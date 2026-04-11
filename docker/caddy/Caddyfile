@@ -4,7 +4,7 @@
 
 # API
 api.optipack.com {
-	reverse_proxy api:4000
+	reverse_proxy localhost:3009
 	encode gzip
 
 	header {
@@ -16,7 +16,7 @@ api.optipack.com {
 
 # Dashboard Web
 app.optipack.com {
-	reverse_proxy web:3000
+	reverse_proxy localhost:3008
 	encode gzip
 
 	header {
@@ -28,5 +28,5 @@ app.optipack.com {
 
 # MinIO Console (admin only)
 storage.optipack.com {
-	reverse_proxy minio:9001
+	reverse_proxy localhost:9001
 }
