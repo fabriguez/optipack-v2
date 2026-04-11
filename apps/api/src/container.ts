@@ -1,0 +1,73 @@
+import 'reflect-metadata';
+import { container } from 'tsyringe';
+
+// Repository interfaces
+import { USER_REPOSITORY } from './application/interfaces/IUserRepository';
+import { AGENCY_REPOSITORY } from './application/interfaces/IAgencyRepository';
+import { WAREHOUSE_REPOSITORY } from './application/interfaces/IWarehouseRepository';
+import { CLIENT_REPOSITORY } from './application/interfaces/IClientRepository';
+import { RECIPIENT_REPOSITORY } from './application/interfaces/IRecipientRepository';
+import { TRANSIT_ROUTE_REPOSITORY } from './application/interfaces/ITransitRouteRepository';
+import { PARCEL_REPOSITORY } from './application/interfaces/IParcelRepository';
+import { CONTAINER_REPOSITORY } from './application/interfaces/IContainerRepository';
+import { INVOICE_REPOSITORY } from './application/interfaces/IInvoiceRepository';
+import { PAYMENT_REPOSITORY } from './application/interfaces/IPaymentRepository';
+import { CASH_REGISTER_REPOSITORY } from './application/interfaces/ICashRegisterRepository';
+import { JOURNAL_ENTRY_REPOSITORY } from './application/interfaces/IJournalEntryRepository';
+import { DISBURSEMENT_REPOSITORY } from './application/interfaces/IDisbursementRepository';
+import { FUND_TRANSFER_REPOSITORY } from './application/interfaces/IFundTransferRepository';
+import { EXPENSE_REPOSITORY } from './application/interfaces/IExpenseRepository';
+import { DEBT_REPOSITORY } from './application/interfaces/IDebtRepository';
+import { LOYALTY_REPOSITORY } from './application/interfaces/ILoyaltyRepository';
+import { PENALTY_REPOSITORY } from './application/interfaces/IPenaltyRepository';
+import { EMPLOYEE_REPOSITORY } from './application/interfaces/IEmployeeRepository';
+import { REFRESH_TOKEN_REPOSITORY } from './application/interfaces/IRefreshTokenRepository';
+import { AUDIT_LOG_REPOSITORY } from './application/interfaces/IAuditLogRepository';
+
+// Repository implementations
+import { PrismaUserRepository } from './infrastructure/database/repositories/PrismaUserRepository';
+import { PrismaAgencyRepository } from './infrastructure/database/repositories/PrismaAgencyRepository';
+import { PrismaWarehouseRepository } from './infrastructure/database/repositories/PrismaWarehouseRepository';
+import { PrismaClientRepository } from './infrastructure/database/repositories/PrismaClientRepository';
+import { PrismaRecipientRepository } from './infrastructure/database/repositories/PrismaRecipientRepository';
+import { PrismaTransitRouteRepository } from './infrastructure/database/repositories/PrismaTransitRouteRepository';
+import { PrismaParcelRepository } from './infrastructure/database/repositories/PrismaParcelRepository';
+import { PrismaContainerRepository } from './infrastructure/database/repositories/PrismaContainerRepository';
+import { PrismaInvoiceRepository } from './infrastructure/database/repositories/PrismaInvoiceRepository';
+import { PrismaPaymentRepository } from './infrastructure/database/repositories/PrismaPaymentRepository';
+import { PrismaCashRegisterRepository } from './infrastructure/database/repositories/PrismaCashRegisterRepository';
+import { PrismaJournalEntryRepository } from './infrastructure/database/repositories/PrismaJournalEntryRepository';
+import { PrismaDisbursementRepository } from './infrastructure/database/repositories/PrismaDisbursementRepository';
+import { PrismaFundTransferRepository } from './infrastructure/database/repositories/PrismaFundTransferRepository';
+import { PrismaExpenseRepository } from './infrastructure/database/repositories/PrismaExpenseRepository';
+import { PrismaDebtRepository } from './infrastructure/database/repositories/PrismaDebtRepository';
+import { PrismaLoyaltyRepository } from './infrastructure/database/repositories/PrismaLoyaltyRepository';
+import { PrismaPenaltyRepository } from './infrastructure/database/repositories/PrismaPenaltyRepository';
+import { PrismaEmployeeRepository } from './infrastructure/database/repositories/PrismaEmployeeRepository';
+import { PrismaRefreshTokenRepository } from './infrastructure/database/repositories/PrismaRefreshTokenRepository';
+import { PrismaAuditLogRepository } from './infrastructure/database/repositories/PrismaAuditLogRepository';
+
+// Register all repositories
+container.register(USER_REPOSITORY, { useClass: PrismaUserRepository });
+container.register(AGENCY_REPOSITORY, { useClass: PrismaAgencyRepository });
+container.register(WAREHOUSE_REPOSITORY, { useClass: PrismaWarehouseRepository });
+container.register(CLIENT_REPOSITORY, { useClass: PrismaClientRepository });
+container.register(RECIPIENT_REPOSITORY, { useClass: PrismaRecipientRepository });
+container.register(TRANSIT_ROUTE_REPOSITORY, { useClass: PrismaTransitRouteRepository });
+container.register(PARCEL_REPOSITORY, { useClass: PrismaParcelRepository });
+container.register(CONTAINER_REPOSITORY, { useClass: PrismaContainerRepository });
+container.register(INVOICE_REPOSITORY, { useClass: PrismaInvoiceRepository });
+container.register(PAYMENT_REPOSITORY, { useClass: PrismaPaymentRepository });
+container.register(CASH_REGISTER_REPOSITORY, { useClass: PrismaCashRegisterRepository });
+container.register(JOURNAL_ENTRY_REPOSITORY, { useClass: PrismaJournalEntryRepository });
+container.register(DISBURSEMENT_REPOSITORY, { useClass: PrismaDisbursementRepository });
+container.register(FUND_TRANSFER_REPOSITORY, { useClass: PrismaFundTransferRepository });
+container.register(EXPENSE_REPOSITORY, { useClass: PrismaExpenseRepository });
+container.register(DEBT_REPOSITORY, { useClass: PrismaDebtRepository });
+container.register(LOYALTY_REPOSITORY, { useClass: PrismaLoyaltyRepository });
+container.register(PENALTY_REPOSITORY, { useClass: PrismaPenaltyRepository });
+container.register(EMPLOYEE_REPOSITORY, { useClass: PrismaEmployeeRepository });
+container.register(REFRESH_TOKEN_REPOSITORY, { useClass: PrismaRefreshTokenRepository });
+container.register(AUDIT_LOG_REPOSITORY, { useClass: PrismaAuditLogRepository });
+
+export { container };

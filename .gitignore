@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+.next/
+.turbo/
+out/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Testing
+coverage/
+
+# Prisma
+apps/api/prisma/*.db
+
+# MinIO data
+minio-data/
+
+# Docker volumes
+postgres-data/
+redis-data/
+
+# Expo
+apps/mobile/.expo/
+apps/tablet/.expo/
+
+# Misc
+*.tsbuildinfo
+
+.claude

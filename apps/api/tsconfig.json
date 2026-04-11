@@ -1,0 +1,15 @@
+{
+  "extends": "@optipack/tsconfig/node.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "prisma"]
+}

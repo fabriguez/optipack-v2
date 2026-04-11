@@ -1,0 +1,87 @@
+import { LOYALTY_POINTS_DIVISOR, LOYALTY_TIER_THRESHOLDS, type LoyaltyTier } from '../constants';
+
+/**
+ * Genere un numero de tracking unique
+ * Format: OP-YYYYMMDD-XXXXX (ex: OP-20260409-A3B7K)
+ */
+export function generateTrackingNumber(): string {
+  const date = new Date();
+  const dateStr =
+    date.getFullYear().toString() +
+    (date.getMonth() + 1).toString().padStart(2, '0') +
+    date.getDate().toString().padStart(2, '0');
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let suffix = '';
+  for (let i = 0; i < 5; i++) {
+    suffix += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return `OP-${dateStr}-${suffix}`;
+}
+
+/**
+ * Genere une reference unique pour les documents financiers
+ * Format: PREFIX-YYYYMMDD-NNNN (ex: FAC-20260409-0001)
+ */
+export function generateReference(prefix: string, sequence: number): string {
+  const date = new Date();
+  const dateStr =
+    date.getFullYear().toString() +
+    (date.getMonth() + 1).toString().padStart(2, '0') +
+    date.getDate().toString().padStart(2, '0');
+  return `${prefix}-${dateStr}-${sequence.toString().padStart(4, '0')}`;
+}
+
+/**
+ * Calcule les points de fidelite pour un montant donne
+ */
+export function calculateLoyaltyPoints(amount: number): number {
+  return Math.floor(amount / LOYALTY_POINTS_DIVISOR);
+}
+
+/**
+ * Determine le palier de fidelite en fonction des points
+ */
+export function getLoyaltyTier(points: number): LoyaltyTier {
+  if (points >= LOYALTY_TIER_THRESHOLDS.VIP) return 'VIP';
+  if (points >= LOYALTY_TIER_THRESHOLDS.GOLD) return 'GOLD';
+  if (points >= LOYALTY_TIER_THRESHOLDS.SILVER) return 'SILVER';
+  return 'STANDARD';
+}
+
+/**
+ * Formate un montant avec separateur de milliers
+ */
+export function formatAmount(amount: number, currency = 'XAF'): string {
+  return new Intl.NumberFormat('fr-FR', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
+/**
+ * Formate une date au format francais
+ */
+export function formatDate(date: Date | string): string {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  return new Intl.DateTimeFormat('fr-FR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(d);
+}
+
+/**
+ * Formate une date avec l'heure
+ */
+export function formatDateTime(date: Date | string): string {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  return new Intl.DateTimeFormat('fr-FR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(d);
+}

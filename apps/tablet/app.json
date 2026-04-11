@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "OptiPack Tablet",
+    "slug": "optipack-tablet",
+    "version": "0.1.0",
+    "orientation": "landscape",
+    "userInterfaceStyle": "light",
+    "scheme": "optipack-tablet",
+    "platforms": ["ios", "android"],
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1B5E20"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "requireFullScreen": true,
+      "bundleIdentifier": "com.optipack.tablet"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1B5E20"
+      },
+      "package": "com.optipack.tablet"
+    },
+    "plugins": ["expo-router", "expo-secure-store"]
+  }
+}

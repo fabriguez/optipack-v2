@@ -1,0 +1,14 @@
+import { inject, injectable } from 'tsyringe';
+import type { PaginationInput } from '@optipack/shared';
+import { TRANSIT_ROUTE_REPOSITORY, type ITransitRouteRepository } from '../../interfaces/ITransitRouteRepository';
+
+@injectable()
+export class ListTransitRoutesUseCase {
+  constructor(
+    @inject(TRANSIT_ROUTE_REPOSITORY) private transitRepo: ITransitRouteRepository,
+  ) {}
+
+  async execute(organizationId: string, pagination: PaginationInput) {
+    return this.transitRepo.findAll(organizationId, pagination);
+  }
+}

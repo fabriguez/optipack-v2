@@ -1,0 +1,32 @@
+{
+	email admin@optipack.com
+}
+
+# API
+api.optipack.com {
+	reverse_proxy api:4000
+	encode gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+}
+
+# Dashboard Web
+app.optipack.com {
+	reverse_proxy web:3000
+	encode gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options SAMEORIGIN
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+}
+
+# MinIO Console (admin only)
+storage.optipack.com {
+	reverse_proxy minio:9001
+}
