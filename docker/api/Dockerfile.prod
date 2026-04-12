@@ -20,10 +20,13 @@ RUN pnpm install --frozen-lockfile || pnpm install
 COPY packages/ ./packages/
 COPY apps/api/ ./apps/api/
 
+# Build shared package first
+RUN pnpm --filter @optipack/shared build
+
 # Generate Prisma client
 RUN pnpm --filter api exec prisma generate
 
-# Build
+# Build API
 RUN pnpm --filter api build
 
 # Prune dev dependencies
