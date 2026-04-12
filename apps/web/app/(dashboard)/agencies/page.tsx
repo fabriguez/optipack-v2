@@ -35,7 +35,7 @@ function AgenciesContent() {
     ...queryParams,
     city: cityFilter || undefined,
     country: countryFilter || undefined,
-  });
+  } as any);
 
   const handleImport = async (rows: Record<string, string>[]) => {
     let success = 0;

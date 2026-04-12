@@ -30,7 +30,7 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
     enabled: !!id,
   });
 
-  const { data: parcelsData } = useParcels({ warehouseId: id, limit: 20, page: parcelPage });
+  const { data: parcelsData } = useParcels({ warehouseId: id, limit: 20, page: parcelPage } as any);
 
   const warehouse = data?.data;
   if (isLoading) return <DashboardSkeleton />;

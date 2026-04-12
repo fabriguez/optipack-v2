@@ -9,7 +9,7 @@ const pageVariants = {
   exit: { opacity: 0 },
 };
 
-const pageTransition = {
+const pageTransition: import('framer-motion').Transition = {
   duration: 0.2,
   ease: 'easeOut',
 };

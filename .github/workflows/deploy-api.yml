@@ -27,6 +27,6 @@ jobs:
           script: |
             cd ~/optipack-v2
             git pull origin main
-            docker compose -f docker-compose.prod.yml build api
+            docker compose -f docker-compose.prod.yml build --no-cache api
             docker compose -f docker-compose.prod.yml up -d api
             docker image prune -f

@@ -37,7 +37,7 @@ function ParcelsContent() {
     status: statusFilter || undefined,
     clientId: clientIdFilter || undefined,
     warehouseId: warehouseIdFilter || undefined,
-  });
+  } as any);
 
   const handleImport = async (rows: Record<string, string>[]) => {
     let success = 0;

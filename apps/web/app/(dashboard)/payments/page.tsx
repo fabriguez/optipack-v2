@@ -42,7 +42,7 @@ function PaymentsContent() {
     paymentMethod: paymentMethodFilter || undefined,
     startDate: startDateFilter || undefined,
     endDate: endDateFilter || undefined,
-  });
+  } as any);
 
   const exportColumns = [
     { key: 'reference', label: 'Reference' },

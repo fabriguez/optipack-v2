@@ -7,7 +7,7 @@ import { ArrowLeft, User, FileText, Calendar, CreditCard, AlertTriangle } from '
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard, AppCardHeader } from '@/components/ui/AppCard';
 import { AppBadge } from '@/components/ui/AppBadge';
-import { AppDataTable } from '@/components/ui/AppDataTable';
+import { AppDataTable, type Column } from '@/components/ui/AppDataTable';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
@@ -42,8 +42,8 @@ export default function DebtDetailPage({ params }: { params: Promise<{ id: strin
   // Parse installment plan if it's JSON
   const installments: any[] = Array.isArray(debt.installmentPlan) ? debt.installmentPlan : [];
 
-  const installmentColumns = [
-    { key: 'number', label: '#', render: (_: any, i: number) => i + 1 },
+  const installmentColumns: Column<any>[] = [
+    { key: 'number', label: '#', render: (_row: any) => installments.indexOf(_row) + 1 },
     { key: 'amount', label: 'Montant', render: (row: any) => formatAmount(Number(row.amount || 0)) },
     { key: 'dueDate', label: 'Echeance', render: (row: any) => row.dueDate ? formatDate(row.dueDate) : '-' },
     {

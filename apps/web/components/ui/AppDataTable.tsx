@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Inbox } from 'l
 import { AppSkeleton } from './AppSkeleton';
 import { cn } from '@/lib/utils/cn';
 
-interface Column<T> {
+export interface Column<T> {
   key: string;
   label: string;
   render?: (row: T) => ReactNode;

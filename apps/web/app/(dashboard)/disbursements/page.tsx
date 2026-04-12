@@ -32,7 +32,7 @@ export default function DisbursementsPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['disbursements', { page, agencyId: agencyFilter }],
-    queryFn: () => disbursementsApi.list({ page, limit: 20, agencyId: agencyFilter || undefined }),
+    queryFn: () => disbursementsApi.list({ page, limit: 20, agencyId: agencyFilter || undefined } as any),
   });
 
   const exportColumns = [

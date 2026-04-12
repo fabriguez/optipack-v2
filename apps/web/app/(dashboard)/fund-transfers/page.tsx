@@ -44,7 +44,7 @@ export default function FundTransfersPage() {
       limit: 20,
       status: statusFilter || undefined,
       agencyId: agencyFilter || undefined,
-    }),
+    } as any),
   });
 
   const exportColumns = [

@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { BookOpen } from 'lucide-react';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppDataTable } from '@/components/ui/AppDataTable';

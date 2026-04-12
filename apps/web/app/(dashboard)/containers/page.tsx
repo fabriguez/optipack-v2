@@ -36,7 +36,7 @@ export default function ContainersPage() {
     limit: 20,
     status: statusFilter || undefined,
     type: typeFilter || undefined,
-  });
+  } as any);
 
   const handleImport = async (rows: Record<string, string>[]) => {
     let success = 0;

@@ -28,6 +28,6 @@ jobs:
           script: |
             cd ~/optipack-v2
             git pull origin main
-            docker compose -f docker-compose.prod.yml build web
+            docker compose -f docker-compose.prod.yml build --no-cache web
             docker compose -f docker-compose.prod.yml up -d web
             docker image prune -f

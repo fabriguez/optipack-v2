@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard, AppCardHeader } from '@/components/ui/AppCard';
 import { AppBadge } from '@/components/ui/AppBadge';
@@ -146,7 +147,7 @@ export default function DashboardPage() {
                     {pieData.map((item, i) => (
                       <div key={item.name} className="flex items-center gap-1.5">
                         <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }} />
-                        <span className="text-xs text-gray-600">{item.name} ({item.value})</span>
+                        <span className="text-xs text-gray-600">{item.name} ({item.value as ReactNode})</span>
                       </div>
                     ))}
                   </div>

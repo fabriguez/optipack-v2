@@ -39,11 +39,12 @@ export const AppSelect = forwardRef<HTMLButtonElement, AppSelectProps>(
   ({ label, error, options, placeholder, value, defaultValue, onChange, onValueChange, name, disabled, className, id }, ref) => {
     const selectId = id || label?.toLowerCase().replace(/\s+/g, '-');
 
-    const handleChange = (val: string) => {
+    const handleChange = (val: string | null, _eventDetails?: unknown) => {
+      const safeVal = val ?? '';
       // Appeler onValueChange si fourni (API directe)
-      onValueChange?.(val);
+      onValueChange?.(safeVal);
       // Appeler onChange avec un event synthetique (compat RHF register)
-      onChange?.({ target: { value: val, name } });
+      onChange?.({ target: { value: safeVal, name } });
     };
 
     return (

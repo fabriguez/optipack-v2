@@ -42,7 +42,7 @@ function ClientsContent() {
     ...queryParams,
     agencyId: agencyFilter || undefined,
     loyaltyTier: loyaltyTierFilter || undefined,
-  });
+  } as any);
 
   const handleImport = async (rows: Record<string, string>[]) => {
     let success = 0;
