@@ -21,7 +21,7 @@ COPY packages/ ./packages/
 COPY apps/api/ ./apps/api/
 
 # Generate Prisma client
-RUN cd apps/api && npx prisma generate || true
+RUN pnpm --filter api exec prisma generate
 
 # Build
 RUN pnpm --filter api build
@@ -49,7 +49,7 @@ COPY --from=builder /app/packages/ ./packages/
 
 # Copy prisma schema and generate client in runner
 COPY apps/api/prisma ./apps/api/prisma
-RUN cd apps/api && npx prisma generate
+RUN pnpm --filter api exec prisma generate
 
 WORKDIR /app/apps/api
 
