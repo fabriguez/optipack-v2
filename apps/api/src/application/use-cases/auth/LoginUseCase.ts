@@ -71,8 +71,8 @@ export class LoginUseCase {
 
     const accessToken = jwt.sign(
       { userId: user.id, email: user.email, role: user.role, agencyIds },
-      config.jwt.secret,
-      { expiresIn: config.jwt.accessExpiry },
+      config.jwt.secret as jwt.Secret,
+      { expiresIn: config.jwt.accessExpiry } as jwt.SignOptions,
     );
 
     const refreshTokenValue = randomUUID();
