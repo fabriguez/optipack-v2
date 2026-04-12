@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'apps/api/**'
+      - 'apps/all/**'
       - 'packages/shared/**'
       - 'packages/config/**'
       - 'docker/api/**'
