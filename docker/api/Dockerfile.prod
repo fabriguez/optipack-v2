@@ -45,11 +45,11 @@ RUN pnpm install --frozen-lockfile --prod || pnpm install --prod
 
 # Copy built artifacts from builder
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/packages/ ./packages/
 
-# Copy prisma schema for migrations
+# Copy prisma schema and generate client in runner
 COPY apps/api/prisma ./apps/api/prisma
+RUN cd apps/api && npx prisma generate
 
 WORKDIR /app/apps/api
 
