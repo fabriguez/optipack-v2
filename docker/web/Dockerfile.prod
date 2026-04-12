@@ -21,6 +21,9 @@ RUN pnpm install --frozen-lockfile || pnpm install
 COPY packages/ ./packages/
 COPY apps/web/ ./apps/web/
 
+# Build shared package first
+RUN pnpm --filter @optipack/shared build
+
 # Build Next.js
 RUN pnpm --filter web build
 
