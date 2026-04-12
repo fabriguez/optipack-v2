@@ -26,30 +26,21 @@ RUN pnpm --filter api exec prisma generate
 # Build
 RUN pnpm --filter api build
 
+# Prune dev dependencies
+RUN pnpm prune --prod
+
 # ---- Production stage ----
 FROM node:20-alpine AS runner
 
-RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
-
 WORKDIR /app
 
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
-COPY apps/api/package.json ./apps/api/
-COPY packages/shared/package.json ./packages/shared/
-COPY packages/config/package.json ./packages/config/
-COPY packages/config/tsconfig/package.json ./packages/config/tsconfig/
-COPY packages/config/eslint/package.json ./packages/config/eslint/
-COPY packages/config/tailwind/package.json ./packages/config/tailwind/
-
-RUN pnpm install --frozen-lockfile --prod || pnpm install --prod
-
-# Copy built artifacts from builder
+# Copy everything from builder (node_modules with pruned devDeps + prisma client)
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
+COPY --from=builder /app/apps/api/node_modules ./apps/api/node_modules
+COPY --from=builder /app/apps/api/package.json ./apps/api/package.json
 COPY --from=builder /app/packages/ ./packages/
-
-# Copy prisma schema and generate client in runner
 COPY apps/api/prisma ./apps/api/prisma
-RUN pnpm --filter api exec prisma generate
 
 WORKDIR /app/apps/api
 
