@@ -1,4 +1,4 @@
-import { LOYALTY_POINTS_DIVISOR, LOYALTY_TIER_THRESHOLDS, type LoyaltyTier } from '../constants';
+import { LOYALTY_POINTS_DIVISOR, LOYALTY_TIER_THRESHOLDS, type LoyaltyTier } from '../constants/index';
 
 /**
  * Genere un numero de tracking unique
