@@ -6,3 +6,4 @@ export * from './IRecipientRepository';
 export * from './ITransitRouteRepository';
 export * from './IRefreshTokenRepository';
 export * from './IAuditLogRepository';
+export * from './INotificationRepository';

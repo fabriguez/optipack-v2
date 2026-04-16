@@ -15,6 +15,8 @@ import { requestLogger } from './presentation/middleware/requestLogger';
 import { auditMiddleware } from './presentation/middleware/auditMiddleware';
 import { errorHandler } from './presentation/middleware/errorHandler';
 import v1Routes from './presentation/routes/v1';
+import { startCronJobs } from './infrastructure/cron/CronService';
+import { registerHandlers as registerNotificationHandlers } from './infrastructure/events/handlers/NotificationHandler';
 
 const app = express();
 const httpServer = createServer(app);
@@ -75,6 +77,12 @@ async function start(): Promise<void> {
 
     // Ensure MinIO bucket
     await ensureBucket();
+
+    // Register event handlers
+    registerNotificationHandlers();
+
+    // Start cron jobs
+    startCronJobs();
 
     httpServer.listen(config.port, () => {
       logger.info(`API server running on port ${config.port}`);

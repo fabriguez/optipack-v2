@@ -10,6 +10,8 @@ import { AppDropdownMenu } from '@/components/ui/AppDropdownMenu';
 import { AppBadge } from '@/components/ui/AppBadge';
 import { useLogout } from '@/lib/hooks/useAuth';
 import { apiClient } from '@/lib/api/client';
+import { notificationsApi } from '@/lib/api/notifications';
+import { useQuery } from '@tanstack/react-query';
 import { cn } from '@/lib/utils/cn';
 
 export function TopBar() {
@@ -25,6 +27,7 @@ export function TopBar() {
       <GlobalSearch />
 
       <div className="flex items-center gap-2">
+        <LanguageSwitcherInline />
         <NotificationBell />
 
         <AppDropdownMenu
@@ -51,18 +54,29 @@ export function TopBar() {
 
 function NotificationBell() {
   const router = useRouter();
-  const [hasNew, setHasNew] = useState(false);
+
+  const { data: unreadData } = useQuery({
+    queryKey: ['notifications-unread-count'],
+    queryFn: () => notificationsApi.getUnreadCount(),
+    refetchInterval: 30_000,
+  });
+
+  const unreadCount = unreadData?.count ?? 0;
 
   return (
     <button
       className="relative rounded-xl p-2 text-gray-500 hover:bg-gray-100 transition-colors"
-      onClick={() => { setHasNew(false); router.push('/notifications'); }}
+      onClick={() => router.push('/notifications')}
     >
       <Bell
-        className={cn('h-5 w-5', hasNew && 'animate-bell-ring')}
+        className={cn('h-5 w-5', unreadCount > 0 && 'animate-bell-ring')}
         style={{ transformOrigin: 'top center' }}
       />
-      {hasNew && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500" />}
+      {unreadCount > 0 && (
+        <span className="absolute -right-0.5 -top-0.5 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+          {unreadCount > 99 ? '99+' : unreadCount}
+        </span>
+      )}
     </button>
   );
 }
@@ -152,6 +166,28 @@ function GlobalSearch() {
         </div>
       )}
     </div>
+  );
+}
+
+function LanguageSwitcherInline() {
+  const currentLocale = typeof document !== 'undefined'
+    ? (document.cookie.match(/locale=([^;]+)/)?.[1] || 'fr')
+    : 'fr';
+
+  const handleChange = (locale: string) => {
+    document.cookie = `locale=${locale};path=/;max-age=31536000`;
+    window.location.reload();
+  };
+
+  return (
+    <select
+      value={currentLocale}
+      onChange={(e) => handleChange(e.target.value)}
+      className="h-8 rounded-lg border border-gray-200 bg-white px-2 text-xs text-gray-600 focus:border-primary-500 focus:outline-none"
+    >
+      <option value="fr">FR</option>
+      <option value="en">EN</option>
+    </select>
   );
 }
 

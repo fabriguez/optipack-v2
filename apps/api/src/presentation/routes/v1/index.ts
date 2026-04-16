@@ -22,12 +22,20 @@ import employeeRoutes from './employee.routes';
 import dashboardRoutes from './dashboard.routes';
 import auditRoutes from './audit.routes';
 import searchRoutes from './search.routes';
+import chatRoutes from './chat.routes';
+import notificationRoutes from './notification.routes';
+import reportRoutes from './report.routes';
+import configRoutes from './config.routes';
+import manifestRoutes from './manifest.routes';
+import routingRoutes from './routing.routes';
+import clientPortalRoutes from './client-portal.routes';
 
 const router = Router();
 
 // Public
 router.use(healthRoutes);
 router.use('/auth', authRoutes);
+router.use('/client-portal', clientPortalRoutes);
 
 // Logistique
 router.use('/agencies', agencyRoutes);
@@ -37,6 +45,8 @@ router.use('/recipients', recipientRoutes);
 router.use('/transit-routes', transitRouteRoutes);
 router.use('/parcels', parcelRoutes);
 router.use('/containers', containerRoutes);
+router.use('/manifests', manifestRoutes);
+router.use('/routings', routingRoutes);
 
 // Finance
 router.use('/invoices', invoiceRoutes);
@@ -55,5 +65,11 @@ router.use('/employees', employeeRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/audit', auditRoutes);
 router.use('/search', searchRoutes);
+router.use('/chat', chatRoutes);
+router.use('/notifications', notificationRoutes);
+
+// Rapports & Config
+router.use('/reports', reportRoutes);
+router.use(configRoutes);
 
 export default router;

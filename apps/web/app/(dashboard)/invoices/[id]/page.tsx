@@ -3,7 +3,7 @@
 import { use, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, FileText, CreditCard, Plus, User, Package, Building2, Eye, XCircle } from 'lucide-react';
+import { ArrowLeft, FileText, CreditCard, Plus, User, Package, Building2, Eye, XCircle, Download } from 'lucide-react';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard, AppCardHeader } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
@@ -26,6 +26,29 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   const { id } = use(params);
   const router = useRouter();
   const [showPayment, setShowPayment] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
+
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
+
+  const handleDownloadPdf = async () => {
+    setPdfLoading(true);
+    try {
+      const res = await apiClient.get(`/invoices/${id}/pdf`, { responseType: 'blob' });
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `facture-${invoice?.reference || id}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      // Fallback: open in new tab
+      window.open(`${API_BASE}/invoices/${id}/pdf`, '_blank');
+    }
+    setPdfLoading(false);
+  };
 
   const { data: invoiceData, isLoading } = useQuery({
     queryKey: ['invoices', id],
@@ -90,10 +113,16 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               <p className="text-sm text-gray-500 mt-0.5">Emise le {formatDate(invoice.issuedAt)}</p>
             </div>
           </div>
-          <AppButton onClick={() => setShowPayment(true)} disabled={invoice.status === 'PAID'}>
-            <Plus className="h-4 w-4" />
-            Enregistrer paiement
-          </AppButton>
+          <div className="flex gap-2">
+            <AppButton variant="outline" onClick={handleDownloadPdf} loading={pdfLoading}>
+              <Download className="h-4 w-4" />
+              Telecharger PDF
+            </AppButton>
+            <AppButton onClick={() => setShowPayment(true)} disabled={invoice.status === 'PAID'}>
+              <Plus className="h-4 w-4" />
+              Enregistrer paiement
+            </AppButton>
+          </div>
         </div>
 
         {/* Summary bar */}

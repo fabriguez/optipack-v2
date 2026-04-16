@@ -1,11 +1,11 @@
 'use client';
 
-import { use } from 'react';
+import { use, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowLeft, Package, MapPin, User, Truck, FileText, Clock,
-  CreditCard, Edit, History, Warehouse, Route,
+  CreditCard, Edit, History, Warehouse, Route, QrCode, Printer,
 } from 'lucide-react';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard, AppCardHeader } from '@/components/ui/AppCard';
@@ -52,8 +52,21 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
     enabled: !!id,
   });
 
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
+
   const parcel = data?.data;
   const history = historyData?.data || [];
+
+  const handlePrintLabel = async () => {
+    try {
+      const res = await apiClient.get(`/parcels/${id}/label`, { responseType: 'blob' });
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      window.open(url, '_blank');
+    } catch {
+      window.open(`${API_BASE}/parcels/${id}/label`, '_blank');
+    }
+  };
 
   if (isLoading) return <DashboardSkeleton />;
   if (!parcel) return <p className="p-6 text-gray-500">Colis introuvable</p>;
@@ -132,6 +145,26 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
             </div>
           </AppCard>
         )}
+
+        {/* QR Code and Label */}
+        <AppCard>
+          <AppCardHeader title="QR Code / Etiquette" />
+          <div className="flex flex-col items-center gap-4">
+            <div className="rounded-xl border border-gray-100 p-3 bg-white">
+              <img
+                src={`${API_BASE}/parcels/${id}/qrcode`}
+                alt={`QR Code - ${parcel.trackingNumber}`}
+                className="h-40 w-40 object-contain"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              />
+            </div>
+            <p className="font-mono text-xs text-gray-500">{parcel.trackingNumber}</p>
+            <AppButton variant="outline" className="w-full" size="sm" onClick={handlePrintLabel}>
+              <Printer className="h-4 w-4" />
+              Imprimer etiquette
+            </AppButton>
+          </div>
+        </AppCard>
       </div>
     </div>
   );

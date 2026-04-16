@@ -23,6 +23,10 @@ import { PENALTY_REPOSITORY } from './application/interfaces/IPenaltyRepository'
 import { EMPLOYEE_REPOSITORY } from './application/interfaces/IEmployeeRepository';
 import { REFRESH_TOKEN_REPOSITORY } from './application/interfaces/IRefreshTokenRepository';
 import { AUDIT_LOG_REPOSITORY } from './application/interfaces/IAuditLogRepository';
+import { NOTIFICATION_REPOSITORY } from './application/interfaces/INotificationRepository';
+import { CHAT_REPOSITORY } from './application/interfaces/IChatRepository';
+import { MANIFEST_REPOSITORY } from './application/interfaces/IManifestRepository';
+import { ROUTING_REPOSITORY } from './application/interfaces/IRoutingRepository';
 
 // Repository implementations
 import { PrismaUserRepository } from './infrastructure/database/repositories/PrismaUserRepository';
@@ -46,6 +50,10 @@ import { PrismaPenaltyRepository } from './infrastructure/database/repositories/
 import { PrismaEmployeeRepository } from './infrastructure/database/repositories/PrismaEmployeeRepository';
 import { PrismaRefreshTokenRepository } from './infrastructure/database/repositories/PrismaRefreshTokenRepository';
 import { PrismaAuditLogRepository } from './infrastructure/database/repositories/PrismaAuditLogRepository';
+import { PrismaNotificationRepository } from './infrastructure/database/repositories/PrismaNotificationRepository';
+import { PrismaChatRepository } from './infrastructure/database/repositories/PrismaChatRepository';
+import { PrismaManifestRepository } from './infrastructure/database/repositories/PrismaManifestRepository';
+import { PrismaRoutingRepository } from './infrastructure/database/repositories/PrismaRoutingRepository';
 
 // Register all repositories
 container.register(USER_REPOSITORY, { useClass: PrismaUserRepository });
@@ -69,5 +77,9 @@ container.register(PENALTY_REPOSITORY, { useClass: PrismaPenaltyRepository });
 container.register(EMPLOYEE_REPOSITORY, { useClass: PrismaEmployeeRepository });
 container.register(REFRESH_TOKEN_REPOSITORY, { useClass: PrismaRefreshTokenRepository });
 container.register(AUDIT_LOG_REPOSITORY, { useClass: PrismaAuditLogRepository });
+container.register(NOTIFICATION_REPOSITORY, { useClass: PrismaNotificationRepository });
+container.register(CHAT_REPOSITORY, { useClass: PrismaChatRepository });
+container.register(MANIFEST_REPOSITORY, { useClass: PrismaManifestRepository });
+container.register(ROUTING_REPOSITORY, { useClass: PrismaRoutingRepository });
 
 export { container };

@@ -3,7 +3,7 @@
 import { use, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Package, Play, PackageCheck, Plus, Eye, PackageMinus, Search } from 'lucide-react';
+import { ArrowLeft, Package, Play, PackageCheck, Plus, Eye, PackageMinus, Search, FileText, FileCheck, FileDiff, Printer } from 'lucide-react';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard, AppCardHeader } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
@@ -37,6 +37,13 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
   const [showUnloadConfirm, setShowUnloadConfirm] = useState<string | null>(null);
   const [selectedParcelIds, setSelectedParcelIds] = useState<string[]>([]);
   const [parcelSearch, setParcelSearch] = useState('');
+  const [showDispatchManifest, setShowDispatchManifest] = useState(false);
+  const [showReceptionManifest, setShowReceptionManifest] = useState(false);
+  const [showComparisonReport, setShowComparisonReport] = useState(false);
+  const [manifestLoading, setManifestLoading] = useState(false);
+  const [dispatchManifest, setDispatchManifest] = useState<any>(null);
+  const [receptionManifest, setReceptionManifest] = useState<any>(null);
+  const [comparisonData, setComparisonData] = useState<any>(null);
 
   const { data: historyData } = useQuery({
     queryKey: ['containers', id, 'history'],
@@ -52,6 +59,70 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
     }).then((r) => r.data),
     enabled: showLoadDialog,
   });
+
+  // Fetch existing manifests for this container
+  const { data: manifestsData } = useQuery({
+    queryKey: ['manifests', id],
+    queryFn: async () => {
+      const results: { dispatch: any; reception: any } = { dispatch: null, reception: null };
+      try {
+        const res = await apiClient.get(`/manifests/dispatch/${id}`);
+        results.dispatch = res.data?.data || null;
+      } catch { /* no dispatch manifest yet */ }
+      try {
+        const res = await apiClient.get(`/manifests/reception/${id}`);
+        results.reception = res.data?.data || null;
+      } catch { /* no reception manifest yet */ }
+      return results;
+    },
+    enabled: !!id,
+  });
+
+  const handleOpenDispatchManifest = async () => {
+    setManifestLoading(true);
+    try {
+      let manifest = manifestsData?.dispatch;
+      if (!manifest) {
+        const res = await apiClient.post(`/manifests/dispatch/${id}`);
+        manifest = res.data?.data;
+        qc.invalidateQueries({ queryKey: ['manifests', id] });
+      }
+      setDispatchManifest(manifest);
+      setShowDispatchManifest(true);
+    } catch {
+      toast.error('Erreur lors de la generation du bordereau d\'envoi');
+    }
+    setManifestLoading(false);
+  };
+
+  const handleOpenReceptionManifest = async () => {
+    setManifestLoading(true);
+    try {
+      let manifest = manifestsData?.reception;
+      if (!manifest) {
+        const res = await apiClient.post(`/manifests/reception/${id}`);
+        manifest = res.data?.data;
+        qc.invalidateQueries({ queryKey: ['manifests', id] });
+      }
+      setReceptionManifest(manifest);
+      setShowReceptionManifest(true);
+    } catch {
+      toast.error('Erreur lors de la generation du bordereau de reception');
+    }
+    setManifestLoading(false);
+  };
+
+  const handleOpenComparisonReport = async () => {
+    setManifestLoading(true);
+    try {
+      const res = await apiClient.get(`/manifests/comparison/${id}`);
+      setComparisonData(res.data?.data);
+      setShowComparisonReport(true);
+    } catch {
+      toast.error('Erreur lors de la generation du rapport comparatif');
+    }
+    setManifestLoading(false);
+  };
 
   const container = data?.data;
   const parcels = parcelsData?.data || [];
@@ -212,6 +283,56 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
           </AppCard>
         </div>
 
+        {/* Bordereaux (manifests) */}
+        <AppCard>
+          <AppCardHeader title="Bordereaux" />
+          <div className="flex flex-wrap gap-3">
+            {(container.status === 'LOADING' || container.status === 'IN_TRANSIT') && (
+              <AppButton variant="outline" size="sm" onClick={handleOpenDispatchManifest} loading={manifestLoading}>
+                <FileText className="h-4 w-4" />
+                Bordereau d'envoi
+              </AppButton>
+            )}
+            {(container.status === 'ARRIVED' || container.status === 'UNLOADING') && (
+              <>
+                <AppButton variant="outline" size="sm" onClick={handleOpenDispatchManifest} loading={manifestLoading}>
+                  <FileText className="h-4 w-4" />
+                  Bordereau d'envoi
+                </AppButton>
+                <AppButton variant="outline" size="sm" onClick={handleOpenReceptionManifest} loading={manifestLoading}>
+                  <FileCheck className="h-4 w-4" />
+                  Bordereau de reception
+                </AppButton>
+                {manifestsData?.reception && (
+                  <AppButton variant="outline" size="sm" onClick={handleOpenComparisonReport} loading={manifestLoading}>
+                    <FileDiff className="h-4 w-4" />
+                    Rapport comparatif
+                  </AppButton>
+                )}
+              </>
+            )}
+          </div>
+          {/* Show existing manifest summaries */}
+          {(manifestsData?.dispatch || manifestsData?.reception) && (
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {manifestsData?.dispatch && (
+                <div className="rounded-xl bg-gray-50 p-3 cursor-pointer hover:bg-primary-50/50 transition-colors" onClick={() => { setDispatchManifest(manifestsData.dispatch); setShowDispatchManifest(true); }}>
+                  <p className="text-xs text-gray-400">Bordereau d'envoi</p>
+                  <p className="text-sm font-medium text-gray-900 mt-0.5">{manifestsData.dispatch.reference || 'Genere'}</p>
+                  <p className="text-xs text-gray-500 mt-1">{manifestsData.dispatch.totalParcels ?? parcels.length} colis - {formatDateTime(manifestsData.dispatch.createdAt)}</p>
+                </div>
+              )}
+              {manifestsData?.reception && (
+                <div className="rounded-xl bg-gray-50 p-3 cursor-pointer hover:bg-primary-50/50 transition-colors" onClick={() => { setReceptionManifest(manifestsData.reception); setShowReceptionManifest(true); }}>
+                  <p className="text-xs text-gray-400">Bordereau de reception</p>
+                  <p className="text-sm font-medium text-gray-900 mt-0.5">{manifestsData.reception.reference || 'Genere'}</p>
+                  <p className="text-xs text-gray-500 mt-1">{manifestsData.reception.totalParcels ?? parcels.length} colis - {formatDateTime(manifestsData.reception.createdAt)}</p>
+                </div>
+              )}
+            </div>
+          )}
+        </AppCard>
+
         {/* Parcels list */}
         <AppCard>
           <div className="flex items-center justify-between mb-4">
@@ -321,6 +442,203 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
           confirmLabel="Confirmer l'arrivee"
           loading={arriveMutation.isPending}
         />
+
+        {/* Dispatch manifest dialog */}
+        <AppDialog open={showDispatchManifest} onClose={() => setShowDispatchManifest(false)} title="Bordereau d'envoi" size="lg">
+          {dispatchManifest ? (
+            <div className="space-y-4 print:space-y-2">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl bg-gray-50 p-3">
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400">Reference</p>
+                  <p className="text-sm font-mono font-medium text-gray-900 mt-0.5">{dispatchManifest.reference || '-'}</p>
+                </div>
+                <div className="rounded-xl bg-gray-50 p-3">
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400">Conteneur</p>
+                  <p className="text-sm font-medium text-gray-900 mt-0.5">{container.designation}</p>
+                </div>
+                <div className="rounded-xl bg-gray-50 p-3">
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400">Origine</p>
+                  <p className="text-sm font-medium text-gray-900 mt-0.5">{container.departureAgency?.name || '-'}</p>
+                </div>
+                <div className="rounded-xl bg-gray-50 p-3">
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400">Destination</p>
+                  <p className="text-sm font-medium text-gray-900 mt-0.5">{container.arrivalAgency?.name || '-'}</p>
+                </div>
+                <div className="rounded-xl bg-gray-50 p-3">
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400">Nombre de colis</p>
+                  <p className="text-sm font-medium text-gray-900 mt-0.5">{dispatchManifest.totalParcels ?? parcels.length}</p>
+                </div>
+                <div className="rounded-xl bg-gray-50 p-3">
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400">Date</p>
+                  <p className="text-sm font-medium text-gray-900 mt-0.5">{formatDateTime(dispatchManifest.createdAt)}</p>
+                </div>
+              </div>
+              {(dispatchManifest.items || dispatchManifest.parcels || []).length > 0 && (
+                <div className="border border-gray-100 rounded-xl overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="text-left p-3 font-medium text-gray-600">#</th>
+                        <th className="text-left p-3 font-medium text-gray-600">Tracking</th>
+                        <th className="text-left p-3 font-medium text-gray-600">Designation</th>
+                        <th className="text-left p-3 font-medium text-gray-600">Masse</th>
+                        <th className="text-left p-3 font-medium text-gray-600">Client</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {(dispatchManifest.items || dispatchManifest.parcels || []).map((item: any, idx: number) => (
+                        <tr key={item.id || idx}>
+                          <td className="p-3 text-gray-400">{idx + 1}</td>
+                          <td className="p-3 font-mono text-xs font-bold text-primary-700">{item.trackingNumber || item.parcel?.trackingNumber || '-'}</td>
+                          <td className="p-3">{item.designation || item.parcel?.designation || '-'}</td>
+                          <td className="p-3">{Number(item.weight || item.parcel?.weight || 0).toFixed(1)} kg</td>
+                          <td className="p-3">{item.clientName || item.parcel?.client?.fullName || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 print:hidden">
+                <AppButton variant="ghost" onClick={() => setShowDispatchManifest(false)}>Fermer</AppButton>
+                <AppButton onClick={() => window.print()}>
+                  <Printer className="h-4 w-4" />
+                  Imprimer
+                </AppButton>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-400">Chargement...</p>
+          )}
+        </AppDialog>
+
+        {/* Reception manifest dialog */}
+        <AppDialog open={showReceptionManifest} onClose={() => setShowReceptionManifest(false)} title="Bordereau de reception" size="lg">
+          {receptionManifest ? (
+            <div className="space-y-4 print:space-y-2">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl bg-gray-50 p-3">
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400">Reference</p>
+                  <p className="text-sm font-mono font-medium text-gray-900 mt-0.5">{receptionManifest.reference || '-'}</p>
+                </div>
+                <div className="rounded-xl bg-gray-50 p-3">
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400">Conteneur</p>
+                  <p className="text-sm font-medium text-gray-900 mt-0.5">{container.designation}</p>
+                </div>
+                <div className="rounded-xl bg-gray-50 p-3">
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400">Nombre de colis</p>
+                  <p className="text-sm font-medium text-gray-900 mt-0.5">{receptionManifest.totalParcels ?? parcels.length}</p>
+                </div>
+                <div className="rounded-xl bg-gray-50 p-3">
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400">Date</p>
+                  <p className="text-sm font-medium text-gray-900 mt-0.5">{formatDateTime(receptionManifest.createdAt)}</p>
+                </div>
+              </div>
+              {(receptionManifest.items || receptionManifest.parcels || []).length > 0 && (
+                <div className="border border-gray-100 rounded-xl overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="text-left p-3 font-medium text-gray-600">#</th>
+                        <th className="text-left p-3 font-medium text-gray-600">Tracking</th>
+                        <th className="text-left p-3 font-medium text-gray-600">Designation</th>
+                        <th className="text-left p-3 font-medium text-gray-600">Masse</th>
+                        <th className="text-left p-3 font-medium text-gray-600">Statut</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {(receptionManifest.items || receptionManifest.parcels || []).map((item: any, idx: number) => (
+                        <tr key={item.id || idx}>
+                          <td className="p-3 text-gray-400">{idx + 1}</td>
+                          <td className="p-3 font-mono text-xs font-bold text-primary-700">{item.trackingNumber || item.parcel?.trackingNumber || '-'}</td>
+                          <td className="p-3">{item.designation || item.parcel?.designation || '-'}</td>
+                          <td className="p-3">{Number(item.weight || item.parcel?.weight || 0).toFixed(1)} kg</td>
+                          <td className="p-3">{item.receptionStatus || item.status || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 print:hidden">
+                <AppButton variant="ghost" onClick={() => setShowReceptionManifest(false)}>Fermer</AppButton>
+                <AppButton onClick={() => window.print()}>
+                  <Printer className="h-4 w-4" />
+                  Imprimer
+                </AppButton>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-400">Chargement...</p>
+          )}
+        </AppDialog>
+
+        {/* Comparison report dialog */}
+        <AppDialog open={showComparisonReport} onClose={() => setShowComparisonReport(false)} title="Rapport comparatif" size="xl">
+          {comparisonData ? (
+            <div className="space-y-4 print:space-y-2">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="rounded-xl bg-gray-50 p-3">
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400">Envoyes</p>
+                  <p className="text-lg font-bold text-gray-900 mt-0.5">{comparisonData.totalDispatched ?? '-'}</p>
+                </div>
+                <div className="rounded-xl bg-gray-50 p-3">
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400">Recus</p>
+                  <p className="text-lg font-bold text-green-600 mt-0.5">{comparisonData.totalReceived ?? '-'}</p>
+                </div>
+                <div className="rounded-xl bg-gray-50 p-3">
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400">Ecarts</p>
+                  <p className="text-lg font-bold text-red-600 mt-0.5">{comparisonData.totalDiscrepancies ?? '-'}</p>
+                </div>
+              </div>
+              {(comparisonData.items || []).length > 0 && (
+                <div className="border border-gray-100 rounded-xl overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="text-left p-3 font-medium text-gray-600">Tracking</th>
+                        <th className="text-left p-3 font-medium text-gray-600">Designation</th>
+                        <th className="text-left p-3 font-medium text-gray-600">Masse envoi</th>
+                        <th className="text-left p-3 font-medium text-gray-600">Masse reception</th>
+                        <th className="text-left p-3 font-medium text-gray-600">Statut envoi</th>
+                        <th className="text-left p-3 font-medium text-gray-600">Statut reception</th>
+                        <th className="text-left p-3 font-medium text-gray-600">Ecart</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {(comparisonData.items || []).map((item: any, idx: number) => (
+                        <tr key={item.trackingNumber || idx} className={item.hasDiscrepancy ? 'bg-red-50' : ''}>
+                          <td className="p-3 font-mono text-xs font-bold text-primary-700">{item.trackingNumber || '-'}</td>
+                          <td className="p-3">{item.designation || '-'}</td>
+                          <td className="p-3">{item.dispatchWeight != null ? `${Number(item.dispatchWeight).toFixed(1)} kg` : '-'}</td>
+                          <td className="p-3">{item.receptionWeight != null ? `${Number(item.receptionWeight).toFixed(1)} kg` : '-'}</td>
+                          <td className="p-3">{item.dispatchStatus || '-'}</td>
+                          <td className="p-3">{item.receptionStatus || '-'}</td>
+                          <td className="p-3">
+                            {item.hasDiscrepancy ? (
+                              <AppBadge variant="error">{item.discrepancyNote || 'Ecart'}</AppBadge>
+                            ) : (
+                              <AppBadge variant="success">OK</AppBadge>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 print:hidden">
+                <AppButton variant="ghost" onClick={() => setShowComparisonReport(false)}>Fermer</AppButton>
+                <AppButton onClick={() => window.print()}>
+                  <Printer className="h-4 w-4" />
+                  Imprimer
+                </AppButton>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-400">Chargement...</p>
+          )}
+        </AppDialog>
       </div>
     </PageTransition>
   );

@@ -3,6 +3,8 @@ import { authenticate } from '../../middleware/authMiddleware';
 import { validate } from '../../middleware/validate';
 import { paginationSchema } from '@optipack/shared';
 import { prisma } from '../../../config/database';
+import { PDFService } from '../../../application/services/PDFService';
+import type { InvoiceData } from '../../../application/services/PDFService';
 
 const router = Router();
 
@@ -64,6 +66,82 @@ router.get('/:id', async (req, res, next) => {
     if (!invoice) return res.status(404).json({ success: false, message: 'Facture introuvable' });
     res.json({ success: true, data: invoice });
   } catch (err) { next(err); }
+});
+
+// Generate invoice PDF
+router.get('/:id/pdf', async (req, res, next) => {
+  try {
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: req.params.id },
+      include: {
+        client: { select: { id: true, fullName: true, phone: true, email: true } },
+        agency: { select: { id: true, name: true, code: true, address: true, phone: true } },
+        parcel: { select: { id: true, trackingNumber: true, designation: true, weight: true, destination: true, price: true } },
+        payments: {
+          orderBy: { createdAt: 'asc' },
+          include: {
+            agency: { select: { name: true } },
+            receivedBy: { select: { firstName: true, lastName: true } },
+          },
+        },
+      },
+    });
+
+    if (!invoice) {
+      return res.status(404).json({ success: false, message: 'Facture introuvable' });
+    }
+
+    const invoiceData: InvoiceData = {
+      reference: invoice.reference,
+      createdAt: invoice.createdAt,
+      client: {
+        fullName: invoice.client.fullName,
+        phone: invoice.client.phone,
+        email: invoice.client.email,
+      },
+      agency: invoice.agency
+        ? { name: invoice.agency.name, code: invoice.agency.code, address: invoice.agency.address, phone: invoice.agency.phone }
+        : null,
+      parcel: Array.isArray(invoice.parcel)
+        ? invoice.parcel.map((p: any) => ({
+            trackingNumber: p.trackingNumber,
+            designation: p.designation,
+            weight: Number(p.weight),
+            destination: p.destination,
+            price: Number(p.price),
+          }))
+        : {
+            trackingNumber: (invoice.parcel as any).trackingNumber,
+            designation: (invoice.parcel as any).designation,
+            weight: Number((invoice.parcel as any).weight),
+            destination: (invoice.parcel as any).destination,
+            price: Number((invoice.parcel as any).price),
+          },
+      payments: invoice.payments.map((p: any) => ({
+        createdAt: p.createdAt,
+        method: p.method,
+        amount: Number(p.amount),
+        agency: p.agency,
+      })),
+      totalAmount: Number((invoice as any).totalAmount ?? 0),
+      discount: Number((invoice as any).discount ?? 0),
+      tax: Number((invoice as any).tax ?? 0),
+      netAmount: Number((invoice as any).netAmount ?? 0),
+      paidAmount: Number((invoice as any).paidAmount ?? 0),
+      balance: Number((invoice as any).balance ?? 0),
+    };
+
+    const pdfBuffer = await PDFService.generateInvoicePDF(invoiceData);
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="facture-${invoice.reference}.pdf"`,
+      'Content-Length': pdfBuffer.length.toString(),
+    });
+    res.send(pdfBuffer);
+  } catch (err) {
+    next(err);
+  }
 });
 
 export default router;
