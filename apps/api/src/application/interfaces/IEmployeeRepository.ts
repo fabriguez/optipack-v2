@@ -4,6 +4,7 @@ import type { PaginationInput, PaginatedResponse } from '@optipack/shared';
 export interface IEmployeeRepository {
   findById(id: string): Promise<Employee | null>;
   findByAgency(agencyId: string, pagination: PaginationInput): Promise<PaginatedResponse<Employee>>;
+  findByAgencies(agencyIds: string[], pagination: PaginationInput, agencyId?: string): Promise<PaginatedResponse<Employee>>;
   create(data: Prisma.EmployeeCreateInput): Promise<Employee>;
   update(id: string, data: Prisma.EmployeeUpdateInput): Promise<Employee>;
   delete(id: string): Promise<void>;

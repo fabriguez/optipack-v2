@@ -1,10 +1,11 @@
 'use client';
 
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { AppDialog } from '@/components/ui/AppDialog';
 import { AppInput } from '@/components/ui/AppInput';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppSelect } from '@/components/ui/AppSelect';
+import { AppPhoneInput } from '@/components/ui/AppPhoneInput';
 import { useAgencies } from '@/lib/hooks/useAgencies';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
@@ -21,7 +22,7 @@ export function EmployeeFormDialog({ open, onClose }: Props) {
     onError: () => toast.error('Erreur'),
   });
 
-  const { register, handleSubmit, reset } = useForm();
+  const { register, handleSubmit, reset, control } = useForm();
   const onSubmit = (data: any) => { mutation.mutate({ ...data, baseSalary: Number(data.baseSalary || 0) }); reset(); };
 
   return (
@@ -31,7 +32,17 @@ export function EmployeeFormDialog({ open, onClose }: Props) {
         <AppSelect label="Agence" {...register('agencyId', { required: true })}
           options={(agencies?.data || []).map((a: any) => ({ value: a.id, label: a.name }))} placeholder="Selectionner" />
         <AppInput label="Poste" {...register('position', { required: true })} />
-        <AppInput label="Telephone" {...register('phone')} />
+        <Controller
+          name="phone"
+          control={control}
+          render={({ field }) => (
+            <AppPhoneInput
+              label="Telephone"
+              value={field.value}
+              onChange={field.onChange}
+            />
+          )}
+        />
         <AppInput label="N. identite" {...register('idNumber')} />
         <AppInput label="Salaire de base" type="number" {...register('baseSalary')} />
         <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">

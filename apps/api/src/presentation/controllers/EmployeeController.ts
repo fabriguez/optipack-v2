@@ -15,6 +15,21 @@ export class EmployeeController {
     }
   }
 
+  static async listAll(req: Request, res: Response, next: NextFunction) {
+    try {
+      const repo = container.resolve<any>(EMPLOYEE_REPOSITORY);
+      const { agencyId } = req.query;
+      const result = await repo.findByAgencies(
+        req.user!.agencyIds,
+        req.query,
+        agencyId as string | undefined,
+      );
+      res.json({ success: true, ...result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   static async list(req: Request, res: Response, next: NextFunction) {
     try {
       const repo = container.resolve<any>(EMPLOYEE_REPOSITORY);

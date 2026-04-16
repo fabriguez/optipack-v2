@@ -7,6 +7,11 @@ export interface IWarehouseRepository {
     agencyId: string,
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<Warehouse>>;
+  findByAgencies(
+    agencyIds: string[],
+    pagination: PaginationInput,
+    agencyId?: string,
+  ): Promise<PaginatedResponse<Warehouse>>;
   create(data: Prisma.WarehouseCreateInput): Promise<Warehouse>;
   update(id: string, data: Prisma.WarehouseUpdateInput): Promise<Warehouse>;
   delete(id: string): Promise<void>;

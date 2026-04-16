@@ -9,6 +9,7 @@ const router = Router();
 router.use(authenticate);
 router.use(authorize('SUPER_ADMIN', 'ADMIN'));
 
+router.get('/', validate(paginationSchema, 'query'), EmployeeController.listAll);
 router.get('/agency/:agencyId', validate(paginationSchema, 'query'), EmployeeController.list);
 router.get('/:id', EmployeeController.getById);
 router.post('/', EmployeeController.create);

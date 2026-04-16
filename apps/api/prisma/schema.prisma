@@ -353,6 +353,7 @@ model Container {
   departureAgencyId    String
   arrivalAgencyId      String
   status               ContainerStatus @default(EMPTY)
+  loadingDate          DateTime?
   departureDate        DateTime?
   estimatedArrivalDate DateTime?
   actualArrivalDate    DateTime?
@@ -709,10 +710,13 @@ model Expense {
   reason             String
   description        String?
   category           String?
+  orderer            String?
   amount             Decimal  @db.Decimal(15, 2)
   receiptUrl         String?
   justificationUrl   String?
   containerId        String?
+  parcelId           String?
+  associationType    String?
   approvedByUserId   String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
@@ -733,9 +737,13 @@ model Debt {
   id              String     @id @default(uuid())
   clientId        String
   invoiceId       String?
+  creditor        String?
   description     String
+  paymentMethod   PaymentMethod?
+  paymentProofUrl String?
   totalAmount     Decimal    @db.Decimal(15, 2)
   remainingAmount Decimal    @db.Decimal(15, 2)
+  installmentCount Int?
   installmentPlan Json?
   nextDueDate     DateTime?
   status          DebtStatus @default(ACTIVE)

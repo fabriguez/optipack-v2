@@ -43,6 +43,37 @@ export class PrismaEmployeeRepository implements IEmployeeRepository {
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
 
+  async findByAgencies(
+    agencyIds: string[],
+    pagination: PaginationInput,
+    agencyId?: string,
+  ): Promise<PaginatedResponse<Employee>> {
+    const { page, limit, search } = pagination;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.EmployeeWhereInput = {
+      agencyId: agencyId ? { equals: agencyId, in: agencyIds } : { in: agencyIds },
+      isActive: true,
+      ...(search && {
+        OR: [
+          { fullName: { contains: search, mode: 'insensitive' } },
+          { position: { contains: search, mode: 'insensitive' } },
+        ],
+      }),
+    };
+
+    const [data, total] = await Promise.all([
+      prisma.employee.findMany({
+        where, skip, take: limit,
+        orderBy: { fullName: 'asc' },
+        include: { agency: { select: { id: true, name: true } } },
+      }),
+      prisma.employee.count({ where }),
+    ]);
+
+    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+  }
+
   async create(data: Prisma.EmployeeCreateInput): Promise<Employee> {
     return prisma.employee.create({ data });
   }

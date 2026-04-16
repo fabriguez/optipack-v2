@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Upload, Warehouse, Eye } from 'lucide-react';
+import { Plus, Upload, Eye } from 'lucide-react';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
@@ -28,15 +28,21 @@ export default function WarehousesPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const { data: agencies } = useAgencies({ limit: 100 });
 
   const agencyIdFilter = searchParams.get('agencyId') || '';
-  const agencyId = agencyIdFilter || agencies?.data?.[0]?.id || '';
 
   const { data, isLoading } = useQuery({
-    queryKey: ['warehouses', agencyId],
-    queryFn: () => apiClient.get(`/warehouses/agency/${agencyId}`, { params: { limit: 50 } }).then((r) => r.data),
-    enabled: !!agencyId,
+    queryKey: ['warehouses', agencyIdFilter, page, search],
+    queryFn: () => apiClient.get('/warehouses', {
+      params: {
+        page,
+        limit: 20,
+        search: search || undefined,
+        agencyId: agencyIdFilter || undefined,
+      },
+    }).then((r) => r.data),
   });
 
   const handleImport = async (rows: Record<string, string>[]) => {
@@ -74,6 +80,7 @@ export default function WarehousesPage() {
   const columns = [
     { key: 'name', label: 'Nom', render: (row: any) => <Link href={`/warehouses/${row.id}`} className="text-primary-700 font-medium hover:underline" onClick={(e) => e.stopPropagation()}>{row.name}</Link> },
     { key: 'location', label: 'Emplacement' },
+    { key: 'agency', label: 'Agence', render: (row: any) => <span className="text-sm">{row.agency?.name || '-'}</span> },
     { key: 'type', label: 'Type', render: (row: any) => <AppBadge>{TYPE_LABELS[row.type] || row.type}</AppBadge> },
     {
       key: 'capacity', label: 'Occupation', render: (row: any) => {
@@ -111,7 +118,7 @@ export default function WarehousesPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Magasins</h1>
-            <p className="text-sm text-gray-500 mt-1">Entrepots et suivi de remplissage.</p>
+            <p className="text-sm text-gray-500 mt-1">{data?.meta?.total ?? 0} entrepots et suivi de remplissage.</p>
           </div>
           <div className="flex gap-2">
             <AppButton variant="outline" onClick={() => setShowImport(true)}>
@@ -122,7 +129,6 @@ export default function WarehousesPage() {
           </div>
         </div>
 
-        {/* Search --- Export | Filtres | Effacer */}
         <div className="flex items-center justify-between gap-3">
           <div className="flex-1">
             <SearchBar value={search} onChange={setSearch} placeholder="Rechercher un magasin..." />
@@ -134,7 +140,17 @@ export default function WarehousesPage() {
         </div>
 
         <AppCard padding="sm">
-          <AppDataTable columns={columns} data={data?.data || []} isLoading={isLoading} />
+          <AppDataTable
+            columns={columns}
+            data={data?.data || []}
+            isLoading={isLoading}
+            page={page}
+            totalPages={data?.meta?.totalPages || 1}
+            total={data?.meta?.total}
+            limit={20}
+            onPageChange={setPage}
+            onRowClick={(row) => router.push(`/warehouses/${row.id}`)}
+          />
         </AppCard>
       </div>
       <WarehouseFormDialog open={showCreate} onClose={() => setShowCreate(false)} />

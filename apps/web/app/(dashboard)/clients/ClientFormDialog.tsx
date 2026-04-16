@@ -1,12 +1,13 @@
 'use client';
 
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { createClientSchema, type CreateClientInput } from '@optipack/shared';
 import { AppDialog } from '@/components/ui/AppDialog';
 import { AppInput } from '@/components/ui/AppInput';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppSelect } from '@/components/ui/AppSelect';
+import { AppPhoneInput } from '@/components/ui/AppPhoneInput';
 import { useCreateClient } from '@/lib/hooks/useClients';
 import { useAgencies } from '@/lib/hooks/useAgencies';
 
@@ -23,6 +24,7 @@ export function ClientFormDialog({ open, onClose }: ClientFormDialogProps) {
     register,
     handleSubmit,
     reset,
+    control,
     formState: { errors },
   } = useForm<CreateClientInput>({
     resolver: zodResolver(createClientSchema),
@@ -43,7 +45,18 @@ export function ClientFormDialog({ open, onClose }: ClientFormDialogProps) {
     <AppDialog open={open} onClose={onClose} title="Nouveau client" size="md">
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <AppInput label="Nom complet" {...register('fullName')} error={errors.fullName?.message} />
-        <AppInput label="Telephone" {...register('phone')} error={errors.phone?.message} />
+        <Controller
+          name="phone"
+          control={control}
+          render={({ field }) => (
+            <AppPhoneInput
+              label="Telephone"
+              value={field.value}
+              onChange={field.onChange}
+              error={errors.phone?.message}
+            />
+          )}
+        />
         <AppInput label="Email" type="email" {...register('email')} error={errors.email?.message} />
         <AppInput label="Adresse" {...register('address')} error={errors.address?.message} />
         <AppSelect

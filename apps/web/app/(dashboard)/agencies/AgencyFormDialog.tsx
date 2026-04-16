@@ -1,11 +1,14 @@
 'use client';
 
-import { useForm } from 'react-hook-form';
+import { useState } from 'react';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { createAgencySchema, type CreateAgencyInput } from '@optipack/shared';
 import { AppDialog } from '@/components/ui/AppDialog';
 import { AppInput } from '@/components/ui/AppInput';
 import { AppButton } from '@/components/ui/AppButton';
+import { AppPhoneInput } from '@/components/ui/AppPhoneInput';
+import { AppCountrySelect, AppCitySelect, AppStateSelect } from '@/components/ui/AppCountryCitySelect';
 import { useCreateAgency, useUpdateAgency } from '@/lib/hooks/useAgencies';
 
 interface AgencyFormDialogProps {
@@ -19,11 +22,15 @@ export function AgencyFormDialog({ open, onClose, agency }: AgencyFormDialogProp
   const createMutation = useCreateAgency();
   const updateMutation = useUpdateAgency();
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
+  const [countryId, setCountryId] = useState<number>(0);
+  const [stateId, setStateId] = useState<number>(0);
 
   const {
     register,
     handleSubmit,
     reset,
+    control,
+    setValue,
     formState: { errors },
   } = useForm<CreateAgencyInput>({
     resolver: zodResolver(createAgencySchema),
@@ -50,12 +57,40 @@ export function AgencyFormDialog({ open, onClose, agency }: AgencyFormDialogProp
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <AppInput label="Nom de l'agence" {...register('name')} error={errors.name?.message} />
-          <AppInput label="Telephone" {...register('phone')} error={errors.phone?.message} />
+          <Controller
+            name="phone"
+            control={control}
+            render={({ field }) => (
+              <AppPhoneInput
+                label="Telephone"
+                value={field.value}
+                onChange={field.onChange}
+                error={errors.phone?.message}
+              />
+            )}
+          />
           <AppInput label="Adresse" {...register('address')} error={errors.address?.message} />
-          <AppInput label="Ville" {...register('city')} error={errors.city?.message} />
-          <AppInput label="Pays" {...register('country')} error={errors.country?.message} />
+          <AppCountrySelect
+            label="Pays"
+            error={errors.country?.message}
+            onChange={(val) => { setValue('country', val); setStateId(0); }}
+            onCountryIdChange={(id) => { setCountryId(id); setStateId(0); }}
+          />
+          <AppStateSelect
+            label="Region"
+            countryId={countryId}
+            onStateIdChange={setStateId}
+            onChange={() => {}}
+          />
+          <AppCitySelect
+            label="Ville"
+            error={errors.city?.message}
+            countryId={countryId}
+            stateId={stateId}
+            onChange={(val) => setValue('city', val)}
+          />
           <AppInput label="Email" type="email" {...register('email')} error={errors.email?.message} />
-          <AppInput label="Lien Google Maps" {...register('googleMapsLink')} error={errors.googleMapsLink?.message} className="sm:col-span-2" />
+          <AppInput label="Lien Google Maps" {...register('googleMapsLink')} error={errors.googleMapsLink?.message} />
         </div>
 
         <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">

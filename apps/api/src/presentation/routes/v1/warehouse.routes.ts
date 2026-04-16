@@ -8,6 +8,7 @@ const router = Router();
 
 router.use(authenticate);
 
+router.get('/', validate(paginationSchema, 'query'), WarehouseController.listAll);
 router.get('/agency/:agencyId', validate(paginationSchema, 'query'), WarehouseController.list);
 router.get('/:id', WarehouseController.getById);
 router.post('/', authorize('SUPER_ADMIN', 'ADMIN', 'AGENT'), WarehouseController.create);

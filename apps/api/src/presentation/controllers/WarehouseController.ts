@@ -18,6 +18,21 @@ export class WarehouseController {
     }
   }
 
+  static async listAll(req: Request, res: Response, next: NextFunction) {
+    try {
+      const repo = container.resolve<any>(WAREHOUSE_REPOSITORY);
+      const { agencyId } = req.query;
+      const result = await repo.findByAgencies(
+        req.user!.agencyIds,
+        req.query as any,
+        agencyId as string | undefined,
+      );
+      res.json({ success: true, ...result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   static async list(req: Request, res: Response, next: NextFunction) {
     try {
       const { agencyId } = req.params;
