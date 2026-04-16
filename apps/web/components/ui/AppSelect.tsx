@@ -9,7 +9,7 @@ import {
 } from './select';
 import { Label } from './label';
 import { cn } from '@/lib/utils/cn';
-import { forwardRef, type SelectHTMLAttributes } from 'react';
+import { forwardRef, useState, useEffect } from 'react';
 
 interface Option {
   value: string;
@@ -33,25 +33,44 @@ interface AppSelectProps {
 
 /**
  * AppSelect construit sur le Select shadcn.
- * Compatible avec react-hook-form via register() grace au synthetic onChange.
+ * Compatible avec react-hook-form via register() ET Controller.
+ *
+ * Quand utilise avec register(), on maintient un state interne
+ * pour que Radix Select affiche toujours le label correct.
  */
 export const AppSelect = forwardRef<HTMLButtonElement, AppSelectProps>(
   ({ label, error, options, placeholder, value, defaultValue, onChange, onValueChange, name, disabled, className, id }, ref) => {
     const selectId = id || label?.toLowerCase().replace(/\s+/g, '-');
 
+    // Internal state to track the selected value when used with register()
+    // (register() provides onChange but NOT value, so Radix can't display the label)
+    const [internalValue, setInternalValue] = useState<string>(value || defaultValue || '');
+
+    // Sync internal value when controlled value changes externally
+    useEffect(() => {
+      if (value !== undefined) {
+        setInternalValue(value);
+      }
+    }, [value]);
+
     const handleChange = (val: string | null, _eventDetails?: unknown) => {
       const safeVal = val ?? '';
-      // Appeler onValueChange si fourni (API directe)
+      // Update internal state for display
+      setInternalValue(safeVal);
+      // Appeler onValueChange si fourni (API directe / Controller)
       onValueChange?.(safeVal);
       // Appeler onChange avec un event synthetique (compat RHF register)
       onChange?.({ target: { value: safeVal, name } });
     };
 
+    // Use the controlled value if provided, otherwise use internal state
+    const displayValue = value !== undefined ? value : internalValue;
+
     return (
       <div className="space-y-1.5">
         {label && <Label htmlFor={selectId}>{label}</Label>}
         <Select
-          value={value}
+          value={displayValue || undefined}
           defaultValue={defaultValue}
           onValueChange={handleChange}
           disabled={disabled}

@@ -256,38 +256,5 @@ body {
   opacity: 0.5;
 }
 
-/* Country/city select overrides */
-.country-city-select {
-  position: relative;
-}
-.country-city-select input {
-  height: 2.75rem;
-  width: 100%;
-  border-radius: 0.75rem;
-  border: 1px solid var(--input);
-  background: var(--background);
-  padding: 0 0.75rem;
-  font-size: 0.875rem;
-}
-.country-city-select input:focus {
-  border-color: #4CAF50;
-  outline: none;
-  box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
-}
-.country-city-select ul {
-  border-radius: 0.75rem;
-  border: 1px solid var(--border);
-  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.07);
-  max-height: 200px;
-  overflow-y: auto;
-  margin-top: 4px;
-  z-index: 50;
-}
-.country-city-select li {
-  padding: 0.5rem 0.75rem;
-  font-size: 0.875rem;
-  cursor: pointer;
-}
-.country-city-select li:hover {
-  background: #E8F5E9;
-}
+/* Hide react-country-state-city default styles (we use custom components) */
+.react-country-state-city { display: none; }

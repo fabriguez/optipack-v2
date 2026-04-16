@@ -3,26 +3,36 @@
 import { use, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Warehouse, Package, MapPin, Plus, Eye, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Package, MapPin, Plus, Eye, Edit, Trash2, ArrowRightLeft } from 'lucide-react';
 import { PageTransition } from '@/components/shared/PageTransition';
-import { AppCard, AppCardHeader } from '@/components/ui/AppCard';
+import { AppCard } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppBadge } from '@/components/ui/AppBadge';
 import { AppDataTable } from '@/components/ui/AppDataTable';
+import { AppDialog } from '@/components/ui/AppDialog';
+import { AppSelect } from '@/components/ui/AppSelect';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { RowActions } from '@/components/shared/RowActions';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParcels } from '@/lib/hooks/useParcels';
 import { apiClient } from '@/lib/api/client';
 import { formatAmount, formatDate } from '@optipack/shared';
+import { toast } from 'sonner';
 import { ParcelFormDialog } from '../../parcels/ParcelFormDialog';
 
 export default function WarehouseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const qc = useQueryClient();
   const [parcelPage, setParcelPage] = useState(1);
   const [showCreateParcel, setShowCreateParcel] = useState(false);
+  const [editParcel, setEditParcel] = useState<any>(null);
+  const [deleteParcel, setDeleteParcel] = useState<any>(null);
+  const [transferParcel, setTransferParcel] = useState<any>(null);
+  const [removeParcel, setRemoveParcel] = useState<any>(null);
+  const [targetWarehouseId, setTargetWarehouseId] = useState('');
 
   const { data, isLoading } = useQuery({
     queryKey: ['warehouses', id],
@@ -30,7 +40,14 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
     enabled: !!id,
   });
 
-  const { data: parcelsData } = useParcels({ warehouseId: id, limit: 20, page: parcelPage } as any);
+  const { data: parcelsData, isLoading: parcelsLoading } = useParcels({ warehouseId: id, limit: 20, page: parcelPage } as any);
+
+  // Load all warehouses for transfer dialog
+  const { data: allWarehousesData } = useQuery({
+    queryKey: ['all-warehouses-for-transfer'],
+    queryFn: () => apiClient.get('/warehouses', { params: { limit: 200 } }).then((r) => r.data),
+    enabled: !!transferParcel,
+  });
 
   const warehouse = data?.data;
   if (isLoading) return <DashboardSkeleton />;
@@ -39,6 +56,63 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
   const max = Number(warehouse.maxCapacity || 0);
   const current = Number(warehouse.currentOccupancy || 0);
   const pct = max > 0 ? Math.round((current / max) * 100) : 0;
+
+  const warehouseOptions = (allWarehousesData?.data || [])
+    .filter((w: any) => w.id !== id)
+    .map((w: any) => ({
+      value: w.id,
+      label: `${w.name} - ${w.agency?.name || ''}`,
+    }));
+
+  const invalidateAll = () => {
+    qc.invalidateQueries({ queryKey: ['warehouses', id] });
+    qc.invalidateQueries({ queryKey: ['parcels'] });
+  };
+
+  const handleTransferParcel = async () => {
+    if (!transferParcel || !targetWarehouseId) return;
+    try {
+      await apiClient.patch(`/parcels/${transferParcel.id}/status`, {
+        status: 'IN_STOCK',
+        warehouseId: targetWarehouseId,
+      });
+      toast.success(`Colis ${transferParcel.trackingNumber} transfere`);
+      invalidateAll();
+    } catch {
+      toast.error('Erreur lors du transfert');
+    }
+    setTransferParcel(null);
+    setTargetWarehouseId('');
+  };
+
+  const handleRemoveParcel = async () => {
+    if (!removeParcel) return;
+    try {
+      await apiClient.patch(`/parcels/${removeParcel.id}/status`, {
+        status: 'IN_STOCK',
+        warehouseId: null,
+      });
+      toast.success(`Colis ${removeParcel.trackingNumber} retire du magasin`);
+      invalidateAll();
+    } catch {
+      toast.error('Erreur lors du retrait');
+    }
+    setRemoveParcel(null);
+  };
+
+  const handleDeleteParcel = async () => {
+    if (!deleteParcel) return;
+    try {
+      await apiClient.patch(`/parcels/${deleteParcel.id}/status`, { status: 'LOST' });
+      toast.success(`Colis ${deleteParcel.trackingNumber} supprime`);
+      invalidateAll();
+    } catch {
+      toast.error('Erreur lors de la suppression');
+    }
+    setDeleteParcel(null);
+  };
+
+  const canModifyParcel = (row: any) => row.status === 'IN_STOCK';
 
   const parcelColumns = [
     {
@@ -51,17 +125,26 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
       ),
     },
     { key: 'designation', label: 'Designation' },
+    { key: 'client', label: 'Client', render: (row: any) => row.client?.fullName || '-' },
     { key: 'weight', label: 'Masse', render: (row: any) => `${Number(row.weight).toFixed(1)} kg` },
+    { key: 'destination', label: 'Destination' },
+    { key: 'price', label: 'Prix', render: (row: any) => formatAmount(Number(row.price)) },
     { key: 'status', label: 'Statut', render: (row: any) => <StatusBadge status={row.status} type="parcel" /> },
     { key: 'createdAt', label: 'Date', render: (row: any) => formatDate(row.createdAt) },
     {
       key: 'actions',
       label: '',
+      className: 'w-10',
       render: (row: any) => (
         <RowActions
           actions={[
             { label: 'Voir', icon: <Eye className="h-4 w-4" />, onClick: () => router.push(`/parcels/${row.id}`) },
-            { label: 'Changer statut', icon: <RefreshCw className="h-4 w-4" />, onClick: () => router.push(`/parcels/${row.id}`) },
+            ...(canModifyParcel(row) ? [
+              { label: 'Modifier', icon: <Edit className="h-4 w-4" />, onClick: () => router.push(`/parcels/${row.id}`) },
+              { label: 'Transferer', icon: <ArrowRightLeft className="h-4 w-4" />, onClick: () => setTransferParcel(row) },
+              { label: 'Retirer du magasin', icon: <Package className="h-4 w-4" />, onClick: () => setRemoveParcel(row) },
+              { label: 'Supprimer', icon: <Trash2 className="h-4 w-4" />, onClick: () => setDeleteParcel(row), variant: 'destructive' as const },
+            ] : []),
           ]}
         />
       ),
@@ -141,16 +224,64 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
           <AppDataTable
             columns={parcelColumns}
             data={parcelsData?.data || []}
+            isLoading={parcelsLoading}
             onRowClick={(row) => router.push(`/parcels/${row.id}`)}
             total={parcelsData?.meta?.total}
             page={parcelPage}
             totalPages={parcelsData?.meta?.totalPages}
+            limit={20}
             onPageChange={setParcelPage}
           />
         </AppCard>
       </div>
 
       <ParcelFormDialog open={showCreateParcel} onClose={() => setShowCreateParcel(false)} />
+
+      {/* Transfer dialog */}
+      <AppDialog
+        open={!!transferParcel}
+        onClose={() => { setTransferParcel(null); setTargetWarehouseId(''); }}
+        title="Transferer le colis"
+        size="md"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Transferer le colis <span className="font-bold font-mono">{transferParcel?.trackingNumber}</span> ({transferParcel?.designation}) vers un autre magasin.
+          </p>
+          <AppSelect
+            label="Magasin de destination"
+            options={warehouseOptions}
+            value={targetWarehouseId}
+            onValueChange={setTargetWarehouseId}
+            placeholder="Selectionner un magasin"
+          />
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+            <AppButton variant="ghost" onClick={() => { setTransferParcel(null); setTargetWarehouseId(''); }}>Annuler</AppButton>
+            <AppButton onClick={handleTransferParcel} disabled={!targetWarehouseId}>Transferer</AppButton>
+          </div>
+        </div>
+      </AppDialog>
+
+      {/* Remove from warehouse confirm */}
+      <ConfirmDialog
+        open={!!removeParcel}
+        onClose={() => setRemoveParcel(null)}
+        onConfirm={handleRemoveParcel}
+        title="Retirer le colis du magasin"
+        message={`Le colis ${removeParcel?.trackingNumber} (${removeParcel?.designation}) sera retire de ce magasin. Il ne sera plus associe a aucun magasin.`}
+        confirmLabel="Retirer"
+      />
+
+      {/* Delete confirm */}
+      <ConfirmDialog
+        open={!!deleteParcel}
+        onClose={() => setDeleteParcel(null)}
+        onConfirm={handleDeleteParcel}
+        title="Supprimer le colis"
+        message={`Le colis ${deleteParcel?.trackingNumber} (${deleteParcel?.designation}) sera marque comme perdu. Cette action est irreversible.`}
+        confirmLabel="Supprimer"
+        variant="destructive"
+      />
     </PageTransition>
   );
 }
