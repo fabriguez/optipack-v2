@@ -24,6 +24,12 @@ COPY apps/web/ ./apps/web/
 # Build shared package first
 RUN pnpm --filter @optipack/shared build
 
+# Accept NEXT_PUBLIC_* vars at build time (they are inlined into the JS bundle)
+ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_SOCKET_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_SOCKET_URL=$NEXT_PUBLIC_SOCKET_URL
+
 # Build Next.js
 RUN pnpm --filter web build
 

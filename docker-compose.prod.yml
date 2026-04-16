@@ -27,6 +27,9 @@ services:
     build:
       context: .
       dockerfile: docker/web/Dockerfile.prod
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_SOCKET_URL: ${NEXT_PUBLIC_SOCKET_URL}
     ports:
       - "3008:3000"
     env_file: .env
