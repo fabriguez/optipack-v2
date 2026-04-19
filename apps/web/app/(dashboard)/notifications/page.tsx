@@ -222,6 +222,8 @@ function NotificationsContent() {
               data={notifications}
               page={meta.page}
               totalPages={meta.totalPages}
+              total={meta.total}
+              limit={meta.limit}
               onPageChange={setPage}
               onRowClick={(notif: any) => {
                 if (!notif.readAt) {

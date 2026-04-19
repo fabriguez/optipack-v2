@@ -12,6 +12,7 @@ interface AppPhoneInputProps {
   error?: string;
   value?: string;
   onChange?: (value: string | undefined) => void;
+  onCountryChange?: (country: Country | undefined) => void;
   defaultCountry?: Country;
   placeholder?: string;
   disabled?: boolean;
@@ -20,7 +21,7 @@ interface AppPhoneInputProps {
 }
 
 export const AppPhoneInput = forwardRef<HTMLInputElement, AppPhoneInputProps>(
-  ({ label, error, value, onChange, defaultCountry = 'CM', placeholder, disabled, className, name }, ref) => {
+  ({ label, error, value, onChange, onCountryChange, defaultCountry = 'CM', placeholder, disabled, className, name }, ref) => {
     const inputId = label?.toLowerCase().replace(/\s+/g, '-');
 
     return (
@@ -31,6 +32,7 @@ export const AppPhoneInput = forwardRef<HTMLInputElement, AppPhoneInputProps>(
           defaultCountry={defaultCountry}
           value={value || ''}
           onChange={(val) => onChange?.(val)}
+          onCountryChange={onCountryChange}
           placeholder={placeholder}
           disabled={disabled}
           flags={flags}

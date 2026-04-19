@@ -56,8 +56,9 @@ export function AppDataTable<T extends Record<string, any>>({
     );
   }
 
-  const startItem = (page - 1) * limit + 1;
-  const endItem = Math.min(page * limit, total || data.length);
+  const effectiveTotal = total ?? data.length;
+  const startItem = effectiveTotal === 0 ? 0 : (page - 1) * limit + 1;
+  const endItem = Math.min(page * limit, effectiveTotal);
 
   return (
     <div>
@@ -115,70 +116,66 @@ export function AppDataTable<T extends Record<string, any>>({
       </div>
 
       {/* Pagination */}
-      {(totalPages > 1 || (total !== undefined && total > 0)) && (
-        <div className="flex items-center justify-between border-t border-gray-100 px-5 py-3.5">
-          <p className="text-xs text-gray-500">
-            {total !== undefined && total > 0
-              ? `${startItem}-${endItem} sur ${total}`
-              : 'Aucun resultat'}
-          </p>
-          {totalPages > 1 && (
-            <div className="flex items-center gap-1">
-              <PaginationButton
-                onClick={() => onPageChange?.(1)}
-                disabled={page <= 1}
-                title="Premiere page"
-              >
-                <ChevronsLeft className="h-3.5 w-3.5" />
-              </PaginationButton>
-              <PaginationButton
-                onClick={() => onPageChange?.(page - 1)}
-                disabled={page <= 1}
-                title="Page precedente"
-              >
-                <ChevronLeft className="h-3.5 w-3.5" />
-              </PaginationButton>
+      <div className="flex items-center justify-between border-t border-gray-100 px-5 py-3.5">
+        <p className="text-xs text-gray-500">
+          {effectiveTotal > 0
+            ? `${startItem}-${endItem} sur ${effectiveTotal}`
+            : 'Aucun resultat'}
+        </p>
+        <div className="flex items-center gap-1">
+          <PaginationButton
+            onClick={() => onPageChange?.(1)}
+            disabled={page <= 1}
+            title="Premiere page"
+          >
+            <ChevronsLeft className="h-3.5 w-3.5" />
+          </PaginationButton>
+          <PaginationButton
+            onClick={() => onPageChange?.(page - 1)}
+            disabled={page <= 1}
+            title="Page precedente"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+          </PaginationButton>
 
-              {/* Page numbers */}
-              {getPageNumbers(page, totalPages).map((p) =>
-                p === '...' ? (
-                  <span key={`dots-${p}`} className="px-1 text-xs text-gray-400">
-                    ...
-                  </span>
-                ) : (
-                  <button
-                    key={p}
-                    onClick={() => onPageChange?.(p as number)}
-                    className={cn(
-                      'flex h-8 w-8 items-center justify-center rounded-lg text-xs font-medium transition-colors',
-                      p === page
-                        ? 'bg-primary-500 text-white shadow-sm'
-                        : 'text-gray-600 hover:bg-gray-100',
-                    )}
-                  >
-                    {p}
-                  </button>
-                ),
-              )}
-
-              <PaginationButton
-                onClick={() => onPageChange?.(page + 1)}
-                disabled={page >= totalPages}
-                title="Page suivante"
+          {/* Page numbers */}
+          {getPageNumbers(page, totalPages).map((p, idx) =>
+            p === '...' ? (
+              <span key={`dots-${idx}`} className="px-1 text-xs text-gray-400">
+                ...
+              </span>
+            ) : (
+              <button
+                key={p}
+                onClick={() => onPageChange?.(p as number)}
+                className={cn(
+                  'flex h-8 w-8 items-center justify-center rounded-lg text-xs font-medium transition-colors',
+                  p === page
+                    ? 'bg-primary-500 text-white shadow-sm'
+                    : 'text-gray-600 hover:bg-gray-100',
+                )}
               >
-                <ChevronRight className="h-3.5 w-3.5" />
-              </PaginationButton>
-              <PaginationButton
-                onClick={() => onPageChange?.(totalPages)}
-                disabled={page >= totalPages}
-                title="Derniere page"
-              >
-                <ChevronsRight className="h-3.5 w-3.5" />
-              </PaginationButton>
-            </div>
+                {p}
+              </button>
+            ),
           )}
+
+          <PaginationButton
+            onClick={() => onPageChange?.(page + 1)}
+            disabled={page >= totalPages}
+            title="Page suivante"
+          >
+            <ChevronRight className="h-3.5 w-3.5" />
+          </PaginationButton>
+          <PaginationButton
+            onClick={() => onPageChange?.(totalPages)}
+            disabled={page >= totalPages}
+            title="Derniere page"
+          >
+            <ChevronsRight className="h-3.5 w-3.5" />
+          </PaginationButton>
         </div>
-      )}
+      </div>
     </div>
   );
 }

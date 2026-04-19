@@ -182,28 +182,47 @@ interface CountrySelectFieldProps {
   onChange?: (value: string) => void;
   onCountryIdChange?: (id: number) => void;
   placeholder?: string;
+  /** ISO 3166-1 alpha-2 code to auto-select once countries are loaded (e.g. "CM") */
+  iso2?: string;
 }
 
-export function AppCountrySelect({ label, error, value, onChange, onCountryIdChange, placeholder }: CountrySelectFieldProps) {
-  const [countries, setCountries] = useState<{ id: number; name: string }[]>([]);
+export function AppCountrySelect({ label, error, value, onChange, onCountryIdChange, placeholder, iso2 }: CountrySelectFieldProps) {
+  const [countries, setCountries] = useState<{ id: number; name: string; iso2: string }[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedName, setSelectedName] = useState<string>(value || '');
 
   useEffect(() => {
     GetCountries().then((result: any[]) => {
-      setCountries(result.map((c: any) => ({ id: c.id, name: c.name })));
+      setCountries(result.map((c: any) => ({ id: c.id, name: c.name, iso2: c.iso2 })));
       setLoading(false);
     });
   }, []);
+
+  useEffect(() => {
+    if (value !== undefined) setSelectedName(value);
+  }, [value]);
+
+  useEffect(() => {
+    if (!iso2 || countries.length === 0) return;
+    const match = countries.find((c) => c.iso2.toUpperCase() === iso2.toUpperCase());
+    if (match && match.name !== selectedName) {
+      setSelectedName(match.name);
+      onChange?.(match.name);
+      onCountryIdChange?.(match.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [iso2, countries]);
 
   return (
     <SearchableLocationSelect
       label={label}
       error={error}
       placeholder={placeholder || 'Selectionner un pays'}
-      value={value}
+      value={selectedName || undefined}
       options={countries}
       loading={loading}
       onChange={(item) => {
+        setSelectedName(item?.name || '');
         onChange?.(item?.name || '');
         onCountryIdChange?.(item?.id || 0);
       }}

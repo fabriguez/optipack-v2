@@ -24,6 +24,7 @@ export function AgencyFormDialog({ open, onClose, agency }: AgencyFormDialogProp
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
   const [countryId, setCountryId] = useState<number>(0);
   const [stateId, setStateId] = useState<number>(0);
+  const [phoneCountryIso, setPhoneCountryIso] = useState<string | undefined>();
 
   const {
     register,
@@ -65,6 +66,7 @@ export function AgencyFormDialog({ open, onClose, agency }: AgencyFormDialogProp
                 label="Telephone"
                 value={field.value}
                 onChange={field.onChange}
+                onCountryChange={(c) => setPhoneCountryIso(c)}
                 error={errors.phone?.message}
               />
             )}
@@ -73,6 +75,7 @@ export function AgencyFormDialog({ open, onClose, agency }: AgencyFormDialogProp
           <AppCountrySelect
             label="Pays"
             error={errors.country?.message}
+            iso2={phoneCountryIso}
             onChange={(val) => { setValue('country', val); setStateId(0); }}
             onCountryIdChange={(id) => { setCountryId(id); setStateId(0); }}
           />
