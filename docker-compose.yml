@@ -20,7 +20,7 @@ services:
       minio:
         condition: service_started
     networks:
-      - optipack
+      - transitsoftservices
 
   # ---------- PostgreSQL ----------
   postgres:
@@ -28,18 +28,18 @@ services:
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_DB: optipack
-      POSTGRES_USER: optipack
-      POSTGRES_PASSWORD: optipack
+      POSTGRES_DB: transitsoftservices
+      POSTGRES_USER: transitsoftservices
+      POSTGRES_PASSWORD: transitsoftservices
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U optipack"]
+      test: ["CMD-SHELL", "pg_isready -U transitsoftservices"]
       interval: 5s
       timeout: 5s
       retries: 5
     networks:
-      - optipack
+      - transitsoftservices
 
   # ---------- Redis ----------
   redis:
@@ -55,7 +55,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - optipack
+      - transitsoftservices
 
   # ---------- MinIO (S3-compatible storage) ----------
   minio:
@@ -64,13 +64,13 @@ services:
       - "9005:9000"
       - "9006:9001"
     environment:
-      MINIO_ROOT_USER: optipack
-      MINIO_ROOT_PASSWORD: optipack_secret
+      MINIO_ROOT_USER: transitsoftservices
+      MINIO_ROOT_PASSWORD: transitsoftservices_secret
     volumes:
       - minio-data:/data
     command: server /data --console-address ":9001"
     networks:
-      - optipack
+      - transitsoftservices
 
 
 volumes:
@@ -79,5 +79,5 @@ volumes:
   minio-data:
 
 networks:
-  optipack:
+  transitsoftservices:
     driver: bridge

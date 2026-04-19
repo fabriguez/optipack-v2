@@ -11,7 +11,7 @@ import { AppDataTable, type Column } from '@/components/ui/AppDataTable';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
-import { formatAmount, formatDate } from '@optipack/shared';
+import { formatAmount, formatDate } from '@transitsoftservices/shared';
 
 const STATUS_VARIANT: Record<string, 'warning' | 'info' | 'success' | 'error'> = {
   ACTIVE: 'warning', PARTIALLY_PAID: 'info', CLEARED: 'success', OVERDUE: 'error',

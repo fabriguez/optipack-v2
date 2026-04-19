@@ -1,5 +1,5 @@
 import type { Client, Prisma } from '@prisma/client';
-import type { PaginationInput, PaginatedResponse } from '@optipack/shared';
+import type { PaginationInput, PaginatedResponse } from '@transitsoftservices/shared';
 
 export interface IClientRepository {
   findById(id: string): Promise<Client | null>;

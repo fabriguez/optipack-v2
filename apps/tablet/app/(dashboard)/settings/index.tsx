@@ -146,7 +146,7 @@ export default function SettingsScreen() {
             Se deconnecter
           </Button>
           <Text style={{ fontSize: 12, color: colors.gray[400], marginTop: spacing.lg }}>
-            OptiPack v{APP_VERSION}
+            TransitSoftServices v{APP_VERSION}
           </Text>
         </View>
       </Card>

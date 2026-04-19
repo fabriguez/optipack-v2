@@ -17,7 +17,7 @@ import { useClient } from '@/lib/hooks/useClients';
 import { useParcels } from '@/lib/hooks/useParcels';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
-import { formatAmount, formatDate } from '@optipack/shared';
+import { formatAmount, formatDate } from '@transitsoftservices/shared';
 import { ParcelFormDialog } from '../../parcels/ParcelFormDialog';
 
 const TIER_VARIANT: Record<string, 'default' | 'info' | 'warning' | 'success'> = {

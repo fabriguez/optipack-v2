@@ -16,7 +16,7 @@ import { RowActions } from '@/components/shared/RowActions';
 import { useServerPagination } from '@/lib/hooks/useServerPagination';
 import { usePayments } from '@/lib/hooks/usePayments';
 import { useAgencies } from '@/lib/hooks/useAgencies';
-import { formatAmount, formatDateTime } from '@optipack/shared';
+import { formatAmount, formatDateTime } from '@transitsoftservices/shared';
 import { PaymentFormDialog } from './PaymentFormDialog';
 
 const METHOD_LABELS: Record<string, string> = {

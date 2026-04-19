@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
 export const metadata: Metadata = {
-  title: 'OptiPack - Gestion de Transit',
+  title: 'TransitSoftServices - Gestion de Transit',
   description: 'Application de gestion de transit aerien, maritime et terrestre',
 };
 

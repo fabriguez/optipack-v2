@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import type { CreateContainerInput, PaginationInput } from '@optipack/shared';
+import type { CreateContainerInput, PaginationInput } from '@transitsoftservices/shared';
 
 export const containersApi = {
   list: (params?: Partial<PaginationInput> & { status?: string }) =>

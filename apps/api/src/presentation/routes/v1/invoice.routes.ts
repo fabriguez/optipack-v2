@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { authenticate } from '../../middleware/authMiddleware';
 import { validate } from '../../middleware/validate';
-import { paginationSchema } from '@optipack/shared';
+import { paginationSchema } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
 import { PDFService } from '../../../application/services/PDFService';
 import type { InvoiceData } from '../../../application/services/PDFService';

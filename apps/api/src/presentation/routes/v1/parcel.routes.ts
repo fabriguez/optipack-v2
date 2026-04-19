@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { ParcelController } from '../../controllers/ParcelController';
 import { authenticate } from '../../middleware/authMiddleware';
 import { validate } from '../../middleware/validate';
-import { createParcelSchema, paginationSchema } from '@optipack/shared';
+import { createParcelSchema, paginationSchema } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
 import { QRCodeService } from '../../../application/services/QRCodeService';
 import { PDFService } from '../../../application/services/PDFService';

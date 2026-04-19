@@ -1,5 +1,5 @@
 import type { TransitRoute, Client } from '@prisma/client';
-import { LOYALTY_TIER_DISCOUNTS } from '@optipack/shared';
+import { LOYALTY_TIER_DISCOUNTS } from '@transitsoftservices/shared';
 
 interface PriceCalculation {
   basePrice: number;

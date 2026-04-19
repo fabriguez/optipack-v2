@@ -33,15 +33,6 @@ export const TransitType = {
 
 export type TransitType = (typeof TransitType)[keyof typeof TransitType];
 
-// -- Types de magasin --
-export const WarehouseType = {
-  STORAGE: 'STORAGE',
-  TRANSIT: 'TRANSIT',
-  DELIVERY: 'DELIVERY',
-} as const;
-
-export type WarehouseType = (typeof WarehouseType)[keyof typeof WarehouseType];
-
 // -- Roles utilisateur --
 export const UserRole = {
   SUPER_ADMIN: 'SUPER_ADMIN',

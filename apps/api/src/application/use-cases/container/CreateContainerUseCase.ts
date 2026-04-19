@@ -1,5 +1,5 @@
 import { inject, injectable } from 'tsyringe';
-import type { CreateContainerInput } from '@optipack/shared';
+import type { CreateContainerInput } from '@transitsoftservices/shared';
 import { CONTAINER_REPOSITORY, type IContainerRepository } from '../../interfaces/IContainerRepository';
 import { AGENCY_REPOSITORY, type IAgencyRepository } from '../../interfaces/IAgencyRepository';
 import { NotFoundError } from '../../../domain/errors/BusinessError';

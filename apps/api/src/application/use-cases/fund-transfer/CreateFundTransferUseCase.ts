@@ -1,6 +1,6 @@
 import { inject, injectable } from 'tsyringe';
-import type { CreateFundTransferInput } from '@optipack/shared';
-import { generateReference } from '@optipack/shared';
+import type { CreateFundTransferInput } from '@transitsoftservices/shared';
+import { generateReference } from '@transitsoftservices/shared';
 import { FUND_TRANSFER_REPOSITORY, type IFundTransferRepository } from '../../interfaces/IFundTransferRepository';
 import { CASH_REGISTER_REPOSITORY, type ICashRegisterRepository } from '../../interfaces/ICashRegisterRepository';
 import { JOURNAL_ENTRY_REPOSITORY, type IJournalEntryRepository } from '../../interfaces/IJournalEntryRepository';

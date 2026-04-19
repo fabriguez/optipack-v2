@@ -1,5 +1,5 @@
 import { inject, injectable } from 'tsyringe';
-import type { CreateAgencyInput } from '@optipack/shared';
+import type { CreateAgencyInput } from '@transitsoftservices/shared';
 import { AGENCY_REPOSITORY, type IAgencyRepository } from '../../interfaces/IAgencyRepository';
 import { ConflictError } from '../../../domain/errors/BusinessError';
 

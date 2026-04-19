@@ -89,29 +89,20 @@ model Agency {
 // ============================================================
 
 model Warehouse {
-  id               String        @id @default(uuid())
-  agencyId         String
-  name             String
-  location         String
-  type             WarehouseType @default(STORAGE)
-  maxCapacity      Decimal?      @db.Decimal(15, 2)
-  currentOccupancy Decimal       @default(0) @db.Decimal(15, 2)
-  isActive         Boolean       @default(true)
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  id        String   @id @default(uuid())
+  agencyId  String
+  name      String
+  location  String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  agency  Agency   @relation(fields: [agencyId], references: [id])
-  parcels Parcel[] @relation("CurrentWarehouse")
+  agency          Agency   @relation(fields: [agencyId], references: [id])
+  parcels         Parcel[] @relation("CurrentWarehouse")
   originalParcels Parcel[] @relation("OriginalWarehouse")
 
   @@index([agencyId])
   @@map("warehouses")
-}
-
-enum WarehouseType {
-  STORAGE
-  TRANSIT
-  DELIVERY
 }
 
 // ============================================================
@@ -422,6 +413,7 @@ model Parcel {
   arrivalDate         DateTime?
   pickupDate          DateTime?
   penaltyStartDate    DateTime?
+  warehouseEnteredAt  DateTime?
 
   isDeleted           Boolean  @default(false)
   deletedAt           DateTime?

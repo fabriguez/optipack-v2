@@ -91,13 +91,7 @@
     "title": "Magasins",
     "newWarehouse": "Nouveau magasin",
     "name": "Nom",
-    "location": "Emplacement",
-    "type": "Type",
-    "storage": "Stockage",
-    "transit": "Transit",
-    "delivery": "Livraison",
-    "capacity": "Capacite",
-    "occupancy": "Occupation"
+    "location": "Emplacement"
   },
   "clients": {
     "title": "Clients",

@@ -1,5 +1,5 @@
 import type { Payment, Prisma } from '@prisma/client';
-import type { PaginationInput, PaginatedResponse } from '@optipack/shared';
+import type { PaginationInput, PaginatedResponse } from '@transitsoftservices/shared';
 
 export interface PaymentWithRelations extends Payment {
   invoice?: { id: string; reference: string; clientId: string };

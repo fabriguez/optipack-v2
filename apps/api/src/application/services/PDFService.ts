@@ -121,7 +121,7 @@ export class PDFService {
     doc
       .fontSize(24)
       .fillColor(COLORS.white)
-      .text('OPTIPACK', 60, 52, { continued: true })
+      .text('TRANSITSOFTSERVICES', 60, 52, { continued: true })
       .fontSize(10)
       .text('  Transit & Logistique', { baseline: 'alphabetic' });
 
@@ -286,7 +286,7 @@ export class PDFService {
     doc
       .fontSize(9)
       .fillColor(COLORS.gray)
-      .text('OptiPack - Transit & Logistique', 50, footerY + 8, {
+      .text('TransitSoftServices - Transit & Logistique', 50, footerY + 8, {
         align: 'center',
         width: pageWidth,
       });
@@ -403,7 +403,7 @@ export class PDFService {
     doc
       .fontSize(9)
       .fillColor(COLORS.gray)
-      .text('OptiPack - Transit & Logistique', 50, footerY + 8, {
+      .text('TransitSoftServices - Transit & Logistique', 50, footerY + 8, {
         align: 'center',
         width: pageWidth,
       });
@@ -424,7 +424,7 @@ export class PDFService {
 
     // Header
     doc.rect(15, 10, w, 30).fill(COLORS.primary);
-    doc.fontSize(14).fillColor(COLORS.white).text('OPTIPACK', 20, 16, { width: w - 10, align: 'center' });
+    doc.fontSize(14).fillColor(COLORS.white).text('TRANSITSOFTSERVICES', 20, 16, { width: w - 10, align: 'center' });
 
     // QR code
     doc.image(qrBuffer, 67, 50, { width: 150 });
@@ -455,7 +455,7 @@ export class PDFService {
       .strokeColor(COLORS.primary)
       .lineWidth(0.5)
       .stroke();
-    doc.fontSize(6).fillColor(COLORS.gray).text('OptiPack - Transit & Logistique', 15, 400, { width: w, align: 'center' });
+    doc.fontSize(6).fillColor(COLORS.gray).text('TransitSoftServices - Transit & Logistique', 15, 400, { width: w, align: 'center' });
 
     return collectBuffer(doc);
   }

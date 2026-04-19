@@ -4,7 +4,7 @@ import { RecordPaymentUseCase } from '../../application/use-cases/payment/Record
 import { VoidPaymentUseCase } from '../../application/use-cases/payment/VoidPaymentUseCase';
 import { PAYMENT_REPOSITORY } from '../../application/interfaces/IPaymentRepository';
 import { NotFoundError } from '../../domain/errors/BusinessError';
-import type { PaginationInput } from '@optipack/shared';
+import type { PaginationInput } from '@transitsoftservices/shared';
 
 export class PaymentController {
   static async record(req: Request, res: Response, next: NextFunction) {

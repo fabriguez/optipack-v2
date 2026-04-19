@@ -19,7 +19,7 @@ import { AppSelect } from '@/components/ui/AppSelect';
 import { ExportButton } from '@/components/shared/ExportButton';
 import { useAgencies } from '@/lib/hooks/useAgencies';
 import { reportsApi, type ReportParams } from '@/lib/api/config';
-import { formatAmount } from '@optipack/shared';
+import { formatAmount } from '@transitsoftservices/shared';
 
 type ReportType = 'parcels' | 'payments' | 'revenue' | 'debts' | 'cash-flow' | 'penalties';
 

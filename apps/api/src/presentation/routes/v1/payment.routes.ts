@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { PaymentController } from '../../controllers/PaymentController';
 import { authenticate, authorize } from '../../middleware/authMiddleware';
 import { validate } from '../../middleware/validate';
-import { recordPaymentSchema, voidPaymentSchema, paginationSchema } from '@optipack/shared';
+import { recordPaymentSchema, voidPaymentSchema, paginationSchema } from '@transitsoftservices/shared';
 
 const router = Router();
 

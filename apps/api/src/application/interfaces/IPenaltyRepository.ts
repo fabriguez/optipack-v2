@@ -1,5 +1,5 @@
 import type { Penalty, Prisma } from '@prisma/client';
-import type { PaginationInput, PaginatedResponse } from '@optipack/shared';
+import type { PaginationInput, PaginatedResponse } from '@transitsoftservices/shared';
 
 export interface IPenaltyRepository {
   findById(id: string): Promise<Penalty | null>;

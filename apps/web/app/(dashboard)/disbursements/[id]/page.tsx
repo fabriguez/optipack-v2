@@ -10,7 +10,7 @@ import { AppBadge } from '@/components/ui/AppBadge';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
-import { formatAmount, formatDate } from '@optipack/shared';
+import { formatAmount, formatDate } from '@transitsoftservices/shared';
 
 export default function DisbursementDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);

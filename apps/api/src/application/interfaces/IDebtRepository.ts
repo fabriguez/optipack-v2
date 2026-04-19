@@ -1,5 +1,5 @@
 import type { Debt, Prisma } from '@prisma/client';
-import type { PaginationInput, PaginatedResponse } from '@optipack/shared';
+import type { PaginationInput, PaginatedResponse } from '@transitsoftservices/shared';
 
 export interface IDebtRepository {
   findById(id: string): Promise<Debt | null>;

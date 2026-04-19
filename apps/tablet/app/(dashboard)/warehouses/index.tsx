@@ -4,10 +4,9 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardHeader } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Badge';
 import { apiClient } from '@/lib/api/client';
 import { colors } from '@/lib/theme/colors';
-import { spacing, radius } from '@/lib/theme/spacing';
+import { spacing } from '@/lib/theme/spacing';
 
 export default function WarehousesScreen() {
   const router = useRouter();
@@ -57,9 +56,6 @@ export default function WarehousesScreen() {
             <Text style={{ textAlign: 'center', fontSize: 13, color: colors.gray[400], paddingVertical: 20 }}>Aucun magasin trouve</Text>
           ) : (
             warehouses.map((warehouse, i) => {
-              const occupancy = warehouse.occupancy ?? 0;
-              const pct = Math.min(occupancy, 100);
-
               return (
                 <Pressable
                   key={warehouse.id}
@@ -78,21 +74,6 @@ export default function WarehousesScreen() {
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
                       <Ionicons name="location-outline" size={12} color={colors.gray[400]} />
                       <Text style={{ fontSize: 12, color: colors.gray[500] }}>{warehouse.location ?? '-'}</Text>
-                      {warehouse.type && <Badge variant="info">{warehouse.type}</Badge>}
-                    </View>
-                    {/* Occupancy bar */}
-                    <View style={{ marginTop: 6, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                      <View style={{ flex: 1, maxWidth: 120, height: 6, backgroundColor: colors.gray[100], borderRadius: radius.sm }}>
-                        <View
-                          style={{
-                            width: `${pct}%`,
-                            height: 6,
-                            backgroundColor: pct > 85 ? colors.error : pct > 60 ? colors.warning : colors.primary[500],
-                            borderRadius: radius.sm,
-                          }}
-                        />
-                      </View>
-                      <Text style={{ fontSize: 11, color: colors.gray[400] }}>{Math.round(pct)}%</Text>
                     </View>
                   </View>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>

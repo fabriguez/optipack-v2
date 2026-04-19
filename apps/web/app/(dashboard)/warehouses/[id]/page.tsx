@@ -3,7 +3,7 @@
 import { use, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Package, MapPin, Plus, Eye, Edit, Trash2, ArrowRightLeft } from 'lucide-react';
+import { ArrowLeft, Package, Plus, Eye, Edit, Trash2, ArrowRightLeft } from 'lucide-react';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
@@ -18,7 +18,7 @@ import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParcels } from '@/lib/hooks/useParcels';
 import { apiClient } from '@/lib/api/client';
-import { formatAmount, formatDate } from '@optipack/shared';
+import { formatAmount, formatDate, formatDurationSince } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
 import { ParcelFormDialog } from '../../parcels/ParcelFormDialog';
 
@@ -52,10 +52,6 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
   const warehouse = data?.data;
   if (isLoading) return <DashboardSkeleton />;
   if (!warehouse) return <p className="p-6 text-gray-500">Magasin introuvable</p>;
-
-  const max = Number(warehouse.maxCapacity || 0);
-  const current = Number(warehouse.currentOccupancy || 0);
-  const pct = max > 0 ? Math.round((current / max) * 100) : 0;
 
   const warehouseOptions = (allWarehousesData?.data || [])
     .filter((w: any) => w.id !== id)
@@ -130,6 +126,13 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
     { key: 'destination', label: 'Destination' },
     { key: 'price', label: 'Prix', render: (row: any) => formatAmount(Number(row.price)) },
     { key: 'status', label: 'Statut', render: (row: any) => <StatusBadge status={row.status} type="parcel" /> },
+    {
+      key: 'warehouseEnteredAt',
+      label: 'Temps en stock',
+      render: (row: any) => (
+        <span className="font-mono text-xs text-gray-600">{formatDurationSince(row.warehouseEnteredAt)}</span>
+      ),
+    },
     { key: 'createdAt', label: 'Date', render: (row: any) => formatDate(row.createdAt) },
     {
       key: 'actions',
@@ -177,16 +180,7 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <AppCard>
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50"><MapPin className="h-5 w-5 text-primary-600" /></div>
-              <div>
-                <p className="text-xs text-gray-400">Type</p>
-                <p className="text-sm font-medium">{warehouse.type === 'STORAGE' ? 'Stockage' : warehouse.type === 'TRANSIT' ? 'Transit' : 'Livraison'}</p>
-              </div>
-            </div>
-          </AppCard>
+        <div className="grid grid-cols-1 gap-4">
           <AppCard>
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50"><Package className="h-5 w-5 text-primary-600" /></div>
@@ -195,16 +189,6 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
                 <p className="text-sm font-bold">{parcelsData?.meta?.total ?? 0}</p>
               </div>
             </div>
-          </AppCard>
-          <AppCard>
-            <p className="text-xs text-gray-400 mb-2">Occupation</p>
-            <div className="flex items-center gap-3">
-              <div className="h-3 flex-1 rounded-full bg-gray-200">
-                <div className={`h-3 rounded-full transition-all ${pct > 80 ? 'bg-red-500' : 'bg-primary-500'}`} style={{ width: `${Math.min(pct, 100)}%` }} />
-              </div>
-              <span className="text-sm font-bold">{pct}%</span>
-            </div>
-            {max > 0 && <p className="text-xs text-gray-400 mt-1">{current.toFixed(0)} / {max.toFixed(0)} kg</p>}
           </AppCard>
         </div>
 

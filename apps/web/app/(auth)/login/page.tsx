@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { loginSchema, type LoginInput } from '@optipack/shared';
+import { loginSchema, type LoginInput } from '@transitsoftservices/shared';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppInput } from '@/components/ui/AppInput';
 import { Eye, EyeOff, LogIn } from 'lucide-react';
@@ -33,7 +33,7 @@ export default function LoginPage() {
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary-500">
             <span className="text-2xl font-bold text-white">OP</span>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">OptiPack</h1>
+          <h1 className="text-2xl font-bold text-gray-900">TransitSoftServices</h1>
           <p className="mt-1 text-sm text-gray-500">Connectez-vous a votre compte</p>
         </div>
 

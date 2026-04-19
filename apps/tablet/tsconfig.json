@@ -1,5 +1,5 @@
 {
-  "extends": "@optipack/tsconfig/react-native.json",
+  "extends": "@transitsoftservices/tsconfig/react-native.json",
   "compilerOptions": {
     "strict": true,
     "paths": {

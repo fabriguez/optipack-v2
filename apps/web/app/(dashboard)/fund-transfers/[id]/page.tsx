@@ -12,7 +12,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
-import { formatAmount, formatDate } from '@optipack/shared';
+import { formatAmount, formatDate } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
 
 const STATUS_VARIANT: Record<string, 'warning' | 'success' | 'error'> = {

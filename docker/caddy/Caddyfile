@@ -1,9 +1,9 @@
 {
-	email admin@optipack.com
+	email admin@transitsoftservices.com
 }
 
 # API
-api.optipack.com {
+api.transitsoftservices.com {
 	reverse_proxy localhost:3009
 	encode gzip
 
@@ -15,7 +15,7 @@ api.optipack.com {
 }
 
 # Dashboard Web
-app.optipack.com {
+app.transitsoftservices.com {
 	reverse_proxy localhost:3008
 	encode gzip
 
@@ -27,6 +27,6 @@ app.optipack.com {
 }
 
 # MinIO Console (admin only)
-storage.optipack.com {
+storage.transitsoftservices.com {
 	reverse_proxy localhost:9006
 }

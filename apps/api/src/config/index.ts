@@ -9,7 +9,7 @@ export const config = {
   webUrl: process.env.WEB_URL || 'http://localhost:3000',
 
   database: {
-    url: process.env.DATABASE_URL || 'postgresql://optipack:optipack@localhost:5432/optipack',
+    url: process.env.DATABASE_URL || 'postgresql://transitsoftservices:transitsoftservices@localhost:5432/transitsoftservices',
   },
 
   redis: {
@@ -19,9 +19,9 @@ export const config = {
   minio: {
     endpoint: process.env.MINIO_ENDPOINT || 'localhost',
     port: parseInt(process.env.MINIO_PORT || '9000', 10),
-    accessKey: process.env.MINIO_ACCESS_KEY || 'optipack',
-    secretKey: process.env.MINIO_SECRET_KEY || 'optipack_secret',
-    bucket: process.env.MINIO_BUCKET || 'optipack',
+    accessKey: process.env.MINIO_ACCESS_KEY || 'transitsoftservices',
+    secretKey: process.env.MINIO_SECRET_KEY || 'transitsoftservices_secret',
+    bucket: process.env.MINIO_BUCKET || 'transitsoftservices',
     useSSL: process.env.MINIO_USE_SSL === 'true',
   },
 
@@ -38,7 +38,7 @@ export const config = {
     secure: process.env.SMTP_SECURE === 'true',
     user: process.env.SMTP_USER || '',
     pass: process.env.SMTP_PASS || '',
-    from: process.env.SMTP_FROM || 'OptiPack <noreply@optipack.com>',
+    from: process.env.SMTP_FROM || 'TransitSoftServices <noreply@transitsoftservices.com>',
   },
 
   stripe: {

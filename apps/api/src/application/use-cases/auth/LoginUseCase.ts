@@ -2,7 +2,7 @@ import { inject, injectable } from 'tsyringe';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { randomUUID } from 'crypto';
-import type { LoginInput } from '@optipack/shared';
+import type { LoginInput } from '@transitsoftservices/shared';
 import { USER_REPOSITORY, type IUserRepository } from '../../interfaces/IUserRepository';
 import {
   REFRESH_TOKEN_REPOSITORY,

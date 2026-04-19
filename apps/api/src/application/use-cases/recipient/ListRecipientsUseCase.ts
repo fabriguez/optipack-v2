@@ -1,5 +1,5 @@
 import { inject, injectable } from 'tsyringe';
-import type { PaginationInput } from '@optipack/shared';
+import type { PaginationInput } from '@transitsoftservices/shared';
 import { RECIPIENT_REPOSITORY, type IRecipientRepository } from '../../interfaces/IRecipientRepository';
 
 @injectable()

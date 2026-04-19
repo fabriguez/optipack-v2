@@ -16,7 +16,7 @@ import { CsvImportDialog } from '@/components/shared/CsvImportDialog';
 import { RowActions } from '@/components/shared/RowActions';
 import { useContainers } from '@/lib/hooks/useContainers';
 import { apiClient } from '@/lib/api/client';
-import { formatDate } from '@optipack/shared';
+import { formatDate } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
 import { ContainerFormDialog } from './ContainerFormDialog';
 

@@ -1,5 +1,5 @@
 {
-  "name": "@optipack/api",
+  "name": "@transitsoftservices/api",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -16,7 +16,7 @@
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
-    "@optipack/shared": "workspace:*",
+    "@transitsoftservices/shared": "workspace:*",
     "@prisma/client": "^6.4.1",
     "@types/node-cron": "^3.0.11",
     "@types/pdfkit": "^0.17.5",
@@ -46,7 +46,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
-    "@optipack/tsconfig": "workspace:*",
+    "@transitsoftservices/tsconfig": "workspace:*",
     "@types/bcryptjs": "^2.4.6",
     "@types/cookie-parser": "^1.4.8",
     "@types/cors": "^2.8.17",

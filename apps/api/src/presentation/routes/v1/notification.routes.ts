@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { NotificationController } from '../../controllers/NotificationController';
 import { authenticate } from '../../middleware/authMiddleware';
 import { validate } from '../../middleware/validate';
-import { paginationSchema } from '@optipack/shared';
+import { paginationSchema } from '@transitsoftservices/shared';
 
 const router = Router();
 

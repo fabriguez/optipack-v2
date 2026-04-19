@@ -1,7 +1,7 @@
 import { injectable } from 'tsyringe';
 import type { DisbursementVoucher, Prisma } from '@prisma/client';
 import type { IDisbursementRepository } from '../../../application/interfaces/IDisbursementRepository';
-import type { PaginationInput, PaginatedResponse } from '@optipack/shared';
+import type { PaginationInput, PaginatedResponse } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
 
 @injectable()

@@ -12,7 +12,7 @@ import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { notificationsApi } from '@/lib/api/notifications';
 import { useServerPagination } from '@/lib/hooks/useServerPagination';
-import { formatDateTime } from '@optipack/shared';
+import { formatDateTime } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
 
 const TYPE_LABELS: Record<string, string> = {

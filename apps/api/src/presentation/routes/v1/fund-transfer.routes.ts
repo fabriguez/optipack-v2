@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { FundTransferController } from '../../controllers/FundTransferController';
 import { authenticate, authorize } from '../../middleware/authMiddleware';
 import { validate } from '../../middleware/validate';
-import { createFundTransferSchema, paginationSchema } from '@optipack/shared';
+import { createFundTransferSchema, paginationSchema } from '@transitsoftservices/shared';
 
 const router = Router();
 

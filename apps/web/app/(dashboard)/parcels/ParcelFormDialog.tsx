@@ -2,7 +2,7 @@
 
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { createParcelSchema, type CreateParcelInput } from '@optipack/shared';
+import { createParcelSchema, type CreateParcelInput } from '@transitsoftservices/shared';
 import { AppDialog } from '@/components/ui/AppDialog';
 import { AppInput } from '@/components/ui/AppInput';
 import { AppButton } from '@/components/ui/AppButton';

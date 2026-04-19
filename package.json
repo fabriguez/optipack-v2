@@ -1,20 +1,20 @@
 {
-  "name": "optipack-v2",
+  "name": "transitsoftservices-v2",
   "version": "0.1.0",
   "private": true,
   "description": "Application de gestion de transit aerien, maritime et terrestre",
   "scripts": {
-    "dev": "turbo run dev --filter=!@optipack/tablet",
+    "dev": "turbo run dev --filter=!@transitsoftservices/tablet",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "type-check": "turbo run type-check",
     "test": "turbo run test",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\"",
-    "db:generate": "dotenv -e .env -- pnpm --filter @optipack/api exec prisma generate",
-    "db:migrate": "dotenv -e .env -- pnpm --filter @optipack/api exec prisma migrate dev",
-    "db:seed": "dotenv -e .env -- pnpm --filter @optipack/api exec prisma db seed",
-    "db:studio": "dotenv -e .env -- pnpm --filter @optipack/api exec prisma studio",
+    "db:generate": "dotenv -e .env -- pnpm --filter @transitsoftservices/api exec prisma generate",
+    "db:migrate": "dotenv -e .env -- pnpm --filter @transitsoftservices/api exec prisma migrate dev",
+    "db:seed": "dotenv -e .env -- pnpm --filter @transitsoftservices/api exec prisma db seed",
+    "db:studio": "dotenv -e .env -- pnpm --filter @transitsoftservices/api exec prisma studio",
     "clean": "turbo run clean && rm -rf node_modules"
   },
   "devDependencies": {

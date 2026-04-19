@@ -22,7 +22,7 @@ COPY packages/ ./packages/
 COPY apps/web/ ./apps/web/
 
 # Build shared package first
-RUN pnpm --filter @optipack/shared build
+RUN pnpm --filter @transitsoftservices/shared build
 
 # Accept NEXT_PUBLIC_* vars at build time (they are inlined into the JS bundle)
 ARG NEXT_PUBLIC_API_URL

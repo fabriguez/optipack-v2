@@ -1,5 +1,5 @@
 import type { Employee, Prisma } from '@prisma/client';
-import type { PaginationInput, PaginatedResponse } from '@optipack/shared';
+import type { PaginationInput, PaginatedResponse } from '@transitsoftservices/shared';
 
 export interface IEmployeeRepository {
   findById(id: string): Promise<Employee | null>;

@@ -2,7 +2,7 @@
 
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { createContainerSchema, type CreateContainerInput } from '@optipack/shared';
+import { createContainerSchema, type CreateContainerInput } from '@transitsoftservices/shared';
 import { AppDialog } from '@/components/ui/AppDialog';
 import { AppInput } from '@/components/ui/AppInput';
 import { AppButton } from '@/components/ui/AppButton';

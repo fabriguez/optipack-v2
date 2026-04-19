@@ -9,7 +9,7 @@ import { AppBadge } from '@/components/ui/AppBadge';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
-import { formatAmount } from '@optipack/shared';
+import { formatAmount } from '@transitsoftservices/shared';
 
 const TYPE_CONFIG: Record<string, { label: string; variant: 'info' | 'warning' | 'success'; icon: any }> = {
   AIR: { label: 'Aerien', variant: 'info', icon: Plane },

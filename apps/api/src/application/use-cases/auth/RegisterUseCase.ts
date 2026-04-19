@@ -1,6 +1,6 @@
 import { inject, injectable } from 'tsyringe';
 import bcrypt from 'bcryptjs';
-import type { RegisterInput } from '@optipack/shared';
+import type { RegisterInput } from '@transitsoftservices/shared';
 import { USER_REPOSITORY, type IUserRepository } from '../../interfaces/IUserRepository';
 import { ConflictError } from '../../../domain/errors/BusinessError';
 

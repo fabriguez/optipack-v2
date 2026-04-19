@@ -29,7 +29,7 @@ export default function LoginScreen() {
           <View style={{ width: 64, height: 64, borderRadius: 16, backgroundColor: colors.primary[500], alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
             <Text style={{ fontSize: 24, fontWeight: '700', color: colors.white }}>OP</Text>
           </View>
-          <Text style={{ fontSize: 24, fontWeight: '700', color: colors.gray[900] }}>OptiPack</Text>
+          <Text style={{ fontSize: 24, fontWeight: '700', color: colors.gray[900] }}>TransitSoftServices</Text>
           <Text style={{ fontSize: 14, color: colors.gray[500], marginTop: 4 }}>Connectez-vous a votre compte</Text>
         </View>
 

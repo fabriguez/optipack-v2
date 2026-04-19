@@ -20,7 +20,7 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - optipack
+      - transitsoftservices
 
   # ---------- Web Next.js ----------
   web:
@@ -41,7 +41,7 @@ services:
         reservations:
           memory: 256M
     networks:
-      - optipack
+      - transitsoftservices
 
   # ---------- PostgreSQL ----------
   postgres:
@@ -50,13 +50,13 @@ services:
       - "127.0.0.1:5432:5432"
     env_file: .env
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-optipack}
-      POSTGRES_USER: ${POSTGRES_USER:-optipack}
+      POSTGRES_DB: ${POSTGRES_DB:-transitsoftservices}
+      POSTGRES_USER: ${POSTGRES_USER:-transitsoftservices}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-optipack}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-transitsoftservices}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -68,7 +68,7 @@ services:
         reservations:
           memory: 256M
     networks:
-      - optipack
+      - transitsoftservices
 
   # ---------- Redis ----------
   redis:
@@ -91,7 +91,7 @@ services:
         reservations:
           memory: 128M
     networks:
-      - optipack
+      - transitsoftservices
 
   # ---------- MinIO ----------
   minio:
@@ -100,7 +100,7 @@ services:
       - "127.0.0.1:9005:9000"
       - "127.0.0.1:9006:9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-optipack}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-transitsoftservices}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     volumes:
       - minio-data:/data
@@ -113,7 +113,7 @@ services:
         reservations:
           memory: 256M
     networks:
-      - optipack
+      - transitsoftservices
 
 volumes:
   postgres-data:
@@ -121,5 +121,5 @@ volumes:
   minio-data:
 
 networks:
-  optipack:
+  transitsoftservices:
     driver: bridge

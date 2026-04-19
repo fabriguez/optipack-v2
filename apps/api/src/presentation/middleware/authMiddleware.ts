@@ -2,7 +2,7 @@ import type { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { config } from '../../config';
 import { AuthenticationError, AuthorizationError } from '../../domain/errors/BusinessError';
-import type { JwtPayload } from '@optipack/shared';
+import type { JwtPayload } from '@transitsoftservices/shared';
 
 declare global {
   namespace Express {

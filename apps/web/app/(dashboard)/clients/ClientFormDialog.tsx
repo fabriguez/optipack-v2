@@ -2,7 +2,7 @@
 
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { createClientSchema, type CreateClientInput } from '@optipack/shared';
+import { createClientSchema, type CreateClientInput } from '@transitsoftservices/shared';
 import { AppDialog } from '@/components/ui/AppDialog';
 import { AppInput } from '@/components/ui/AppInput';
 import { AppButton } from '@/components/ui/AppButton';

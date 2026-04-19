@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { paymentsApi } from '@/lib/api/payments';
-import type { RecordPaymentInput, PaginationInput } from '@optipack/shared';
+import type { RecordPaymentInput, PaginationInput } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
 
 export function usePayments(params?: Partial<PaginationInput> & { agencyId?: string }) {

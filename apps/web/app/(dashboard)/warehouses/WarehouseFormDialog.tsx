@@ -2,12 +2,13 @@
 
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { createWarehouseSchema, type CreateWarehouseInput } from '@optipack/shared';
+import { createWarehouseSchema, type CreateWarehouseInput } from '@transitsoftservices/shared';
 import { AppDialog } from '@/components/ui/AppDialog';
 import { AppInput } from '@/components/ui/AppInput';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppSelect } from '@/components/ui/AppSelect';
 import { useAgencies } from '@/lib/hooks/useAgencies';
+
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { toast } from 'sonner';
@@ -36,10 +37,6 @@ export function WarehouseFormDialog({ open, onClose }: Props) {
         <AppSelect label="Agence" {...register('agencyId')} error={errors.agencyId?.message}
           options={(agencies?.data || []).map((a: any) => ({ value: a.id, label: a.name }))} placeholder="Selectionner" />
         <AppInput label="Emplacement" {...register('location')} error={errors.location?.message} />
-        <AppSelect label="Type" {...register('type')} options={[
-          { value: 'STORAGE', label: 'Stockage' }, { value: 'TRANSIT', label: 'Transit' }, { value: 'DELIVERY', label: 'Livraison' },
-        ]} />
-        <AppInput label="Capacite max (kg)" type="number" {...register('maxCapacity', { valueAsNumber: true })} />
         <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
           <AppButton variant="ghost" type="button" onClick={onClose}>Annuler</AppButton>
           <AppButton type="submit" loading={mutation.isPending}>Creer</AppButton>

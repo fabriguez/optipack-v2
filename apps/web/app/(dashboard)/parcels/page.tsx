@@ -17,7 +17,7 @@ import { RowActions } from '@/components/shared/RowActions';
 import { useServerPagination } from '@/lib/hooks/useServerPagination';
 import { useParcels } from '@/lib/hooks/useParcels';
 import { apiClient } from '@/lib/api/client';
-import { formatAmount, formatDate } from '@optipack/shared';
+import { formatAmount, formatDate } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
 import { ParcelFormDialog } from './ParcelFormDialog';
 

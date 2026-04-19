@@ -1,7 +1,7 @@
 import { injectable } from 'tsyringe';
 import type { Penalty, Prisma } from '@prisma/client';
 import type { IPenaltyRepository } from '../../../application/interfaces/IPenaltyRepository';
-import type { PaginationInput, PaginatedResponse } from '@optipack/shared';
+import type { PaginationInput, PaginatedResponse } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
 
 @injectable()

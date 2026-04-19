@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { ClientController } from '../../controllers/ClientController';
 import { authenticate } from '../../middleware/authMiddleware';
 import { validate } from '../../middleware/validate';
-import { createClientSchema, updateClientSchema, paginationSchema } from '@optipack/shared';
+import { createClientSchema, updateClientSchema, paginationSchema } from '@transitsoftservices/shared';
 
 const router = Router();
 

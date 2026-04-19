@@ -19,7 +19,7 @@ import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 import { useContainer, useContainerParcels, useDepartContainer, useArriveContainer, useLoadParcels } from '@/lib/hooks/useContainers';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
-import { formatAmount, formatDate, formatDateTime } from '@optipack/shared';
+import { formatAmount, formatDate, formatDateTime } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
 
 export default function ContainerDetailPage({ params }: { params: Promise<{ id: string }> }) {

@@ -60,7 +60,7 @@ export default function ClientPortalLayout({
             href="/portal/dashboard"
             className="text-xl font-bold text-primary-700"
           >
-            OptiPack
+            TransitSoftServices
           </Link>
 
           {/* Desktop nav */}

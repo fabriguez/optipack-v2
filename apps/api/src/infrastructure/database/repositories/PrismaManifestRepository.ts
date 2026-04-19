@@ -5,7 +5,7 @@ import type {
   ManifestWithLines,
   ManifestComparison,
 } from '../../../application/interfaces/IManifestRepository';
-import type { PaginationInput, PaginatedResponse } from '@optipack/shared';
+import type { PaginationInput, PaginatedResponse } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
 import { NotFoundError } from '../../../domain/errors/BusinessError';
 

@@ -1,6 +1,6 @@
 import { inject, injectable } from 'tsyringe';
-import type { CreateParcelInput } from '@optipack/shared';
-import { generateTrackingNumber, generateReference } from '@optipack/shared';
+import type { CreateParcelInput } from '@transitsoftservices/shared';
+import { generateTrackingNumber, generateReference } from '@transitsoftservices/shared';
 import { PARCEL_REPOSITORY, type IParcelRepository } from '../../interfaces/IParcelRepository';
 import { CLIENT_REPOSITORY, type IClientRepository } from '../../interfaces/IClientRepository';
 import { WAREHOUSE_REPOSITORY, type IWarehouseRepository } from '../../interfaces/IWarehouseRepository';
@@ -72,6 +72,7 @@ export class CreateParcelUseCase {
       price: pricing.finalPrice,
       status: 'IN_STOCK',
       isPresent: true,
+      warehouseEnteredAt: new Date(),
       client: { connect: { id: input.clientId } },
       ...(input.recipientId && { recipient: { connect: { id: input.recipientId } } }),
       warehouse: { connect: { id: input.warehouseId } },

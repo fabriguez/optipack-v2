@@ -25,7 +25,7 @@ export class QRCodeService {
     const payload = JSON.stringify({
       tracking: trackingNumber,
       id: parcelId,
-      url: `https://optipack.app/tracking/${trackingNumber}`,
+      url: `https://transitsoftservices.app/tracking/${trackingNumber}`,
     });
     return this.generateQRCode(payload);
   }

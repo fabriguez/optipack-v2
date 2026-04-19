@@ -21,7 +21,7 @@ COPY packages/ ./packages/
 COPY apps/api/ ./apps/api/
 
 # Build shared package first
-RUN pnpm --filter @optipack/shared build
+RUN pnpm --filter @transitsoftservices/shared build
 
 # Generate Prisma client
 RUN pnpm --filter api exec prisma generate

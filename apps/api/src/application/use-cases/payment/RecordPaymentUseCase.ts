@@ -1,6 +1,6 @@
 import { inject, injectable } from 'tsyringe';
-import type { RecordPaymentInput } from '@optipack/shared';
-import { generateReference } from '@optipack/shared';
+import type { RecordPaymentInput } from '@transitsoftservices/shared';
+import { generateReference } from '@transitsoftservices/shared';
 import { PAYMENT_REPOSITORY, type IPaymentRepository } from '../../interfaces/IPaymentRepository';
 import { INVOICE_REPOSITORY, type IInvoiceRepository } from '../../interfaces/IInvoiceRepository';
 import { CASH_REGISTER_REPOSITORY, type ICashRegisterRepository } from '../../interfaces/ICashRegisterRepository';

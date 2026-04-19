@@ -1,7 +1,7 @@
 import { injectable } from 'tsyringe';
 import type { Debt, Prisma } from '@prisma/client';
 import type { IDebtRepository } from '../../../application/interfaces/IDebtRepository';
-import type { PaginationInput, PaginatedResponse } from '@optipack/shared';
+import type { PaginationInput, PaginatedResponse } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
 
 @injectable()

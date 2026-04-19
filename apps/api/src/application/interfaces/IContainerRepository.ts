@@ -1,5 +1,5 @@
 import type { Container, Prisma } from '@prisma/client';
-import type { PaginationInput, PaginatedResponse } from '@optipack/shared';
+import type { PaginationInput, PaginatedResponse } from '@transitsoftservices/shared';
 
 export interface ContainerWithRelations extends Container {
   departureAgency?: { id: string; name: string; code: string };

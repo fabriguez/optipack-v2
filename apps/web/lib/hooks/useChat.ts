@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { chatApi } from '@/lib/api/chat';
-import type { PaginationInput } from '@optipack/shared';
+import type { PaginationInput } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
 
 export function useConversations(params?: Partial<PaginationInput> & { status?: string; clientId?: string }) {

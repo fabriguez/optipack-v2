@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "OptiPack Tablet",
-    "slug": "optipack-tablet",
+    "name": "TransitSoftServices Tablet",
+    "slug": "transitsoftservices-tablet",
     "version": "0.1.0",
     "orientation": "landscape",
     "userInterfaceStyle": "light",
-    "scheme": "optipack-tablet",
+    "scheme": "transitsoftservices-tablet",
     "platforms": ["ios", "android"],
     "icon": "./assets/icon.png",
     "splash": {
@@ -16,14 +16,14 @@
     "ios": {
       "supportsTablet": true,
       "requireFullScreen": true,
-      "bundleIdentifier": "com.optipack.tablet"
+      "bundleIdentifier": "com.transitsoftservices.tablet"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1B5E20"
       },
-      "package": "com.optipack.tablet"
+      "package": "com.transitsoftservices.tablet"
     },
     "plugins": ["expo-router", "expo-secure-store"]
   }

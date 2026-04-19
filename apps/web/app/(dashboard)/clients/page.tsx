@@ -19,7 +19,7 @@ import { useClients } from '@/lib/hooks/useClients';
 import { useAgencies } from '@/lib/hooks/useAgencies';
 import { ClientFormDialog } from './ClientFormDialog';
 import { apiClient } from '@/lib/api/client';
-import { formatAmount } from '@optipack/shared';
+import { formatAmount } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
 
 const TIER_VARIANT: Record<string, 'default' | 'info' | 'warning' | 'success'> = {

@@ -16,7 +16,7 @@ import { CsvImportDialog } from '@/components/shared/CsvImportDialog';
 import { RowActions } from '@/components/shared/RowActions';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
-import { formatAmount } from '@optipack/shared';
+import { formatAmount } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
 import { TransitRouteFormDialog } from './TransitRouteFormDialog';
 

@@ -5,7 +5,7 @@ import { AppCard, AppCardHeader } from '@/components/ui/AppCard';
 import { AppBadge } from '@/components/ui/AppBadge';
 import { useClients } from '@/lib/hooks/useClients';
 import { Star } from 'lucide-react';
-import { formatAmount } from '@optipack/shared';
+import { formatAmount } from '@transitsoftservices/shared';
 
 const TIER_CONFIG: Record<string, { variant: 'default' | 'info' | 'warning' | 'success'; min: number }> = {
   STANDARD: { variant: 'default', min: 0 },

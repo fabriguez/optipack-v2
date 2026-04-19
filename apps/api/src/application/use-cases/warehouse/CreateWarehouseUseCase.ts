@@ -7,8 +7,6 @@ interface CreateWarehouseInput {
   name: string;
   agencyId: string;
   location: string;
-  type?: 'STORAGE' | 'TRANSIT' | 'DELIVERY';
-  maxCapacity?: number;
 }
 
 @injectable()
@@ -27,8 +25,6 @@ export class CreateWarehouseUseCase {
     return this.warehouseRepo.create({
       name: input.name,
       location: input.location,
-      type: input.type || 'STORAGE',
-      maxCapacity: input.maxCapacity ?? null,
       agency: { connect: { id: input.agencyId } },
     });
   }

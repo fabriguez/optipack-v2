@@ -1,5 +1,5 @@
 import { inject, injectable } from 'tsyringe';
-import type { UpdateRecipientInput } from '@optipack/shared';
+import type { UpdateRecipientInput } from '@transitsoftservices/shared';
 import { RECIPIENT_REPOSITORY, type IRecipientRepository } from '../../interfaces/IRecipientRepository';
 import { NotFoundError } from '../../../domain/errors/BusinessError';
 

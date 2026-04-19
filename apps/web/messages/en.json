@@ -91,13 +91,7 @@
     "title": "Warehouses",
     "newWarehouse": "New warehouse",
     "name": "Name",
-    "location": "Location",
-    "type": "Type",
-    "storage": "Storage",
-    "transit": "Transit",
-    "delivery": "Delivery",
-    "capacity": "Capacity",
-    "occupancy": "Occupancy"
+    "location": "Location"
   },
   "clients": {
     "title": "Clients",

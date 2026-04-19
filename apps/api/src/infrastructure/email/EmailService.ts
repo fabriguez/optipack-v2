@@ -40,7 +40,7 @@ class EmailService {
       await this.transporter.sendMail({
         from: config.smtp.from,
         to,
-        subject: `OptiPack - ${subject}`,
+        subject: `TransitSoftServices - ${subject}`,
         html: emailLayout(bodyContent),
       });
       logger.info({ to, subject }, 'Email envoye');
@@ -201,7 +201,7 @@ class EmailService {
 
   async sendWelcome(to: string, clientName: string) {
     const content = [
-      heading('Bienvenue chez OptiPack'),
+      heading('Bienvenue chez TransitSoftServices'),
       paragraph(
         `Bonjour <strong>${clientName}</strong>, bienvenue dans notre service de transit. ` +
         'Votre compte a ete cree avec succes.',

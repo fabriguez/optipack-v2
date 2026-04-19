@@ -15,7 +15,7 @@ import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 import { useQuery } from '@tanstack/react-query';
 import { usePaymentsByInvoice } from '@/lib/hooks/usePayments';
 import { apiClient } from '@/lib/api/client';
-import { formatAmount, formatDate, formatDateTime } from '@optipack/shared';
+import { formatAmount, formatDate, formatDateTime } from '@transitsoftservices/shared';
 import { PaymentFormDialog } from '../../payments/PaymentFormDialog';
 
 const METHOD_LABELS: Record<string, string> = {

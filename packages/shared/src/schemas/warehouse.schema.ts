@@ -4,8 +4,6 @@ export const createWarehouseSchema = z.object({
   name: z.string().min(2, 'Le nom doit contenir au moins 2 caracteres'),
   agencyId: z.string().uuid('ID agence invalide'),
   location: z.string().min(3, 'Emplacement requis'),
-  type: z.enum(['STORAGE', 'TRANSIT', 'DELIVERY']).optional().default('STORAGE'),
-  maxCapacity: z.number().positive('La capacite doit etre positive').optional(),
 });
 
 export const updateWarehouseSchema = createWarehouseSchema.omit({ agencyId: true }).partial();

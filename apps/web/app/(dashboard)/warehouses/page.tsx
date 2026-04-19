@@ -20,8 +20,6 @@ import { apiClient } from '@/lib/api/client';
 import { toast } from 'sonner';
 import { WarehouseFormDialog } from './WarehouseFormDialog';
 
-const TYPE_LABELS: Record<string, string> = { STORAGE: 'Stockage', TRANSIT: 'Transit', DELIVERY: 'Livraison' };
-
 export default function WarehousesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -53,7 +51,6 @@ export default function WarehousesPage() {
           name: row.name,
           agencyId: row.agencyId,
           location: row.location,
-          type: row.type,
         });
         success++;
       } catch { /* skip */ }
@@ -64,7 +61,6 @@ export default function WarehousesPage() {
   const exportColumns = [
     { key: 'name', label: 'Nom' },
     { key: 'location', label: 'Emplacement' },
-    { key: 'type', label: 'Type' },
     { key: 'agency', label: 'Agence' },
   ];
 
@@ -81,23 +77,6 @@ export default function WarehousesPage() {
     { key: 'name', label: 'Nom', render: (row: any) => <Link href={`/warehouses/${row.id}`} className="text-primary-700 font-medium hover:underline" onClick={(e) => e.stopPropagation()}>{row.name}</Link> },
     { key: 'location', label: 'Emplacement' },
     { key: 'agency', label: 'Agence', render: (row: any) => <span className="text-sm">{row.agency?.name || '-'}</span> },
-    { key: 'type', label: 'Type', render: (row: any) => <AppBadge>{TYPE_LABELS[row.type] || row.type}</AppBadge> },
-    {
-      key: 'capacity', label: 'Occupation', render: (row: any) => {
-        const max = Number(row.maxCapacity || 0);
-        const current = Number(row.currentOccupancy || 0);
-        if (!max) return `${current} kg`;
-        const pct = Math.round((current / max) * 100);
-        return (
-          <div className="flex items-center gap-2">
-            <div className="h-2 w-20 rounded-full bg-gray-200">
-              <div className={`h-2 rounded-full ${pct > 80 ? 'bg-red-500' : 'bg-primary-500'}`} style={{ width: `${Math.min(pct, 100)}%` }} />
-            </div>
-            <span className="text-xs text-gray-500">{pct}%</span>
-          </div>
-        );
-      },
-    },
     { key: '_count', label: 'Colis', render: (row: any) => row._count?.parcels ?? 0 },
     { key: 'isActive', label: 'Statut', render: (row: any) => <AppBadge variant={row.isActive ? 'success' : 'error'}>{row.isActive ? 'Actif' : 'Inactif'}</AppBadge> },
     {
@@ -118,7 +97,7 @@ export default function WarehousesPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Magasins</h1>
-            <p className="text-sm text-gray-500 mt-1">{data?.meta?.total ?? 0} entrepots et suivi de remplissage.</p>
+            <p className="text-sm text-gray-500 mt-1">{data?.meta?.total ?? 0} entrepots.</p>
           </div>
           <div className="flex gap-2">
             <AppButton variant="outline" onClick={() => setShowImport(true)}>
@@ -159,8 +138,8 @@ export default function WarehousesPage() {
         onClose={() => setShowImport(false)}
         onImport={handleImport}
         title="Importer des magasins"
-        requiredColumns={['name', 'agencyId', 'location', 'type']}
-        columnLabels={{ name: 'Nom', agencyId: 'ID Agence', location: 'Emplacement', type: 'Type' }}
+        requiredColumns={['name', 'agencyId', 'location']}
+        columnLabels={{ name: 'Nom', agencyId: 'ID Agence', location: 'Emplacement' }}
       />
     </PageTransition>
   );

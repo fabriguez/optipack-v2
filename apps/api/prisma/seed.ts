@@ -18,7 +18,7 @@ async function main() {
     update: {},
     create: {
       id: ORG_ID,
-      name: 'OptiPack',
+      name: 'TransitSoftServices',
       defaultCurrency: 'XAF',
       defaultLanguage: 'fr',
     },
@@ -27,14 +27,14 @@ async function main() {
 
   const passwordHash = await bcrypt.hash('Admin123!', 12);
   const admin = await prisma.user.upsert({
-    where: { email: 'admin@optipack.com' },
+    where: { email: 'admin@transitsoftservices.com' },
     update: {},
     create: {
       id: ADMIN_ID,
-      email: 'admin@optipack.com',
+      email: 'admin@transitsoftservices.com',
       passwordHash,
       firstName: 'Admin',
-      lastName: 'OptiPack',
+      lastName: 'TransitSoftServices',
       phone: '+237600000000',
       role: 'SUPER_ADMIN',
       isActive: true,
@@ -75,7 +75,6 @@ async function main() {
         data: {
           name: `Entrepot ${agencyData.city}`,
           location: agencyData.address,
-          type: 'STORAGE',
           agency: { connect: { id: agency.id } },
         },
       });

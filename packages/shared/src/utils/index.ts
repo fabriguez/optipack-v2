@@ -85,3 +85,25 @@ export function formatDateTime(date: Date | string): string {
     minute: '2-digit',
   }).format(d);
 }
+
+/**
+ * Formate une duree ecoulee depuis une date donnee jusqu'a maintenant
+ * Ex: "2 j", "5 h", "12 min", "<1 min"
+ */
+export function formatDurationSince(date: Date | string | null | undefined): string {
+  if (!date) return '-';
+  const d = typeof date === 'string' ? new Date(date) : date;
+  const ms = Date.now() - d.getTime();
+  if (ms < 0) return '<1 min';
+  const minutes = Math.floor(ms / 60000);
+  if (minutes < 1) return '<1 min';
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} h`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days} j`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months} mois`;
+  const years = Math.floor(days / 365);
+  return `${years} an${years > 1 ? 's' : ''}`;
+}

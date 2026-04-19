@@ -1,5 +1,5 @@
 import { inject, injectable } from 'tsyringe';
-import { generateReference } from '@optipack/shared';
+import { generateReference } from '@transitsoftservices/shared';
 import { DISBURSEMENT_REPOSITORY, type IDisbursementRepository } from '../../interfaces/IDisbursementRepository';
 import { CASH_REGISTER_REPOSITORY, type ICashRegisterRepository } from '../../interfaces/ICashRegisterRepository';
 import { JOURNAL_ENTRY_REPOSITORY, type IJournalEntryRepository } from '../../interfaces/IJournalEntryRepository';

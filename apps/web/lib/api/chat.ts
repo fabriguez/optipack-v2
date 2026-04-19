@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import type { PaginationInput } from '@optipack/shared';
+import type { PaginationInput } from '@transitsoftservices/shared';
 
 export interface ChatConversation {
   id: string;

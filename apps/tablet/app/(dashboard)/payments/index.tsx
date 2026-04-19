@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/Badge';
 import { apiClient } from '@/lib/api/client';
 import { colors } from '@/lib/theme/colors';
 import { spacing } from '@/lib/theme/spacing';
-import { formatAmount, formatDate } from '@optipack/shared';
+import { formatAmount, formatDate } from '@transitsoftservices/shared';
 
 export default function PaymentsScreen() {
   const router = useRouter();

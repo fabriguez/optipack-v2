@@ -1,5 +1,5 @@
 /**
- * Layout email unifie OptiPack
+ * Layout email unifie TransitSoftServices
  * Couleurs alignees sur le dashboard :
  *   primary-900: #1B5E20 (header/footer)
  *   primary-500: #4CAF50 (boutons, accents)
@@ -39,14 +39,14 @@ export function emailLayout(content: string): string {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>OptiPack</title>
+  <title>TransitSoftServices</title>
 </head>
 <body style="${STYLES.wrapper}">
   <div style="${STYLES.container}">
     <div style="${STYLES.card}">
       <!-- Header -->
       <div style="${STYLES.header}">
-        <h1 style="${STYLES.headerLogo}">OptiPack</h1>
+        <h1 style="${STYLES.headerLogo}">TransitSoftServices</h1>
         <p style="${STYLES.headerSub}">Gestion de transit aerien, maritime et terrestre</p>
       </div>
 
@@ -58,18 +58,18 @@ export function emailLayout(content: string): string {
       <!-- Footer -->
       <div style="${STYLES.footer}">
         <p style="${STYLES.footerText}">
-          Cet email a ete envoye automatiquement par OptiPack.<br>
+          Cet email a ete envoye automatiquement par TransitSoftServices.<br>
           Pour toute question, contactez votre agence de reference.
         </p>
         <p style="${STYLES.footerText};margin-top:12px">
-          &copy; ${new Date().getFullYear()} OptiPack. Tous droits reserves.
+          &copy; ${new Date().getFullYear()} TransitSoftServices. Tous droits reserves.
         </p>
       </div>
     </div>
 
     <!-- Unsubscribe -->
     <p style="text-align:center;margin-top:16px;${STYLES.muted}">
-      Vous recevez cet email car vous etes client chez OptiPack.
+      Vous recevez cet email car vous etes client chez TransitSoftServices.
     </p>
   </div>
 </body>

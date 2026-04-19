@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import type { RecordPaymentInput, PaginationInput } from '@optipack/shared';
+import type { RecordPaymentInput, PaginationInput } from '@transitsoftservices/shared';
 
 export const paymentsApi = {
   list: (params?: Partial<PaginationInput> & { agencyId?: string }) =>

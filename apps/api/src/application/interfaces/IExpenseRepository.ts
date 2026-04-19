@@ -1,5 +1,5 @@
 import type { Expense, Prisma } from '@prisma/client';
-import type { PaginationInput, PaginatedResponse } from '@optipack/shared';
+import type { PaginationInput, PaginatedResponse } from '@transitsoftservices/shared';
 
 export interface IExpenseRepository {
   findById(id: string): Promise<Expense | null>;

@@ -1,5 +1,5 @@
 import type { ShippingManifest, ManifestLine } from '@prisma/client';
-import type { PaginationInput, PaginatedResponse } from '@optipack/shared';
+import type { PaginationInput, PaginatedResponse } from '@transitsoftservices/shared';
 
 export interface ManifestWithLines extends ShippingManifest {
   lines: ManifestLine[];

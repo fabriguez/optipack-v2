@@ -17,7 +17,7 @@ import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 import { useParcel } from '@/lib/hooks/useParcels';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
-import { formatAmount, formatDate, formatDateTime } from '@optipack/shared';
+import { formatAmount, formatDate, formatDateTime } from '@transitsoftservices/shared';
 
 const STATUS_STEPS = ['IN_STOCK', 'LOADING', 'IN_TRANSIT', 'ARRIVED', 'RECEIVED', 'DELIVERED'];
 const STEP_LABELS: Record<string, string> = {

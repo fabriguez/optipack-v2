@@ -3,7 +3,7 @@ import type {
   CreateDisbursementInput,
   CreateFundTransferInput,
   PaginationInput,
-} from '@optipack/shared';
+} from '@transitsoftservices/shared';
 
 export const cashRegisterApi = {
   get: (agencyId: string) =>

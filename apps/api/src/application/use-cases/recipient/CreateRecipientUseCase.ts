@@ -1,5 +1,5 @@
 import { inject, injectable } from 'tsyringe';
-import type { CreateRecipientInput } from '@optipack/shared';
+import type { CreateRecipientInput } from '@transitsoftservices/shared';
 import { RECIPIENT_REPOSITORY, type IRecipientRepository } from '../../interfaces/IRecipientRepository';
 
 @injectable()

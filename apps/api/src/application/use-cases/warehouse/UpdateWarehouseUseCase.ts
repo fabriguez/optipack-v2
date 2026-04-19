@@ -5,8 +5,6 @@ import { NotFoundError } from '../../../domain/errors/BusinessError';
 interface UpdateWarehouseInput {
   name?: string;
   location?: string;
-  type?: 'STORAGE' | 'TRANSIT' | 'DELIVERY';
-  maxCapacity?: number | null;
 }
 
 @injectable()

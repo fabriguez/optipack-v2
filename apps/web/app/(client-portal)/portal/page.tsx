@@ -43,7 +43,7 @@ export default function ClientPortalLoginPage() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold text-primary-700">OptiPack</h1>
+          <h1 className="text-3xl font-bold text-primary-700">TransitSoftServices</h1>
           <p className="mt-2 text-sm text-gray-500">
             Espace Client -- Suivez vos colis en temps reel
           </p>

@@ -1,7 +1,7 @@
 import { injectable } from 'tsyringe';
 import type { Employee, Prisma } from '@prisma/client';
 import type { IEmployeeRepository } from '../../../application/interfaces/IEmployeeRepository';
-import type { PaginationInput, PaginatedResponse } from '@optipack/shared';
+import type { PaginationInput, PaginatedResponse } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
 
 @injectable()

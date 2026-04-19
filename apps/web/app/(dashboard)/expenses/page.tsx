@@ -15,7 +15,7 @@ import { RowActions } from '@/components/shared/RowActions';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { useAgencies } from '@/lib/hooks/useAgencies';
-import { formatAmount, formatDate } from '@optipack/shared';
+import { formatAmount, formatDate } from '@transitsoftservices/shared';
 import { ExpenseFormDialog } from './ExpenseFormDialog';
 
 export default function ExpensesPage() {

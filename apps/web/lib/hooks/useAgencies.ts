@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { agenciesApi } from '@/lib/api/agencies';
-import type { CreateAgencyInput, UpdateAgencyInput, PaginationInput } from '@optipack/shared';
+import type { CreateAgencyInput, UpdateAgencyInput, PaginationInput } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
 
 export function useAgencies(params?: Partial<PaginationInput>) {

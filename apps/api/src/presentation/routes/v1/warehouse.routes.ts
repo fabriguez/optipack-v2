@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { WarehouseController } from '../../controllers/WarehouseController';
 import { authenticate, authorize } from '../../middleware/authMiddleware';
 import { validate } from '../../middleware/validate';
-import { paginationSchema } from '@optipack/shared';
+import { paginationSchema } from '@transitsoftservices/shared';
 
 const router = Router();
 

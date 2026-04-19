@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import type { CreateClientInput, UpdateClientInput, PaginationInput } from '@optipack/shared';
+import type { CreateClientInput, UpdateClientInput, PaginationInput } from '@transitsoftservices/shared';
 
 export const clientsApi = {
   list: (params?: Partial<PaginationInput> & { agencyId?: string }) =>

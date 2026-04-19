@@ -59,7 +59,15 @@ export class ParcelController {
   static async updateStatus(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(UpdateParcelStatusUseCase);
-      const parcel = await useCase.execute(req.params.id, req.body.status, req.user!.userId);
+      const warehouseChange = Object.prototype.hasOwnProperty.call(req.body, 'warehouseId')
+        ? { warehouseId: (req.body.warehouseId as string | null) ?? null }
+        : undefined;
+      const parcel = await useCase.execute(
+        req.params.id,
+        req.body.status,
+        req.user!.userId,
+        warehouseChange,
+      );
       res.json({ success: true, data: parcel });
     } catch (err) {
       next(err);

@@ -152,7 +152,7 @@ export function Sidebar() {
       {/* Logo */}
       <div className="flex h-16 items-center justify-between px-4 border-b border-white/10">
         {!collapsed && (
-          <span className="text-xl font-bold text-white tracking-tight">OptiPack</span>
+          <span className="text-xl font-bold text-white tracking-tight">TransitSoftServices</span>
         )}
         <button
           onClick={() => setCollapsed(!collapsed)}

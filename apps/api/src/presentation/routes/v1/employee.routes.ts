@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { EmployeeController } from '../../controllers/EmployeeController';
 import { authenticate, authorize } from '../../middleware/authMiddleware';
 import { validate } from '../../middleware/validate';
-import { paginationSchema } from '@optipack/shared';
+import { paginationSchema } from '@transitsoftservices/shared';
 
 const router = Router();
 

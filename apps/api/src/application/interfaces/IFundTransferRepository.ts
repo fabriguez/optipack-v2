@@ -1,5 +1,5 @@
 import type { FundTransfer, Prisma } from '@prisma/client';
-import type { PaginationInput, PaginatedResponse } from '@optipack/shared';
+import type { PaginationInput, PaginatedResponse } from '@transitsoftservices/shared';
 
 export interface IFundTransferRepository {
   findById(id: string): Promise<FundTransfer | null>;

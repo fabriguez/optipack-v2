@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { AgencyController } from '../../controllers/AgencyController';
 import { authenticate, authorize } from '../../middleware/authMiddleware';
 import { validate } from '../../middleware/validate';
-import { createAgencySchema, updateAgencySchema, paginationSchema } from '@optipack/shared';
+import { createAgencySchema, updateAgencySchema, paginationSchema } from '@transitsoftservices/shared';
 
 const router = Router();
 

@@ -1,6 +1,6 @@
 import type { Config } from 'tailwindcss';
 
-const optipackPreset: Partial<Config> = {
+const transitsoftservicesPreset: Partial<Config> = {
   theme: {
     extend: {
       colors: {
@@ -97,4 +97,4 @@ const optipackPreset: Partial<Config> = {
   },
 };
 
-export default optipackPreset;
+export default transitsoftservicesPreset;

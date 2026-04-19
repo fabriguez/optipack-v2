@@ -12,7 +12,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { useQuery } from '@tanstack/react-query';
 import { useVoidPayment } from '@/lib/hooks/usePayments';
 import { apiClient } from '@/lib/api/client';
-import { formatAmount, formatDateTime } from '@optipack/shared';
+import { formatAmount, formatDateTime } from '@transitsoftservices/shared';
 import { useState } from 'react';
 
 const METHOD_LABELS: Record<string, string> = {

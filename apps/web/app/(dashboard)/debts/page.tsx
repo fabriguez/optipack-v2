@@ -14,7 +14,7 @@ import { ExportButton } from '@/components/shared/ExportButton';
 import { RowActions } from '@/components/shared/RowActions';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
-import { formatAmount, formatDate } from '@optipack/shared';
+import { formatAmount, formatDate } from '@transitsoftservices/shared';
 
 const STATUS_VARIANT: Record<string, 'warning' | 'success' | 'error' | 'default'> = {
   ACTIVE: 'warning', PARTIALLY_PAID: 'info' as any, CLEARED: 'success', OVERDUE: 'error',

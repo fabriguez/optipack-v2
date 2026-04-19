@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { AuthController } from '../../controllers/AuthController';
 import { authenticate } from '../../middleware/authMiddleware';
 import { validate } from '../../middleware/validate';
-import { loginSchema, registerSchema } from '@optipack/shared';
+import { loginSchema, registerSchema } from '@transitsoftservices/shared';
 
 const router = Router();
 

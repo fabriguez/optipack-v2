@@ -1,5 +1,5 @@
 import { inject, injectable } from 'tsyringe';
-import type { CreateTransitRouteInput } from '@optipack/shared';
+import type { CreateTransitRouteInput } from '@transitsoftservices/shared';
 import { TRANSIT_ROUTE_REPOSITORY, type ITransitRouteRepository } from '../../interfaces/ITransitRouteRepository';
 
 @injectable()

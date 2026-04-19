@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { clientsApi } from '@/lib/api/clients';
-import type { CreateClientInput, UpdateClientInput, PaginationInput } from '@optipack/shared';
+import type { CreateClientInput, UpdateClientInput, PaginationInput } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
 
 export function useClients(params?: Partial<PaginationInput> & { agencyId?: string }) {

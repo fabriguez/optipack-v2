@@ -16,7 +16,7 @@ import { RowActions } from '@/components/shared/RowActions';
 import { useQuery } from '@tanstack/react-query';
 import { fundTransfersApi } from '@/lib/api/finance';
 import { useAgencies } from '@/lib/hooks/useAgencies';
-import { formatAmount, formatDateTime } from '@optipack/shared';
+import { formatAmount, formatDateTime } from '@transitsoftservices/shared';
 import { FundTransferFormDialog } from './FundTransferFormDialog';
 
 const STATUS_VARIANT: Record<string, 'warning' | 'success' | 'error'> = {

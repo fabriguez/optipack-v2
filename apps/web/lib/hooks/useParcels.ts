@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { parcelsApi } from '@/lib/api/parcels';
-import type { CreateParcelInput, PaginationInput } from '@optipack/shared';
+import type { CreateParcelInput, PaginationInput } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
 
 export function useParcels(params?: Partial<PaginationInput> & { status?: string; clientId?: string }) {

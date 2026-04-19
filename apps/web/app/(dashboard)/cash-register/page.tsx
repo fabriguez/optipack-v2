@@ -8,7 +8,7 @@ import { AppButton } from '@/components/ui/AppButton';
 import { AppBadge } from '@/components/ui/AppBadge';
 import { CardSkeleton } from '@/components/ui/AppSkeleton';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
-import { formatAmount } from '@optipack/shared';
+import { formatAmount } from '@transitsoftservices/shared';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { cashRegisterApi } from '@/lib/api/finance';
 import { useAgencies } from '@/lib/hooks/useAgencies';

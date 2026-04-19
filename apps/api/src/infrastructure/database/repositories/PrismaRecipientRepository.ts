@@ -1,7 +1,7 @@
 import { injectable } from 'tsyringe';
 import type { Recipient, Prisma } from '@prisma/client';
 import type { IRecipientRepository } from '../../../application/interfaces/IRecipientRepository';
-import type { PaginationInput, PaginatedResponse } from '@optipack/shared';
+import type { PaginationInput, PaginatedResponse } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
 
 @injectable()

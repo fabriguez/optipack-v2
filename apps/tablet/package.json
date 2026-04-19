@@ -1,5 +1,5 @@
 {
-  "name": "@optipack/tablet",
+  "name": "@transitsoftservices/tablet",
   "version": "0.1.0",
   "private": true,
   "main": "expo-router/entry",
@@ -12,7 +12,7 @@
     "clean": "rm -rf .expo dist"
   },
   "dependencies": {
-    "@optipack/shared": "workspace:*",
+    "@transitsoftservices/shared": "workspace:*",
     "@expo/vector-icons": "^14.0.0",
     "@react-navigation/drawer": "^7.3.0",
     "@tanstack/react-query": "^5.66.8",
@@ -31,7 +31,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
-    "@optipack/tsconfig": "workspace:*",
+    "@transitsoftservices/tsconfig": "workspace:*",
     "@types/react": "^19.0.8",
     "typescript": "^5.7.3"
   }

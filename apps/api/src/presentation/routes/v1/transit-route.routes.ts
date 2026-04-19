@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { TransitRouteController } from '../../controllers/TransitRouteController';
 import { authenticate, authorize } from '../../middleware/authMiddleware';
 import { validate } from '../../middleware/validate';
-import { createTransitRouteSchema, updateTransitRouteSchema, paginationSchema } from '@optipack/shared';
+import { createTransitRouteSchema, updateTransitRouteSchema, paginationSchema } from '@transitsoftservices/shared';
 
 const router = Router();
 

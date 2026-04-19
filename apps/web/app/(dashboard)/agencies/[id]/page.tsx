@@ -23,7 +23,7 @@ import { AgencyFormDialog } from '../AgencyFormDialog';
 import { WarehouseFormDialog } from '../../warehouses/WarehouseFormDialog';
 import { ClientFormDialog } from '../../clients/ClientFormDialog';
 import { EmployeeFormDialog } from '../../employees/EmployeeFormDialog';
-import { formatAmount, formatDate } from '@optipack/shared';
+import { formatAmount, formatDate } from '@transitsoftservices/shared';
 
 export default function AgencyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -73,7 +73,6 @@ export default function AgencyDetailPage({ params }: { params: Promise<{ id: str
   const warehouseColumns = [
     { key: 'name', label: 'Nom', render: (row: any) => <Link href={`/warehouses/${row.id}`} className="font-medium text-primary-700 hover:underline">{row.name}</Link> },
     { key: 'location', label: 'Emplacement' },
-    { key: 'type', label: 'Type', render: (row: any) => <AppBadge>{row.type === 'STORAGE' ? 'Stockage' : row.type === 'TRANSIT' ? 'Transit' : 'Livraison'}</AppBadge> },
     { key: '_count', label: 'Colis', render: (row: any) => row._count?.parcels ?? 0 },
     { key: 'actions', label: '', className: 'w-10', render: (row: any) => <RowActions actions={[{ label: 'Voir', icon: <Eye className="h-4 w-4" />, onClick: () => router.push(`/warehouses/${row.id}`) }]} /> },
   ];

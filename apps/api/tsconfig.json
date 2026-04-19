@@ -1,5 +1,5 @@
 {
-  "extends": "@optipack/tsconfig/node.json",
+  "extends": "@transitsoftservices/tsconfig/node.json",
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": "./src",

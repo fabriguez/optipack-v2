@@ -7,7 +7,7 @@ import { AppDataTable } from '@/components/ui/AppDataTable';
 import { AppBadge } from '@/components/ui/AppBadge';
 import { useQuery } from '@tanstack/react-query';
 import { accountingApi } from '@/lib/api/finance';
-import { formatAmount, formatDateTime } from '@optipack/shared';
+import { formatAmount, formatDateTime } from '@transitsoftservices/shared';
 
 const SOURCE_LABELS: Record<string, string> = {
   PAYMENT: 'Paiement',

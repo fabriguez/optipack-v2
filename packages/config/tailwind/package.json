@@ -1,5 +1,5 @@
 {
-  "name": "@optipack/tailwind-config",
+  "name": "@transitsoftservices/tailwind-config",
   "version": "0.0.0",
   "private": true,
   "main": "preset.ts",

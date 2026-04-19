@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import type { CreateParcelInput, PaginationInput } from '@optipack/shared';
+import type { CreateParcelInput, PaginationInput } from '@transitsoftservices/shared';
 
 export const parcelsApi = {
   list: (params?: Partial<PaginationInput> & { status?: string; clientId?: string; warehouseId?: string }) =>

@@ -1,5 +1,5 @@
 import type { ChatConversation, ChatMessage, Prisma } from '@prisma/client';
-import type { PaginationInput, PaginatedResponse } from '@optipack/shared';
+import type { PaginationInput, PaginatedResponse } from '@transitsoftservices/shared';
 
 export interface IChatRepository {
   findConversationById(id: string): Promise<ChatConversation | null>;

@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import type { LoginInput, RegisterInput } from '@optipack/shared';
+import type { LoginInput, RegisterInput } from '@transitsoftservices/shared';
 
 export const authApi = {
   login: (data: LoginInput) => apiClient.post('/auth/login', data).then((r) => r.data),

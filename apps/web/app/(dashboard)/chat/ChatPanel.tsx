@@ -6,7 +6,7 @@ import { useSession } from 'next-auth/react';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppBadge } from '@/components/ui/AppBadge';
-import { formatDateTime } from '@optipack/shared';
+import { formatDateTime } from '@transitsoftservices/shared';
 import {
   useConversation,
   useMessages,

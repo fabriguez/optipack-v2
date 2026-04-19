@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/Badge';
 import { useDashboardStats } from '@/lib/hooks/useDashboard';
 import { colors } from '@/lib/theme/colors';
 import { spacing } from '@/lib/theme/spacing';
-import { formatAmount } from '@optipack/shared';
+import { formatAmount } from '@transitsoftservices/shared';
 
 export default function DashboardScreen() {
   const { data, isLoading, refetch } = useDashboardStats();

@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/Badge';
 import { apiClient } from '@/lib/api/client';
 import { colors } from '@/lib/theme/colors';
 import { spacing } from '@/lib/theme/spacing';
-import { formatAmount } from '@optipack/shared';
+import { formatAmount } from '@transitsoftservices/shared';
 
 export default function InvoicesScreen() {
   const router = useRouter();

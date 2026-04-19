@@ -1,5 +1,5 @@
 {
-  "name": "@optipack/shared",
+  "name": "@transitsoftservices/shared",
   "version": "0.1.0",
   "private": true,
   "main": "./dist/index.js",
@@ -36,7 +36,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
-    "@optipack/tsconfig": "workspace:*",
+    "@transitsoftservices/tsconfig": "workspace:*",
     "typescript": "^5.7.3"
   }
 }

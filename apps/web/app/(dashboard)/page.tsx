@@ -6,7 +6,7 @@ import { AppCard, AppCardHeader } from '@/components/ui/AppCard';
 import { AppBadge } from '@/components/ui/AppBadge';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 import { useDashboardStats } from '@/lib/hooks/useDashboard';
-import { formatAmount } from '@optipack/shared';
+import { formatAmount } from '@transitsoftservices/shared';
 import {
   Package,
   CheckCircle,

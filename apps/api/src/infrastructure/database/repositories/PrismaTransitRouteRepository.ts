@@ -1,7 +1,7 @@
 import { injectable } from 'tsyringe';
 import type { TransitRoute, Prisma } from '@prisma/client';
 import type { ITransitRouteRepository } from '../../../application/interfaces/ITransitRouteRepository';
-import type { PaginationInput, PaginatedResponse } from '@optipack/shared';
+import type { PaginationInput, PaginatedResponse } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
 
 @injectable()

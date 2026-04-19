@@ -16,7 +16,7 @@ import { useServerPagination } from '@/lib/hooks/useServerPagination';
 import { useAgencies } from '@/lib/hooks/useAgencies';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
-import { formatAmount, formatDate } from '@optipack/shared';
+import { formatAmount, formatDate } from '@transitsoftservices/shared';
 
 function InvoicesContent() {
   const router = useRouter();

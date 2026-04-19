@@ -1,5 +1,5 @@
 import { inject, injectable } from 'tsyringe';
-import { calculateLoyaltyPoints, getLoyaltyTier } from '@optipack/shared';
+import { calculateLoyaltyPoints, getLoyaltyTier } from '@transitsoftservices/shared';
 import { LOYALTY_REPOSITORY, type ILoyaltyRepository } from '../../interfaces/ILoyaltyRepository';
 import { CLIENT_REPOSITORY, type IClientRepository } from '../../interfaces/IClientRepository';
 import { NotFoundError } from '../../../domain/errors/BusinessError';

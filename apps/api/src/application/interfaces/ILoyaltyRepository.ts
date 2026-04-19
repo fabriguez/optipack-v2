@@ -1,5 +1,5 @@
 import type { LoyaltyTransaction, Prisma } from '@prisma/client';
-import type { PaginationInput, PaginatedResponse } from '@optipack/shared';
+import type { PaginationInput, PaginatedResponse } from '@transitsoftservices/shared';
 
 export interface ILoyaltyRepository {
   findByClient(clientId: string, pagination: PaginationInput): Promise<PaginatedResponse<LoyaltyTransaction>>;

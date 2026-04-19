@@ -1,5 +1,5 @@
 {
-  "extends": "@optipack/tsconfig/nextjs.json",
+  "extends": "@transitsoftservices/tsconfig/nextjs.json",
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": "./src"

@@ -1,5 +1,5 @@
 import { inject, injectable } from 'tsyringe';
-import { PENALTY_GRACE_DAYS } from '@optipack/shared';
+import { PENALTY_GRACE_DAYS } from '@transitsoftservices/shared';
 import { PENALTY_REPOSITORY, type IPenaltyRepository } from '../../interfaces/IPenaltyRepository';
 import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 import { prisma } from '../../../config/database';

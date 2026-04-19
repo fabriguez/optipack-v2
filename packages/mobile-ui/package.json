@@ -1,5 +1,5 @@
 {
-  "name": "@optipack/mobile-ui",
+  "name": "@transitsoftservices/mobile-ui",
   "version": "0.1.0",
   "private": true,
   "main": "./src/index.ts",
@@ -10,7 +10,7 @@
     "clean": "rm -rf dist .turbo"
   },
   "devDependencies": {
-    "@optipack/tsconfig": "workspace:*",
+    "@transitsoftservices/tsconfig": "workspace:*",
     "typescript": "^5.7.3"
   }
 }

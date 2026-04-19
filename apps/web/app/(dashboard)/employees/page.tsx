@@ -17,7 +17,7 @@ import { RowActions } from '@/components/shared/RowActions';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { useAgencies } from '@/lib/hooks/useAgencies';
-import { formatAmount } from '@optipack/shared';
+import { formatAmount } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
 import { EmployeeFormDialog } from './EmployeeFormDialog';
 

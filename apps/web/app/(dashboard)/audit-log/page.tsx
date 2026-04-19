@@ -8,7 +8,7 @@ import { AppDataTable } from '@/components/ui/AppDataTable';
 import { AppBadge } from '@/components/ui/AppBadge';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
-import { formatDateTime } from '@optipack/shared';
+import { formatDateTime } from '@transitsoftservices/shared';
 
 const ACTION_COLORS: Record<string, 'success' | 'warning' | 'error' | 'info' | 'default'> = {
   CREATE: 'success',

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { DisbursementController } from '../../controllers/DisbursementController';
 import { authenticate, authorize } from '../../middleware/authMiddleware';
 import { validate } from '../../middleware/validate';
-import { createDisbursementSchema, voidDisbursementSchema, paginationSchema } from '@optipack/shared';
+import { createDisbursementSchema, voidDisbursementSchema, paginationSchema } from '@transitsoftservices/shared';
 
 const router = Router();
 
