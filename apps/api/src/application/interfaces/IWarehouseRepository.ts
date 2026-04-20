@@ -8,7 +8,7 @@ export interface IWarehouseRepository {
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<Warehouse>>;
   findByAgencies(
-    agencyIds: string[],
+    agencyIds: string[] | null,
     pagination: PaginationInput,
     agencyId?: string,
   ): Promise<PaginatedResponse<Warehouse>>;

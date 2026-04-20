@@ -22,8 +22,9 @@ export class WarehouseController {
     try {
       const repo = container.resolve<any>(WAREHOUSE_REPOSITORY);
       const { agencyId } = req.query;
+      const scope = req.user!.role === 'SUPER_ADMIN' ? null : req.user!.agencyIds;
       const result = await repo.findByAgencies(
-        req.user!.agencyIds,
+        scope,
         req.query as any,
         agencyId as string | undefined,
       );

@@ -49,15 +49,22 @@ export class PrismaWarehouseRepository implements IWarehouseRepository {
   }
 
   async findByAgencies(
-    agencyIds: string[],
+    agencyIds: string[] | null,
     pagination: PaginationInput,
     agencyId?: string,
   ): Promise<PaginatedResponse<Warehouse>> {
     const { page, limit, sortBy, sortOrder, search } = pagination;
     const skip = (page - 1) * limit;
 
+    const agencyFilter: Prisma.WarehouseWhereInput =
+      agencyIds === null
+        ? agencyId
+          ? { agencyId }
+          : {}
+        : { agencyId: agencyId ? { equals: agencyId, in: agencyIds } : { in: agencyIds } };
+
     const where: Prisma.WarehouseWhereInput = {
-      agencyId: agencyId ? { equals: agencyId, in: agencyIds } : { in: agencyIds },
+      ...agencyFilter,
       isActive: true,
       ...(search && {
         OR: [
