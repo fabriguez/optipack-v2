@@ -9,13 +9,24 @@ import { UnloadParcelUseCase } from '../../application/use-cases/container/Unloa
 import { CONTAINER_REPOSITORY } from '../../application/interfaces/IContainerRepository';
 import { PARCEL_REPOSITORY } from '../../application/interfaces/IParcelRepository';
 import { NotFoundError } from '../../domain/errors/BusinessError';
+import { HistoryService } from '../../application/services/HistoryService';
 
 export class ContainerController {
   static async create(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(CreateContainerUseCase);
-      const result = await useCase.execute(req.body);
+      const result = await useCase.execute(req.body, req.user!.userId);
       res.status(201).json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async getHistory(req: Request, res: Response, next: NextFunction) {
+    try {
+      const history = container.resolve(HistoryService);
+      const items = await history.listContainerHistory(req.params.id);
+      res.json({ success: true, data: items });
     } catch (err) {
       next(err);
     }

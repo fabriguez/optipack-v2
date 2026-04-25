@@ -7,7 +7,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-
 // ============================================================
 // ORGANISATION
 // ============================================================
@@ -59,25 +58,25 @@ model Agency {
   organization    Organization @relation(fields: [organizationId], references: [id])
   responsibleUser User?        @relation("AgencyResponsible", fields: [responsibleUserId], references: [id])
 
-  warehouses              Warehouse[]
-  userAgencies            UserAgency[]
-  employees               Employee[]
-  clients                 Client[]
-  recipients              Recipient[]
-  departureContainers     Container[]          @relation("DepartureAgency")
-  arrivalContainers       Container[]          @relation("ArrivalAgency")
-  invoices                Invoice[]
-  payments                Payment[]
-  cashRegisters           AgencyCashRegister[]
-  disbursements           DisbursementVoucher[]
-  fundTransfersSent       FundTransfer[]       @relation("SourceAgency")
-  fundTransfersReceived   FundTransfer[]       @relation("DestinationAgencyRel")
-  expenses                Expense[]
-  penalties               Penalty[]
-  journalEntries          JournalEntry[]
-  auditLogs               AuditLog[]
-  chatConversations       ChatConversation[]
-  notifications           Notification[]
+  warehouses            Warehouse[]
+  userAgencies          UserAgency[]
+  employees             Employee[]
+  clients               Client[]
+  recipients            Recipient[]
+  departureContainers   Container[]           @relation("DepartureAgency")
+  arrivalContainers     Container[]           @relation("ArrivalAgency")
+  invoices              Invoice[]
+  payments              Payment[]
+  cashRegisters         AgencyCashRegister[]
+  disbursements         DisbursementVoucher[]
+  fundTransfersSent     FundTransfer[]        @relation("SourceAgency")
+  fundTransfersReceived FundTransfer[]        @relation("DestinationAgencyRel")
+  expenses              Expense[]
+  penalties             Penalty[]
+  journalEntries        JournalEntry[]
+  auditLogs             AuditLog[]
+  chatConversations     ChatConversation[]
+  notifications         Notification[]
 
   @@index([organizationId])
   @@index([city])
@@ -110,42 +109,42 @@ model Warehouse {
 // ============================================================
 
 model User {
-  id               String   @id @default(uuid())
+  id               String    @id @default(uuid())
   organizationId   String
-  email            String   @unique
+  email            String    @unique
   passwordHash     String
   firstName        String
   lastName         String
   phone            String?
   avatarUrl        String?
-  role             UserRole @default(AGENT)
-  isActive         Boolean  @default(true)
-  isVerified       Boolean  @default(false)
-  twoFactorEnabled Boolean  @default(false)
+  role             UserRole  @default(AGENT)
+  isActive         Boolean   @default(true)
+  isVerified       Boolean   @default(false)
+  twoFactorEnabled Boolean   @default(false)
   twoFactorSecret  String?
   lastLoginAt      DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id])
 
-  userAgencies           UserAgency[]
-  responsibleAgencies    Agency[]              @relation("AgencyResponsible")
-  refreshTokens          RefreshToken[]
-  paymentsReceived       Payment[]
-  voidedPayments         Payment[]             @relation("VoidedByUser")
-  disbursementsIssued    DisbursementVoucher[] @relation("IssuedByUser")
-  disbursementsApproved  DisbursementVoucher[] @relation("ApprovedByUser")
-  transfersInitiated     FundTransfer[]        @relation("InitiatedByUser")
-  transfersConfirmed     FundTransfer[]        @relation("ConfirmedByUser")
-  closedCashRegisters    AgencyCashRegister[]
-  journalEntriesCreated  JournalEntry[]
-  expensesApproved       Expense[]
-  parcelHistories        ParcelHistory[]
-  containerHistories     ContainerHistory[]
-  auditLogs              AuditLog[]
-  chatMessagesAgent      ChatMessage[]
-  assignedConversations  ChatConversation[]
+  userAgencies          UserAgency[]
+  responsibleAgencies   Agency[]              @relation("AgencyResponsible")
+  refreshTokens         RefreshToken[]
+  paymentsReceived      Payment[]
+  voidedPayments        Payment[]             @relation("VoidedByUser")
+  disbursementsIssued   DisbursementVoucher[] @relation("IssuedByUser")
+  disbursementsApproved DisbursementVoucher[] @relation("ApprovedByUser")
+  transfersInitiated    FundTransfer[]        @relation("InitiatedByUser")
+  transfersConfirmed    FundTransfer[]        @relation("ConfirmedByUser")
+  closedCashRegisters   AgencyCashRegister[]
+  journalEntriesCreated JournalEntry[]
+  expensesApproved      Expense[]
+  parcelHistories       ParcelHistory[]
+  containerHistories    ContainerHistory[]
+  auditLogs             AuditLog[]
+  chatMessagesAgent     ChatMessage[]
+  assignedConversations ChatConversation[]
 
   @@index([organizationId])
   @@index([email])
@@ -191,19 +190,19 @@ model RefreshToken {
 // ============================================================
 
 model Employee {
-  id          String    @id @default(uuid())
-  agencyId    String
-  fullName    String
-  idNumber    String?
-  phone       String?
-  position    String
-  level       String?
-  baseSalary  Decimal   @default(0) @db.Decimal(15, 2)
-  startDate   DateTime  @default(now())
-  endDate     DateTime?
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id         String    @id @default(uuid())
+  agencyId   String
+  fullName   String
+  idNumber   String?
+  phone      String?
+  position   String
+  level      String?
+  baseSalary Decimal   @default(0) @db.Decimal(15, 2)
+  startDate  DateTime  @default(now())
+  endDate    DateTime?
+  isActive   Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   agency   Agency    @relation(fields: [agencyId], references: [id])
   payslips Payslip[]
@@ -213,17 +212,17 @@ model Employee {
 }
 
 model Payslip {
-  id                    String   @id @default(uuid())
-  employeeId            String
-  period                String
-  baseSalary            Decimal  @db.Decimal(15, 2)
-  bonuses               Decimal  @default(0) @db.Decimal(15, 2)
-  benefitsInKind        Decimal  @default(0) @db.Decimal(15, 2)
-  socialContributions   Decimal  @default(0) @db.Decimal(15, 2)
-  grossSalary           Decimal  @db.Decimal(15, 2)
-  netSalary             Decimal  @db.Decimal(15, 2)
-  isPaid                Boolean  @default(false)
-  generatedAt           DateTime @default(now())
+  id                  String   @id @default(uuid())
+  employeeId          String
+  period              String
+  baseSalary          Decimal  @db.Decimal(15, 2)
+  bonuses             Decimal  @default(0) @db.Decimal(15, 2)
+  benefitsInKind      Decimal  @default(0) @db.Decimal(15, 2)
+  socialContributions Decimal  @default(0) @db.Decimal(15, 2)
+  grossSalary         Decimal  @db.Decimal(15, 2)
+  netSalary           Decimal  @db.Decimal(15, 2)
+  isPaid              Boolean  @default(false)
+  generatedAt         DateTime @default(now())
 
   employee Employee @relation(fields: [employeeId], references: [id])
 
@@ -245,6 +244,7 @@ model Client {
   idNumber       String?
   imageUrl       String?
   address        String?
+  clientType     ClientType  @default(INDIVIDUAL)
   loyaltyTier    LoyaltyTier @default(STANDARD)
   loyaltyPoints  Int         @default(0)
   totalSpent     Decimal     @default(0) @db.Decimal(15, 2)
@@ -265,11 +265,19 @@ model Client {
   penalties           Penalty[]
   chatConversations   ChatConversation[]
   notifications       Notification[]       @relation("ClientNotifications")
+  partnerPricings     PartnerPricing[]
 
   @@index([organizationId])
   @@index([agencyId])
   @@index([phone])
+  @@index([clientType])
   @@map("clients")
+}
+
+enum ClientType {
+  INDIVIDUAL
+  COMPANY
+  PARTNER
 }
 
 enum LoyaltyTier {
@@ -277,6 +285,25 @@ enum LoyaltyTier {
   SILVER
   GOLD
   VIP
+}
+
+// Tarification specifique par partenaire (override des prix de la TransitRoute)
+model PartnerPricing {
+  id             String   @id @default(uuid())
+  clientId       String
+  transitRouteId String?
+  pricePerKg     Decimal  @db.Decimal(15, 2)
+  pricePerVolume Decimal  @default(0) @db.Decimal(15, 2)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  client       Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  transitRoute TransitRoute? @relation(fields: [transitRouteId], references: [id])
+
+  @@unique([clientId, transitRouteId])
+  @@index([clientId])
+  @@map("partner_pricings")
 }
 
 model Recipient {
@@ -301,24 +328,25 @@ model Recipient {
 // ============================================================
 
 model TransitRoute {
-  id                  String      @id @default(uuid())
-  organizationId      String
-  name                String
-  type                TransitType
-  departureCity       String
-  departureCountry    String
-  arrivalCity         String
-  arrivalCountry      String
-  pricePerKg          Decimal     @db.Decimal(15, 2)
-  pricePerVolume      Decimal     @default(0) @db.Decimal(15, 2)
-  estimatedDurationDays Int       @default(0)
-  isActive            Boolean     @default(true)
-  createdAt           DateTime    @default(now())
-  updatedAt           DateTime    @updatedAt
+  id                    String      @id @default(uuid())
+  organizationId        String
+  name                  String
+  type                  TransitType
+  departureCity         String
+  departureCountry      String
+  arrivalCity           String
+  arrivalCountry        String
+  pricePerKg            Decimal     @db.Decimal(15, 2)
+  pricePerVolume        Decimal     @default(0) @db.Decimal(15, 2)
+  estimatedDurationDays Int         @default(0)
+  isActive              Boolean     @default(true)
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
 
-  organization Organization @relation(fields: [organizationId], references: [id])
-  parcels      Parcel[]
-  containers   Container[]
+  organization    Organization     @relation(fields: [organizationId], references: [id])
+  parcels         Parcel[]
+  containers      Container[]
+  partnerPricings PartnerPricing[]
 
   @@index([organizationId])
   @@map("transit_routes")
@@ -338,6 +366,7 @@ model Container {
   id                   String          @id @default(uuid())
   designation          String          @unique
   type                 TransitType
+  isForwarding         Boolean         @default(false)
   capacity             Decimal         @db.Decimal(15, 2)
   currentLoad          Decimal         @default(0) @db.Decimal(15, 2)
   transitRouteId       String?
@@ -353,16 +382,17 @@ model Container {
   createdAt            DateTime        @default(now())
   updatedAt            DateTime        @updatedAt
 
-  transitRoute      TransitRoute?      @relation(fields: [transitRouteId], references: [id])
-  departureAgency   Agency             @relation("DepartureAgency", fields: [departureAgencyId], references: [id])
-  arrivalAgency     Agency             @relation("ArrivalAgency", fields: [arrivalAgencyId], references: [id])
-  parcels           Parcel[]           @relation("CurrentContainer")
-  lastContainerFor  Parcel[]           @relation("LastContainer")
-  histories         ContainerHistory[]
-  manifests         ShippingManifest[]
-  expenses          Expense[]
-  routingSource     InterAgencyRouting[] @relation("SourceContainer")
-  routingTarget     InterAgencyRouting[] @relation("TargetContainer")
+  transitRoute     TransitRoute?         @relation(fields: [transitRouteId], references: [id])
+  departureAgency  Agency                @relation("DepartureAgency", fields: [departureAgencyId], references: [id])
+  arrivalAgency    Agency                @relation("ArrivalAgency", fields: [arrivalAgencyId], references: [id])
+  parcels          Parcel[]              @relation("CurrentContainer")
+  lastContainerFor Parcel[]              @relation("LastContainer")
+  histories        ContainerHistory[]
+  manifests        ShippingManifest[]
+  expenses         Expense[]
+  routingSource    InterAgencyRouting[]  @relation("SourceContainer")
+  routingTarget    InterAgencyRouting[]  @relation("TargetContainer")
+  discrepancies    ManifestDiscrepancy[]
 
   @@index([departureAgencyId])
   @@index([arrivalAgencyId])
@@ -388,7 +418,7 @@ model Parcel {
   id                  String       @id @default(uuid())
   trackingNumber      String       @unique
   designation         String
-  weight              Decimal      @db.Decimal(15, 3)
+  weight              Decimal?     @db.Decimal(15, 3)
   originalWeight      Decimal?     @db.Decimal(15, 3)
   volume              Decimal?     @db.Decimal(15, 3)
   imageUrl            String?
@@ -408,31 +438,33 @@ model Parcel {
   containerId         String?
   lastContainerId     String?
   transitRouteId      String?
-  invoiceId           String?      @unique
+  invoiceId           String? @unique
 
-  arrivalDate         DateTime?
-  pickupDate          DateTime?
-  penaltyStartDate    DateTime?
-  warehouseEnteredAt  DateTime?
+  arrivalDate        DateTime?
+  pickupDate         DateTime?
+  penaltyStartDate   DateTime?
+  warehouseEnteredAt DateTime?
 
-  isDeleted           Boolean  @default(false)
-  deletedAt           DateTime?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
-  client            Client         @relation(fields: [clientId], references: [id])
-  recipient         Recipient?     @relation(fields: [recipientId], references: [id])
-  warehouse         Warehouse?     @relation("CurrentWarehouse", fields: [warehouseId], references: [id])
-  originalWarehouse Warehouse?     @relation("OriginalWarehouse", fields: [originalWarehouseId], references: [id])
-  container         Container?     @relation("CurrentContainer", fields: [containerId], references: [id])
-  lastContainer     Container?     @relation("LastContainer", fields: [lastContainerId], references: [id])
-  transitRoute      TransitRoute?  @relation(fields: [transitRouteId], references: [id])
-  invoice           Invoice?       @relation(fields: [invoiceId], references: [id])
+  client            Client        @relation(fields: [clientId], references: [id])
+  recipient         Recipient?    @relation(fields: [recipientId], references: [id])
+  warehouse         Warehouse?    @relation("CurrentWarehouse", fields: [warehouseId], references: [id])
+  originalWarehouse Warehouse?    @relation("OriginalWarehouse", fields: [originalWarehouseId], references: [id])
+  container         Container?    @relation("CurrentContainer", fields: [containerId], references: [id])
+  lastContainer     Container?    @relation("LastContainer", fields: [lastContainerId], references: [id])
+  transitRoute      TransitRoute? @relation(fields: [transitRouteId], references: [id])
+  invoice           Invoice?      @relation(fields: [invoiceId], references: [id])
 
-  histories         ParcelHistory[]
-  manifestLines     ManifestLine[]
-  penalties         Penalty[]
-  routings          InterAgencyRouting[]
+  histories     ParcelHistory[]
+  manifestLines ManifestLine[]
+  penalties     Penalty[]
+  routings      InterAgencyRouting[]
+  images        ParcelImage[]
+  discrepancies ManifestDiscrepancy[]
 
   @@index([clientId])
   @@index([warehouseId])
@@ -440,6 +472,22 @@ model Parcel {
   @@index([status])
   @@index([trackingNumber])
   @@map("parcels")
+}
+
+// Galerie d'images d'un colis (multi-images)
+model ParcelImage {
+  id        String   @id @default(uuid())
+  parcelId  String
+  url       String
+  caption   String?
+  sortOrder Int      @default(0)
+  isPrimary Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  parcel Parcel @relation(fields: [parcelId], references: [id], onDelete: Cascade)
+
+  @@index([parcelId])
+  @@map("parcel_images")
 }
 
 enum ParcelStatus {
@@ -468,9 +516,9 @@ model InterAgencyRouting {
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 
-  sourceContainer Container @relation("SourceContainer", fields: [sourceContainerId], references: [id])
+  sourceContainer Container  @relation("SourceContainer", fields: [sourceContainerId], references: [id])
   targetContainer Container? @relation("TargetContainer", fields: [targetContainerId], references: [id])
-  parcel          Parcel    @relation(fields: [parcelId], references: [id])
+  parcel          Parcel     @relation(fields: [parcelId], references: [id])
 
   @@index([sourceContainerId])
   @@index([parcelId])
@@ -543,10 +591,10 @@ model Payment {
   receivedByUserId     String
 
   // Immutabilite : pas de updatedAt, void seulement
-  isVoided             Boolean   @default(false)
-  voidedAt             DateTime?
-  voidReason           String?
-  voidedByUserId       String?
+  isVoided       Boolean   @default(false)
+  voidedAt       DateTime?
+  voidReason     String?
+  voidedByUserId String?
 
   createdAt DateTime @default(now())
   // PAS de updatedAt -- paiement immutable
@@ -606,32 +654,32 @@ model AgencyCashRegister {
 // ============================================================
 
 model DisbursementVoucher {
-  id              String   @id @default(uuid())
-  reference       String   @unique
-  agencyId        String
-  cashRegisterId  String
-  reason          String
-  description     String?
-  orderer         String
-  amount          Decimal  @db.Decimal(15, 2)
-  amountInWords   String
-  proofUrl        String?
-  issuedByUserId  String
+  id               String  @id @default(uuid())
+  reference        String  @unique
+  agencyId         String
+  cashRegisterId   String
+  reason           String
+  description      String?
+  orderer          String
+  amount           Decimal @db.Decimal(15, 2)
+  amountInWords    String
+  proofUrl         String?
+  issuedByUserId   String
   approvedByUserId String?
 
   // Immutabilite
-  isVoided         Boolean  @default(false)
-  voidedAt         DateTime?
-  voidReason       String?
-  reverseEntryId   String?  @unique
+  isVoided       Boolean   @default(false)
+  voidedAt       DateTime?
+  voidReason     String?
+  reverseEntryId String?   @unique
 
   createdAt DateTime @default(now())
   // PAS de updatedAt -- immutable
 
-  agency       Agency             @relation(fields: [agencyId], references: [id])
-  cashRegister AgencyCashRegister @relation(fields: [cashRegisterId], references: [id])
-  issuedBy     User               @relation("IssuedByUser", fields: [issuedByUserId], references: [id])
-  approvedBy   User?              @relation("ApprovedByUser", fields: [approvedByUserId], references: [id])
+  agency       Agency               @relation(fields: [agencyId], references: [id])
+  cashRegister AgencyCashRegister   @relation(fields: [cashRegisterId], references: [id])
+  issuedBy     User                 @relation("IssuedByUser", fields: [issuedByUserId], references: [id])
+  approvedBy   User?                @relation("ApprovedByUser", fields: [approvedByUserId], references: [id])
   reverseEntry DisbursementVoucher? @relation("ReverseVoucher", fields: [reverseEntryId], references: [id])
   reversedBy   DisbursementVoucher? @relation("ReverseVoucher")
 
@@ -645,32 +693,32 @@ model DisbursementVoucher {
 // ============================================================
 
 model FundTransfer {
-  id                 String                  @id @default(uuid())
-  reference          String                  @unique
-  sourceAgencyId     String
-  destinationType    TransferDestinationType
+  id                  String                  @id @default(uuid())
+  reference           String                  @unique
+  sourceAgencyId      String
+  destinationType     TransferDestinationType
   destinationAgencyId String?
-  destinationLabel   String?
-  amount             Decimal                 @db.Decimal(15, 2)
-  transferMethod     String
-  proofImageUrl      String?
-  initiatedByUserId  String
-  confirmedByUserId  String?
-  status             TransferStatus          @default(PENDING)
+  destinationLabel    String?
+  amount              Decimal                 @db.Decimal(15, 2)
+  transferMethod      String
+  proofImageUrl       String?
+  initiatedByUserId   String
+  confirmedByUserId   String?
+  status              TransferStatus          @default(PENDING)
 
   // Immutabilite
-  isVoided           Boolean   @default(false)
-  voidedAt           DateTime?
-  voidReason         String?
-  reverseEntryId     String?   @unique
+  isVoided       Boolean   @default(false)
+  voidedAt       DateTime?
+  voidReason     String?
+  reverseEntryId String?   @unique
 
   createdAt DateTime @default(now())
   // PAS de updatedAt -- immutable
 
-  sourceAgency      Agency  @relation("SourceAgency", fields: [sourceAgencyId], references: [id])
-  destinationAgency Agency? @relation("DestinationAgencyRel", fields: [destinationAgencyId], references: [id])
-  initiatedBy       User    @relation("InitiatedByUser", fields: [initiatedByUserId], references: [id])
-  confirmedBy       User?   @relation("ConfirmedByUser", fields: [confirmedByUserId], references: [id])
+  sourceAgency      Agency        @relation("SourceAgency", fields: [sourceAgencyId], references: [id])
+  destinationAgency Agency?       @relation("DestinationAgencyRel", fields: [destinationAgencyId], references: [id])
+  initiatedBy       User          @relation("InitiatedByUser", fields: [initiatedByUserId], references: [id])
+  confirmedBy       User?         @relation("ConfirmedByUser", fields: [confirmedByUserId], references: [id])
   reverseEntry      FundTransfer? @relation("ReverseTransfer", fields: [reverseEntryId], references: [id])
   reversedBy        FundTransfer? @relation("ReverseTransfer")
 
@@ -696,22 +744,22 @@ enum TransferStatus {
 // ============================================================
 
 model Expense {
-  id                 String   @id @default(uuid())
-  agencyId           String
-  title              String
-  reason             String
-  description        String?
-  category           String?
-  orderer            String?
-  amount             Decimal  @db.Decimal(15, 2)
-  receiptUrl         String?
-  justificationUrl   String?
-  containerId        String?
-  parcelId           String?
-  associationType    String?
-  approvedByUserId   String?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id               String   @id @default(uuid())
+  agencyId         String
+  title            String
+  reason           String
+  description      String?
+  category         String?
+  orderer          String?
+  amount           Decimal  @db.Decimal(15, 2)
+  receiptUrl       String?
+  justificationUrl String?
+  containerId      String?
+  parcelId         String?
+  associationType  String?
+  approvedByUserId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   agency     Agency     @relation(fields: [agencyId], references: [id])
   container  Container? @relation(fields: [containerId], references: [id])
@@ -726,23 +774,23 @@ model Expense {
 // ============================================================
 
 model Debt {
-  id              String     @id @default(uuid())
-  clientId        String
-  invoiceId       String?
-  creditor        String?
-  description     String
-  paymentMethod   PaymentMethod?
-  paymentProofUrl String?
-  totalAmount     Decimal    @db.Decimal(15, 2)
-  remainingAmount Decimal    @db.Decimal(15, 2)
+  id               String         @id @default(uuid())
+  clientId         String
+  invoiceId        String?
+  creditor         String?
+  description      String
+  paymentMethod    PaymentMethod?
+  paymentProofUrl  String?
+  totalAmount      Decimal        @db.Decimal(15, 2)
+  remainingAmount  Decimal        @db.Decimal(15, 2)
   installmentCount Int?
-  installmentPlan Json?
-  nextDueDate     DateTime?
-  status          DebtStatus @default(ACTIVE)
-  isCleared       Boolean    @default(false)
-  alertSent       Boolean    @default(false)
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
+  installmentPlan  Json?
+  nextDueDate      DateTime?
+  status           DebtStatus     @default(ACTIVE)
+  isCleared        Boolean        @default(false)
+  alertSent        Boolean        @default(false)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
 
   client  Client   @relation(fields: [clientId], references: [id])
   invoice Invoice? @relation(fields: [invoiceId], references: [id])
@@ -803,17 +851,17 @@ model JournalEntry {
   sourceId        String
 
   // Immutabilite
-  isReversed        Boolean  @default(false)
-  reversedByEntryId String?  @unique
+  isReversed        Boolean @default(false)
+  reversedByEntryId String? @unique
 
   createdAt DateTime @default(now())
   // PAS de updatedAt -- immutable
 
-  agency       Agency        @relation(fields: [agencyId], references: [id])
-  createdBy    User          @relation(fields: [createdByUserId], references: [id])
+  agency       Agency             @relation(fields: [agencyId], references: [id])
+  createdBy    User               @relation(fields: [createdByUserId], references: [id])
   lines        JournalEntryLine[]
-  reverseEntry JournalEntry? @relation("ReverseJournalEntry", fields: [reversedByEntryId], references: [id])
-  reversedBy   JournalEntry? @relation("ReverseJournalEntry")
+  reverseEntry JournalEntry?      @relation("ReverseJournalEntry", fields: [reversedByEntryId], references: [id])
+  reversedBy   JournalEntry?      @relation("ReverseJournalEntry")
 
   @@index([agencyId])
   @@index([sourceType, sourceId])
@@ -831,16 +879,16 @@ enum JournalSourceType {
 }
 
 model JournalEntryLine {
-  id             String  @id @default(uuid())
-  journalEntryId String
-  debitAccountId String?
+  id              String   @id @default(uuid())
+  journalEntryId  String
+  debitAccountId  String?
   creditAccountId String?
-  debitAmount    Decimal @default(0) @db.Decimal(15, 2)
-  creditAmount   Decimal @default(0) @db.Decimal(15, 2)
-  description    String?
-  createdAt      DateTime @default(now())
+  debitAmount     Decimal  @default(0) @db.Decimal(15, 2)
+  creditAmount    Decimal  @default(0) @db.Decimal(15, 2)
+  description     String?
+  createdAt       DateTime @default(now())
 
-  journalEntry  JournalEntry      @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  journalEntry  JournalEntry       @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
   debitAccount  AccountingAccount? @relation("DebitAccount", fields: [debitAccountId], references: [id])
   creditAccount AccountingAccount? @relation("CreditAccount", fields: [creditAccountId], references: [id])
 
@@ -908,23 +956,50 @@ enum ManifestStatus {
 }
 
 model ManifestLine {
-  id          String  @id @default(uuid())
+  id          String   @id @default(uuid())
   manifestId  String
-  parcelId    String
+  parcelId    String?
   designation String
-  weight      Decimal @db.Decimal(15, 3)
+  weight      Decimal? @db.Decimal(15, 3)
   origin      String?
   destination String?
   transit     String?
-  price       Decimal @default(0) @db.Decimal(15, 2)
+  price       Decimal  @default(0) @db.Decimal(15, 2)
   status      String?
   addedAt     DateTime @default(now())
 
   manifest ShippingManifest @relation(fields: [manifestId], references: [id], onDelete: Cascade)
-  parcel   Parcel           @relation(fields: [parcelId], references: [id])
+  parcel   Parcel?          @relation(fields: [parcelId], references: [id])
 
   @@index([manifestId])
   @@map("manifest_lines")
+}
+
+// Ecarts marques par l'admin lors de la reception d'un conteneur
+// (colis presents physiquement mais pas en ligne, ou en ligne mais absents physiquement)
+model ManifestDiscrepancy {
+  id             String          @id @default(uuid())
+  containerId    String
+  parcelId       String?
+  type           DiscrepancyType
+  designation    String?
+  trackingNumber String?
+  weight         Decimal?        @db.Decimal(15, 3)
+  comment        String?
+  markedByUserId String?
+  createdAt      DateTime        @default(now())
+
+  container Container @relation(fields: [containerId], references: [id])
+  parcel    Parcel?   @relation(fields: [parcelId], references: [id])
+
+  @@index([containerId])
+  @@index([type])
+  @@map("manifest_discrepancies")
+}
+
+enum DiscrepancyType {
+  MISSING_PHYSICAL // declare en ligne mais absent physiquement
+  EXTRA_PHYSICAL // present physiquement mais non enregistre en ligne
 }
 
 // ============================================================
@@ -932,26 +1007,26 @@ model ManifestLine {
 // ============================================================
 
 model ParcelHistory {
-  id                       String   @id @default(uuid())
-  parcelId                 String
-  action                   String
-  statusBefore             String?
-  statusAfter              String?
-  wasPresentBefore         Boolean?
-  isPresentAfter           Boolean?
-  locationBefore           String?
-  locationAfter            String?
-  warehouseId              String?
-  containerId              String?
-  transitRouteId           String?
-  userId                   String?
-  actorType                String?
-  actorName                String?
+  id                        String   @id @default(uuid())
+  parcelId                  String
+  action                    String
+  statusBefore              String?
+  statusAfter               String?
+  wasPresentBefore          Boolean?
+  isPresentAfter            Boolean?
+  locationBefore            String?
+  locationAfter             String?
+  warehouseId               String?
+  containerId               String?
+  transitRouteId            String?
+  userId                    String?
+  actorType                 String?
+  actorName                 String?
   parcelDesignationSnapshot String?
-  parcelTrackingSnapshot   String?
-  comment                  String?
-  metadata                 Json?
-  createdAt                DateTime @default(now())
+  parcelTrackingSnapshot    String?
+  comment                   String?
+  metadata                  Json?
+  createdAt                 DateTime @default(now())
 
   parcel Parcel @relation(fields: [parcelId], references: [id])
   user   User?  @relation(fields: [userId], references: [id])
@@ -1050,13 +1125,13 @@ enum NotificationStatus {
 // ============================================================
 
 model ChatConversation {
-  id              String             @id @default(uuid())
-  clientId        String
-  agencyId        String
-  assignedUserId  String?
-  status          ConversationStatus @default(OPEN)
-  createdAt       DateTime           @default(now())
-  closedAt        DateTime?
+  id             String             @id @default(uuid())
+  clientId       String
+  agencyId       String
+  assignedUserId String?
+  status         ConversationStatus @default(OPEN)
+  createdAt      DateTime           @default(now())
+  closedAt       DateTime?
 
   client       Client        @relation(fields: [clientId], references: [id])
   agency       Agency        @relation(fields: [agencyId], references: [id])
@@ -1074,14 +1149,14 @@ enum ConversationStatus {
 }
 
 model ChatMessage {
-  id             String   @id @default(uuid())
+  id             String    @id @default(uuid())
   conversationId String
   senderId       String
   senderType     String
   message        String
-  isRead         Boolean  @default(false)
+  isRead         Boolean   @default(false)
   readAt         DateTime?
-  createdAt      DateTime @default(now())
+  createdAt      DateTime  @default(now())
 
   conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   senderUser   User?            @relation(fields: [senderId], references: [id])
@@ -1111,11 +1186,11 @@ model LoyaltyTransaction {
 }
 
 model LoyaltyTierConfig {
-  id              String  @id @default(uuid())
+  id              String   @id @default(uuid())
   organizationId  String
   name            String
   minPoints       Int
-  discountPercent Decimal @db.Decimal(5, 2)
+  discountPercent Decimal  @db.Decimal(5, 2)
   benefits        Json?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

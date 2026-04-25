@@ -3,7 +3,10 @@ import { container } from '../../container';
 import { CreateParcelUseCase } from '../../application/use-cases/parcel/CreateParcelUseCase';
 import { ListParcelsUseCase } from '../../application/use-cases/parcel/ListParcelsUseCase';
 import { GetParcelUseCase } from '../../application/use-cases/parcel/GetParcelUseCase';
+import { UpdateParcelUseCase } from '../../application/use-cases/parcel/UpdateParcelUseCase';
 import { UpdateParcelStatusUseCase } from '../../application/use-cases/parcel/UpdateParcelStatusUseCase';
+import { prisma } from '../../config/database';
+import { HistoryService } from '../../application/services/HistoryService';
 
 export class ParcelController {
   static async create(req: Request, res: Response, next: NextFunction) {
@@ -56,6 +59,16 @@ export class ParcelController {
     }
   }
 
+  static async update(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(UpdateParcelUseCase);
+      const parcel = await useCase.execute(req.params.id, req.body, req.user!.userId);
+      res.json({ success: true, data: parcel });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   static async updateStatus(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(UpdateParcelStatusUseCase);
@@ -69,6 +82,95 @@ export class ParcelController {
         warehouseChange,
       );
       res.json({ success: true, data: parcel });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  // ============================================================
+  // GALERIE D'IMAGES
+  // ============================================================
+
+  static async listImages(req: Request, res: Response, next: NextFunction) {
+    try {
+      const images = await prisma.parcelImage.findMany({
+        where: { parcelId: req.params.id },
+        orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
+      });
+      res.json({ success: true, data: images });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async addImage(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { url, caption, isPrimary } = req.body as { url: string; caption?: string; isPrimary?: boolean };
+      if (!url) {
+        return res.status(400).json({ success: false, message: 'url requis' });
+      }
+
+      const parcel = await prisma.parcel.findUnique({ where: { id: req.params.id }, select: { id: true, designation: true, trackingNumber: true } });
+      if (!parcel) {
+        return res.status(404).json({ success: false, message: 'Colis introuvable' });
+      }
+
+      if (isPrimary) {
+        await prisma.parcelImage.updateMany({ where: { parcelId: parcel.id }, data: { isPrimary: false } });
+      }
+
+      const count = await prisma.parcelImage.count({ where: { parcelId: parcel.id } });
+      const image = await prisma.parcelImage.create({
+        data: {
+          parcelId: parcel.id,
+          url,
+          caption: caption ?? null,
+          isPrimary: !!isPrimary,
+          sortOrder: count,
+        },
+      });
+
+      const history = container.resolve(HistoryService);
+      await history.recordParcel({
+        parcelId: parcel.id,
+        action: 'IMAGE_ADDED',
+        userId: req.user!.userId,
+        parcelDesignationSnapshot: parcel.designation,
+        parcelTrackingSnapshot: parcel.trackingNumber,
+        comment: 'Image ajoutee a la galerie',
+        metadata: { url, isPrimary: !!isPrimary },
+      });
+
+      res.status(201).json({ success: true, data: image });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async deleteImage(req: Request, res: Response, next: NextFunction) {
+    try {
+      const image = await prisma.parcelImage.findUnique({
+        where: { id: req.params.imageId },
+        include: { parcel: { select: { designation: true, trackingNumber: true } } },
+      });
+      if (!image || image.parcelId !== req.params.id) {
+        return res.status(404).json({ success: false, message: 'Image introuvable' });
+      }
+
+      await prisma.parcelImage.delete({ where: { id: image.id } });
+
+      const history = container.resolve(HistoryService);
+      await history.recordParcel({
+        parcelId: image.parcelId,
+        action: 'IMAGE_REMOVED',
+        userId: req.user!.userId,
+        parcelDesignationSnapshot: image.parcel.designation,
+        parcelTrackingSnapshot: image.parcel.trackingNumber,
+        comment: 'Image retiree de la galerie',
+        metadata: { url: image.url },
+      });
+
+      res.json({ success: true });
     } catch (err) {
       next(err);
     }

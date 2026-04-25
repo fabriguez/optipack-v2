@@ -20,6 +20,10 @@ export class UpdateClientUseCase {
       ...(input.phone !== undefined && { phone: input.phone }),
       ...(input.email !== undefined && { email: input.email || null }),
       ...(input.address !== undefined && { address: input.address || null }),
+      ...(input.clientType !== undefined && { clientType: input.clientType }),
+      ...(input.loyaltyTier !== undefined && { loyaltyTier: input.loyaltyTier }),
+      ...(input.isActive !== undefined && { isActive: input.isActive }),
+      ...(input.agencyId !== undefined && { agency: { connect: { id: input.agencyId } } }),
     });
   }
 }

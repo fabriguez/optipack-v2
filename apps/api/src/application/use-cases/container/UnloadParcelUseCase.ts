@@ -3,7 +3,7 @@ import { CONTAINER_REPOSITORY, type IContainerRepository } from '../../interface
 import { PARCEL_REPOSITORY, type IParcelRepository } from '../../interfaces/IParcelRepository';
 import { WAREHOUSE_REPOSITORY, type IWarehouseRepository } from '../../interfaces/IWarehouseRepository';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
-import { prisma } from '../../../config/database';
+import { HistoryService } from '../../services/HistoryService';
 
 interface UnloadResult {
   parcelId: string;
@@ -12,12 +12,15 @@ interface UnloadResult {
   comment?: string;
 }
 
+const UNLOAD_ALLOWED_STATUSES = new Set(['ARRIVED', 'RECEIVED', 'UNLOADING']);
+
 @injectable()
 export class UnloadParcelUseCase {
   constructor(
     @inject(CONTAINER_REPOSITORY) private containerRepo: IContainerRepository,
     @inject(PARCEL_REPOSITORY) private parcelRepo: IParcelRepository,
     @inject(WAREHOUSE_REPOSITORY) private warehouseRepo: IWarehouseRepository,
+    private history: HistoryService,
   ) {}
 
   async execute(
@@ -31,8 +34,10 @@ export class UnloadParcelUseCase {
     const container = await this.containerRepo.findById(containerId);
     if (!container) throw new NotFoundError('Conteneur', containerId);
 
-    if (container.status !== 'ARRIVED' && container.status !== 'RECEIVED' && container.status !== 'UNLOADING') {
-      throw new BusinessError(`Conteneur ne peut pas etre decharge au statut ${container.status}`);
+    if (!UNLOAD_ALLOWED_STATUSES.has(container.status)) {
+      throw new BusinessError(
+        `Conteneur ne peut pas etre decharge au statut ${container.status}. Le conteneur doit etre arrive.`,
+      );
     }
 
     const parcel = await this.parcelRepo.findById(parcelId);
@@ -45,9 +50,17 @@ export class UnloadParcelUseCase {
     const warehouse = await this.warehouseRepo.findById(warehouseId);
     if (!warehouse) throw new NotFoundError('Magasin', warehouseId);
 
-    // Update container to UNLOADING if needed
+    const previousContainerStatus = container.status;
     if (container.status !== 'UNLOADING') {
       await this.containerRepo.update(containerId, { status: 'UNLOADING' });
+      await this.history.recordContainer({
+        containerId,
+        action: 'UNLOADING_STARTED',
+        statusBefore: previousContainerStatus,
+        statusAfter: 'UNLOADING',
+        userId,
+        comment: 'Debut de dechargement',
+      });
     }
 
     switch (action) {
@@ -80,25 +93,23 @@ export class UnloadParcelUseCase {
         break;
     }
 
-    // Update container load
-    const newLoad = Math.max(0, Number(container.currentLoad) - Number(parcel.weight));
+    const parcelWeight = parcel.weight ? Number(parcel.weight) : 0;
+    const newLoad = Math.max(0, Number(container.currentLoad) - parcelWeight);
     await this.containerRepo.update(containerId, { currentLoad: newLoad });
 
-    // History
-    await prisma.parcelHistory.create({
-      data: {
-        parcelId,
-        action: `UNLOADED_${action.toUpperCase()}`,
-        statusBefore: parcel.status,
-        statusAfter: action === 'not_found' ? 'LOST' : 'RECEIVED',
-        containerId,
-        warehouseId,
-        userId,
-        actorType: 'USER',
-        comment: options?.comment,
-        parcelDesignationSnapshot: parcel.designation,
-        parcelTrackingSnapshot: parcel.trackingNumber,
-      },
+    await this.history.recordParcel({
+      parcelId,
+      action: `UNLOADED_${action.toUpperCase()}`,
+      statusBefore: parcel.status,
+      statusAfter: action === 'not_found' ? 'LOST' : 'RECEIVED',
+      isPresentAfter: action !== 'not_found',
+      containerId,
+      warehouseId: action === 'not_found' ? null : warehouseId,
+      userId,
+      comment: options?.comment ?? null,
+      parcelDesignationSnapshot: parcel.designation,
+      parcelTrackingSnapshot: parcel.trackingNumber,
+      metadata: options?.newWeight ? { newWeight: options.newWeight, previousWeight: parcelWeight } : null,
     });
 
     return {

@@ -10,8 +10,29 @@ router.use(authenticate);
 
 router.get('/', validate(paginationSchema, 'query'), ManifestController.list);
 router.get('/comparison/:containerId', ManifestController.getComparison);
+router.get('/comparison/:containerId/pdf', ManifestController.getComparisonPDF);
+router.get('/discrepancies/:containerId', ManifestController.listDiscrepancies);
+router.post(
+  '/discrepancies/:containerId',
+  authorize('SUPER_ADMIN', 'ADMIN'),
+  ManifestController.addDiscrepancy,
+);
+router.delete(
+  '/discrepancies/:containerId/:discrepancyId',
+  authorize('SUPER_ADMIN', 'ADMIN'),
+  ManifestController.removeDiscrepancy,
+);
 router.get('/:id', ManifestController.getById);
-router.post('/dispatch/:containerId', authorize('SUPER_ADMIN', 'ADMIN', 'AGENT'), ManifestController.createDispatch);
-router.post('/reception/:containerId', authorize('SUPER_ADMIN', 'ADMIN', 'AGENT'), ManifestController.createReception);
+router.get('/:id/pdf', ManifestController.getPDF);
+router.post(
+  '/dispatch/:containerId',
+  authorize('SUPER_ADMIN', 'ADMIN', 'AGENT'),
+  ManifestController.createDispatch,
+);
+router.post(
+  '/reception/:containerId',
+  authorize('SUPER_ADMIN', 'ADMIN', 'AGENT'),
+  ManifestController.createReception,
+);
 
 export default router;

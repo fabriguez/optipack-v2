@@ -11,6 +11,7 @@ router.use(authenticate);
 router.get('/', validate(paginationSchema, 'query'), ContainerController.list);
 router.get('/:id', ContainerController.getById);
 router.get('/:id/parcels', ContainerController.getParcels);
+router.get('/:id/history', ContainerController.getHistory);
 router.post('/', authorize('SUPER_ADMIN', 'ADMIN', 'AGENT'), validate(createContainerSchema), ContainerController.create);
 router.post('/:id/load', authorize('SUPER_ADMIN', 'ADMIN', 'AGENT', 'MAGASINIER'), validate(loadParcelsSchema), ContainerController.loadParcels);
 router.post('/:id/depart', authorize('SUPER_ADMIN', 'ADMIN', 'AGENT'), ContainerController.depart);

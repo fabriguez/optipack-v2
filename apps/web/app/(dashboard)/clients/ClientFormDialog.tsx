@@ -7,9 +7,10 @@ import { AppDialog } from '@/components/ui/AppDialog';
 import { AppInput } from '@/components/ui/AppInput';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppSelect } from '@/components/ui/AppSelect';
+import { AppSearchSelect } from '@/components/ui/AppSearchSelect';
 import { AppPhoneInput } from '@/components/ui/AppPhoneInput';
 import { useCreateClient } from '@/lib/hooks/useClients';
-import { useAgencies } from '@/lib/hooks/useAgencies';
+import { searchers } from '@/lib/api/searchers';
 
 interface ClientFormDialogProps {
   open: boolean;
@@ -18,7 +19,6 @@ interface ClientFormDialogProps {
 
 export function ClientFormDialog({ open, onClose }: ClientFormDialogProps) {
   const createMutation = useCreateClient();
-  const { data: agencies } = useAgencies({ limit: 100 });
 
   const {
     register,
@@ -28,18 +28,18 @@ export function ClientFormDialog({ open, onClose }: ClientFormDialogProps) {
     formState: { errors },
   } = useForm<CreateClientInput>({
     resolver: zodResolver(createClientSchema),
+    defaultValues: {
+      clientType: 'INDIVIDUAL',
+      loyaltyTier: 'STANDARD',
+      isActive: true,
+    },
   });
 
   const onSubmit = async (data: CreateClientInput) => {
     await createMutation.mutateAsync(data);
-    reset();
+    reset({ clientType: 'INDIVIDUAL', loyaltyTier: 'STANDARD', isActive: true });
     onClose();
   };
-
-  const agencyOptions = (agencies?.data || []).map((a: any) => ({
-    value: a.id,
-    label: `${a.name} (${a.code})`,
-  }));
 
   return (
     <AppDialog open={open} onClose={onClose} title="Nouveau client" size="md">
@@ -59,12 +59,57 @@ export function ClientFormDialog({ open, onClose }: ClientFormDialogProps) {
         />
         <AppInput label="Email" type="email" {...register('email')} error={errors.email?.message} />
         <AppInput label="Adresse" {...register('address')} error={errors.address?.message} />
-        <AppSelect
-          label="Agence"
-          {...register('agencyId')}
-          error={errors.agencyId?.message}
-          options={agencyOptions}
-          placeholder="Selectionner une agence"
+
+        <div className="grid grid-cols-2 gap-3">
+          <Controller
+            name="clientType"
+            control={control}
+            render={({ field }) => (
+              <AppSelect
+                label="Type de client"
+                value={field.value}
+                onValueChange={(v) => field.onChange(v)}
+                options={[
+                  { value: 'INDIVIDUAL', label: 'Particulier' },
+                  { value: 'COMPANY', label: 'Entreprise' },
+                  { value: 'PARTNER', label: 'Partenaire (tarif dedie)' },
+                ]}
+              />
+            )}
+          />
+          <Controller
+            name="loyaltyTier"
+            control={control}
+            render={({ field }) => (
+              <AppSelect
+                label="Statut fidelite"
+                value={field.value}
+                onValueChange={(v) => field.onChange(v)}
+                options={[
+                  { value: 'STANDARD', label: 'Standard' },
+                  { value: 'SILVER', label: 'Silver' },
+                  { value: 'GOLD', label: 'Gold' },
+                  { value: 'VIP', label: 'VIP' },
+                ]}
+              />
+            )}
+          />
+        </div>
+
+        <Controller
+          name="agencyId"
+          control={control}
+          render={({ field }) => (
+            <AppSearchSelect
+              label="Agence"
+              value={field.value}
+              onChange={(v) => field.onChange(v ?? '')}
+              search={(q, l) => searchers.agencies(q, l)}
+              error={errors.agencyId?.message}
+              required
+              placeholder="Selectionner une agence"
+            />
+          )}
         />
 
         <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">

@@ -15,9 +15,15 @@ router.get('/', validate(paginationSchema, 'query'), ParcelController.list);
 router.get('/tracking/:tracking', ParcelController.getByTracking);
 router.get('/:id', ParcelController.getById);
 router.post('/', validate(createParcelSchema), ParcelController.create);
+router.patch('/:id', ParcelController.update);
 router.patch('/:id/status', ParcelController.updateStatus);
 
-// QR code for a parcel
+// Galerie d'images
+router.get('/:id/images', ParcelController.listImages);
+router.post('/:id/images', ParcelController.addImage);
+router.delete('/:id/images/:imageId', ParcelController.deleteImage);
+
+// QR code
 router.get('/:id/qrcode', async (req, res, next) => {
   try {
     const parcel = await prisma.parcel.findUnique({
@@ -41,18 +47,16 @@ router.get('/:id/qrcode', async (req, res, next) => {
   }
 });
 
-// Label PDF with QR + parcel info
+// Etiquette enrichie
 router.get('/:id/label', async (req, res, next) => {
   try {
     const parcel = await prisma.parcel.findUnique({
       where: { id: req.params.id },
-      select: {
-        id: true,
-        trackingNumber: true,
-        designation: true,
-        weight: true,
-        destination: true,
-        client: { select: { fullName: true } },
+      include: {
+        client: { select: { fullName: true, phone: true } },
+        recipient: { select: { fullName: true, phone: true } },
+        warehouse: { include: { agency: { select: { name: true, city: true } } } },
+        transitRoute: { select: { name: true, type: true } },
       },
     });
     if (!parcel) {
@@ -64,9 +68,21 @@ router.get('/:id/label', async (req, res, next) => {
       {
         trackingNumber: parcel.trackingNumber,
         designation: parcel.designation,
-        weight: Number(parcel.weight),
+        weight: parcel.weight ? Number(parcel.weight) : null,
+        volume: parcel.volume ? Number(parcel.volume) : null,
         destination: parcel.destination,
-        clientName: (parcel as any).client?.fullName ?? '-',
+        origin: parcel.origin ?? null,
+        clientName: parcel.client?.fullName ?? '-',
+        clientPhone: parcel.client?.phone ?? null,
+        recipientName: parcel.recipient?.fullName ?? null,
+        recipientPhone: parcel.recipient?.phone ?? null,
+        transitRoute: parcel.transitRoute?.name ?? null,
+        transitType: parcel.transitRoute?.type ?? null,
+        agencyName: parcel.warehouse?.agency
+          ? `${parcel.warehouse.agency.name} (${parcel.warehouse.agency.city})`
+          : null,
+        observation: parcel.observation ?? null,
+        price: parcel.price ? Number(parcel.price) : null,
       },
       qrBuffer,
     );

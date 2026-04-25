@@ -1,16 +1,34 @@
 import { z } from 'zod';
 import { TransitType } from '../constants/enums';
 
-export const createContainerSchema = z.object({
-  designation: z.string().min(2, 'La designation doit contenir au moins 2 caracteres'),
-  type: z.enum([TransitType.AIR, TransitType.SEA, TransitType.LAND]),
-  capacity: z.number().positive('La capacite doit etre positive'),
-  departureAgencyId: z.string().uuid("ID agence de depart invalide"),
-  arrivalAgencyId: z.string().uuid("ID agence d'arrivee invalide"),
-  transitRouteId: z.string().uuid('ID route de transit invalide').optional(),
-});
+export const createContainerSchema = z
+  .object({
+    designation: z.string().min(2, 'La designation doit contenir au moins 2 caracteres'),
+    type: z.enum([TransitType.AIR, TransitType.SEA, TransitType.LAND]),
+    isForwarding: z.boolean().optional().default(false),
+    capacity: z.number().positive('La capacite doit etre positive'),
+    departureAgencyId: z.string().uuid("ID agence de depart invalide"),
+    arrivalAgencyId: z.string().uuid("ID agence d'arrivee invalide"),
+    transitRouteId: z.string().uuid('ID route de transit invalide').optional(),
+  })
+  .refine(
+    (data) => data.isForwarding === true || data.type !== 'LAND',
+    {
+      message: "Les conteneurs standards ne supportent que AIR ou SEA. Activez 'acheminement' pour LAND.",
+      path: ['type'],
+    },
+  );
 
-export const updateContainerSchema = createContainerSchema.partial();
+export const updateContainerSchema = z
+  .object({
+    designation: z.string().min(2).optional(),
+    type: z.enum([TransitType.AIR, TransitType.SEA, TransitType.LAND]).optional(),
+    isForwarding: z.boolean().optional(),
+    capacity: z.number().positive().optional(),
+    departureAgencyId: z.string().uuid().optional(),
+    arrivalAgencyId: z.string().uuid().optional(),
+    transitRouteId: z.string().uuid().optional(),
+  });
 
 export const loadParcelSchema = z.object({
   parcelId: z.string().uuid('ID colis invalide'),

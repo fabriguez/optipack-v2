@@ -1,0 +1,151 @@
+/**
+ * Helpers pour AppSearchSelect : convertit les API list paginees en
+ * resultats SearchOption[] limites a `limit`.
+ */
+
+import { apiClient } from './client';
+import { clientsApi } from './clients';
+import type { SearchOption } from '@/components/ui/AppSearchSelect';
+
+const DEFAULT_LIMIT = 10;
+
+interface ListResponse<T> {
+  success: boolean;
+  data: T[];
+}
+
+async function searchPaginated<T>(
+  endpoint: string,
+  query: string,
+  limit: number,
+  extraParams?: Record<string, unknown>,
+): Promise<T[]> {
+  const res = await apiClient.get<ListResponse<T>>(endpoint, {
+    params: { search: query, limit, page: 1, ...extraParams },
+  });
+  return res.data.data ?? [];
+}
+
+export const searchers = {
+  clients: async (q: string, limit = DEFAULT_LIMIT, extra?: Record<string, unknown>): Promise<SearchOption[]> => {
+    const items = await searchPaginated<{ id: string; fullName: string; phone: string; clientType?: string }>(
+      '/clients',
+      q,
+      limit,
+      extra,
+    );
+    return items.map((c) => ({
+      value: c.id,
+      label: c.fullName,
+      sublabel: `${c.phone}${c.clientType && c.clientType !== 'INDIVIDUAL' ? ` - ${c.clientType}` : ''}`,
+    }));
+  },
+
+  recipients: async (q: string, limit = DEFAULT_LIMIT): Promise<SearchOption[]> => {
+    const items = await searchPaginated<{ id: string; fullName: string; phone: string }>('/recipients', q, limit);
+    return items.map((r) => ({ value: r.id, label: r.fullName, sublabel: r.phone }));
+  },
+
+  warehouses: async (q: string, limit = DEFAULT_LIMIT): Promise<SearchOption[]> => {
+    const items = await searchPaginated<{ id: string; name: string; agency?: { name: string } }>(
+      '/warehouses',
+      q,
+      limit,
+    );
+    return items.map((w) => ({
+      value: w.id,
+      label: w.name,
+      sublabel: w.agency?.name ?? null,
+    }));
+  },
+
+  agencies: async (q: string, limit = DEFAULT_LIMIT): Promise<SearchOption[]> => {
+    const items = await searchPaginated<{ id: string; name: string; city: string }>('/agencies', q, limit);
+    return items.map((a) => ({ value: a.id, label: a.name, sublabel: a.city }));
+  },
+
+  transitRoutes: async (q: string, limit = DEFAULT_LIMIT): Promise<SearchOption[]> => {
+    const items = await searchPaginated<{
+      id: string;
+      name: string;
+      type: string;
+      pricePerKg: string | number;
+      departureCity?: string;
+      arrivalCity?: string;
+    }>('/transit-routes', q, limit);
+    return items.map((r) => ({
+      value: r.id,
+      label: r.name,
+      sublabel: `${r.type} - ${r.departureCity ?? ''} → ${r.arrivalCity ?? ''}`,
+    }));
+  },
+
+  containers: async (q: string, limit = DEFAULT_LIMIT, extra?: Record<string, unknown>): Promise<SearchOption[]> => {
+    const items = await searchPaginated<{
+      id: string;
+      designation: string;
+      type: string;
+      status: string;
+      isForwarding?: boolean;
+    }>('/containers', q, limit, extra);
+    return items.map((c) => ({
+      value: c.id,
+      label: c.designation,
+      sublabel: `${c.type}${c.isForwarding ? ' (acheminement)' : ''} - ${c.status}`,
+    }));
+  },
+
+  parcels: async (q: string, limit = DEFAULT_LIMIT, extra?: Record<string, unknown>): Promise<SearchOption[]> => {
+    const items = await searchPaginated<{
+      id: string;
+      trackingNumber: string;
+      designation: string;
+      status: string;
+    }>('/parcels', q, limit, extra);
+    return items.map((p) => ({
+      value: p.id,
+      label: `${p.trackingNumber} - ${p.designation}`,
+      sublabel: p.status,
+    }));
+  },
+};
+
+/**
+ * Createurs inline pour SearchSelect.onCreate : retourne SearchOption|null
+ */
+export const inlineCreators = {
+  client: async (
+    fullName: string,
+    extra: { agencyId: string; phone?: string },
+  ): Promise<SearchOption | null> => {
+    if (!fullName.trim()) return null;
+    // phone est requis cote backend, on demande au minimum un placeholder unique base sur le timestamp
+    const phone = extra.phone || `temp-${Date.now()}`;
+    const res = await clientsApi.create({
+      fullName,
+      phone,
+      agencyId: extra.agencyId,
+    } as never);
+    const c = res.data;
+    return { value: c.id, label: c.fullName, sublabel: c.phone };
+  },
+
+  recipient: async (fullName: string, extra: { agencyId: string; phone?: string }): Promise<SearchOption | null> => {
+    if (!fullName.trim()) return null;
+    const phone = extra.phone || `temp-${Date.now()}`;
+    const res = await apiClient.post('/recipients', { fullName, phone, agencyId: extra.agencyId });
+    const r = res.data.data;
+    return { value: r.id, label: r.fullName, sublabel: r.phone };
+  },
+
+  warehouse: async (name: string, extra: { agencyId: string; location?: string }): Promise<SearchOption | null> => {
+    if (!name.trim()) return null;
+    const res = await apiClient.post('/warehouses', {
+      name,
+      agencyId: extra.agencyId,
+      location: extra.location || name,
+    });
+    const w = res.data.data;
+    return { value: w.id, label: w.name, sublabel: extra.agencyId };
+  },
+};

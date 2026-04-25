@@ -19,6 +19,7 @@ import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
 import { ParcelFormDialog } from '../../parcels/ParcelFormDialog';
+import { PartnerPricingsSection } from './PartnerPricingsSection';
 
 const TIER_VARIANT: Record<string, 'default' | 'info' | 'warning' | 'success'> = {
   STANDARD: 'default', SILVER: 'info', GOLD: 'warning', VIP: 'success',
@@ -228,7 +229,14 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
           <div className="flex-1">
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold text-gray-900">{client.fullName}</h1>
+              {client.clientType === 'PARTNER' && (
+                <AppBadge variant="success">Partenaire</AppBadge>
+              )}
+              {client.clientType === 'COMPANY' && (
+                <AppBadge variant="info">Entreprise</AppBadge>
+              )}
               <AppBadge variant={TIER_VARIANT[client.loyaltyTier] || 'default'}>{client.loyaltyTier}</AppBadge>
+              {!client.isActive && <AppBadge variant="default">Inactif</AppBadge>}
             </div>
             <p className="text-sm text-gray-500 mt-0.5">{client.phone} {client.email ? `-- ${client.email}` : ''}</p>
           </div>
@@ -281,6 +289,9 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
             </div>
           </AppCard>
         </div>
+
+        {/* Tarification partenaire (visible uniquement pour les partenaires) */}
+        <PartnerPricingsSection clientId={id} isPartner={client.clientType === 'PARTNER'} />
 
         {/* Tabs: Colis, Factures, Dettes */}
         <AppTabs

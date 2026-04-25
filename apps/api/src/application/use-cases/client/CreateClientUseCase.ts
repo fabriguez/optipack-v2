@@ -29,6 +29,9 @@ export class CreateClientUseCase {
       address: input.address || null,
       organizationId,
       agency: { connect: { id: input.agencyId } },
+      ...(input.clientType && { clientType: input.clientType }),
+      ...(input.loyaltyTier && { loyaltyTier: input.loyaltyTier }),
+      ...(input.isActive !== undefined && { isActive: input.isActive }),
     });
   }
 }

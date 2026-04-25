@@ -3,12 +3,13 @@ import { VALID_PARCEL_TRANSITIONS } from '@transitsoftservices/shared';
 import { PARCEL_REPOSITORY, type IParcelRepository } from '../../interfaces/IParcelRepository';
 import { NotFoundError, InvalidStatusTransitionError } from '../../../domain/errors/BusinessError';
 import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
-import { prisma } from '../../../config/database';
+import { HistoryService } from '../../services/HistoryService';
 
 @injectable()
 export class UpdateParcelStatusUseCase {
   constructor(
     @inject(PARCEL_REPOSITORY) private parcelRepo: IParcelRepository,
+    private history: HistoryService,
   ) {}
 
   async execute(
@@ -27,7 +28,6 @@ export class UpdateParcelStatusUseCase {
     const isWarehouseChange =
       warehouseChange !== undefined && warehouseChange.warehouseId !== parcel.warehouseId;
 
-    // Validate transition only when status actually changes
     if (isStatusChange) {
       const validTransitions = VALID_PARCEL_TRANSITIONS[parcel.status] || [];
       if (!validTransitions.includes(newStatus)) {
@@ -35,7 +35,6 @@ export class UpdateParcelStatusUseCase {
       }
     }
 
-    // Apply status-specific logic
     const updateData: Record<string, any> = { status: newStatus };
 
     if (newStatus === 'DELIVERED') {
@@ -58,7 +57,6 @@ export class UpdateParcelStatusUseCase {
 
     const updated = await this.parcelRepo.update(parcelId, updateData);
 
-    // Create history entry
     const action = isStatusChange
       ? `STATUS_CHANGE_${newStatus}`
       : isWarehouseChange
@@ -67,21 +65,17 @@ export class UpdateParcelStatusUseCase {
           : 'WAREHOUSE_REMOVE'
         : `STATUS_CHANGE_${newStatus}`;
 
-    await prisma.parcelHistory.create({
-      data: {
-        parcelId,
-        action,
-        statusBefore: oldStatus,
-        statusAfter: newStatus,
-        warehouseId: isWarehouseChange ? warehouseChange!.warehouseId : parcel.warehouseId,
-        userId,
-        actorType: 'USER',
-        parcelDesignationSnapshot: parcel.designation,
-        parcelTrackingSnapshot: parcel.trackingNumber,
-      },
+    await this.history.recordParcel({
+      parcelId,
+      action,
+      statusBefore: oldStatus,
+      statusAfter: newStatus,
+      warehouseId: isWarehouseChange ? warehouseChange!.warehouseId : parcel.warehouseId,
+      userId,
+      parcelDesignationSnapshot: parcel.designation,
+      parcelTrackingSnapshot: parcel.trackingNumber,
     });
 
-    // Emit event
     eventBus.emit({
       type: DomainEvents.PARCEL_STATUS_CHANGED,
       payload: { parcelId, oldStatus, newStatus, trackingNumber: parcel.trackingNumber },

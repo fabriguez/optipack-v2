@@ -73,7 +73,7 @@ export default function ContainersPage() {
         { value: 'EMPTY', label: 'Vide' },
         { value: 'LOADING', label: 'En chargement' },
         { value: 'IN_TRANSIT', label: 'En transit' },
-        { value: 'ARRIVED', label: 'Arrives' },
+        { value: 'ARRIVED', label: 'Receptionne' },
         { value: 'UNLOADING', label: 'En dechargement' },
         { value: 'UNLOADED', label: 'Decharge' },
       ],
@@ -85,7 +85,15 @@ export default function ContainersPage() {
       options: [
         { value: 'AIR', label: 'Aerien' },
         { value: 'SEA', label: 'Maritime' },
-        { value: 'LAND', label: 'Terrestre' },
+      ],
+    },
+    {
+      key: 'isForwarding',
+      label: 'Acheminement',
+      type: 'select' as const,
+      options: [
+        { value: 'true', label: 'Acheminement uniquement' },
+        { value: 'false', label: 'Standard uniquement' },
       ],
     },
   ];
@@ -99,11 +107,16 @@ export default function ContainersPage() {
       ),
     },
     { key: 'type', label: 'Type', render: (row: any) => (
-      <span className={`text-xs font-medium px-2 py-0.5 rounded-md ${
-        row.type === 'AIR' ? 'bg-blue-50 text-blue-700' :
-        row.type === 'SEA' ? 'bg-cyan-50 text-cyan-700' :
-        'bg-amber-50 text-amber-700'
-      }`}>{row.type === 'AIR' ? 'Aerien' : row.type === 'SEA' ? 'Maritime' : 'Terrestre'}</span>
+      <div className="flex items-center gap-1">
+        <span className={`text-xs font-medium px-2 py-0.5 rounded-md ${
+          row.type === 'AIR' ? 'bg-blue-50 text-blue-700' :
+          row.type === 'SEA' ? 'bg-cyan-50 text-cyan-700' :
+          'bg-amber-50 text-amber-700'
+        }`}>{row.type === 'AIR' ? 'Aerien' : row.type === 'SEA' ? 'Maritime' : 'Terrestre'}</span>
+        {row.isForwarding && (
+          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-primary-50 text-primary-700">Acheminement</span>
+        )}
+      </div>
     )},
     { key: 'departureAgency', label: 'Depart', render: (row: any) => row.departureAgency?.name || '-' },
     { key: 'arrivalAgency', label: 'Arrivee', render: (row: any) => row.arrivalAgency?.name || '-' },

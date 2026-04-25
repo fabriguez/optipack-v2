@@ -6,9 +6,11 @@ import { CLIENT_REPOSITORY, type IClientRepository } from '../../interfaces/ICli
 import { WAREHOUSE_REPOSITORY, type IWarehouseRepository } from '../../interfaces/IWarehouseRepository';
 import { TRANSIT_ROUTE_REPOSITORY, type ITransitRouteRepository } from '../../interfaces/ITransitRouteRepository';
 import { INVOICE_REPOSITORY, type IInvoiceRepository } from '../../interfaces/IInvoiceRepository';
-import { NotFoundError } from '../../../domain/errors/BusinessError';
+import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
 import { PricingService } from '../../services/PricingService';
+import { HistoryService } from '../../services/HistoryService';
 import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
+import { prisma } from '../../../config/database';
 
 @injectable()
 export class CreateParcelUseCase {
@@ -18,10 +20,17 @@ export class CreateParcelUseCase {
     @inject(WAREHOUSE_REPOSITORY) private warehouseRepo: IWarehouseRepository,
     @inject(TRANSIT_ROUTE_REPOSITORY) private transitRepo: ITransitRouteRepository,
     @inject(INVOICE_REPOSITORY) private invoiceRepo: IInvoiceRepository,
+    private history: HistoryService,
   ) {}
 
   async execute(input: CreateParcelInput, userId: string) {
-    // Validate relations
+    // Au moins l'un de masse OU volume doit etre fourni
+    const hasWeight = input.weight !== undefined && input.weight !== null && Number(input.weight) > 0;
+    const hasVolume = input.volume !== undefined && input.volume !== null && Number(input.volume) > 0;
+    if (!hasWeight && !hasVolume) {
+      throw new BusinessError('Le colis doit avoir une masse ou un volume');
+    }
+
     const [client, warehouse, transitRoute] = await Promise.all([
       this.clientRepo.findById(input.clientId),
       this.warehouseRepo.findById(input.warehouseId),
@@ -32,18 +41,33 @@ export class CreateParcelUseCase {
     if (!warehouse) throw new NotFoundError('Magasin', input.warehouseId);
     if (!transitRoute) throw new NotFoundError('Route de transit', input.transitRouteId);
 
-    // Calculate price
+    // Tarification : prix specifique partenaire si defini
+    const partnerPricing = await prisma.partnerPricing.findFirst({
+      where: {
+        clientId: client.id,
+        isActive: true,
+        OR: [{ transitRouteId: transitRoute.id }, { transitRouteId: null }],
+      },
+      orderBy: { transitRouteId: 'desc' }, // priorise la regle specifique au route
+    });
+
+    const effectiveRoute = partnerPricing
+      ? {
+          ...transitRoute,
+          pricePerKg: partnerPricing.pricePerKg,
+          pricePerVolume: partnerPricing.pricePerVolume,
+        }
+      : transitRoute;
+
     const pricing = PricingService.calculate(
-      input.weight,
-      input.volume,
-      transitRoute,
+      hasWeight ? Number(input.weight) : 0,
+      hasVolume ? Number(input.volume) : undefined,
+      effectiveRoute,
       client,
     );
 
-    // Generate tracking number
     const trackingNumber = generateTrackingNumber();
 
-    // Create invoice first
     const invoiceCount = await this.invoiceRepo.countByDate(warehouse.agencyId, new Date());
     const invoiceRef = generateReference('FAC', invoiceCount + 1);
 
@@ -59,13 +83,12 @@ export class CreateParcelUseCase {
       agency: { connect: { id: warehouse.agencyId } },
     });
 
-    // Create parcel
     const parcel = await this.parcelRepo.create({
       trackingNumber,
       designation: input.designation,
-      weight: input.weight,
-      originalWeight: input.weight,
-      volume: input.volume ?? null,
+      weight: hasWeight ? Number(input.weight) : null,
+      originalWeight: hasWeight ? Number(input.weight) : null,
+      volume: hasVolume ? Number(input.volume) : null,
       destination: input.destination,
       observation: input.observation || null,
       originalObservation: input.observation || null,
@@ -81,7 +104,28 @@ export class CreateParcelUseCase {
       invoice: { connect: { id: invoice.id } },
     });
 
-    // Emit domain event
+    // Historique de creation
+    await this.history.recordParcel({
+      parcelId: parcel.id,
+      action: 'CREATED',
+      statusAfter: 'IN_STOCK',
+      isPresentAfter: true,
+      warehouseId: input.warehouseId,
+      transitRouteId: input.transitRouteId,
+      userId,
+      parcelDesignationSnapshot: parcel.designation,
+      parcelTrackingSnapshot: parcel.trackingNumber,
+      comment: 'Colis cree et enregistre en magasin',
+      metadata: {
+        invoiceId: invoice.id,
+        invoiceRef: invoice.reference,
+        price: pricing.finalPrice.toString(),
+        weight: hasWeight ? Number(input.weight) : null,
+        volume: hasVolume ? Number(input.volume) : null,
+        partnerPricingApplied: !!partnerPricing,
+      },
+    });
+
     eventBus.emit({
       type: DomainEvents.PARCEL_CREATED,
       payload: {
