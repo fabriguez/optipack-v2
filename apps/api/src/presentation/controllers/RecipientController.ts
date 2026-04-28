@@ -29,6 +29,19 @@ export class RecipientController {
     }
   }
 
+  static async listAll(req: Request, res: Response, next: NextFunction) {
+    try {
+      const repo = container.resolve<any>(RECIPIENT_REPOSITORY);
+      const result = await repo.findAll(
+        { agencyIds: req.user?.agencyIds },
+        req.query as any,
+      );
+      res.json({ success: true, ...result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   static async getById(req: Request, res: Response, next: NextFunction) {
     try {
       const repo = container.resolve<any>(RECIPIENT_REPOSITORY);

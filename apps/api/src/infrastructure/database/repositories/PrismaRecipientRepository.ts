@@ -46,6 +46,40 @@ export class PrismaRecipientRepository implements IRecipientRepository {
     };
   }
 
+  async findAll(
+    filters: { agencyIds?: string[] },
+    pagination: PaginationInput,
+  ): Promise<PaginatedResponse<Recipient>> {
+    const { page, limit, sortBy, sortOrder, search } = pagination;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.RecipientWhereInput = {
+      ...(filters.agencyIds && filters.agencyIds.length > 0 && { agencyId: { in: filters.agencyIds } }),
+      ...(search && {
+        OR: [
+          { fullName: { contains: search, mode: 'insensitive' } },
+          { phone: { contains: search } },
+        ],
+      }),
+    };
+
+    const [data, total] = await Promise.all([
+      prisma.recipient.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: sortBy ? { [sortBy]: sortOrder } : { createdAt: 'desc' },
+        include: { agency: { select: { id: true, name: true, code: true } } },
+      }),
+      prisma.recipient.count({ where }),
+    ]);
+
+    return {
+      data,
+      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
+    };
+  }
+
   async create(data: Prisma.RecipientCreateInput): Promise<Recipient> {
     return prisma.recipient.create({ data });
   }

@@ -8,6 +8,7 @@ const router = Router();
 
 router.use(authenticate);
 
+router.get('/', validate(paginationSchema, 'query'), RecipientController.listAll);
 router.get('/agency/:agencyId', validate(paginationSchema, 'query'), RecipientController.list);
 router.get('/:id', RecipientController.getById);
 router.post('/', validate(createRecipientSchema), RecipientController.create);

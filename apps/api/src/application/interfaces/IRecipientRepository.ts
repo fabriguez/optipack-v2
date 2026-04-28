@@ -7,6 +7,10 @@ export interface IRecipientRepository {
     agencyId: string,
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<Recipient>>;
+  findAll(
+    filters: { agencyIds?: string[] },
+    pagination: PaginationInput,
+  ): Promise<PaginatedResponse<Recipient>>;
   create(data: Prisma.RecipientCreateInput): Promise<Recipient>;
   update(id: string, data: Prisma.RecipientUpdateInput): Promise<Recipient>;
   delete(id: string): Promise<void>;
