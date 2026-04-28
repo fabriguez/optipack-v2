@@ -3,11 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --port 3000",
-    "build": "next build",
+    "dev": "pnpm sync-locations || true && next dev --port 3000",
+    "build": "(pnpm sync-locations || echo 'sync-locations skipped (offline ?)') && next build",
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
+    "sync-locations": "node scripts/sync-locations.mjs",
+    "sync-locations:force": "node scripts/sync-locations.mjs --force",
     "clean": "rm -rf .next .turbo"
   },
   "dependencies": {
@@ -44,7 +46,6 @@
     "next-intl": "^4.9.1",
     "nuqs": "^2.8.9",
     "react": "^19.0.0",
-    "react-country-state-city": "^1.1.12",
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.54.2",
     "react-phone-number-input": "^3.4.16",

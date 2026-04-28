@@ -49,4 +49,8 @@ apps/tablet/.expo/
 # Misc
 *.tsbuildinfo
 
+# Donnees pays/regions/villes (telechargees via scripts/sync-locations.mjs)
+apps/web/public/locations/*.json
+apps/web/public/locations/cities/
+
 .claude

@@ -2,12 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import {
-  GetCountries,
-  GetState,
-  GetCity,
-} from 'react-country-state-city';
-import 'react-country-state-city/dist/react-country-state-city.css';
+import { GetCountries, GetState, GetCity } from '@/lib/locations';
 import { Label } from './label';
 import { cn } from '@/lib/utils/cn';
 import { ChevronDown, Search, Check } from 'lucide-react';

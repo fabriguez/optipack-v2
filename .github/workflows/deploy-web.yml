@@ -18,7 +18,28 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Deploy via SSH
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Cache des donnees pays/villes : ces fichiers changent rarement,
+      # on les telecharge une seule fois et on reutilise le cache GHA.
+      - name: Cache locations data
+        id: cache-locations
+        uses: actions/cache@v4
+        with:
+          path: apps/web/public/locations
+          key: locations-data-v1
+
+      - name: Sync locations data (countries / states / cities)
+        if: steps.cache-locations.outputs.cache-hit != 'true'
+        run: node apps/web/scripts/sync-locations.mjs
+
+      - name: Push code to VPS
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -28,6 +49,30 @@ jobs:
           script: |
             cd ~/optipack-v2
             git pull origin main
+            mkdir -p apps/web/public/locations/cities
+
+      # Le `git pull` ne touche pas aux fichiers untracked (locations gitignores),
+      # donc on peut envoyer les JSON par-dessus en toute securite.
+      - name: Upload locations data to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          source: 'apps/web/public/locations/'
+          target: '~/optipack-v2/apps/web/public/'
+          strip_components: 0
+
+      - name: Build & restart container
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            cd ~/optipack-v2
             docker compose -f docker-compose.prod.yml build --no-cache web
             docker compose -f docker-compose.prod.yml up -d web
             docker image prune -f
