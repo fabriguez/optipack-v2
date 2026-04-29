@@ -46,6 +46,15 @@ COPY --from=builder /app/apps/api/package.json ./apps/api/package.json
 COPY --from=builder /app/packages/ ./packages/
 COPY apps/api/prisma ./apps/api/prisma
 
+# Install Prisma CLI + tsx globally so the entrypoint can run
+# `prisma migrate deploy` and `prisma db seed` (devDeps were pruned).
+# Versions kept in sync with apps/api/package.json devDependencies.
+RUN npm install -g prisma@^6.4.1 tsx@^4.19.2 && npm cache clean --force
+
+# Entrypoint script baked into the image (compose declares entrypoint:)
+COPY docker/api/entrypoint.sh /usr/local/bin/api-entrypoint.sh
+RUN chmod +x /usr/local/bin/api-entrypoint.sh
+
 WORKDIR /app/apps/api
 
 EXPOSE 4000

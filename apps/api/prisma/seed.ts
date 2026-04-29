@@ -10,8 +10,22 @@ const prisma = new PrismaClient();
 const ORG_ID = '00000000-0000-4000-a000-000000000001';
 const ADMIN_ID = '00000000-0000-4000-a000-000000000010';
 
+// Bump this version when seed content changes to force a re-run
+const SEED_VERSION = process.env.SEED_VERSION || '1';
+const SEED_MARKER_KEY = 'seed_version';
+
 async function main() {
   console.log('Seeding database...');
+
+  // Guard: skip if the same seed version was already applied for this org
+  const existingMarker = await prisma.systemConfig.findUnique({
+    where: { organizationId_key: { organizationId: ORG_ID, key: SEED_MARKER_KEY } },
+  }).catch(() => null);
+
+  if (existingMarker?.value === SEED_VERSION && process.env.FORCE_SEED !== 'true') {
+    console.log(`Seed version ${SEED_VERSION} already applied. Skipping.`);
+    return;
+  }
 
   const org = await prisma.organization.upsert({
     where: { id: ORG_ID },
@@ -133,7 +147,19 @@ async function main() {
   }
   console.log('System config created');
 
-  console.log('Seed completed!');
+  // Write/refresh the seed marker so subsequent runs are skipped
+  await prisma.systemConfig.upsert({
+    where: { organizationId_key: { organizationId: org.id, key: SEED_MARKER_KEY } },
+    update: { value: SEED_VERSION, description: 'Marker tracking the last applied seed version' },
+    create: {
+      key: SEED_MARKER_KEY,
+      value: SEED_VERSION,
+      description: 'Marker tracking the last applied seed version',
+      organization: { connect: { id: org.id } },
+    },
+  });
+
+  console.log(`Seed completed! (version ${SEED_VERSION})`);
 }
 
 main()

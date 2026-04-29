@@ -27,4 +27,5 @@ WORKDIR /app/apps/api
 
 EXPOSE 4000
 
+# Entrypoint is wired up in docker-compose.yml (mounted as a volume)
 CMD ["pnpm", "dev"]

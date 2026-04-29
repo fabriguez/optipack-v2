@@ -12,6 +12,9 @@ services:
       - ./packages:/app/packages
       - /app/node_modules
       - /app/apps/api/node_modules
+      - ./docker/api/entrypoint.sh:/usr/local/bin/api-entrypoint.sh:ro
+    entrypoint: ["/bin/sh", "/usr/local/bin/api-entrypoint.sh"]
+    command: ["pnpm", "dev"]
     depends_on:
       postgres:
         condition: service_healthy

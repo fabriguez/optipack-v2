@@ -7,6 +7,8 @@ services:
     ports:
       - "3009:4000"
     env_file: .env
+    entrypoint: ["/bin/sh", "/usr/local/bin/api-entrypoint.sh"]
+    command: ["node", "dist/index.js"]
     restart: unless-stopped
     deploy:
       resources:
@@ -21,23 +23,6 @@ services:
         condition: service_healthy
     networks:
       - transitsoftservices
-
-  # ---------- API migrate + seed (one-shot) ----------
-  api-migrate:
-    build:
-      context: .
-      dockerfile: docker/api/Dockerfile.prod
-      target: builder
-    env_file: .env
-    working_dir: /app/apps/api
-    command: sh -c "pnpm exec prisma migrate deploy && pnpm exec prisma db seed"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - transitsoftservices
-    profiles: ["migrate"]
-    restart: "no"
 
   # ---------- Web Next.js ----------
   web:
