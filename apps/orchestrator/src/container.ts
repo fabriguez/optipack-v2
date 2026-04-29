@@ -8,6 +8,7 @@ import { StripeProvider } from './infrastructure/billing/StripeProvider';
 import { MobileMoneyProvider } from './infrastructure/billing/MobileMoneyProvider';
 import { GHCRClient } from './infrastructure/ghcr/GHCRClient';
 import { NotificationService } from './infrastructure/notifications/NotificationService';
+import { MetricsService } from './infrastructure/metrics/MetricsService';
 
 container.register(SSH_SERVICE, { useClass: SSHService });
 container.register(DOCKER_SERVICE, { useClass: DockerService });
@@ -18,5 +19,6 @@ container.registerSingleton(StripeProvider);
 container.registerSingleton(MobileMoneyProvider);
 container.registerSingleton(GHCRClient);
 container.registerSingleton(NotificationService);
+container.registerSingleton(MetricsService);
 
 export { container };

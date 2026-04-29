@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import { container } from '../../container';
 import { CalculatePenaltiesUseCase } from '../../application/use-cases/penalty/CalculatePenaltiesUseCase';
+import { CoherenceService } from '../../application/services/CoherenceService';
 import { prisma } from '../../config/database';
 import { eventBus, DomainEvents } from '../events/EventBus';
 import { createChildLogger } from '../../config/logger';
@@ -40,7 +41,22 @@ export function startCronJobs(): void {
     }
   });
 
-  logger.info('Cron jobs scheduled: penalty (2AM), debt alerts (8AM), overdue debts (1AM)');
+  // #02 — Verification de coherence Parcel (warehouseId XOR containerId) toutes les 6h
+  cron.schedule('0 */6 * * *', async () => {
+    try {
+      const svc = container.resolve(CoherenceService);
+      const result = await svc.checkParcelLocations();
+      if (result.bothSet > 0 || result.neitherSet > 0) {
+        logger.warn(result, 'Parcel coherence violations detected');
+      }
+    } catch (err) {
+      logger.error({ err }, 'Parcel coherence check failed');
+    }
+  });
+
+  logger.info(
+    'Cron jobs scheduled: penalty (2AM), debt alerts (8AM), overdue debts (1AM), parcel coherence (every 6h)',
+  );
 }
 
 async function checkDebtAlerts(): Promise<void> {

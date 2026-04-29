@@ -11,6 +11,8 @@ import { logger } from './infrastructure/logger';
 import routes from './presentation/routes';
 import { errorHandler } from './presentation/middleware/errorHandler';
 import { requestContext } from './presentation/middleware/requestContext';
+import { container } from './container';
+import { MetricsService } from './infrastructure/metrics/MetricsService';
 import { startProvisioningWorkers, stopWorkers } from './infrastructure/queue/workers';
 import { closeQueues } from './infrastructure/queue/queues';
 import { redisConnection } from './infrastructure/queue/connection';
@@ -26,7 +28,29 @@ const app = express();
 // Reverse-proxy (Caddy) en prod : confiance pour X-Forwarded-For (rate-limit + IP audit)
 app.set('trust proxy', 1);
 
-app.use(helmet());
+// Helmet : on durcit la CSP. L'orchestrateur sert uniquement du JSON, donc on bloque
+// l'execution de scripts/styles inline et on whiteliste seulement les CDN absolument
+// necessaires (aucun pour le moment cote API).
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'"],
+        imgSrc: ["'self'", 'data:'],
+        connectSrc: ["'self'"],
+        frameAncestors: ["'none'"],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+      },
+    },
+    crossOriginEmbedderPolicy: false, // pas necessaire pour une API JSON
+    referrerPolicy: { policy: 'no-referrer' },
+  }),
+);
 
 // CORS : whitelist via OPS_CORS_ORIGINS si fournie, sinon dev = all, prod = bloque.
 app.use(
@@ -44,6 +68,24 @@ app.use(
 app.use(express.json({ limit: '2mb' }));
 app.use(cookieParser());
 app.use(requestContext);
+
+// Tracking metriques HTTP (Phase 5 #28)
+const metrics = container.resolve(MetricsService);
+app.use((req, res, next) => {
+  res.on('finish', () => metrics.trackHttp(req.method, res.statusCode));
+  next();
+});
+
+// Endpoint /metrics (format Prometheus, sans auth — protege par firewall/network).
+// Pour exposer publiquement : ajouter requireServiceToken ou IP allowlist.
+app.get('/metrics', async (_req, res, next) => {
+  try {
+    const body = await metrics.render();
+    res.type('text/plain; version=0.0.4').send(body);
+  } catch (err) {
+    next(err);
+  }
+});
 
 // Rate limit serre sur l'auth (10 tentatives login / 15 min / IP)
 app.use(

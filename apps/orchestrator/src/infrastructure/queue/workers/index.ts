@@ -61,15 +61,51 @@ async function withJobLogger<T extends JobWithLogger>(
 export function startProvisioningWorkers(): Worker[] {
   const workers: Worker[] = [];
 
-  // PROVISION
+  // PROVISION — avec rollback partiel si retries epuises (Phase 5 #08)
   workers.push(
     new Worker<ProvisionJobData>(
       QUEUE_NAMES.PROVISION,
       async (bullJob) => {
-        await withJobLogger(bullJob, async () => {
-          const useCase = container.resolve(ProvisionTenantUseCase);
-          await useCase.execute(bullJob.data.tenantId, bullJob.data.provisioningJobId);
-        });
+        try {
+          await withJobLogger(bullJob, async () => {
+            const useCase = container.resolve(ProvisionTenantUseCase);
+            await useCase.execute(bullJob.data.tenantId, bullJob.data.provisioningJobId);
+          });
+        } catch (err) {
+          // Si on est au dernier essai : on tente un cleanup automatique (drop DB + remove
+          // containers + retire Caddy). Le tenant reste en BDD avec status ARCHIVED pour
+          // que l'ops admin puisse retrouver les logs et eventuellement re-provisionner.
+          const isLastAttempt =
+            bullJob.attemptsMade >= (bullJob.opts.attempts ?? 1) - 1;
+          if (isLastAttempt) {
+            const jobLogger = container.resolve(ProvisioningJobLogger);
+            await jobLogger.append(
+              bullJob.data.provisioningJobId,
+              '[provision] retries epuises -> rollback partiel (delete artefacts)',
+            );
+            try {
+              await container
+                .resolve(DeleteTenantUseCase)
+                .execute(bullJob.data.tenantId, bullJob.data.provisioningJobId);
+              await jobLogger.append(
+                bullJob.data.provisioningJobId,
+                '[provision] rollback OK -> tenant ARCHIVED',
+              );
+            } catch (cleanupErr) {
+              const m =
+                cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr);
+              await jobLogger.append(
+                bullJob.data.provisioningJobId,
+                `[provision] WARN rollback partiellement echoue : ${m}`,
+              );
+              logger.error(
+                { jobId: bullJob.id, err: m },
+                '[provision] cleanup after fail failed',
+              );
+            }
+          }
+          throw err;
+        }
       },
       workerOpts,
     ),

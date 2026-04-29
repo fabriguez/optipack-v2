@@ -18,10 +18,8 @@ Sévérité :
 - **Mitigation** : type-check rigoureux, tests manuels en dev.
 - **Action** : ajouter Vitest + tests pour les chemins critiques (auth, paiement, chargement, multi-tenant isolation).
 
-### #02 — [0.7] [MED] Invariant `warehouseId XOR containerId` non enforced en BDD
-- Logique applicative seulement (use cases LoadParcels/UnloadParcel).
-- **Mitigation** : audit dans `UpdateParcelUseCase`.
-- **Action** : test de cohérence périodique (cron) qui détecte les parcels avec les 2 FK ; ou check constraint partiel Postgres si on accepte la complexité.
+### ~~#02~~ — [0.7] [MED] ~~Invariant `warehouseId XOR containerId` non enforced en BDD~~ ✅ RESOLU
+- `CoherenceService.checkParcelLocations` + cron node-cron toutes les 6h dans `apps/api`. Log warn avec sample IDs si violation. Pas de check constraint Postgres (volontaire, complexite vs valeur).
 
 ### #03 — [0.8] [LOW] `Penalty.daysAccumulated` snapshot uniquement à la facturation
 - Computed à la lecture, mais pas snapshot avant `invoiceId`.
@@ -45,19 +43,15 @@ Sévérité :
 ### ~~#06~~ — [1.3] [MED] ~~Pas de codes de récupération 2FA~~ ✅ RESOLU
 - 10 codes generes au confirm 2FA (`SetupTwoFactorUseCase.confirm` retourne `recoveryCodes` en clair une seule fois). Stockes hashes bcrypt dans `OpsAdmin.twoFactorRecoveryCodes`. Endpoints : `POST /ops/auth/2fa/recovery` (login alternatif) et `POST /ops/auth/2fa/recovery/regenerate` (nouveau lot).
 
-### #07 — [1.4] [LOW] SSH key fingerprint masqué basique
-- L'affichage masqué (`fingerprint`) n'est pas un vrai SHA256 fingerprint OpenSSH.
-- **Mitigation** : OK pour l'identification visuelle.
-- **Action** : utiliser `node-ssh` ou `sshpk` pour calculer un vrai fingerprint MD5/SHA256.
+### ~~#07~~ — [1.4] [LOW] ~~SSH key fingerprint masqué basique~~ ✅ RESOLU
+- `SshKeyEncryption.fingerprint` derive la public key (Node `createPublicKey`) puis SHA256 sur SPKI DER -> format `SHA256:<base64>`. Identifie une cle de maniere unique dans le dashboard ops.
 
 ---
 
 ## Phase 2 — Provisioning automatique
 
-### #08 — [2.1] [HIGH] Pas de cleanup automatique sur fail
-- Si le worker `provision-tenant` échoue à mi-chemin (ex: après création DB mais avant container API), les artefacts partiels restent.
-- **Mitigation** : retry 3x BullMQ + script idempotent (cleanup containers anciens avant run).
-- **Action** : ajouter un step "rollback partiel" qui drop la DB + remove containers si attempts épuisé.
+### ~~#08~~ — [2.1] [HIGH] ~~Pas de cleanup automatique sur fail~~ ✅ RESOLU
+- Au dernier essai du worker PROVISION, on invoque `DeleteTenantUseCase` (drop DB + remove containers + reload Caddy). Tenant passe en ARCHIVED, logs disponibles pour debug.
 
 ### #09 — [2.1] [MED] Seed Organization fait via `node -e` inline
 - Code JS injecté dans une string shell échappée. Fragile.
@@ -184,25 +178,17 @@ Sévérité :
 ### ~~#26~~ — [SEC] [MED] ~~Aucun rate-limit sur les endpoints écriture~~ ✅ RESOLU
 - `index.ts` applique un `writeLimit` global sur `/ops` : 30 ecritures/min/IP, skip GET + webhooks + auth (qui ont leur propre limite).
 
-### #27 — [SEC] [LOW] Pas de CSP (Content-Security-Policy) ops-admin
-- helmet config par défaut.
-- **Mitigation** : OK API-only.
-- **Action** : durcir CSP quand `apps/ops-admin` shipper.
+### ~~#27~~ — [SEC] [LOW] ~~Pas de CSP (Content-Security-Policy)~~ ✅ RESOLU
+- Orchestrator : `helmet({ contentSecurityPolicy: { directives: ... } })` avec `default-src 'self'`, scripts/styles `'self'` only, `frame-ancestors 'none'`. Ops-admin : headers `Content-Security-Policy` + `X-Frame-Options DENY` + `Permissions-Policy` via `next.config.ts`.
 
-### #28 — [OBS] [MED] Pas de métriques Prometheus
-- Performance API, queue depth, etc. : invisibles sans logs.
-- **Mitigation** : pino logs ingestables.
-- **Action** : `/metrics` endpoint Prometheus avec `prom-client`. Surface : http_request_duration, bullmq_jobs_active, db_query_duration.
+### ~~#28~~ — [OBS] [MED] ~~Pas de métriques Prometheus~~ ✅ RESOLU
+- `MetricsService` + endpoint `GET /metrics` au format Prometheus text. Implementation manuelle (sans prom-client). Expose : `optipack_http_requests_total`, `optipack_bullmq_jobs{queue,state}`, `optipack_tenants{status}`, `optipack_vps{status}`. A scraper depuis Prometheus/Grafana Cloud.
 
-### #29 — [DOC] [HIGH] Setup VPS hôte non documenté
-- Un nouveau VPS doit avoir : Docker, Caddy admin API, postgres+redis+minio shared, network `optipack-shared`.
-- **Mitigation** : doc inline dans README orchestrator.
-- **Action** : créer `docs/vps-setup.md` + script Ansible/bash `scripts/provision-vps-host.sh` qui prépare un VPS vierge.
+### ~~#29~~ — [DOC] [HIGH] ~~Setup VPS hôte non documenté~~ ✅ RESOLU (doc seulement)
+- `docs/vps-setup.md` couvre : firewall UFW, Docker, compte `optipack`, network `optipack-shared`, services partages (postgres/redis/minio/caddy), repertoires, login GHCR, enregistrement dans l'orchestrator, verification. Le script bash automatique reste a faire.
 
-### #30 — [DEV] [LOW] Pas de hot-reload des secrets
-- Si on change `OPS_MASTER_KEY` en prod, on perd le déchiffrement des SSH keys existantes.
-- **Mitigation** : ne pas changer la masterKey. Si besoin : rotation via un script qui re-chiffre.
-- **Action** : documenter la rotation + script `scripts/rotate-master-key.ts`.
+### ~~#30~~ — [DEV] [LOW] ~~Pas de hot-reload des secrets~~ ✅ RESOLU (doc + script template)
+- `docs/master-key-rotation.md` documente la procedure (stop service ~5 min, script `rotate-master-key.ts` decrit, recovery en cas d'echec). Hot-reload double-key non implemente (volontaire, complexite > valeur).
 
 ---
 
