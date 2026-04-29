@@ -31,13 +31,10 @@ jobs:
             # Ensure postgres is up
             docker compose -f docker-compose.prod.yml up -d postgres
 
-            # Build api + migrate images
-            docker compose -f docker-compose.prod.yml --profile migrate build api api-migrate
+            # Build api image
+            docker compose -f docker-compose.prod.yml build api
 
-            # Run migrations + seed (one-shot, exits when done)
-            docker compose -f docker-compose.prod.yml --profile migrate run --rm api-migrate
-
-            # Start (or restart) api
+            # Start (or restart) api -- entrypoint runs migrations + seed before booting
             docker compose -f docker-compose.prod.yml up -d api
 
             docker image prune -f
