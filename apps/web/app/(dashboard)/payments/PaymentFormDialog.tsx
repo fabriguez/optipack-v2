@@ -1,13 +1,14 @@
 'use client';
 
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { recordPaymentSchema, type RecordPaymentInput } from '@transitsoftservices/shared';
 import { AppDialog } from '@/components/ui/AppDialog';
 import { AppInput } from '@/components/ui/AppInput';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppSelect } from '@/components/ui/AppSelect';
-import { useAgencies } from '@/lib/hooks/useAgencies';
+import { AppSearchSelect } from '@/components/ui/AppSearchSelect';
+import { searchers } from '@/lib/api/searchers';
 import { useRecordPayment } from '@/lib/hooks/usePayments';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
@@ -15,7 +16,6 @@ import { apiClient } from '@/lib/api/client';
 interface Props { open: boolean; onClose: () => void; invoiceId?: string; }
 
 export function PaymentFormDialog({ open, onClose, invoiceId }: Props) {
-  const { data: agencies } = useAgencies({ limit: 100 });
   const mutation = useRecordPayment();
 
   // Charger les factures non soldees
@@ -25,7 +25,7 @@ export function PaymentFormDialog({ open, onClose, invoiceId }: Props) {
     enabled: open && !invoiceId,
   });
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<RecordPaymentInput>({
+  const { register, handleSubmit, reset, control, formState: { errors } } = useForm<RecordPaymentInput>({
     resolver: zodResolver(recordPaymentSchema),
     defaultValues: { invoiceId: invoiceId || '' },
   });
@@ -53,8 +53,20 @@ export function PaymentFormDialog({ open, onClose, invoiceId }: Props) {
             placeholder="Selectionner une facture"
           />
         )}
-        <AppSelect label="Agence encaisseuse" {...register('agencyId')} error={errors.agencyId?.message}
-          options={(agencies?.data || []).map((a: any) => ({ value: a.id, label: a.name }))} placeholder="Selectionner" />
+        <Controller
+          name="agencyId"
+          control={control}
+          render={({ field }) => (
+            <AppSearchSelect
+              label="Agence encaisseuse"
+              value={field.value}
+              onChange={(v) => field.onChange(v ?? '')}
+              search={(q, l) => searchers.agencies(q, l)}
+              error={errors.agencyId?.message}
+              placeholder="Selectionner une agence"
+            />
+          )}
+        />
         <AppInput label="Montant" type="number" step="0.01" {...register('amount', { valueAsNumber: true })} error={errors.amount?.message} />
         <AppSelect label="Mode de paiement" {...register('paymentMethod')} error={errors.paymentMethod?.message}
           options={[

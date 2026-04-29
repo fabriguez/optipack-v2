@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { api, setToken } from '@/lib/api';
+import { api } from '@/lib/api';
 import { ShieldCheck } from 'lucide-react';
 
 export default function LoginPage() {
@@ -20,12 +20,13 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const r = await api.post('/auth/login', { email, password });
-      // 2FA exige : { twoFaToken, requires2FA: true } ; sinon { token }
-      if (r.data?.requires2FA) {
-        setTwoFaToken(r.data.twoFaToken);
+      const data = r.data?.data ?? r.data;
+      // Backend renvoie soit { challengeToken, requires2FA } soit { accessToken, opsAdmin }
+      if (data?.requires2FA || data?.challengeToken) {
+        setTwoFaToken(data.challengeToken ?? data.twoFaToken);
         setStep('2fa');
-      } else if (r.data?.token) {
-        setToken(r.data.token);
+      } else if (data?.accessToken || data?.opsAdmin) {
+        // Cookie httpOnly deja pose par le backend
         router.replace('/dashboard');
       } else {
         setErr('Reponse inattendue du serveur');
@@ -45,9 +46,12 @@ export default function LoginPage() {
     setErr(null);
     setLoading(true);
     try {
-      const r = await api.post('/auth/2fa/confirm', { twoFaToken, code });
-      if (r.data?.token) {
-        setToken(r.data.token);
+      const r = await api.post('/auth/2fa/confirm', {
+        challengeToken: twoFaToken,
+        totpCode: code,
+      });
+      const data = r.data?.data ?? r.data;
+      if (data?.accessToken || data?.opsAdmin) {
         router.replace('/dashboard');
       } else {
         setErr('Code 2FA invalide');

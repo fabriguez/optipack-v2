@@ -11,6 +11,7 @@
     "clean": "rm -rf .next .turbo"
   },
   "dependencies": {
+    "@transitsoftservices/ui": "workspace:*",
     "@tanstack/react-query": "^5.66.8",
     "axios": "^1.7.9",
     "clsx": "^2.1.1",

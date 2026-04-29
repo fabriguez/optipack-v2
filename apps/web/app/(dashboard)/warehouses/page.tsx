@@ -14,7 +14,7 @@ import { FilterDialog } from '@/components/shared/FilterDialog';
 import { ExportButton } from '@/components/shared/ExportButton';
 import { CsvImportDialog } from '@/components/shared/CsvImportDialog';
 import { RowActions } from '@/components/shared/RowActions';
-import { useAgencies } from '@/lib/hooks/useAgencies';
+import { searchers } from '@/lib/api/searchers';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { toast } from 'sonner';
@@ -27,8 +27,6 @@ export default function WarehousesPage() {
   const [showImport, setShowImport] = useState(false);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
-  const { data: agencies } = useAgencies({ limit: 100 });
-
   const agencyIdFilter = searchParams.get('agencyId') || '';
 
   const { data, isLoading } = useQuery({
@@ -68,8 +66,8 @@ export default function WarehousesPage() {
     {
       key: 'agencyId',
       label: 'Agence',
-      type: 'select' as const,
-      options: (agencies?.data || []).map((a: any) => ({ value: a.id, label: a.name })),
+      type: 'search-select' as const,
+      searcher: searchers.agencies,
     },
   ];
 

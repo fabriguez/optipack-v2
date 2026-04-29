@@ -10,6 +10,7 @@ import { GHCRClient } from '../ghcr/GHCRClient';
 import { ReleaseUseCases } from '../../application/use-cases/release/ReleaseUseCases';
 import { BackupTenantUseCase } from '../../application/use-cases/backup/BackupTenantUseCase';
 import { NotificationService } from '../notifications/NotificationService';
+import { DiskQuotaCheckUseCase } from '../../application/use-cases/monitoring/DiskQuotaCheckUseCase';
 
 const MONITOR_QUEUE = 'monitoring';
 const MONITOR_INTERVAL_MS = 5 * 60 * 1000; // 5 min
@@ -173,6 +174,11 @@ async function runBackupNightly() {
   const result = await backups.runNightly();
   if (result.failed > 0) {
     logger.warn(result, '[backup-nightly] some failures');
+  }
+  // Couple : verification quota disque (cf. #11/#18). Meme rythme quotidien.
+  const disk = await container.resolve(DiskQuotaCheckUseCase).run();
+  if (disk.warnings > 0 || disk.criticals > 0) {
+    logger.warn(disk, '[disk-quota] tenants approchent / depassent quota');
   }
 }
 

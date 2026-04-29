@@ -19,13 +19,20 @@ declare global {
   }
 }
 
+export const OPS_AUTH_COOKIE = 'ops_token';
+
 export function authenticateOps(req: Request, _res: Response, next: NextFunction): void {
+  // Phase 5 #36 — accepter cookie httpOnly OU Bearer header (ce dernier conserve
+  // pour les outils CLI / curl en debug ; le frontend ops-admin passe en cookie).
   const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith('Bearer ')) {
+  const fromCookie = (req as Request & { cookies?: Record<string, string> }).cookies?.[OPS_AUTH_COOKIE];
+  const token = authHeader?.startsWith('Bearer ')
+    ? authHeader.slice(7)
+    : fromCookie ?? '';
+
+  if (!token) {
     return next(new AuthenticationError());
   }
-
-  const token = authHeader.slice(7);
   try {
     const payload = jwt.verify(token, config.jwt.secret) as OpsJwtPayload;
     if (payload.scope !== 'ops') {

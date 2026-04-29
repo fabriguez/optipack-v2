@@ -15,7 +15,7 @@ import { ExportButton } from '@/components/shared/ExportButton';
 import { RowActions } from '@/components/shared/RowActions';
 import { useServerPagination } from '@/lib/hooks/useServerPagination';
 import { usePayments } from '@/lib/hooks/usePayments';
-import { useAgencies } from '@/lib/hooks/useAgencies';
+import { searchers } from '@/lib/api/searchers';
 import { formatAmount, formatDateTime } from '@transitsoftservices/shared';
 import { PaymentFormDialog } from './PaymentFormDialog';
 
@@ -28,8 +28,6 @@ function PaymentsContent() {
   const searchParams = useSearchParams();
   const [showCreate, setShowCreate] = useState(false);
   const { page, search, setPage, setSearch, queryParams } = useServerPagination();
-
-  const { data: agenciesData } = useAgencies({ limit: 100 });
 
   const agencyFilter = searchParams.get('agencyId') || '';
   const paymentMethodFilter = searchParams.get('paymentMethod') || '';
@@ -56,8 +54,8 @@ function PaymentsContent() {
     {
       key: 'agencyId',
       label: 'Agence',
-      type: 'select' as const,
-      options: (agenciesData?.data || []).map((a: any) => ({ value: a.id, label: a.name })),
+      type: 'search-select' as const,
+      searcher: searchers.agencies,
     },
     {
       key: 'paymentMethod',

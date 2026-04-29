@@ -12,8 +12,17 @@
     "type-check": "tsc --noEmit",
     "clean": "rm -rf dist .turbo"
   },
+  "peerDependencies": {
+    "react": "^18 || ^19"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^3.0.2"
+  },
   "devDependencies": {
     "@transitsoftservices/tsconfig": "workspace:*",
+    "@types/react": "^19.0.10",
+    "react": "^19.0.0",
     "typescript": "^5.7.3"
   }
 }

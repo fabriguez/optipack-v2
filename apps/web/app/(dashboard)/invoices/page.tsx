@@ -13,7 +13,7 @@ import { FilterDialog } from '@/components/shared/FilterDialog';
 import { ExportButton } from '@/components/shared/ExportButton';
 import { RowActions } from '@/components/shared/RowActions';
 import { useServerPagination } from '@/lib/hooks/useServerPagination';
-import { useAgencies } from '@/lib/hooks/useAgencies';
+import { searchers } from '@/lib/api/searchers';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
@@ -22,8 +22,6 @@ function InvoicesContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { page, search, setPage, setSearch, queryParams } = useServerPagination();
-
-  const { data: agenciesData } = useAgencies({ limit: 100 });
 
   const statusFilter = searchParams.get('status') || '';
   const agencyFilter = searchParams.get('agencyId') || '';
@@ -70,8 +68,8 @@ function InvoicesContent() {
     {
       key: 'agencyId',
       label: 'Agence',
-      type: 'select' as const,
-      options: (agenciesData?.data || []).map((a: any) => ({ value: a.id, label: a.name })),
+      type: 'search-select' as const,
+      searcher: searchers.agencies,
     },
     { key: 'startDate', label: 'Date debut', type: 'date' as const },
     { key: 'endDate', label: 'Date fin', type: 'date' as const },

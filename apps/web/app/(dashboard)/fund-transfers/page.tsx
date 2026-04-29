@@ -15,7 +15,7 @@ import { ExportButton } from '@/components/shared/ExportButton';
 import { RowActions } from '@/components/shared/RowActions';
 import { useQuery } from '@tanstack/react-query';
 import { fundTransfersApi } from '@/lib/api/finance';
-import { useAgencies } from '@/lib/hooks/useAgencies';
+import { searchers } from '@/lib/api/searchers';
 import { formatAmount, formatDateTime } from '@transitsoftservices/shared';
 import { FundTransferFormDialog } from './FundTransferFormDialog';
 
@@ -31,8 +31,6 @@ export default function FundTransfersPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
-
-  const { data: agenciesData } = useAgencies({ limit: 100 });
 
   const statusFilter = searchParams.get('status') || '';
   const agencyFilter = searchParams.get('agencyId') || '';
@@ -69,8 +67,8 @@ export default function FundTransfersPage() {
     {
       key: 'agencyId',
       label: 'Agence',
-      type: 'select' as const,
-      options: (agenciesData?.data || []).map((a: any) => ({ value: a.id, label: a.name })),
+      type: 'search-select' as const,
+      searcher: searchers.agencies,
     },
   ];
 

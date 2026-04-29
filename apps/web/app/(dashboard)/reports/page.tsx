@@ -15,9 +15,9 @@ import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard, AppCardHeader } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppInput } from '@/components/ui/AppInput';
-import { AppSelect } from '@/components/ui/AppSelect';
+import { AppSearchSelect } from '@/components/ui/AppSearchSelect';
 import { ExportButton } from '@/components/shared/ExportButton';
-import { useAgencies } from '@/lib/hooks/useAgencies';
+import { searchers } from '@/lib/api/searchers';
 import { reportsApi, type ReportParams } from '@/lib/api/config';
 import { formatAmount } from '@transitsoftservices/shared';
 
@@ -92,9 +92,6 @@ export default function ReportsPage() {
   const [agencyId, setAgencyId] = useState('');
   const [activeReport, setActiveReport] = useState<ReportType | null>(null);
 
-  const { data: agenciesData } = useAgencies({ limit: 100 });
-  const agencies = agenciesData?.data || [];
-
   const params: ReportParams = {
     startDate: startDate || undefined,
     endDate: endDate || undefined,
@@ -143,15 +140,14 @@ export default function ReportsPage() {
               onChange={(e) => setEndDate(e.target.value)}
               className="w-44"
             />
-            <AppSelect
+            <AppSearchSelect
               label="Agence"
               placeholder="Toutes les agences"
               value={agencyId}
-              onValueChange={setAgencyId}
-              options={[
-                { value: '', label: 'Toutes les agences' },
-                ...agencies.map((a: any) => ({ value: a.id, label: a.name })),
-              ]}
+              onChange={(v) => setAgencyId(v ?? '')}
+              search={(q, l) => searchers.agencies(q, l)}
+              clearable
+              className="w-64"
             />
           </div>
         </AppCard>

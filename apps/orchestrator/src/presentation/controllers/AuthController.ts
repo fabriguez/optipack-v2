@@ -5,6 +5,23 @@ import { SetupTwoFactorUseCase } from '../../application/use-cases/auth/SetupTwo
 import { GetMeUseCase } from '../../application/use-cases/auth/GetMeUseCase';
 import { AuditLogger } from '../../application/services/AuditLogger';
 import { AuthenticationError } from '../../domain/errors/BusinessError';
+import { OPS_AUTH_COOKIE } from '../middleware/authOpsMiddleware';
+import { config } from '../../config';
+
+function setAuthCookie(res: Response, token: string) {
+  // 1h en secondes (aligne avec accessExpiry JWT)
+  res.cookie(OPS_AUTH_COOKIE, token, {
+    httpOnly: true,
+    secure: config.env === 'production',
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 60 * 60 * 1000,
+  });
+}
+
+function clearAuthCookie(res: Response) {
+  res.clearCookie(OPS_AUTH_COOKIE, { path: '/' });
+}
 
 export class AuthController {
   static async login(req: Request, res: Response, next: NextFunction) {
@@ -24,6 +41,7 @@ export class AuthController {
           entityType: 'OpsAdmin',
           entityId: result.opsAdmin.id,
         });
+        setAuthCookie(res, result.accessToken);
       }
       res.json({ success: true, data: result });
     } catch (err) {
@@ -70,6 +88,7 @@ export class AuthController {
           entityType: 'OpsAdmin',
           entityId: result.opsAdmin.id,
         });
+        if (result.accessToken) setAuthCookie(res, result.accessToken);
       }
       res.json({ success: true, data: result });
     } catch (err) {
@@ -109,6 +128,7 @@ export class AuthController {
       const result = await container
         .resolve(SetupTwoFactorUseCase)
         .useRecoveryCode(challengeToken, recoveryCode);
+      if (result.accessToken) setAuthCookie(res, result.accessToken);
       res.json({ success: true, data: result });
     } catch (err) {
       next(err);
@@ -142,6 +162,7 @@ export class AuthController {
           entityId: req.opsAdmin.sub,
         });
       }
+      clearAuthCookie(res);
       res.json({ success: true, message: 'Deconnexion enregistree' });
     } catch (err) {
       next(err);

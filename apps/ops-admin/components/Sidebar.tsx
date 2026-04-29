@@ -13,7 +13,7 @@ import {
   ScrollText,
   LogOut,
 } from 'lucide-react';
-import { clearToken } from '@/lib/api';
+import { logout } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 const items = [
@@ -31,8 +31,8 @@ export function Sidebar() {
   const path = usePathname();
   const router = useRouter();
 
-  function logout() {
-    clearToken();
+  async function handleLogout() {
+    await logout();
     router.replace('/login');
   }
 
@@ -64,7 +64,7 @@ export function Sidebar() {
         })}
       </nav>
       <button
-        onClick={logout}
+        onClick={handleLogout}
         className="flex items-center gap-2 border-t px-4 py-3 text-sm text-gray-600 hover:bg-gray-50"
       >
         <LogOut size={16} />

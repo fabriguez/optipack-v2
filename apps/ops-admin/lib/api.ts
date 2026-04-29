@@ -5,22 +5,15 @@ const ORCHESTRATOR_URL =
 
 export const api = axios.create({
   baseURL: `${ORCHESTRATOR_URL}/ops`,
-  withCredentials: false,
-});
-
-api.interceptors.request.use((cfg) => {
-  if (typeof window !== 'undefined') {
-    const tok = localStorage.getItem('ops_token');
-    if (tok) cfg.headers.Authorization = `Bearer ${tok}`;
-  }
-  return cfg;
+  // Phase 5 #36 — auth via cookie httpOnly. Le navigateur envoie le cookie
+  // automatiquement avec les requetes cross-origin grace a withCredentials.
+  withCredentials: true,
 });
 
 api.interceptors.response.use(
   (r) => r,
   (err: AxiosError) => {
     if (err.response?.status === 401 && typeof window !== 'undefined') {
-      localStorage.removeItem('ops_token');
       if (window.location.pathname !== '/login') {
         window.location.href = '/login';
       }
@@ -29,15 +22,24 @@ api.interceptors.response.use(
   },
 );
 
-export function getToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem('ops_token');
+/**
+ * Heuristique cote client : on tente un /auth/me. Si 200 -> authentifie.
+ * (Le cookie etant httpOnly, le JS ne peut pas le lire directement.)
+ */
+export async function isAuthenticated(): Promise<boolean> {
+  try {
+    await api.get('/auth/me');
+    return true;
+  } catch {
+    return false;
+  }
 }
 
-export function setToken(t: string) {
-  localStorage.setItem('ops_token', t);
-}
-
-export function clearToken() {
-  localStorage.removeItem('ops_token');
+/** Logout : supprime le cookie cote serveur. */
+export async function logout(): Promise<void> {
+  try {
+    await api.post('/auth/logout');
+  } catch {
+    // best-effort
+  }
 }

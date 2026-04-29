@@ -58,15 +58,13 @@ Sévérité :
 - **Mitigation** : fonctionnel mais lourd à debug.
 - **Action** : créer un script `apps/api/scripts/seed-tenant.ts` packagé dans l'image API, appelé via `docker exec api node scripts/seed-tenant.js <orgId> <name> ...`.
 
-### #10 — [2.3] [HIGH] Caddy admin API exposée sur localhost:2019
-- Pas d'auth sur l'admin API Caddy. Si quelqu'un atteint localhost:2019 via tunneling, il peut tout reconfigurer.
-- **Mitigation** : firewall iptables + bind 127.0.0.1.
-- **Action** : configurer Caddy admin avec `origins` whitelist + auth.
+### ~~#10~~ — [2.3] [HIGH] ~~Caddy admin API exposée sur localhost:2019~~ ✅ RESOLU
+- `CaddyService.buildConfig` injecte `admin: { listen: 'localhost:2019', origins: ['localhost', '127.0.0.1', '[::1]'], enforce_origin: true }`. Anti DNS-rebinding + bind localhost. Auth pre-shared a ajouter si on expose un jour le admin via tunneling — pas necessaire tant que l'orchestrator passe par SSH.
 
-### #11 — [2.4] [MED] Pas de quota disque enforced
-- `diskQuotaGb` est tracké en BDD mais Docker n'a pas de `--disk-limit` natif.
-- **Mitigation** : aucune.
-- **Action** : LVM thin provisioning ou bind-mount avec `quota` Linux. Gros chantier infra.
+### #11 — [2.4] [MED] Pas de quota disque enforced (partiellement adresse)
+- ~~Aucune visibilite~~ : `DiskQuotaCheckUseCase` cron quotidien -> `pg_database_size` per tenant -> log warn a 80%, alerte webhook ops a 95%.
+- **Mitigation** : monitoring + alerting. L'enforcement reel reste a faire.
+- **Action restante** : LVM thin provisioning ou xfs `prjquota` pour empecher un tenant de saturer le disque (vs simplement le voir).
 
 ---
 
@@ -104,10 +102,8 @@ Sévérité :
 - **Mitigation** : durci à l'arrivée des creds opérateur.
 - **Action** : implémenter `verifyMtnSignature` / `verifyOrangeSignature` selon les specs opérateur.
 
-### #18 — [4.3] [MED] Disk quota non enforced (cf. #11)
-- Couplage avec capacity check : `assertCanAllocate` regarde `diskQuotaGb` mais Docker ne l'applique pas.
-- **Mitigation** : suivi best-effort.
-- **Action** : cf. #11.
+### #18 — [4.3] [MED] Disk quota non enforced (cf. #11, partiel)
+- `DiskQuotaCheckUseCase` ajoute la visibilite + alerting cote ops. L'enforcement Docker reel reste a faire (cf. #11).
 
 ### #19 — [4.4] [MED] Subscription pricing par mois uniquement
 - Pas de billing yearly (avec discount), pas de pro-rata sur upgrade mid-month.
@@ -129,10 +125,10 @@ Sévérité :
 - **Mitigation** : OK pour récupérer une mauvaise migration, mais perte totale si le VPS brûle.
 - **Action** : pousser le dump vers MinIO control plane (ou S3/Backblaze) après écriture, ne garder que la copie distante. Permet aussi le restore cross-VPS.
 
-### #32 — [5.1] [HIGH] ops-admin frontend incomplet
-- Skeleton créé (login + dashboard + listes tenants/vps/releases/plans/backups/audit/ops-admins). Manquent : formulaires de création (tenant, vps, plan, ops-admin), édition branding, vue détaillée VPS avec graphes, page billing/MRR, gestion releases (édit changelog, marquer stable/critique).
-- **Mitigation** : actions sensibles encore réalisables via curl/Postman.
-- **Action** : Phase 5.1 — compléter formulaires + détails. Réutiliser composants `apps/web` (extraction `packages/ui` mentionnée dans le plan, encore non faite).
+### #32 — [5.1] [HIGH] ops-admin frontend (partiellement adresse)
+- Formulaires de creation livres : `/vps/new`, `/tenants/new` (avec selecteur VPS+plan, modules toggleables, color pickers), `/plans/new`, `/ops-admins/new` (avec affichage one-shot du mot de passe initial). Pages liste ont desormais des boutons "+ Nouveau".
+- **Mitigation** : flow de provisioning operable via UI.
+- **Action restante** : edition branding tenant, vue detail VPS avec graphes (recharts), page billing/MRR, edit release changelog + flags stable/critical.
 
 ### #33 — [5.4] [MED] Notifications email no-op si SMTP non configuré
 - `NotificationService` log silencieusement et retourne false si SMTP non config (cas dev).
@@ -141,15 +137,13 @@ Sévérité :
 
 ### ~~#34~~ — [5.4] [MED] ~~Pas de préavis avant freeze auto~~ ✅ RESOLU (cf. #20, doublon)
 
-### #35 — [5.1] [MED] `packages/ui` toujours vide
-- Plan prévoyait l'extraction des composants AppButton/AppCard/etc. partagés entre `apps/web` et `apps/ops-admin`.
-- **Mitigation** : `apps/ops-admin` a recréé des primitives inline (Tailwind direct, pas de composants partagés). Divergence visuelle possible.
-- **Action** : extraire les composants `apps/web/components/ui` vers `packages/ui` quand l'API stabilisera.
+### #35 — [5.1] [MED] `packages/ui` extraction initiale faite
+- Premier batch dans `packages/ui` : `cn`, `formatDate`, `formatBytes`, `StatusBadge`, primitives Form (`Field`, `TextInput`, `Textarea`, `Select`, `SubmitButton`). Consomme par `apps/ops-admin` (re-export via `lib/utils.ts` + `components/StatusBadge.tsx` + `components/Form.tsx`).
+- **Mitigation** : base partagee minimale, composants generiques sans deps lourdes.
+- **Action restante** : etendre quand AppButton/AppCard/AppDialog/AppDataTable de `apps/web` se stabilisent. Risque actuel d'extraire des composants encore en mouvement.
 
-### #36 — [5.1] [LOW] Auth ops-admin stocke le JWT en localStorage
-- `apps/ops-admin/lib/api.ts` lit/écrit `ops_token` dans localStorage.
-- **Mitigation** : OK pour un outil interne ops, pas exposé au public.
-- **Action** : passer en httpOnly cookie + endpoint refresh quand on durcira la prod.
+### ~~#36~~ — [5.1] [LOW] ~~Auth ops-admin JWT en localStorage~~ ✅ RESOLU
+- Cookie `ops_token` httpOnly + Secure (en prod) + SameSite=Lax pose par le backend a chaque login/2FA confirm/recovery, supprime sur logout. `authenticateOps` accepte cookie OU Bearer (pour curl/CLI). Frontend `lib/api.ts` n'utilise plus localStorage, `withCredentials: true`, `isAuthenticated()` heuristique via `/auth/me`.
 
 ---
 

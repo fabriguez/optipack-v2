@@ -4,9 +4,9 @@ import { useForm, Controller } from 'react-hook-form';
 import { AppDialog } from '@/components/ui/AppDialog';
 import { AppInput } from '@/components/ui/AppInput';
 import { AppButton } from '@/components/ui/AppButton';
-import { AppSelect } from '@/components/ui/AppSelect';
+import { AppSearchSelect } from '@/components/ui/AppSearchSelect';
 import { AppPhoneInput } from '@/components/ui/AppPhoneInput';
-import { useAgencies } from '@/lib/hooks/useAgencies';
+import { searchers } from '@/lib/api/searchers';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { toast } from 'sonner';
@@ -15,7 +15,6 @@ interface Props { open: boolean; onClose: () => void; }
 
 export function EmployeeFormDialog({ open, onClose }: Props) {
   const qc = useQueryClient();
-  const { data: agencies } = useAgencies({ limit: 100 });
   const mutation = useMutation({
     mutationFn: (data: any) => apiClient.post('/employees', data).then((r) => r.data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['employees'] }); toast.success('Employe cree'); onClose(); },
@@ -29,8 +28,21 @@ export function EmployeeFormDialog({ open, onClose }: Props) {
     <AppDialog open={open} onClose={onClose} title="Nouvel employe" size="md">
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <AppInput label="Nom complet" {...register('fullName', { required: true })} />
-        <AppSelect label="Agence" {...register('agencyId', { required: true })}
-          options={(agencies?.data || []).map((a: any) => ({ value: a.id, label: a.name }))} placeholder="Selectionner" />
+        <Controller
+          name="agencyId"
+          control={control}
+          rules={{ required: true }}
+          render={({ field }) => (
+            <AppSearchSelect
+              label="Agence"
+              value={field.value as string | null | undefined}
+              onChange={(v) => field.onChange(v ?? '')}
+              search={(q, l) => searchers.agencies(q, l)}
+              required
+              placeholder="Selectionner une agence"
+            />
+          )}
+        />
         <AppInput label="Poste" {...register('position', { required: true })} />
         <Controller
           name="phone"

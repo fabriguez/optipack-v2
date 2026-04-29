@@ -3,9 +3,8 @@
 import { useState } from 'react';
 import { AppDialog } from '@/components/ui/AppDialog';
 import { AppButton } from '@/components/ui/AppButton';
-import { AppSelect } from '@/components/ui/AppSelect';
-import { useClients } from '@/lib/hooks/useClients';
-import { useAgencies } from '@/lib/hooks/useAgencies';
+import { AppSearchSelect } from '@/components/ui/AppSearchSelect';
+import { searchers } from '@/lib/api/searchers';
 import { useCreateConversation } from '@/lib/hooks/useChat';
 
 interface NewConversationDialogProps {
@@ -18,19 +17,7 @@ export function NewConversationDialog({ open, onClose, onCreated }: NewConversat
   const [clientId, setClientId] = useState('');
   const [agencyId, setAgencyId] = useState('');
 
-  const { data: clientsData } = useClients({ limit: 200 });
-  const { data: agenciesData } = useAgencies({ limit: 200 });
   const createMutation = useCreateConversation();
-
-  const clientOptions = (clientsData?.data || []).map((c: any) => ({
-    value: c.id,
-    label: c.fullName,
-  }));
-
-  const agencyOptions = (agenciesData?.data || []).map((a: any) => ({
-    value: a.id,
-    label: a.name,
-  }));
 
   const handleSubmit = () => {
     if (!clientId || !agencyId) return;
@@ -50,19 +37,21 @@ export function NewConversationDialog({ open, onClose, onCreated }: NewConversat
   return (
     <AppDialog open={open} onClose={onClose} title="Nouvelle conversation">
       <div className="space-y-4">
-        <AppSelect
+        <AppSearchSelect
           label="Client"
           placeholder="Selectionner un client"
-          options={clientOptions}
           value={clientId}
-          onValueChange={setClientId}
+          onChange={(v) => setClientId(v ?? '')}
+          search={(q, l) => searchers.clients(q, l)}
+          required
         />
-        <AppSelect
+        <AppSearchSelect
           label="Agence"
           placeholder="Selectionner une agence"
-          options={agencyOptions}
           value={agencyId}
-          onValueChange={setAgencyId}
+          onChange={(v) => setAgencyId(v ?? '')}
+          search={(q, l) => searchers.agencies(q, l)}
+          required
         />
         <div className="flex justify-end gap-3 pt-2">
           <AppButton variant="ghost" onClick={onClose}>

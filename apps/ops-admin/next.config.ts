@@ -28,6 +28,7 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   output: 'standalone',
+  transpilePackages: ['@transitsoftservices/ui'],
   env: {
     NEXT_PUBLIC_ORCHESTRATOR_URL: orchestratorUrl,
   },

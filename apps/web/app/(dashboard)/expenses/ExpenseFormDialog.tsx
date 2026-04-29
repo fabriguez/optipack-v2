@@ -1,12 +1,12 @@
 'use client';
 
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { AppDialog } from '@/components/ui/AppDialog';
 import { AppInput } from '@/components/ui/AppInput';
 import { AppButton } from '@/components/ui/AppButton';
-import { AppSelect } from '@/components/ui/AppSelect';
+import { AppSearchSelect } from '@/components/ui/AppSearchSelect';
 import { AppTextarea } from '@/components/ui/AppTextarea';
-import { useAgencies } from '@/lib/hooks/useAgencies';
+import { searchers } from '@/lib/api/searchers';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { toast } from 'sonner';
@@ -15,14 +15,13 @@ interface Props { open: boolean; onClose: () => void; }
 
 export function ExpenseFormDialog({ open, onClose }: Props) {
   const qc = useQueryClient();
-  const { data: agencies } = useAgencies({ limit: 100 });
   const mutation = useMutation({
     mutationFn: (data: any) => apiClient.post('/expenses', data).then((r) => r.data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['expenses'] }); toast.success('Depense enregistree'); onClose(); },
     onError: () => toast.error('Erreur'),
   });
 
-  const { register, handleSubmit, reset } = useForm();
+  const { register, handleSubmit, reset, control, formState: { errors } } = useForm<{ agencyId: string; title: string; reason: string; description?: string; category?: string; amount: number }>();
   const onSubmit = (data: any) => { mutation.mutate({ ...data, amount: Number(data.amount) }); reset(); };
 
   return (
@@ -37,8 +36,22 @@ export function ExpenseFormDialog({ open, onClose }: Props) {
           {...register('description')}
         />
         <AppInput label="Categorie" {...register('category')} placeholder="Transport, fournitures..." />
-        <AppSelect label="Agence" {...register('agencyId', { required: true })}
-          options={(agencies?.data || []).map((a: any) => ({ value: a.id, label: a.name }))} placeholder="Selectionner" />
+        <Controller
+          name="agencyId"
+          control={control}
+          rules={{ required: true }}
+          render={({ field }) => (
+            <AppSearchSelect
+              label="Agence"
+              value={field.value}
+              onChange={(v) => field.onChange(v ?? '')}
+              search={(q, l) => searchers.agencies(q, l)}
+              error={errors.agencyId ? 'Agence requise' : undefined}
+              required
+              placeholder="Selectionner une agence"
+            />
+          )}
+        />
         <AppInput label="Montant" type="number" step="0.01" {...register('amount', { required: true })} />
         <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
           <AppButton variant="ghost" type="button" onClick={onClose}>Annuler</AppButton>

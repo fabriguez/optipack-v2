@@ -75,7 +75,15 @@ export class CaddyService {
     }
 
     return {
-      admin: { listen: 'localhost:2019' },
+      // Phase 5 #10 — Caddy admin API durcie :
+      //   - bind localhost:2019 uniquement (jamais expose hors VPS)
+      //   - origins allowlist : seul `localhost` est tolere comme Host header
+      //   - enforce_origin : refuse les requetes avec un Host non-whitelist (anti DNS-rebinding)
+      admin: {
+        listen: 'localhost:2019',
+        origins: ['localhost', '127.0.0.1', '[::1]'],
+        enforce_origin: true,
+      },
       apps: {
         http: {
           servers: {

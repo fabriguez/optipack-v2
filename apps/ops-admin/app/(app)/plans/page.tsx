@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 
@@ -20,7 +21,15 @@ export default function PlansPage() {
   });
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-semibold">Plans de ressources</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">Plans de ressources</h1>
+        <Link
+          href="/plans/new"
+          className="rounded-md bg-primary-700 px-3 py-1.5 text-sm text-white hover:bg-primary-900"
+        >
+          + Nouveau plan
+        </Link>
+      </div>
       <div className="rounded-lg border bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="border-b bg-gray-50 text-xs text-gray-500">

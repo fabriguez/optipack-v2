@@ -7,13 +7,16 @@ import { AppDialog } from '@/components/ui/AppDialog';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppInput } from '@/components/ui/AppInput';
 import { AppSelect } from '@/components/ui/AppSelect';
+import { AppSearchSelect, type SearchOption } from '@/components/ui/AppSearchSelect';
 import { AppDatePicker } from '@/components/ui/AppDatePicker';
 
 export interface FilterField {
   key: string;
   label: string;
-  type: 'select' | 'text' | 'date';
+  type: 'select' | 'text' | 'date' | 'search-select';
   options?: { value: string; label: string }[];
+  /** Pour `search-select` : recherche serveur. Ex: `searchers.agencies` */
+  searcher?: (query: string, limit: number) => Promise<SearchOption[]>;
   placeholder?: string;
 }
 
@@ -110,6 +113,19 @@ export function FilterDialog({ fields }: FilterDialogProps) {
                   value={value}
                   onChange={(e) => onChange(e.target.value)}
                   options={[{ value: '', label: 'Tous' }, ...field.options]}
+                />
+              );
+            }
+            if (field.type === 'search-select' && field.searcher) {
+              return (
+                <AppSearchSelect
+                  key={field.key}
+                  label={field.label}
+                  value={value}
+                  onChange={(v) => onChange(v ?? '')}
+                  search={field.searcher}
+                  placeholder={field.placeholder ?? 'Tous'}
+                  clearable
                 />
               );
             }

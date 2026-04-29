@@ -14,7 +14,7 @@ import { ExportButton } from '@/components/shared/ExportButton';
 import { RowActions } from '@/components/shared/RowActions';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
-import { useAgencies } from '@/lib/hooks/useAgencies';
+import { searchers } from '@/lib/api/searchers';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
 import { ExpenseFormDialog } from './ExpenseFormDialog';
 
@@ -24,8 +24,6 @@ export default function ExpensesPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
-
-  const { data: agenciesData } = useAgencies({ limit: 100 });
 
   const agencyFilter = searchParams.get('agencyId') || '';
   const categoryFilter = searchParams.get('category') || '';
@@ -54,8 +52,8 @@ export default function ExpensesPage() {
     {
       key: 'agencyId',
       label: 'Agence',
-      type: 'select' as const,
-      options: (agenciesData?.data || []).map((a: any) => ({ value: a.id, label: a.name })),
+      type: 'search-select' as const,
+      searcher: searchers.agencies,
     },
     { key: 'category', label: 'Categorie', type: 'text' as const },
   ];

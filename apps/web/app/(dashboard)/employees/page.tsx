@@ -16,7 +16,7 @@ import { CsvImportDialog } from '@/components/shared/CsvImportDialog';
 import { RowActions } from '@/components/shared/RowActions';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
-import { useAgencies } from '@/lib/hooks/useAgencies';
+import { searchers } from '@/lib/api/searchers';
 import { formatAmount } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
 import { EmployeeFormDialog } from './EmployeeFormDialog';
@@ -28,8 +28,6 @@ export default function EmployeesPage() {
   const [showImport, setShowImport] = useState(false);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
-  const { data: agencies } = useAgencies({ limit: 100 });
-
   const agencyIdFilter = searchParams.get('agencyId') || '';
 
   const { data, isLoading } = useQuery({
@@ -71,8 +69,8 @@ export default function EmployeesPage() {
     {
       key: 'agencyId',
       label: 'Agence',
-      type: 'select' as const,
-      options: (agencies?.data || []).map((a: any) => ({ value: a.id, label: a.name })),
+      type: 'search-select' as const,
+      searcher: searchers.agencies,
     },
   ];
 

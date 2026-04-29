@@ -16,7 +16,7 @@ import { CsvImportDialog } from '@/components/shared/CsvImportDialog';
 import { RowActions } from '@/components/shared/RowActions';
 import { useServerPagination } from '@/lib/hooks/useServerPagination';
 import { useClients } from '@/lib/hooks/useClients';
-import { useAgencies } from '@/lib/hooks/useAgencies';
+import { searchers } from '@/lib/api/searchers';
 import { ClientFormDialog } from './ClientFormDialog';
 import { apiClient } from '@/lib/api/client';
 import { formatAmount } from '@transitsoftservices/shared';
@@ -33,7 +33,6 @@ function ClientsContent() {
   const [showCreate, setShowCreate] = useState(false);
   const [showImport, setShowImport] = useState(false);
 
-  const { data: agenciesData } = useAgencies({ limit: 100 });
 
   const agencyFilter = searchParams.get('agencyId') || '';
   const loyaltyTierFilter = searchParams.get('loyaltyTier') || '';
@@ -53,7 +52,7 @@ function ClientsContent() {
           phone: row.phone || row.telephone,
           email: row.email || '',
           address: row.address || row.adresse || '',
-          agencyId: agencyFilter || agenciesData?.data?.[0]?.id,
+          agencyId: agencyFilter || undefined,
         });
         success++;
       } catch { /* skip */ }
@@ -74,8 +73,8 @@ function ClientsContent() {
     {
       key: 'agencyId',
       label: 'Agence',
-      type: 'select' as const,
-      options: (agenciesData?.data || []).map((a: any) => ({ value: a.id, label: a.name })),
+      type: 'search-select' as const,
+      searcher: searchers.agencies,
     },
     {
       key: 'loyaltyTier',

@@ -4,14 +4,15 @@ import { useState } from 'react';
 import { SlidersHorizontal, X } from 'lucide-react';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppSelect } from '@/components/ui/AppSelect';
+import { AppSearchSelect, type SearchOption } from '@/components/ui/AppSearchSelect';
 import { AppInput } from '@/components/ui/AppInput';
-import { cn } from '@/lib/utils/cn';
 
 interface FilterField {
   key: string;
   label: string;
-  type: 'select' | 'text' | 'date';
+  type: 'select' | 'text' | 'date' | 'search-select';
   options?: { value: string; label: string }[];
+  searcher?: (query: string, limit: number) => Promise<SearchOption[]>;
   placeholder?: string;
 }
 
@@ -61,6 +62,19 @@ export function AdvancedFilters({ fields, values, onChange, onClear }: AdvancedF
                   value={values[field.key] || ''}
                   onChange={(e) => onChange(field.key, e.target.value)}
                   options={[{ value: '', label: 'Tous' }, ...field.options]}
+                />
+              );
+            }
+            if (field.type === 'search-select' && field.searcher) {
+              return (
+                <AppSearchSelect
+                  key={field.key}
+                  label={field.label}
+                  value={values[field.key] || ''}
+                  onChange={(v) => onChange(field.key, v ?? '')}
+                  search={field.searcher}
+                  placeholder={field.placeholder ?? 'Tous'}
+                  clearable
                 />
               );
             }

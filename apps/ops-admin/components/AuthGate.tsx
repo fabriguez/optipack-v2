@@ -1,17 +1,22 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { getToken } from '@/lib/api';
+import { isAuthenticated } from '@/lib/api';
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [ready, setReady] = useState(false);
   useEffect(() => {
-    if (!getToken()) {
-      router.replace('/login');
-    } else {
-      setReady(true);
-    }
+    let cancelled = false;
+    void (async () => {
+      const ok = await isAuthenticated();
+      if (cancelled) return;
+      if (!ok) router.replace('/login');
+      else setReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
   if (!ready) {
     return (
