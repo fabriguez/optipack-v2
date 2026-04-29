@@ -7,6 +7,11 @@ services:
     ports:
       - "3009:4000"
     env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-transitsoftservices}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-transitsoftservices}?schema=public
+      REDIS_URL: redis://redis:6379
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: "9000"
     entrypoint: ["/bin/sh", "/usr/local/bin/api-entrypoint.sh"]
     command: ["node", "dist/index.js"]
     restart: unless-stopped
@@ -35,6 +40,8 @@ services:
     ports:
       - "3008:3000"
     env_file: .env
+    environment:
+      INTERNAL_API_URL: http://api:4000/api/v1
     restart: unless-stopped
     deploy:
       resources:
