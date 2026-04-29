@@ -30,11 +30,11 @@ until echo "SELECT 1;" | "$PRISMA" db execute --schema=./prisma/schema.prisma --
 done
 echo "[entrypoint] Database is reachable."
 
-if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
-  echo "[entrypoint] Applying migrations (prisma migrate deploy)..."
-  "$PRISMA" migrate deploy
+if [ "${RUN_DB_PUSH:-true}" = "true" ]; then
+  echo "[entrypoint] Syncing schema (prisma db push)..."
+  "$PRISMA" db push --schema=./prisma/schema.prisma --skip-generate --accept-data-loss
 else
-  echo "[entrypoint] Migrations skipped (RUN_MIGRATIONS=${RUN_MIGRATIONS})."
+  echo "[entrypoint] Schema sync skipped (RUN_DB_PUSH=${RUN_DB_PUSH})."
 fi
 
 if [ "${RUN_SEED:-true}" = "true" ]; then
