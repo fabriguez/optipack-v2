@@ -150,7 +150,7 @@ export function PartnerPricingsSection({ clientId, isPartner }: Props) {
             label="Route de transit"
             value={routeId}
             onChange={setRouteId}
-            search={(q, l) => searchers.transitRoutes(q, l)}
+            search={searchers.transitRoutes}
             placeholder="Toutes routes (laisser vide)"
           />
           <p className="text-xs text-gray-500">Si aucune route n&apos;est selectionnee, ce prix s&apos;applique a toutes les routes (a defaut d&apos;une regle specifique).</p>

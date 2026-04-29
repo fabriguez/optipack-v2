@@ -516,7 +516,7 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
                 label="Magasin de destination"
                 value={unloadWarehouseId}
                 onChange={setUnloadWarehouseId}
-                search={(q, l) => searchers.warehouses(q, l)}
+                search={searchers.warehouses}
                 placeholder="Selectionner un magasin"
                 required
               />

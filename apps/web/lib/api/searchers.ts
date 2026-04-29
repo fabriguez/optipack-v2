@@ -120,6 +120,31 @@ export const searchers = {
 };
 
 /**
+ * Helpers pour construire un `SearchOption` a partir d'une entite deja chargee
+ * (ex. depuis une page detail). Sert a alimenter `selectedOption` quand on
+ * pre-selectionne une valeur qui n'est pas encore dans les resultats du searcher.
+ */
+export const toSearchOption = {
+  agency: (a: { id: string; name: string; city?: string | null }): SearchOption => ({
+    value: a.id,
+    label: a.name,
+    sublabel: a.city ?? null,
+  }),
+  warehouse: (
+    w: { id: string; name: string; agency?: { name?: string | null } | null },
+  ): SearchOption => ({
+    value: w.id,
+    label: w.name,
+    sublabel: w.agency?.name ?? null,
+  }),
+  client: (c: { id: string; fullName: string; phone?: string | null }): SearchOption => ({
+    value: c.id,
+    label: c.fullName,
+    sublabel: c.phone ?? null,
+  }),
+};
+
+/**
  * Createurs inline pour SearchSelect.onCreate : retourne SearchOption|null
  */
 export const inlineCreators = {

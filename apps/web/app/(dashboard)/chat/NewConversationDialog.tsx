@@ -60,7 +60,7 @@ export function NewConversationDialog({ open, onClose, onCreated }: NewConversat
           placeholder="Selectionner un client"
           value={clientId}
           onChange={(v) => setClientId(v ?? '')}
-          search={(q, l) => searchers.clients(q, l)}
+          search={searchers.clients}
           required
         />
         <AppSearchSelect
@@ -68,7 +68,7 @@ export function NewConversationDialog({ open, onClose, onCreated }: NewConversat
           placeholder="Selectionner une agence"
           value={agencyId}
           onChange={(v) => setAgencyId(v ?? '')}
-          search={(q, l) => searchers.agencies(q, l)}
+          search={searchers.agencies}
           required
         />
       </div>

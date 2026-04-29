@@ -10,7 +10,7 @@ import { AppSelect } from '@/components/ui/AppSelect';
 import { AppSearchSelect } from '@/components/ui/AppSearchSelect';
 import { AppPhoneInput } from '@/components/ui/AppPhoneInput';
 import { useCreateClient } from '@/lib/hooks/useClients';
-import { searchers } from '@/lib/api/searchers';
+import { searchers, toSearchOption } from '@/lib/api/searchers';
 
 interface ClientFormDialogProps {
   open: boolean;
@@ -118,12 +118,8 @@ export function ClientFormDialog({ open, onClose, defaultAgency }: ClientFormDia
               label="Agence"
               value={field.value}
               onChange={(v) => field.onChange(v ?? '')}
-              search={(q, l) => searchers.agencies(q, l)}
-              selectedOption={
-                defaultAgency
-                  ? { value: defaultAgency.id, label: defaultAgency.name, sublabel: defaultAgency.city ?? null }
-                  : undefined
-              }
+              search={searchers.agencies}
+              selectedOption={defaultAgency ? toSearchOption.agency(defaultAgency) : undefined}
               error={errors.agencyId?.message}
               required
               disabled={!!defaultAgency}

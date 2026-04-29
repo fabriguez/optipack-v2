@@ -11,7 +11,7 @@ import { AppPhoneInput } from '@/components/ui/AppPhoneInput';
 import { AppSearchSelect, type SearchOption } from '@/components/ui/AppSearchSelect';
 import { AppSelect } from '@/components/ui/AppSelect';
 import { clientsApi } from '@/lib/api/clients';
-import { searchers } from '@/lib/api/searchers';
+import { searchers, toSearchOption } from '@/lib/api/searchers';
 import { toast } from 'sonner';
 
 interface Props {
@@ -63,7 +63,7 @@ export function RecipientQuickCreateDialog({ open, onClose, initialName, onCreat
       const c = res.data;
       if (c) {
         toast.success('Destinataire cree');
-        onCreated?.({ value: c.id, label: c.fullName, sublabel: c.phone });
+        onCreated?.(toSearchOption.client(c));
         reset();
         onClose();
       }
@@ -138,7 +138,7 @@ export function RecipientQuickCreateDialog({ open, onClose, initialName, onCreat
               label="Agence"
               value={field.value}
               onChange={(v) => field.onChange(v ?? '')}
-              search={(q, l) => searchers.agencies(q, l)}
+              search={searchers.agencies}
               error={errors.agencyId?.message}
               required
               placeholder="Selectionner une agence"

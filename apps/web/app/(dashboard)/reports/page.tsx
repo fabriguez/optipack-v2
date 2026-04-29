@@ -145,7 +145,7 @@ export default function ReportsPage() {
               placeholder="Toutes les agences"
               value={agencyId}
               onChange={(v) => setAgencyId(v ?? '')}
-              search={(q, l) => searchers.agencies(q, l)}
+              search={searchers.agencies}
               clearable
               className="w-64"
             />

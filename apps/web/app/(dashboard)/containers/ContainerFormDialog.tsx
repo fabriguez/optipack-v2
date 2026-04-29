@@ -121,7 +121,7 @@ export function ContainerFormDialog({ open, onClose }: ContainerFormDialogProps)
               label="Agence de depart"
               value={field.value}
               onChange={(v) => field.onChange(v ?? '')}
-              search={(q, l) => searchers.agencies(q, l)}
+              search={searchers.agencies}
               error={errors.departureAgencyId?.message}
               required
               placeholder="Selectionner"
@@ -137,7 +137,7 @@ export function ContainerFormDialog({ open, onClose }: ContainerFormDialogProps)
               label="Agence d'arrivee"
               value={field.value}
               onChange={(v) => field.onChange(v ?? '')}
-              search={(q, l) => searchers.agencies(q, l)}
+              search={searchers.agencies}
               error={errors.arrivalAgencyId?.message}
               required
               placeholder="Selectionner"
@@ -153,7 +153,7 @@ export function ContainerFormDialog({ open, onClose }: ContainerFormDialogProps)
               label="Route de transit (optionnel)"
               value={field.value || null}
               onChange={(v) => field.onChange(v ?? undefined)}
-              search={(q, l) => searchers.transitRoutes(q, l)}
+              search={searchers.transitRoutes}
               placeholder="Optionnel"
             />
           )}

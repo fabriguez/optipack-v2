@@ -12,7 +12,7 @@ import { AppSearchSelect, type SearchOption } from '@/components/ui/AppSearchSel
 import { AppSelect } from '@/components/ui/AppSelect';
 import { AppSwitch } from '@/components/ui/AppSwitch';
 import { useCreateParcel, useUpdateParcel } from '@/lib/hooks/useParcels';
-import { searchers } from '@/lib/api/searchers';
+import { searchers, toSearchOption } from '@/lib/api/searchers';
 import { ParcelCategoryValues } from '@transitsoftservices/shared';
 import { RecipientQuickCreateDialog } from './RecipientQuickCreateDialog';
 
@@ -84,21 +84,15 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
         warehouseId: parcel.warehouse?.id ?? '',
         transitRouteId: parcel.transitRoute?.id ?? '',
       });
-      if (parcel.client) {
-        setSelectedClient({ value: parcel.client.id, label: parcel.client.fullName, sublabel: parcel.client.phone });
-      }
-      if (parcel.recipient) {
-        setSelectedRecipient({ value: parcel.recipient.id, label: parcel.recipient.fullName, sublabel: parcel.recipient.phone });
-      }
-      if (parcel.warehouse) {
-        setSelectedWarehouse({
-          value: parcel.warehouse.id,
-          label: parcel.warehouse.name,
-          sublabel: parcel.warehouse.agency?.name ?? null,
-        });
-      }
+      if (parcel.client) setSelectedClient(toSearchOption.client(parcel.client));
+      if (parcel.recipient) setSelectedRecipient(toSearchOption.client(parcel.recipient));
+      if (parcel.warehouse) setSelectedWarehouse(toSearchOption.warehouse(parcel.warehouse));
       if (parcel.transitRoute) {
-        setSelectedRoute({ value: parcel.transitRoute.id, label: parcel.transitRoute.name, sublabel: parcel.transitRoute.type ?? null });
+        setSelectedRoute({
+          value: parcel.transitRoute.id,
+          label: parcel.transitRoute.name,
+          sublabel: parcel.transitRoute.type ?? null,
+        });
       }
       const hasW = parcel.weight !== null && parcel.weight !== undefined && Number(parcel.weight) > 0;
       const hasV = parcel.volume !== null && parcel.volume !== undefined && Number(parcel.volume) > 0;
@@ -108,21 +102,9 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
       if (defaultWarehouse) initial.warehouseId = defaultWarehouse.id;
       if (defaultClient) initial.clientId = defaultClient.id;
       reset(initial as CreateParcelInput);
-      setSelectedClient(
-        defaultClient
-          ? { value: defaultClient.id, label: defaultClient.fullName, sublabel: defaultClient.phone ?? null }
-          : null,
-      );
+      setSelectedClient(defaultClient ? toSearchOption.client(defaultClient) : null);
       setSelectedRecipient(null);
-      setSelectedWarehouse(
-        defaultWarehouse
-          ? {
-              value: defaultWarehouse.id,
-              label: defaultWarehouse.name,
-              sublabel: defaultWarehouse.agency?.name ?? null,
-            }
-          : null,
-      );
+      setSelectedWarehouse(defaultWarehouse ? toSearchOption.warehouse(defaultWarehouse) : null);
       setSelectedRoute(null);
       setMode('weight');
     }
@@ -224,7 +206,7 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
                   field.onChange(v);
                   if (!v) setSelectedClient(null);
                 }}
-                search={(q, l) => searchers.clients(q, l)}
+                search={searchers.clients}
                 selectedOption={selectedClient}
                 error={errors.clientId?.message}
                 required
@@ -245,7 +227,7 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
                   field.onChange(v ?? undefined);
                   if (!v) setSelectedRecipient(null);
                 }}
-                search={(q, l) => searchers.recipients(q, l)}
+                search={searchers.recipients}
                 selectedOption={selectedRecipient}
                 placeholder="Selectionner ou creer un destinataire"
                 createLabel="Creer le destinataire"
@@ -268,7 +250,7 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
                 label="Magasin"
                 value={field.value}
                 onChange={(v) => field.onChange(v ?? '')}
-                search={(q, l) => searchers.warehouses(q, l)}
+                search={searchers.warehouses}
                 selectedOption={selectedWarehouse}
                 error={errors.warehouseId?.message}
                 required
@@ -286,7 +268,7 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
                 label="Route de transit"
                 value={field.value}
                 onChange={(v) => field.onChange(v ?? '')}
-                search={(q, l) => searchers.transitRoutes(q, l)}
+                search={searchers.transitRoutes}
                 selectedOption={selectedRoute}
                 error={errors.transitRouteId?.message}
                 required
@@ -304,7 +286,7 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
                 label="Agence destination (optionnel)"
                 value={field.value || null}
                 onChange={(v) => field.onChange(v ?? null)}
-                search={(q, l) => searchers.agencies(q, l)}
+                search={searchers.agencies}
                 placeholder="Selectionner une agence de reception"
               />
             )}

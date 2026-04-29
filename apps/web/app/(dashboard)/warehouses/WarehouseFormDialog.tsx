@@ -10,7 +10,7 @@ import { AppButton } from '@/components/ui/AppButton';
 import { AppSearchSelect } from '@/components/ui/AppSearchSelect';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
-import { searchers } from '@/lib/api/searchers';
+import { searchers, toSearchOption } from '@/lib/api/searchers';
 import { toast } from 'sonner';
 
 interface Props {
@@ -78,12 +78,8 @@ export function WarehouseFormDialog({ open, onClose, defaultAgency }: Props) {
               label="Agence"
               value={field.value}
               onChange={(v) => field.onChange(v ?? '')}
-              search={(q, l) => searchers.agencies(q, l)}
-              selectedOption={
-                defaultAgency
-                  ? { value: defaultAgency.id, label: defaultAgency.name, sublabel: defaultAgency.city ?? null }
-                  : undefined
-              }
+              search={searchers.agencies}
+              selectedOption={defaultAgency ? toSearchOption.agency(defaultAgency) : undefined}
               error={errors.agencyId?.message}
               required
               disabled={!!defaultAgency}

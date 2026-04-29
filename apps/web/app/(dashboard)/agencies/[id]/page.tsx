@@ -68,6 +68,8 @@ export default function AgencyDetailPage({ params }: { params: Promise<{ id: str
   if (isLoading) return <DashboardSkeleton />;
   if (!agency) return <p className="p-6 text-gray-500">Agence introuvable</p>;
 
+  const agencyRef = { id: agency.id, name: agency.name, city: agency.city ?? null };
+
   const cash = cashData?.data;
 
   const warehouseColumns = [
@@ -201,17 +203,17 @@ export default function AgencyDetailPage({ params }: { params: Promise<{ id: str
         <WarehouseFormDialog
           open={showCreateWarehouse}
           onClose={() => setShowCreateWarehouse(false)}
-          defaultAgency={{ id: agency.id, name: agency.name, city: agency.city ?? null }}
+          defaultAgency={agencyRef}
         />
         <ClientFormDialog
           open={showCreateClient}
           onClose={() => setShowCreateClient(false)}
-          defaultAgency={{ id: agency.id, name: agency.name, city: agency.city ?? null }}
+          defaultAgency={agencyRef}
         />
         <EmployeeFormDialog
           open={showCreateEmployee}
           onClose={() => setShowCreateEmployee(false)}
-          defaultAgency={{ id: agency.id, name: agency.name, city: agency.city ?? null }}
+          defaultAgency={agencyRef}
         />
       </div>
     </PageTransition>

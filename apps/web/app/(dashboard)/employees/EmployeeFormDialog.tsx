@@ -7,7 +7,7 @@ import { AppInput } from '@/components/ui/AppInput';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppSearchSelect } from '@/components/ui/AppSearchSelect';
 import { AppPhoneInput } from '@/components/ui/AppPhoneInput';
-import { searchers } from '@/lib/api/searchers';
+import { searchers, toSearchOption } from '@/lib/api/searchers';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { toast } from 'sonner';
@@ -60,12 +60,8 @@ export function EmployeeFormDialog({ open, onClose, defaultAgency }: Props) {
               label="Agence"
               value={field.value as string | null | undefined}
               onChange={(v) => field.onChange(v ?? '')}
-              search={(q, l) => searchers.agencies(q, l)}
-              selectedOption={
-                defaultAgency
-                  ? { value: defaultAgency.id, label: defaultAgency.name, sublabel: defaultAgency.city ?? null }
-                  : undefined
-              }
+              search={searchers.agencies}
+              selectedOption={defaultAgency ? toSearchOption.agency(defaultAgency) : undefined}
               required
               disabled={!!defaultAgency}
               placeholder="Selectionner une agence"

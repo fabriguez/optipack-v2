@@ -51,7 +51,7 @@ export function DisbursementFormDialog({ open, onClose }: Props) {
               label="Agence"
               value={field.value}
               onChange={(v) => field.onChange(v ?? '')}
-              search={(q, l) => searchers.agencies(q, l)}
+              search={searchers.agencies}
               error={errors.agencyId?.message}
               required
               placeholder="Selectionner une agence"

@@ -72,7 +72,7 @@ export function PaymentFormDialog({ open, onClose, invoiceId }: Props) {
               label="Agence encaisseuse"
               value={field.value}
               onChange={(v) => field.onChange(v ?? '')}
-              search={(q, l) => searchers.agencies(q, l)}
+              search={searchers.agencies}
               error={errors.agencyId?.message}
               placeholder="Selectionner une agence"
             />
