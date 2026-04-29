@@ -25,8 +25,19 @@ export function ExpenseFormDialog({ open, onClose }: Props) {
   const onSubmit = (data: any) => { mutation.mutate({ ...data, amount: Number(data.amount) }); reset(); };
 
   return (
-    <AppDialog open={open} onClose={onClose} title="Nouvelle depense" size="md">
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+    <AppDialog
+      open={open}
+      onClose={onClose}
+      title="Nouvelle depense"
+      size="md"
+      footer={
+        <>
+          <AppButton variant="ghost" type="button" onClick={onClose}>Annuler</AppButton>
+          <AppButton type="submit" form="expense-form" loading={mutation.isPending}>Enregistrer</AppButton>
+        </>
+      }
+    >
+      <form id="expense-form" onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <AppInput label="Titre" {...register('title', { required: true })} />
         <AppInput label="Motif" {...register('reason', { required: true })} />
         <AppTextarea
@@ -53,10 +64,6 @@ export function ExpenseFormDialog({ open, onClose }: Props) {
           )}
         />
         <AppInput label="Montant" type="number" step="0.01" {...register('amount', { required: true })} />
-        <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-          <AppButton variant="ghost" type="button" onClick={onClose}>Annuler</AppButton>
-          <AppButton type="submit" loading={mutation.isPending}>Enregistrer</AppButton>
-        </div>
       </form>
     </AppDialog>
   );

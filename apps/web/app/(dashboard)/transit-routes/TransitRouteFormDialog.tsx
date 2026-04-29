@@ -35,8 +35,19 @@ export function TransitRouteFormDialog({ open, onClose }: Props) {
   const onSubmit = (data: CreateTransitRouteInput) => { mutation.mutate(data); reset(); };
 
   return (
-    <AppDialog open={open} onClose={onClose} title="Nouvelle route de transit" size="lg">
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+    <AppDialog
+      open={open}
+      onClose={onClose}
+      title="Nouvelle route de transit"
+      size="lg"
+      footer={
+        <>
+          <AppButton variant="ghost" type="button" onClick={onClose}>Annuler</AppButton>
+          <AppButton type="submit" form="transit-route-form" loading={mutation.isPending}>Creer</AppButton>
+        </>
+      }
+    >
+      <form id="transit-route-form" onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <AppInput label="Nom" {...register('name')} error={errors.name?.message} />
           <AppSelect label="Type" {...register('type')} error={errors.type?.message} options={[
@@ -98,10 +109,6 @@ export function TransitRouteFormDialog({ open, onClose }: Props) {
           <AppInput label="Prix par kg" type="number" step="0.01" {...register('pricePerKg', { valueAsNumber: true })} error={errors.pricePerKg?.message} />
           <AppInput label="Prix par m3" type="number" step="0.01" {...register('pricePerVolume', { valueAsNumber: true })} />
           <AppInput label="Delai estime (jours)" type="number" {...register('estimatedDurationDays', { valueAsNumber: true })} />
-        </div>
-        <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-          <AppButton variant="ghost" type="button" onClick={onClose}>Annuler</AppButton>
-          <AppButton type="submit" loading={mutation.isPending}>Creer</AppButton>
         </div>
       </form>
     </AppDialog>

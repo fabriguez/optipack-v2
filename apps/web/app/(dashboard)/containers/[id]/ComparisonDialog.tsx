@@ -120,7 +120,21 @@ export function ComparisonDialog({ open, onClose, containerId, containerDesignat
 
   return (
     <>
-      <AppDialog open={open} onClose={onClose} title={`Bordereau de comparaison - ${containerDesignation}`} size="xl">
+      <AppDialog
+        open={open}
+        onClose={onClose}
+        title={`Bordereau de comparaison - ${containerDesignation}`}
+        size="xl"
+        footer={
+          <>
+            <AppButton variant="ghost" onClick={onClose}>Fermer</AppButton>
+            <AppButton variant="outline" onClick={handlePrint}>
+              <Printer className="h-4 w-4" />
+              Imprimer / PDF
+            </AppButton>
+          </>
+        }
+      >
         {isLoading ? (
           <p className="p-4 text-sm text-gray-400">Chargement...</p>
         ) : !comparison ? (
@@ -200,13 +214,6 @@ export function ComparisonDialog({ open, onClose, containerId, containerDesignat
               </div>
             </AppCard>
 
-            <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-              <AppButton variant="ghost" onClick={onClose}>Fermer</AppButton>
-              <AppButton variant="outline" onClick={handlePrint}>
-                <Printer className="h-4 w-4" />
-                Imprimer / PDF
-              </AppButton>
-            </div>
           </div>
         )}
       </AppDialog>

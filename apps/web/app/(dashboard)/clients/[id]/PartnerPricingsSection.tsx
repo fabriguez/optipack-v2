@@ -118,7 +118,33 @@ export function PartnerPricingsSection({ clientId, isPartner }: Props) {
         </div>
       )}
 
-      <AppDialog open={open} onClose={() => setOpen(false)} title="Nouvelle tarification" size="md">
+      <AppDialog
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Nouvelle tarification"
+        size="md"
+        footer={
+          <>
+            <AppButton variant="ghost" onClick={() => setOpen(false)}>Annuler</AppButton>
+            <AppButton
+              onClick={() => {
+                if (!pricePerKg) {
+                  toast.error('Prix par kg requis');
+                  return;
+                }
+                createMut.mutate({
+                  transitRouteId: routeId,
+                  pricePerKg: Number(pricePerKg),
+                  pricePerVolume: pricePerVolume ? Number(pricePerVolume) : undefined,
+                });
+              }}
+              loading={createMut.isPending}
+            >
+              Enregistrer
+            </AppButton>
+          </>
+        }
+      >
         <div className="space-y-4">
           <AppSearchSelect
             label="Route de transit"
@@ -146,25 +172,6 @@ export function PartnerPricingsSection({ clientId, isPartner }: Props) {
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-            <AppButton variant="ghost" onClick={() => setOpen(false)}>Annuler</AppButton>
-            <AppButton
-              onClick={() => {
-                if (!pricePerKg) {
-                  toast.error('Prix par kg requis');
-                  return;
-                }
-                createMut.mutate({
-                  transitRouteId: routeId,
-                  pricePerKg: Number(pricePerKg),
-                  pricePerVolume: pricePerVolume ? Number(pricePerVolume) : undefined,
-                });
-              }}
-              loading={createMut.isPending}
-            >
-              Enregistrer
-            </AppButton>
-          </div>
         </div>
       </AppDialog>
 

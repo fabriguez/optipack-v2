@@ -40,8 +40,19 @@ export function PaymentFormDialog({ open, onClose, invoiceId }: Props) {
     }));
 
   return (
-    <AppDialog open={open} onClose={onClose} title="Enregistrer un paiement" size="md">
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+    <AppDialog
+      open={open}
+      onClose={onClose}
+      title="Enregistrer un paiement"
+      size="md"
+      footer={
+        <>
+          <AppButton variant="ghost" type="button" onClick={onClose}>Annuler</AppButton>
+          <AppButton type="submit" form="payment-form" loading={mutation.isPending}>Enregistrer</AppButton>
+        </>
+      }
+    >
+      <form id="payment-form" onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         {invoiceId ? (
           <AppInput label="Facture" value={invoiceId} disabled {...register('invoiceId')} />
         ) : (
@@ -74,10 +85,6 @@ export function PaymentFormDialog({ open, onClose, invoiceId }: Props) {
             { value: 'BANK_TRANSFER', label: 'Virement' }, { value: 'CARD', label: 'Carte' }, { value: 'CHECK', label: 'Cheque' },
           ]} placeholder="Selectionner" />
         <AppInput label="Reference transaction" {...register('transactionReference')} placeholder="Optionnel" />
-        <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-          <AppButton variant="ghost" type="button" onClick={onClose}>Annuler</AppButton>
-          <AppButton type="submit" loading={mutation.isPending}>Enregistrer</AppButton>
-        </div>
       </form>
     </AppDialog>
   );

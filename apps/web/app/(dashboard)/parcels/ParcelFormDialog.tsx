@@ -33,11 +33,15 @@ interface Props {
   open: boolean;
   onClose: () => void;
   parcel?: ParcelLike | null; // si fourni : mode edition
+  /** Pre-selection (lock) du magasin — utilise depuis la page detail magasin */
+  defaultWarehouse?: { id: string; name: string; agency?: { name?: string | null } | null } | null;
+  /** Pre-selection (lock) du client — utilise depuis la page detail client */
+  defaultClient?: { id: string; fullName: string; phone?: string | null } | null;
 }
 
 type Mode = 'weight' | 'volume' | 'both';
 
-export function ParcelFormDialog({ open, onClose, parcel }: Props) {
+export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defaultClient }: Props) {
   const isEdit = !!parcel;
   const createMutation = useCreateParcel();
   const updateMutation = useUpdateParcel();
@@ -100,14 +104,29 @@ export function ParcelFormDialog({ open, onClose, parcel }: Props) {
       const hasV = parcel.volume !== null && parcel.volume !== undefined && Number(parcel.volume) > 0;
       setMode(hasW && hasV ? 'both' : hasV ? 'volume' : 'weight');
     } else {
-      reset({});
-      setSelectedClient(null);
+      const initial: Partial<CreateParcelInput> = {};
+      if (defaultWarehouse) initial.warehouseId = defaultWarehouse.id;
+      if (defaultClient) initial.clientId = defaultClient.id;
+      reset(initial as CreateParcelInput);
+      setSelectedClient(
+        defaultClient
+          ? { value: defaultClient.id, label: defaultClient.fullName, sublabel: defaultClient.phone ?? null }
+          : null,
+      );
       setSelectedRecipient(null);
-      setSelectedWarehouse(null);
+      setSelectedWarehouse(
+        defaultWarehouse
+          ? {
+              value: defaultWarehouse.id,
+              label: defaultWarehouse.name,
+              sublabel: defaultWarehouse.agency?.name ?? null,
+            }
+          : null,
+      );
       setSelectedRoute(null);
       setMode('weight');
     }
-  }, [open, parcel, reset]);
+  }, [open, parcel, reset, defaultWarehouse, defaultClient]);
 
   const onSubmit = async (data: CreateParcelInput) => {
     if (mode === 'weight') data.volume = undefined;
@@ -135,8 +154,27 @@ export function ParcelFormDialog({ open, onClose, parcel }: Props) {
   };
 
   return (
-    <AppDialog open={open} onClose={onClose} title={isEdit ? 'Modifier le colis' : 'Nouveau colis'} size="lg">
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+    <AppDialog
+      open={open}
+      onClose={onClose}
+      title={isEdit ? 'Modifier le colis' : 'Nouveau colis'}
+      size="lg"
+      footer={
+        <>
+          <AppButton variant="ghost" type="button" onClick={onClose}>
+            Annuler
+          </AppButton>
+          <AppButton
+            type="submit"
+            form="parcel-form"
+            loading={createMutation.isPending || updateMutation.isPending}
+          >
+            {isEdit ? 'Enregistrer les modifications' : 'Enregistrer le colis'}
+          </AppButton>
+        </>
+      }
+    >
+      <form id="parcel-form" onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <AppInput label="Designation" {...register('designation')} error={errors.designation?.message} />
           <AppInput label="Destination" {...register('destination')} error={errors.destination?.message} />
@@ -190,6 +228,7 @@ export function ParcelFormDialog({ open, onClose, parcel }: Props) {
                 selectedOption={selectedClient}
                 error={errors.clientId?.message}
                 required
+                disabled={!!defaultClient}
                 placeholder="Selectionner un client"
               />
             )}
@@ -233,6 +272,7 @@ export function ParcelFormDialog({ open, onClose, parcel }: Props) {
                 selectedOption={selectedWarehouse}
                 error={errors.warehouseId?.message}
                 required
+                disabled={!!defaultWarehouse}
                 placeholder="Selectionner un magasin"
               />
             )}
@@ -339,14 +379,6 @@ export function ParcelFormDialog({ open, onClose, parcel }: Props) {
           </div>
         )}
 
-        <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-          <AppButton variant="ghost" type="button" onClick={onClose}>
-            Annuler
-          </AppButton>
-          <AppButton type="submit" loading={createMutation.isPending || updateMutation.isPending}>
-            {isEdit ? 'Enregistrer les modifications' : 'Enregistrer le colis'}
-          </AppButton>
-        </div>
       </form>
 
       <RecipientQuickCreateDialog

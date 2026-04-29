@@ -69,7 +69,21 @@ export function AppSearchSelect({
   const [results, setResults] = useState<SearchOption[]>(options ?? []);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [triggerWidth, setTriggerWidth] = useState<number | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+
+  // Mesure la largeur du trigger pour aligner la largeur du popover (Base UI
+  // n'expose pas de CSS var trigger-width comme Radix).
+  useEffect(() => {
+    if (!triggerRef.current) return;
+    const el = triggerRef.current;
+    const update = () => setTriggerWidth(el.getBoundingClientRect().width);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const selected = useMemo(() => {
     if (!value) return null;
@@ -154,6 +168,7 @@ export function AppSearchSelect({
       )}
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger
+          ref={triggerRef}
           disabled={disabled}
           className={cn(
             'flex h-11 w-full items-center justify-between gap-2 rounded-xl border border-input bg-background px-3 text-left text-sm ring-offset-background',
@@ -183,7 +198,9 @@ export function AppSearchSelect({
         </PopoverTrigger>
         <PopoverContent
           align="start"
-          className="z-50 w-(--radix-popover-trigger-width) p-0"
+          sideOffset={4}
+          className="z-50 p-0"
+          style={triggerWidth ? { width: triggerWidth } : undefined}
         >
           <div className="border-b p-2">
             <Input

@@ -30,8 +30,19 @@ export function FundTransferFormDialog({ open, onClose }: Props) {
   const onSubmit = (data: CreateFundTransferInput) => { mutation.mutate(data); reset(); };
 
   return (
-    <AppDialog open={open} onClose={onClose} title="Nouveau transfert de fonds" size="md">
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+    <AppDialog
+      open={open}
+      onClose={onClose}
+      title="Nouveau transfert de fonds"
+      size="md"
+      footer={
+        <>
+          <AppButton variant="ghost" type="button" onClick={onClose}>Annuler</AppButton>
+          <AppButton type="submit" form="fund-transfer-form" loading={mutation.isPending}>Creer</AppButton>
+        </>
+      }
+    >
+      <form id="fund-transfer-form" onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <Controller
           name="sourceAgencyId"
           control={control}
@@ -51,10 +62,6 @@ export function FundTransferFormDialog({ open, onClose }: Props) {
           options={[{ value: 'HQ', label: 'Siege' }, { value: 'BANK', label: 'Banque' }, { value: 'AGENCY', label: 'Autre agence' }]} placeholder="Selectionner" />
         <AppInput label="Mode de transfert" {...register('transferMethod')} error={errors.transferMethod?.message} placeholder="Virement, especes..." />
         <AppInput label="Montant" type="number" step="0.01" {...register('amount', { valueAsNumber: true })} error={errors.amount?.message} />
-        <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-          <AppButton variant="ghost" type="button" onClick={onClose}>Annuler</AppButton>
-          <AppButton type="submit" loading={mutation.isPending}>Creer</AppButton>
-        </div>
       </form>
     </AppDialog>
   );

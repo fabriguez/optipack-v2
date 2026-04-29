@@ -303,7 +303,11 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
         />
       </div>
 
-      <ParcelFormDialog open={showCreateParcel} onClose={() => setShowCreateParcel(false)} />
+      <ParcelFormDialog
+        open={showCreateParcel}
+        onClose={() => setShowCreateParcel(false)}
+        defaultClient={{ id: client.id, fullName: client.fullName, phone: client.phone ?? null }}
+      />
     </PageTransition>
   );
 }

@@ -35,7 +35,25 @@ export function NewConversationDialog({ open, onClose, onCreated }: NewConversat
   };
 
   return (
-    <AppDialog open={open} onClose={onClose} title="Nouvelle conversation">
+    <AppDialog
+      open={open}
+      onClose={onClose}
+      title="Nouvelle conversation"
+      footer={
+        <>
+          <AppButton variant="ghost" onClick={onClose}>
+            Annuler
+          </AppButton>
+          <AppButton
+            onClick={handleSubmit}
+            loading={createMutation.isPending}
+            disabled={!clientId || !agencyId}
+          >
+            Creer
+          </AppButton>
+        </>
+      }
+    >
       <div className="space-y-4">
         <AppSearchSelect
           label="Client"
@@ -53,18 +71,6 @@ export function NewConversationDialog({ open, onClose, onCreated }: NewConversat
           search={(q, l) => searchers.agencies(q, l)}
           required
         />
-        <div className="flex justify-end gap-3 pt-2">
-          <AppButton variant="ghost" onClick={onClose}>
-            Annuler
-          </AppButton>
-          <AppButton
-            onClick={handleSubmit}
-            loading={createMutation.isPending}
-            disabled={!clientId || !agencyId}
-          >
-            Creer
-          </AppButton>
-        </div>
       </div>
     </AppDialog>
   );

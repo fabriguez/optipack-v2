@@ -54,8 +54,18 @@ export function AgencyFormDialog({ open, onClose, agency }: AgencyFormDialogProp
       onClose={onClose}
       title={isEdit ? 'Modifier l\'agence' : 'Nouvelle agence'}
       size="lg"
+      footer={
+        <>
+          <AppButton variant="ghost" type="button" onClick={onClose}>
+            Annuler
+          </AppButton>
+          <AppButton type="submit" form="agency-form" loading={isSubmitting}>
+            {isEdit ? 'Enregistrer' : 'Creer'}
+          </AppButton>
+        </>
+      }
     >
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      <form id="agency-form" onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <AppInput label="Nom de l'agence" {...register('name')} error={errors.name?.message} />
           <Controller
@@ -94,15 +104,6 @@ export function AgencyFormDialog({ open, onClose, agency }: AgencyFormDialogProp
           />
           <AppInput label="Email" type="email" {...register('email')} error={errors.email?.message} />
           <AppInput label="Lien Google Maps" {...register('googleMapsLink')} error={errors.googleMapsLink?.message} />
-        </div>
-
-        <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-          <AppButton variant="ghost" type="button" onClick={onClose}>
-            Annuler
-          </AppButton>
-          <AppButton type="submit" loading={isSubmitting}>
-            {isEdit ? 'Enregistrer' : 'Creer'}
-          </AppButton>
         </div>
       </form>
     </AppDialog>

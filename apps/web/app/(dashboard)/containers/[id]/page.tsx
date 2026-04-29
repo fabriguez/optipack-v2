@@ -402,7 +402,21 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
         />
 
         {/* Load parcels dialog */}
-        <AppDialog open={showLoadDialog} onClose={() => { setShowLoadDialog(false); setSelectedParcelIds([]); }} title="Charger des colis" size="lg">
+        <AppDialog
+          open={showLoadDialog}
+          onClose={() => { setShowLoadDialog(false); setSelectedParcelIds([]); }}
+          title="Charger des colis"
+          size="lg"
+          footer={
+            <>
+              <AppButton variant="ghost" onClick={() => { setShowLoadDialog(false); setSelectedParcelIds([]); }}>Annuler</AppButton>
+              <AppButton onClick={handleLoadParcels} loading={loadMutation.isPending} disabled={selectedParcelIds.length === 0}>
+                <Package className="h-4 w-4" />
+                Charger {selectedParcelIds.length} colis
+              </AppButton>
+            </>
+          }
+        >
           <div className="space-y-4">
             <p className="text-xs text-gray-500">
               Seuls les colis du meme type ({container.type}) peuvent etre charges
@@ -457,13 +471,6 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
             {selectedParcelIds.length > 0 && (
               <p className="text-sm text-primary-700 font-medium">{selectedParcelIds.length} colis selectionne(s)</p>
             )}
-            <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-              <AppButton variant="ghost" onClick={() => { setShowLoadDialog(false); setSelectedParcelIds([]); }}>Annuler</AppButton>
-              <AppButton onClick={handleLoadParcels} loading={loadMutation.isPending} disabled={selectedParcelIds.length === 0}>
-                <Package className="h-4 w-4" />
-                Charger {selectedParcelIds.length} colis
-              </AppButton>
-            </div>
           </div>
         </AppDialog>
 
@@ -473,6 +480,15 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
           onClose={() => setUnloadTarget(null)}
           title={unloadTarget ? `Decharger ${unloadTarget.designation}` : 'Decharger'}
           size="md"
+          footer={
+            <>
+              <AppButton variant="ghost" onClick={() => setUnloadTarget(null)}>Annuler</AppButton>
+              <AppButton onClick={handleUnloadConfirm} loading={unloading}>
+                <PackageMinus className="h-4 w-4" />
+                Decharger
+              </AppButton>
+            </>
+          }
         >
           <div className="space-y-4">
             <div className="flex gap-2">
@@ -521,14 +537,6 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
               value={unloadComment}
               onChange={(e) => setUnloadComment(e.target.value)}
             />
-
-            <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-              <AppButton variant="ghost" onClick={() => setUnloadTarget(null)}>Annuler</AppButton>
-              <AppButton onClick={handleUnloadConfirm} loading={unloading}>
-                <PackageMinus className="h-4 w-4" />
-                Decharger
-              </AppButton>
-            </div>
           </div>
         </AppDialog>
 

@@ -54,8 +54,23 @@ export function ContainerFormDialog({ open, onClose }: ContainerFormDialogProps)
       ];
 
   return (
-    <AppDialog open={open} onClose={onClose} title="Nouveau conteneur" size="md">
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+    <AppDialog
+      open={open}
+      onClose={onClose}
+      title="Nouveau conteneur"
+      size="md"
+      footer={
+        <>
+          <AppButton variant="ghost" type="button" onClick={onClose}>
+            Annuler
+          </AppButton>
+          <AppButton type="submit" form="container-form" loading={createMutation.isPending}>
+            Creer
+          </AppButton>
+        </>
+      }
+    >
+      <form id="container-form" onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <AppInput label="Designation" {...register('designation')} error={errors.designation?.message} />
 
         <div className="flex items-center justify-between rounded-xl bg-primary-50 p-3">
@@ -144,14 +159,6 @@ export function ContainerFormDialog({ open, onClose }: ContainerFormDialogProps)
           )}
         />
 
-        <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-          <AppButton variant="ghost" type="button" onClick={onClose}>
-            Annuler
-          </AppButton>
-          <AppButton type="submit" loading={createMutation.isPending}>
-            Creer
-          </AppButton>
-        </div>
       </form>
     </AppDialog>
   );

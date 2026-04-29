@@ -219,7 +219,15 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
         </AppCard>
       </div>
 
-      <ParcelFormDialog open={showCreateParcel} onClose={() => setShowCreateParcel(false)} />
+      <ParcelFormDialog
+        open={showCreateParcel}
+        onClose={() => setShowCreateParcel(false)}
+        defaultWarehouse={
+          warehouse
+            ? { id: warehouse.id, name: warehouse.name, agency: warehouse.agency ?? null }
+            : null
+        }
+      />
 
       {/* Transfer dialog */}
       <AppDialog
@@ -227,6 +235,12 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
         onClose={() => { setTransferParcel(null); setTargetWarehouseId(''); }}
         title="Transferer le colis"
         size="md"
+        footer={
+          <>
+            <AppButton variant="ghost" onClick={() => { setTransferParcel(null); setTargetWarehouseId(''); }}>Annuler</AppButton>
+            <AppButton onClick={handleTransferParcel} disabled={!targetWarehouseId}>Transferer</AppButton>
+          </>
+        }
       >
         <div className="space-y-4">
           <p className="text-sm text-gray-600">
@@ -239,10 +253,6 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
             onValueChange={setTargetWarehouseId}
             placeholder="Selectionner un magasin"
           />
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-            <AppButton variant="ghost" onClick={() => { setTransferParcel(null); setTargetWarehouseId(''); }}>Annuler</AppButton>
-            <AppButton onClick={handleTransferParcel} disabled={!targetWarehouseId}>Transferer</AppButton>
-          </div>
         </div>
       </AppDialog>
 

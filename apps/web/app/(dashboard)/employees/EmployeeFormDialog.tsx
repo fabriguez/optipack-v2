@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { AppDialog } from '@/components/ui/AppDialog';
 import { AppInput } from '@/components/ui/AppInput';
@@ -11,9 +12,14 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { toast } from 'sonner';
 
-interface Props { open: boolean; onClose: () => void; }
+interface Props {
+  open: boolean;
+  onClose: () => void;
+  /** Pre-selection (lock) de l'agence — utilise depuis la page detail agence */
+  defaultAgency?: { id: string; name: string; city?: string | null } | null;
+}
 
-export function EmployeeFormDialog({ open, onClose }: Props) {
+export function EmployeeFormDialog({ open, onClose, defaultAgency }: Props) {
   const qc = useQueryClient();
   const mutation = useMutation({
     mutationFn: (data: any) => apiClient.post('/employees', data).then((r) => r.data),
@@ -24,9 +30,26 @@ export function EmployeeFormDialog({ open, onClose }: Props) {
   const { register, handleSubmit, reset, control } = useForm();
   const onSubmit = (data: any) => { mutation.mutate({ ...data, baseSalary: Number(data.baseSalary || 0) }); reset(); };
 
+  useEffect(() => {
+    if (open) {
+      reset(defaultAgency ? { agencyId: defaultAgency.id } : {});
+    }
+  }, [open, defaultAgency, reset]);
+
   return (
-    <AppDialog open={open} onClose={onClose} title="Nouvel employe" size="md">
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+    <AppDialog
+      open={open}
+      onClose={onClose}
+      title="Nouvel employe"
+      size="md"
+      footer={
+        <>
+          <AppButton variant="ghost" type="button" onClick={onClose}>Annuler</AppButton>
+          <AppButton type="submit" form="employee-form" loading={mutation.isPending}>Creer</AppButton>
+        </>
+      }
+    >
+      <form id="employee-form" onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <AppInput label="Nom complet" {...register('fullName', { required: true })} />
         <Controller
           name="agencyId"
@@ -38,7 +61,13 @@ export function EmployeeFormDialog({ open, onClose }: Props) {
               value={field.value as string | null | undefined}
               onChange={(v) => field.onChange(v ?? '')}
               search={(q, l) => searchers.agencies(q, l)}
+              selectedOption={
+                defaultAgency
+                  ? { value: defaultAgency.id, label: defaultAgency.name, sublabel: defaultAgency.city ?? null }
+                  : undefined
+              }
               required
+              disabled={!!defaultAgency}
               placeholder="Selectionner une agence"
             />
           )}
@@ -57,10 +86,6 @@ export function EmployeeFormDialog({ open, onClose }: Props) {
         />
         <AppInput label="N. identite" {...register('idNumber')} />
         <AppInput label="Salaire de base" type="number" {...register('baseSalary')} />
-        <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-          <AppButton variant="ghost" type="button" onClick={onClose}>Annuler</AppButton>
-          <AppButton type="submit" loading={mutation.isPending}>Creer</AppButton>
-        </div>
       </form>
     </AppDialog>
   );

@@ -30,8 +30,19 @@ export function DisbursementFormDialog({ open, onClose }: Props) {
   const onSubmit = (data: CreateDisbursementInput) => { mutation.mutate(data); reset(); };
 
   return (
-    <AppDialog open={open} onClose={onClose} title="Nouveau bon de decaissement" size="md">
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+    <AppDialog
+      open={open}
+      onClose={onClose}
+      title="Nouveau bon de decaissement"
+      size="md"
+      footer={
+        <>
+          <AppButton variant="ghost" type="button" onClick={onClose}>Annuler</AppButton>
+          <AppButton type="submit" form="disbursement-form" loading={mutation.isPending}>Creer</AppButton>
+        </>
+      }
+    >
+      <form id="disbursement-form" onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <Controller
           name="agencyId"
           control={control}
@@ -57,10 +68,6 @@ export function DisbursementFormDialog({ open, onClose }: Props) {
         <AppInput label="Ordonnateur" {...register('orderer')} error={errors.orderer?.message} />
         <AppInput label="Montant" type="number" step="0.01" {...register('amount', { valueAsNumber: true })} error={errors.amount?.message} />
         <AppInput label="Montant en lettres" {...register('amountInWords')} error={errors.amountInWords?.message} />
-        <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-          <AppButton variant="ghost" type="button" onClick={onClose}>Annuler</AppButton>
-          <AppButton type="submit" loading={mutation.isPending}>Creer</AppButton>
-        </div>
       </form>
     </AppDialog>
   );

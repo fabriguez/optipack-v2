@@ -74,8 +74,23 @@ export function RecipientQuickCreateDialog({ open, onClose, initialName, onCreat
   };
 
   return (
-    <AppDialog open={open} onClose={onClose} title="Nouveau destinataire" size="md">
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+    <AppDialog
+      open={open}
+      onClose={onClose}
+      title="Nouveau destinataire"
+      size="md"
+      footer={
+        <>
+          <AppButton variant="ghost" type="button" onClick={onClose} disabled={submitting}>
+            Annuler
+          </AppButton>
+          <AppButton type="submit" form="recipient-quick-form" loading={submitting}>
+            Creer le destinataire
+          </AppButton>
+        </>
+      }
+    >
+      <form id="recipient-quick-form" onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <p className="text-xs text-gray-500">
           Le destinataire est ajoute a la liste des clients et pourra aussi etre utilise comme
           expediteur plus tard.
@@ -131,14 +146,6 @@ export function RecipientQuickCreateDialog({ open, onClose, initialName, onCreat
           )}
         />
 
-        <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-          <AppButton variant="ghost" type="button" onClick={onClose} disabled={submitting}>
-            Annuler
-          </AppButton>
-          <AppButton type="submit" loading={submitting}>
-            Creer le destinataire
-          </AppButton>
-        </div>
       </form>
     </AppDialog>
   );

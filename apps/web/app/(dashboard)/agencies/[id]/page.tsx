@@ -198,9 +198,21 @@ export default function AgencyDetailPage({ params }: { params: Promise<{ id: str
 
         {/* Dialogs */}
         <AgencyFormDialog open={showEdit} onClose={() => setShowEdit(false)} agency={agency} />
-        <WarehouseFormDialog open={showCreateWarehouse} onClose={() => setShowCreateWarehouse(false)} />
-        <ClientFormDialog open={showCreateClient} onClose={() => setShowCreateClient(false)} />
-        <EmployeeFormDialog open={showCreateEmployee} onClose={() => setShowCreateEmployee(false)} />
+        <WarehouseFormDialog
+          open={showCreateWarehouse}
+          onClose={() => setShowCreateWarehouse(false)}
+          defaultAgency={{ id: agency.id, name: agency.name, city: agency.city ?? null }}
+        />
+        <ClientFormDialog
+          open={showCreateClient}
+          onClose={() => setShowCreateClient(false)}
+          defaultAgency={{ id: agency.id, name: agency.name, city: agency.city ?? null }}
+        />
+        <EmployeeFormDialog
+          open={showCreateEmployee}
+          onClose={() => setShowCreateEmployee(false)}
+          defaultAgency={{ id: agency.id, name: agency.name, city: agency.city ?? null }}
+        />
       </div>
     </PageTransition>
   );

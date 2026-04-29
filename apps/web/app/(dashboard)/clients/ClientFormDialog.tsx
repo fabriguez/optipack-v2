@@ -15,9 +15,11 @@ import { searchers } from '@/lib/api/searchers';
 interface ClientFormDialogProps {
   open: boolean;
   onClose: () => void;
+  /** Pre-selection (lock) de l'agence — utilise depuis la page detail agence */
+  defaultAgency?: { id: string; name: string; city?: string | null } | null;
 }
 
-export function ClientFormDialog({ open, onClose }: ClientFormDialogProps) {
+export function ClientFormDialog({ open, onClose, defaultAgency }: ClientFormDialogProps) {
   const createMutation = useCreateClient();
 
   const {
@@ -32,6 +34,7 @@ export function ClientFormDialog({ open, onClose }: ClientFormDialogProps) {
       clientType: 'INDIVIDUAL',
       loyaltyTier: 'STANDARD',
       isActive: true,
+      agencyId: defaultAgency?.id,
     },
   });
 
@@ -42,8 +45,19 @@ export function ClientFormDialog({ open, onClose }: ClientFormDialogProps) {
   };
 
   return (
-    <AppDialog open={open} onClose={onClose} title="Nouveau client" size="md">
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+    <AppDialog
+      open={open}
+      onClose={onClose}
+      title="Nouveau client"
+      size="md"
+      footer={
+        <>
+          <AppButton variant="ghost" type="button" onClick={onClose}>Annuler</AppButton>
+          <AppButton type="submit" form="client-form" loading={createMutation.isPending}>Creer</AppButton>
+        </>
+      }
+    >
+      <form id="client-form" onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <AppInput label="Nom complet" {...register('fullName')} error={errors.fullName?.message} />
         <Controller
           name="phone"
@@ -105,17 +119,19 @@ export function ClientFormDialog({ open, onClose }: ClientFormDialogProps) {
               value={field.value}
               onChange={(v) => field.onChange(v ?? '')}
               search={(q, l) => searchers.agencies(q, l)}
+              selectedOption={
+                defaultAgency
+                  ? { value: defaultAgency.id, label: defaultAgency.name, sublabel: defaultAgency.city ?? null }
+                  : undefined
+              }
               error={errors.agencyId?.message}
               required
+              disabled={!!defaultAgency}
               placeholder="Selectionner une agence"
             />
           )}
         />
 
-        <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-          <AppButton variant="ghost" type="button" onClick={onClose}>Annuler</AppButton>
-          <AppButton type="submit" loading={createMutation.isPending}>Creer</AppButton>
-        </div>
       </form>
     </AppDialog>
   );

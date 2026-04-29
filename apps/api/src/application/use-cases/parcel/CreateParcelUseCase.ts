@@ -68,20 +68,47 @@ export class CreateParcelUseCase {
 
     const trackingNumber = generateTrackingNumber();
 
-    const invoiceCount = await this.invoiceRepo.countByDate(warehouse.agencyId, new Date());
-    const invoiceRef = generateReference('FAC', invoiceCount + 1);
-
-    const invoice = await this.invoiceRepo.create({
-      reference: invoiceRef,
-      totalAmount: pricing.basePrice,
-      discount: pricing.discountAmount,
-      tva: 0,
-      netAmount: pricing.finalPrice,
-      paidAmount: 0,
-      balance: pricing.finalPrice,
-      client: { connect: { id: client.id } },
-      agency: { connect: { id: warehouse.agencyId } },
-    });
+    // Race-safe : si la reference est deja prise (countByDate non-atomique),
+    // on retente jusqu'a 5x avec un compteur incremente. Au-dela on suffix random.
+    let invoiceCount = await this.invoiceRepo.countByDate(warehouse.agencyId, new Date());
+    let invoice;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const ref = generateReference('FAC', invoiceCount + 1 + attempt);
+      try {
+        invoice = await this.invoiceRepo.create({
+          reference: ref,
+          totalAmount: pricing.basePrice,
+          discount: pricing.discountAmount,
+          tva: 0,
+          netAmount: pricing.finalPrice,
+          paidAmount: 0,
+          balance: pricing.finalPrice,
+          client: { connect: { id: client.id } },
+          agency: { connect: { id: warehouse.agencyId } },
+        });
+        break;
+      } catch (err: unknown) {
+        const code = (err as { code?: string })?.code;
+        if (code !== 'P2002') throw err;
+        // Re-fetch et boucle
+        invoiceCount = await this.invoiceRepo.countByDate(warehouse.agencyId, new Date());
+      }
+    }
+    if (!invoice) {
+      // Fallback : reference avec suffix random pour garantir l'unicite
+      const fallback = `${generateReference('FAC', invoiceCount + 1)}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+      invoice = await this.invoiceRepo.create({
+        reference: fallback,
+        totalAmount: pricing.basePrice,
+        discount: pricing.discountAmount,
+        tva: 0,
+        netAmount: pricing.finalPrice,
+        paidAmount: 0,
+        balance: pricing.finalPrice,
+        client: { connect: { id: client.id } },
+        agency: { connect: { id: warehouse.agencyId } },
+      });
+    }
 
     const parcel = await this.parcelRepo.create({
       organizationId: client.organizationId,
