@@ -6,13 +6,21 @@ import { RefreshTokenUseCase } from '../../application/use-cases/auth/RefreshTok
 import { GetMeUseCase } from '../../application/use-cases/auth/GetMeUseCase';
 import { AuthenticationError } from '../../domain/errors/BusinessError';
 
-const DEFAULT_ORG_ID = '00000000-0000-4000-a000-000000000001';
-
+// Phase 0.2 : multi-tenant. Le seed initial du tenant cree son premier admin avec
+// un organizationId fourni. Les invitations ulterieures viennent d'un user authentifie
+// qui partage son organizationId au nouveau user.
 export class AuthController {
   static async register(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(RegisterUseCase);
-      const result = await useCase.execute(req.body, DEFAULT_ORG_ID);
+      // organizationId : prio body (seed orchestrator), sinon user authentifie, sinon erreur.
+      const orgId =
+        (req.body?.organizationId as string | undefined) ||
+        req.user?.organizationId;
+      if (!orgId) {
+        throw new AuthenticationError('organizationId requis pour creer un user');
+      }
+      const result = await useCase.execute(req.body, orgId);
       res.status(201).json({ success: true, data: result });
     } catch (err) {
       next(err);

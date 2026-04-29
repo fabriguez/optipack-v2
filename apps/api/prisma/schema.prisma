@@ -18,8 +18,17 @@ model Organization {
   phone           String?
   email           String?
   logoUrl         String?
+  // Branding tenant : controle par l'admin du tenant via /settings/branding
+  primaryColor    String   @default("#1B5E20")  // primary-900 (vert fonce)
+  secondaryColor  String   @default("#4CAF50")  // primary-500 (vert moyen)
+  accentColor     String   @default("#E8F5E9")  // primary-50 (vert clair)
+  // Modules actives pour ce tenant. Vide = tous actifs (compat ascendante).
+  enabledModules  String[] @default([])
   defaultCurrency String   @default("XAF")
   defaultLanguage String   @default("fr")
+  supportEmail    String?
+  // Slug unique pour matcher subdomain (acme.transitsoftservices.com)
+  slug            String?  @unique
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -62,9 +71,9 @@ model Agency {
   userAgencies          UserAgency[]
   employees             Employee[]
   clients               Client[]
-  recipients            Recipient[]
   departureContainers   Container[]           @relation("DepartureAgency")
   arrivalContainers     Container[]           @relation("ArrivalAgency")
+  parcelsAsDestination  Parcel[]              @relation("ParcelDestinationAgency")
   invoices              Invoice[]
   payments              Payment[]
   cashRegisters         AgencyCashRegister[]
@@ -258,7 +267,8 @@ model Client {
 
   organization        Organization[]
   agency              Agency               @relation(fields: [agencyId], references: [id])
-  parcels             Parcel[]
+  parcels             Parcel[]             @relation("ParcelClient")
+  parcelsAsRecipient  Parcel[]             @relation("ParcelRecipient")
   invoices            Invoice[]
   debts               Debt[]
   loyaltyTransactions LoyaltyTransaction[]
@@ -306,22 +316,10 @@ model PartnerPricing {
   @@map("partner_pricings")
 }
 
-model Recipient {
-  id        String   @id @default(uuid())
-  agencyId  String
-  fullName  String
-  phone     String
-  email     String?
-  idNumber  String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  agency  Agency   @relation(fields: [agencyId], references: [id])
-  parcels Parcel[]
-
-  @@index([agencyId])
-  @@map("recipients")
-}
+// NOTE : ancien modele Recipient fusionne dans Client.
+// Un client peut maintenant etre a la fois expediteur (Parcel.client) et
+// destinataire (Parcel.recipient via la meme table). Les anciens recipients
+// ont ete migres en Client (cf. migration *_merge_recipients_into_clients).
 
 // ============================================================
 // ROUTES DE TRANSIT
@@ -364,10 +362,13 @@ enum TransitType {
 
 model Container {
   id                   String          @id @default(uuid())
-  designation          String          @unique
+  // organizationId pour isolation multi-tenant
+  organizationId       String
+  designation          String
   type                 TransitType
   isForwarding         Boolean         @default(false)
   capacity             Decimal         @db.Decimal(15, 2)
+  // currentLoad : valeur snapshot, peut driver. Repository la recalcule a la lecture.
   currentLoad          Decimal         @default(0) @db.Decimal(15, 2)
   transitRouteId       String?
   departureAgencyId    String
@@ -394,19 +395,22 @@ model Container {
   routingTarget    InterAgencyRouting[]  @relation("TargetContainer")
   discrepancies    ManifestDiscrepancy[]
 
+  @@unique([organizationId, designation])
+  @@index([organizationId])
   @@index([departureAgencyId])
   @@index([arrivalAgencyId])
   @@index([status])
   @@map("containers")
 }
 
+// Cycle de vie simplifie a 5 statuts (audit fix #3) :
+// EMPTY -> LOADING -> IN_TRANSIT -> RECEIVED -> UNLOADED (terminal)
+// Les anciens ARRIVED + UNLOADING sont migres vers RECEIVED.
 enum ContainerStatus {
   EMPTY
   LOADING
   IN_TRANSIT
-  ARRIVED
   RECEIVED
-  UNLOADING
   UNLOADED
 }
 
@@ -416,6 +420,8 @@ enum ContainerStatus {
 
 model Parcel {
   id                  String       @id @default(uuid())
+  // organizationId : isolation multi-tenant
+  organizationId      String
   trackingNumber      String       @unique
   designation         String
   weight              Decimal?     @db.Decimal(15, 3)
@@ -424,12 +430,24 @@ model Parcel {
   imageUrl            String?
   qrCodeUrl           String?
   origin              String?
+  // Destination structuree (audit fix #1) :
+  // - destination = ville d'arrivee (legacy / pre-rempli depuis transitRoute.arrivalCity)
+  // - destinationAgencyId = agence physique de reception (peut etre NULL si livraison directe)
+  // - destinationAddress = adresse precise libre (rue, quartier)
   destination         String
+  destinationAgencyId String?
+  destinationAddress  String?
   observation         String?
   originalObservation String?
   status              ParcelStatus @default(IN_STOCK)
   isPresent           Boolean      @default(true)
   price               Decimal      @default(0) @db.Decimal(15, 2)
+
+  // Categorie + flags metiers (audit fix #10)
+  category       ParcelCategory @default(STANDARD)
+  isFragile      Boolean        @default(false)
+  isHazardous    Boolean        @default(false)
+  declaredValue  Decimal?       @db.Decimal(15, 2)  // pour assurance
 
   clientId            String
   recipientId         String?
@@ -438,7 +456,8 @@ model Parcel {
   containerId         String?
   lastContainerId     String?
   transitRouteId      String?
-  invoiceId           String? @unique
+  // invoiceId : NON unique. Une facture peut couvrir N colis (audit fix #5).
+  invoiceId           String?
 
   arrivalDate        DateTime?
   pickupDate         DateTime?
@@ -450,10 +469,11 @@ model Parcel {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  client            Client        @relation(fields: [clientId], references: [id])
-  recipient         Recipient?    @relation(fields: [recipientId], references: [id])
+  client            Client        @relation("ParcelClient", fields: [clientId], references: [id])
+  recipient         Client?       @relation("ParcelRecipient", fields: [recipientId], references: [id])
   warehouse         Warehouse?    @relation("CurrentWarehouse", fields: [warehouseId], references: [id])
   originalWarehouse Warehouse?    @relation("OriginalWarehouse", fields: [originalWarehouseId], references: [id])
+  destinationAgency Agency?       @relation("ParcelDestinationAgency", fields: [destinationAgencyId], references: [id])
   container         Container?    @relation("CurrentContainer", fields: [containerId], references: [id])
   lastContainer     Container?    @relation("LastContainer", fields: [lastContainerId], references: [id])
   transitRoute      TransitRoute? @relation(fields: [transitRouteId], references: [id])
@@ -466,12 +486,26 @@ model Parcel {
   images        ParcelImage[]
   discrepancies ManifestDiscrepancy[]
 
+  @@index([organizationId])
   @@index([clientId])
   @@index([warehouseId])
   @@index([containerId])
+  @@index([destinationAgencyId])
+  @@index([invoiceId])
   @@index([status])
   @@index([trackingNumber])
+  @@index([category])
   @@map("parcels")
+}
+
+// Categorie metier du colis (audit fix #10)
+enum ParcelCategory {
+  STANDARD
+  DOCUMENT
+  FOOD
+  ELECTRONICS
+  CLOTHING
+  OTHER
 }
 
 // Galerie d'images d'un colis (multi-images)
@@ -556,7 +590,8 @@ model Invoice {
 
   client   Client    @relation(fields: [clientId], references: [id])
   agency   Agency    @relation(fields: [agencyId], references: [id])
-  parcel   Parcel?
+  // 1 facture peut couvrir N colis (audit fix #5)
+  parcels  Parcel[]
   payments Payment[]
   debts    Debt[]
 

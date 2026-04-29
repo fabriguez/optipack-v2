@@ -1,0 +1,374 @@
+// ============================================================
+// OptiPack Orchestrator — Schéma de la BDD ops-admin
+// Cette BDD est SEPAREE de celles des tenants. Elle gère :
+// - les ops admins (login + 2FA)
+// - les VPS connus (avec SSH credentials chiffrés)
+// - les tenants (instances OptiPack provisionnées)
+// - les abonnements + paiements
+// - les jobs de provisioning / migration / update
+// - l'audit log des actions ops
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/orchestrator-client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("OPS_DATABASE_URL")
+}
+
+// ============================================================
+// OPS ADMINS
+// ============================================================
+
+model OpsAdmin {
+  id              String    @id @default(uuid())
+  email           String    @unique
+  passwordHash    String
+  fullName        String
+  // 2FA TOTP. Le secret est genere au premier login et confirme apres scan QR.
+  twoFactorSecret String?
+  twoFactorEnabled Boolean  @default(false)
+  // Phase 5 — codes de recuperation 2FA hashes (bcrypt). 10 codes generes au setup.
+  // Format : tableau de hash, on retire un code apres usage. Si vide, plus aucun code dispo.
+  twoFactorRecoveryCodes String[] @default([])
+  isActive        Boolean   @default(true)
+  isSuperAdmin    Boolean   @default(false)
+  lastLoginAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  auditLogs AuditLog[]
+
+  @@map("ops_admins")
+}
+
+// ============================================================
+// VPS
+// ============================================================
+
+model VPS {
+  id              String    @id @default(uuid())
+  name            String
+  host            String
+  port            Int       @default(22)
+  username        String
+  // SSH key chiffree avec AES-256-GCM. Format: <iv>:<authTag>:<ciphertext> en hex.
+  sshKeyEncrypted String
+  region          String?
+  notes           String?
+  // Capacites max (renseignees a la main ou inferees via SSH)
+  totalCpu        Int?
+  totalRamMb      Int?
+  totalDiskGb     Int?
+  // Configuration de capacite editable par l'ops admin (Phase 4)
+  // - Reserved : capacite reservee aux services systeme (postgres, redis, minio, caddy, OS)
+  // - Overcommit : facteur de surreservation (1.5 = on peut allouer 1.5x la capacite reelle)
+  reservedCpu     Float     @default(1.0)
+  reservedRamMb   Int       @default(2048)
+  reservedDiskGb  Int       @default(20)
+  cpuOvercommit   Float     @default(1.5)
+  memoryOvercommit Float    @default(1.2)
+  diskOvercommit  Float     @default(1.0)
+  // Derniere telemetrie (mise a jour par le worker vps-monitor)
+  lastSeenAt      DateTime?
+  cpuUsagePct     Float?
+  ramUsagePct     Float?
+  diskUsagePct    Float?
+  status          VPSStatus @default(ACTIVE)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  tenants Tenant[]
+
+  @@index([status])
+  @@map("vps")
+}
+
+enum VPSStatus {
+  ACTIVE
+  MAINTENANCE
+  DECOMMISSIONED
+}
+
+// ============================================================
+// TENANTS
+// ============================================================
+
+model Tenant {
+  id              String       @id @default(uuid())
+  // Slug : matche le subdomain (ex: "acme" → acme.transitsoftservices.com)
+  slug            String       @unique
+  name            String
+  ownerEmail      String
+  ownerUsername   String
+
+  // Branding initial. Le tenant peut le modifier ensuite via son propre dashboard.
+  logoUrl         String?
+  primaryColor    String       @default("#1B5E20")
+  secondaryColor  String       @default("#4CAF50")
+  accentColor     String       @default("#E8F5E9")
+  enabledModules  String[]     @default([])
+
+  // Domaine custom (optionnel) : ex "app.acme.com" via CNAME
+  customDomain    String?      @unique
+
+  // Provisioning : sur quel VPS, quels ports, quelle BDD
+  vpsId           String
+  vps             VPS          @relation(fields: [vpsId], references: [id])
+  apiPort         Int?
+  webPort         Int?
+  dbName          String?      // ex: "tenant_acme_db"
+
+  // Etat actuel
+  status          TenantStatus @default(PROVISIONING)
+  currentVersion  String?      // ex: "1.4.2"
+  pinnedVersion   String?
+  autoUpdatePolicy String      @default("MANUAL")  // MANUAL | AUTO_STABLE | AUTO_CRITICAL_ONLY
+
+  // Subscription (1:1)
+  subscription   Subscription?
+
+  // Plan tarifaire + ressources (Phase 4)
+  // Un tenant a un plan (FK), qui dicte ses limites par defaut.
+  // L'ops admin peut surcharger via customCpuLimit/customMemoryMb/customDiskGb.
+  resourcePlanId  String?
+  resourcePlan    ResourcePlan? @relation(fields: [resourcePlanId], references: [id])
+  customCpuLimit  Float?       // override : nb de coeurs (peut etre fractionnel, ex 0.5)
+  customMemoryMb  Int?         // override : RAM en MB
+  customDiskGb    Int?         // override : disque en GB
+
+  // Lifecycle
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  freezedAt       DateTime?
+  archivedAt      DateTime?
+
+  jobs        ProvisioningJob[]
+  updateJobs  TenantUpdateJob[]
+  planChanges PlanChange[]
+
+  @@index([vpsId])
+  @@index([status])
+  @@index([resourcePlanId])
+  @@map("tenants")
+}
+
+enum TenantStatus {
+  PROVISIONING
+  ACTIVE
+  FROZEN
+  MIGRATING
+  ARCHIVED
+}
+
+// ============================================================
+// RESOURCE PLANS (Phase 4) — gere par l'ops admin
+// ============================================================
+//
+// Chaque plan definit le quota de ressources (CPU, RAM, disque) ET le prix.
+// Quand un tenant upgrade son plan, il paie la difference et les containers sont
+// redemarres avec les nouvelles limites docker (--cpus, --memory).
+
+model ResourcePlan {
+  id              String   @id @default(uuid())
+  code            String   @unique  // ex: "starter", "pro", "enterprise"
+  name            String              // ex: "Starter"
+  description     String?  @db.Text
+  pricePerMonth   Decimal  @db.Decimal(15, 2)
+  currency        String   @default("XAF")
+  // Limites
+  cpuLimit        Float    // nb de coeurs (peut etre fractionnel, ex 0.5)
+  memoryMb        Int      // RAM en MB
+  diskQuotaGb     Int      // disque (DB + storage)
+  // Limites business optionnelles (informatives)
+  maxParcelsPerMonth Int?
+  maxUsers          Int?
+  // Modules par defaut a activer pour ce plan
+  defaultModules    String[] @default([])
+  // Visibilite
+  isActive          Boolean  @default(true)
+  isPublic          Boolean  @default(true)  // false = invite-only / sur-mesure
+  sortOrder         Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  tenants     Tenant[]
+  planChanges PlanChange[]
+
+  @@map("resource_plans")
+}
+
+// Suivi des changements de plan (upgrade/downgrade) avec lien vers le paiement
+model PlanChange {
+  id              String   @id @default(uuid())
+  tenantId        String
+  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+  fromPlanId      String?
+  toPlanId        String
+  toPlan          ResourcePlan @relation(fields: [toPlanId], references: [id])
+  status          String   // "pending_payment" | "active" | "cancelled" | "failed"
+  paymentId       String?  // FK vers Payment apres reglement
+  // Source de la demande
+  requestedBy     String   // "tenant_owner" | "ops_admin"
+  requestedAt     DateTime @default(now())
+  effectiveAt     DateTime?
+  // Snapshot des limites au moment du changement (pour audit)
+  cpuLimitAtChange  Float?
+  memoryMbAtChange  Int?
+  diskGbAtChange    Int?
+
+  @@index([tenantId])
+  @@index([status])
+  @@map("plan_changes")
+}
+
+// ============================================================
+// ABONNEMENTS + PAIEMENTS
+// ============================================================
+
+model Subscription {
+  id            String   @id @default(uuid())
+  tenantId      String   @unique
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  plan          String   // "starter" | "pro" | "enterprise"
+  pricePerMonth Decimal  @db.Decimal(15, 2)
+  currency      String   @default("XAF")
+  startedAt     DateTime
+  expiresAt     DateTime
+  isActive      Boolean  @default(true)
+  // Phase 5 — derniere notification "expire bientot" envoyee. Evite de spammer le owner.
+  lastExpiryNoticeAt DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  payments Payment[]
+
+  @@index([expiresAt])
+  @@map("subscriptions")
+}
+
+model Payment {
+  id             String       @id @default(uuid())
+  subscriptionId String
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id])
+  amount         Decimal      @db.Decimal(15, 2)
+  currency       String       @default("XAF")
+  provider       String       // "stripe" | "mtn" | "orange" | "manual"
+  externalRef    String?
+  status         String       // "pending" | "succeeded" | "failed"
+  paidAt         DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@index([subscriptionId])
+  @@index([provider])
+  @@map("payments")
+}
+
+// ============================================================
+// JOBS (provisioning / migration / freeze / unfreeze / delete)
+// ============================================================
+
+model ProvisioningJob {
+  id          String    @id @default(uuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  type        String    // PROVISION | MIGRATE | FREEZE | UNFREEZE | DELETE
+  payload     Json
+  status      String    @default("queued") // queued | running | succeeded | failed
+  logs        String?   @db.Text
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([tenantId])
+  @@index([status])
+  @@map("provisioning_jobs")
+}
+
+// ============================================================
+// RELEASES (versions OptiPack disponibles)
+// ============================================================
+
+model Release {
+  id            String   @id @default(uuid())
+  version       String   @unique  // ex: "1.4.2"
+  apiImageTag   String              // ex: "ghcr.io/.../optipack-api:1.4.2"
+  webImageTag   String
+  changelog     String?  @db.Text
+  isStable      Boolean  @default(false)
+  isCritical    Boolean  @default(false)
+  isPublished   Boolean  @default(false)
+  publishedAt   DateTime?
+  publishedById String?
+  createdAt     DateTime @default(now())
+
+  @@map("releases")
+}
+
+model TenantUpdateJob {
+  id              String    @id @default(uuid())
+  tenantId        String
+  tenant          Tenant    @relation(fields: [tenantId], references: [id])
+  fromVersion     String
+  toVersion       String
+  status          String    @default("scheduled") // scheduled | running | succeeded | failed | rolled_back
+  scheduledFor    DateTime?
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  backupRef       String?
+  errorLog        String?   @db.Text
+  triggeredBy     String    // tenant_owner | ops_admin | auto_critical
+  rollbackBefore  DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@index([tenantId])
+  @@index([status])
+  @@map("tenant_update_jobs")
+}
+
+// ============================================================
+// AUDIT LOGS
+// ============================================================
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  opsAdminId String?
+  opsAdmin   OpsAdmin? @relation(fields: [opsAdminId], references: [id])
+  action     String
+  entityType String
+  entityId   String?
+  payload    Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([opsAdminId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ============================================================
+// BACKUPS (Phase 5)
+// ============================================================
+
+model TenantBackup {
+  id         String   @id @default(uuid())
+  tenantId   String
+  vpsId      String
+  // Format de stockage : "vps:<path>" (sur le VPS source) ou "minio:<bucket>/<key>"
+  storageRef String
+  sizeBytes  BigInt?
+  kind       String   @default("nightly") // nightly | manual | pre-update
+  status     String   @default("succeeded") // succeeded | failed
+  errorLog   String?
+  expiresAt  DateTime? // pour la retention 30j
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([expiresAt])
+  @@map("tenant_backups")
+}

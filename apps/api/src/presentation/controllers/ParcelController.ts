@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { container } from '../../container';
 import { CreateParcelUseCase } from '../../application/use-cases/parcel/CreateParcelUseCase';
+import { CreateBatchParcelsUseCase } from '../../application/use-cases/parcel/CreateBatchParcelsUseCase';
 import { ListParcelsUseCase } from '../../application/use-cases/parcel/ListParcelsUseCase';
 import { GetParcelUseCase } from '../../application/use-cases/parcel/GetParcelUseCase';
 import { UpdateParcelUseCase } from '../../application/use-cases/parcel/UpdateParcelUseCase';
@@ -12,6 +13,17 @@ export class ParcelController {
   static async create(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(CreateParcelUseCase);
+      const result = await useCase.execute(req.body, req.user!.userId);
+      res.status(201).json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  // Audit fix #5 : creation batch (1 facture pour N colis)
+  static async createBatch(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(CreateBatchParcelsUseCase);
       const result = await useCase.execute(req.body, req.user!.userId);
       res.status(201).json({ success: true, data: result });
     } catch (err) {

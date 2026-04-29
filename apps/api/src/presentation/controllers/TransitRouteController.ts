@@ -6,14 +6,13 @@ import { UpdateTransitRouteUseCase } from '../../application/use-cases/transit-r
 import { DeleteTransitRouteUseCase } from '../../application/use-cases/transit-route/DeleteTransitRouteUseCase';
 import { TRANSIT_ROUTE_REPOSITORY } from '../../application/interfaces/ITransitRouteRepository';
 import { NotFoundError } from '../../domain/errors/BusinessError';
-
-const DEFAULT_ORG_ID = '00000000-0000-4000-a000-000000000001';
+import { getOrgId } from '../middleware/tenantGuard';
 
 export class TransitRouteController {
   static async create(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(CreateTransitRouteUseCase);
-      const route = await useCase.execute(req.body, DEFAULT_ORG_ID);
+      const route = await useCase.execute(req.body, getOrgId(req));
       res.status(201).json({ success: true, data: route });
     } catch (err) {
       next(err);
@@ -23,17 +22,17 @@ export class TransitRouteController {
   static async list(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(ListTransitRoutesUseCase);
-      const result = await useCase.execute(DEFAULT_ORG_ID, req.query as any);
+      const result = await useCase.execute(getOrgId(req), req.query as never);
       res.json({ success: true, ...result });
     } catch (err) {
       next(err);
     }
   }
 
-  static async getActive(_req: Request, res: Response, next: NextFunction) {
+  static async getActive(req: Request, res: Response, next: NextFunction) {
     try {
-      const repo = container.resolve<any>(TRANSIT_ROUTE_REPOSITORY);
-      const routes = await repo.findActive(DEFAULT_ORG_ID);
+      const repo = container.resolve<{ findActive(orgId: string): Promise<unknown> }>(TRANSIT_ROUTE_REPOSITORY);
+      const routes = await repo.findActive(getOrgId(req));
       res.json({ success: true, data: routes });
     } catch (err) {
       next(err);

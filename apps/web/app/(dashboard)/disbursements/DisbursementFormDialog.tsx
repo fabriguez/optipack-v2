@@ -36,7 +36,12 @@ export function DisbursementFormDialog({ open, onClose }: Props) {
         <AppSelect label="Agence" {...register('agencyId')} error={errors.agencyId?.message}
           options={(agencies?.data || []).map((a: any) => ({ value: a.id, label: a.name }))} placeholder="Selectionner" />
         <AppInput label="Motif" {...register('reason')} error={errors.reason?.message} />
-        <AppTextarea label="Description" {...register('description')} />
+        <AppTextarea
+          label="Description"
+          rows={3}
+          placeholder="Detail du decaissement (optionnel)"
+          {...register('description')}
+        />
         <AppInput label="Ordonnateur" {...register('orderer')} error={errors.orderer?.message} />
         <AppInput label="Montant" type="number" step="0.01" {...register('amount', { valueAsNumber: true })} error={errors.amount?.message} />
         <AppInput label="Montant en lettres" {...register('amountInWords')} error={errors.amountInWords?.message} />

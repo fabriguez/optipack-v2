@@ -1,0 +1,220 @@
+# Cahier de dettes techniques — OptiPack SaaS
+
+Liste des limitations connues, raccourcis assumés, et travaux à finir.
+Mise à jour à chaque phase. Format : `#NN — [Phase X.Y] [SEV] Titre — Détail — Mitigation actuelle — Action future`.
+
+Sévérité :
+- **CRIT** = bloque la prod ou la sécurité
+- **HIGH** = doit être traité avant scaling
+- **MED** = à fixer dans les 6 mois
+- **LOW** = nice-to-have
+
+---
+
+## Phase 0 — Stabilisation OptiPack
+
+### #01 — [0.6] [MED] Tests d'intégration manquants
+- Aucun test n'a été écrit pour les use cases (CreateParcel, LoadParcels, RecordPayment, etc.).
+- **Mitigation** : type-check rigoureux, tests manuels en dev.
+- **Action** : ajouter Vitest + tests pour les chemins critiques (auth, paiement, chargement, multi-tenant isolation).
+
+### #02 — [0.7] [MED] Invariant `warehouseId XOR containerId` non enforced en BDD
+- Logique applicative seulement (use cases LoadParcels/UnloadParcel).
+- **Mitigation** : audit dans `UpdateParcelUseCase`.
+- **Action** : test de cohérence périodique (cron) qui détecte les parcels avec les 2 FK ; ou check constraint partiel Postgres si on accepte la complexité.
+
+### #03 — [0.8] [LOW] `Penalty.daysAccumulated` snapshot uniquement à la facturation
+- Computed à la lecture, mais pas snapshot avant `invoiceId`.
+- **Mitigation** : aucune (volontaire).
+- **Action** : confirmer avec l'équipe métier que le snapshot au paiement est suffisant.
+
+---
+
+## Phase 1 — Orchestrator core
+
+### #04 — [1.2] [HIGH] Migration Prisma orchestrator non générée
+- Le schéma est défini mais aucune migration `prisma migrate dev` n'a été exécutée.
+- **Mitigation** : faisable en local quand `ops_admin` Postgres est up.
+- **Action** : `OPS_DATABASE_URL=... npx prisma migrate dev --name init` une fois la BDD démarrée. Commiter le dossier `migrations/`.
+
+### #05 — [1.3] [MED] Pas de blacklist JWT côté serveur
+- Logout = côté client uniquement (le JWT reste valide jusqu'à expiration).
+- **Mitigation** : JWT court (1h).
+- **Action** : si besoin de révocation immédiate, ajouter une blacklist Redis avec TTL = `exp - now`.
+
+### ~~#06~~ — [1.3] [MED] ~~Pas de codes de récupération 2FA~~ ✅ RESOLU
+- 10 codes generes au confirm 2FA (`SetupTwoFactorUseCase.confirm` retourne `recoveryCodes` en clair une seule fois). Stockes hashes bcrypt dans `OpsAdmin.twoFactorRecoveryCodes`. Endpoints : `POST /ops/auth/2fa/recovery` (login alternatif) et `POST /ops/auth/2fa/recovery/regenerate` (nouveau lot).
+
+### #07 — [1.4] [LOW] SSH key fingerprint masqué basique
+- L'affichage masqué (`fingerprint`) n'est pas un vrai SHA256 fingerprint OpenSSH.
+- **Mitigation** : OK pour l'identification visuelle.
+- **Action** : utiliser `node-ssh` ou `sshpk` pour calculer un vrai fingerprint MD5/SHA256.
+
+---
+
+## Phase 2 — Provisioning automatique
+
+### #08 — [2.1] [HIGH] Pas de cleanup automatique sur fail
+- Si le worker `provision-tenant` échoue à mi-chemin (ex: après création DB mais avant container API), les artefacts partiels restent.
+- **Mitigation** : retry 3x BullMQ + script idempotent (cleanup containers anciens avant run).
+- **Action** : ajouter un step "rollback partiel" qui drop la DB + remove containers si attempts épuisé.
+
+### #09 — [2.1] [MED] Seed Organization fait via `node -e` inline
+- Code JS injecté dans une string shell échappée. Fragile.
+- **Mitigation** : fonctionnel mais lourd à debug.
+- **Action** : créer un script `apps/api/scripts/seed-tenant.ts` packagé dans l'image API, appelé via `docker exec api node scripts/seed-tenant.js <orgId> <name> ...`.
+
+### #10 — [2.3] [HIGH] Caddy admin API exposée sur localhost:2019
+- Pas d'auth sur l'admin API Caddy. Si quelqu'un atteint localhost:2019 via tunneling, il peut tout reconfigurer.
+- **Mitigation** : firewall iptables + bind 127.0.0.1.
+- **Action** : configurer Caddy admin avec `origins` whitelist + auth.
+
+### #11 — [2.4] [MED] Pas de quota disque enforced
+- `diskQuotaGb` est tracké en BDD mais Docker n'a pas de `--disk-limit` natif.
+- **Mitigation** : aucune.
+- **Action** : LVM thin provisioning ou bind-mount avec `quota` Linux. Gros chantier infra.
+
+---
+
+## Phase 3 — Migration cross-VPS + monitoring
+
+### #12 — [3.1] [HIGH] SCP via base64 pour les dumps
+- Scalabilité limitée à ~100 MB par dump (passage en RAM côté orchestrateur).
+- **Mitigation** : OK pour la majorité des tenants démarrants.
+- **Action** : passer par MinIO (control plane) en staging : source `pg_dump` → upload MinIO → target `pg_restore` from MinIO. Ajouter compression gzip.
+
+### #13 — [3.1] [HIGH] DNS automation manquante en cas de migration cross-VPS multi-IP
+- Si wildcard `*.transitsoftservices.com → IP1` et migration vers VPS2 (IP2), il faut un A record explicite `acme.transit*.com → IP2`.
+- **Mitigation** : actuellement l'ops admin doit le faire à la main.
+- **Action** : intégrer Cloudflare API (`OPS_CLOUDFLARE_TOKEN`) pour créer/update les A records lors d'une migration.
+
+### ~~#14~~ — [3.2] [MED] ~~Alertes monitoring non envoyées~~ ✅ RESOLU (Phase 5)
+- VPS down > 15 min → `NotificationService.vpsDown` (Discord/Slack webhook) cable dans `runVpsHeartbeat`.
+
+---
+
+## Phase 4 — Resources + Billing
+
+### #15 — [4.1] [HIGH] Stripe ne supporte pas XAF directement
+- Le checkout est fait en EUR (`'eur'` hardcodé dans `BillingUseCases`).
+- **Mitigation** : conversion EUR → XAF à la main pour l'instant (oracle de change manuel).
+- **Action** : implémenter une conversion via API (ex: openexchangerates.org), stocker le taux du jour dans `Payment.exchangeRate`. Proposer XOF (qui est sur Stripe) comme proxy ?
+
+### #16 — [4.2] [HIGH] Mobile Money en mode stub
+- MTN MoMo + Orange Money : squelettes seulement, mode `MOMO_MODE=mock` pour dev.
+- **Mitigation** : payments via MoMo non opérationnels en prod.
+- **Action** : intégrer MTN MoMo Collections API (sandbox dispo) puis Orange Money Cameroon. Compter ~1 semaine par opérateur (creds + signature webhook + tests sandbox).
+
+### #17 — [4.2] [MED] Pas de webhook MoMo signé
+- Le webhook accepte les notifications sans vérification de signature.
+- **Mitigation** : durci à l'arrivée des creds opérateur.
+- **Action** : implémenter `verifyMtnSignature` / `verifyOrangeSignature` selon les specs opérateur.
+
+### #18 — [4.3] [MED] Disk quota non enforced (cf. #11)
+- Couplage avec capacity check : `assertCanAllocate` regarde `diskQuotaGb` mais Docker ne l'applique pas.
+- **Mitigation** : suivi best-effort.
+- **Action** : cf. #11.
+
+### #19 — [4.4] [MED] Subscription pricing par mois uniquement
+- Pas de billing yearly (avec discount), pas de pro-rata sur upgrade mid-month.
+- **Mitigation** : renewal manual avec `months: 12`.
+- **Action** : ajouter `billingCycle: MONTHLY | YEARLY` à Subscription, calculer pro-rata pour les changements mid-cycle.
+
+### ~~#20~~ — [4.5] [LOW] ~~Auto-freeze cron sans préavis~~ ✅ RESOLU
+- `BillingUseCases.runExpiringNoticeCron` envoie un email aux subscriptions qui expirent dans <= 7j. Anti-spam via `Subscription.lastExpiryNoticeAt`. Cron quotidien (couple a auto-freeze).
+
+### ~~#21~~ — [4.6] [MED] ~~Capacity check ne libère pas immédiatement les FROZEN~~ ✅ RESOLU
+- `BillingUseCases.runReleaseLongFrozenCron(30)` archive les tenants FROZEN > 30 jours (drop DB + containers via `deleteQueue`). Idempotent. Cron quotidien.
+
+---
+
+## Phase 5 — Polish ops
+
+### #31 — [5.3] [HIGH] Backups stockés sur le VPS source uniquement
+- `BackupTenantUseCase` écrit le `pg_dump` dans `/var/lib/optipack/backups/...` sur le même VPS que la DB.
+- **Mitigation** : OK pour récupérer une mauvaise migration, mais perte totale si le VPS brûle.
+- **Action** : pousser le dump vers MinIO control plane (ou S3/Backblaze) après écriture, ne garder que la copie distante. Permet aussi le restore cross-VPS.
+
+### #32 — [5.1] [HIGH] ops-admin frontend incomplet
+- Skeleton créé (login + dashboard + listes tenants/vps/releases/plans/backups/audit/ops-admins). Manquent : formulaires de création (tenant, vps, plan, ops-admin), édition branding, vue détaillée VPS avec graphes, page billing/MRR, gestion releases (édit changelog, marquer stable/critique).
+- **Mitigation** : actions sensibles encore réalisables via curl/Postman.
+- **Action** : Phase 5.1 — compléter formulaires + détails. Réutiliser composants `apps/web` (extraction `packages/ui` mentionnée dans le plan, encore non faite).
+
+### #33 — [5.4] [MED] Notifications email no-op si SMTP non configuré
+- `NotificationService` log silencieusement et retourne false si SMTP non config (cas dev).
+- **Mitigation** : volontaire pour le dev local.
+- **Action** : ajouter une healthcheck "SMTP configured?" exposée dans le dashboard ops-admin pour ne pas découvrir en prod qu'aucun email ne part.
+
+### ~~#34~~ — [5.4] [MED] ~~Pas de préavis avant freeze auto~~ ✅ RESOLU (cf. #20, doublon)
+
+### #35 — [5.1] [MED] `packages/ui` toujours vide
+- Plan prévoyait l'extraction des composants AppButton/AppCard/etc. partagés entre `apps/web` et `apps/ops-admin`.
+- **Mitigation** : `apps/ops-admin` a recréé des primitives inline (Tailwind direct, pas de composants partagés). Divergence visuelle possible.
+- **Action** : extraire les composants `apps/web/components/ui` vers `packages/ui` quand l'API stabilisera.
+
+### #36 — [5.1] [LOW] Auth ops-admin stocke le JWT en localStorage
+- `apps/ops-admin/lib/api.ts` lit/écrit `ops_token` dans localStorage.
+- **Mitigation** : OK pour un outil interne ops, pas exposé au public.
+- **Action** : passer en httpOnly cookie + endpoint refresh quand on durcira la prod.
+
+---
+
+## Phase 5+ — À venir
+
+### ~~#22~~ — [5.1] [HIGH] ~~Frontend ops-admin manquant~~ ✅ PARTIEL (Phase 5)
+- Skeleton Next.js livre (login + dashboard + listes). Cf. #32 pour les morceaux restants (formulaires, branding, billing chart).
+
+### #23 — [5.2] [MED] Pas de système d'invitation par email
+- L'ops admin invite un nouvel admin → password initial retourné en clair dans l'API response.
+- **Mitigation** : ops admin transmet via canal sûr.
+- **Action** : envoi email avec lien `/setup-account?token=...` à durée de vie courte.
+
+### ~~#24~~ — [5.3] [HIGH] ~~Pas de backups automatiques tenant~~ ✅ RESOLU (Phase 5)
+- `BackupTenantUseCase` + cron nightly 24h, retention 30j. Storage encore VPS-local : cf. #31 pour le push MinIO.
+
+### #25 — [5.4] [MED] Pas de logging centralisé
+- Logs pino chacun sur son VPS, ops admin doit SSH pour consulter.
+- **Mitigation** : `GET /tenants/:id/logs` pour debug ponctuel.
+- **Action** : ingestion vers Loki/Grafana (ou Better Stack) en streaming.
+
+---
+
+## Cross-cutting
+
+### ~~#26~~ — [SEC] [MED] ~~Aucun rate-limit sur les endpoints écriture~~ ✅ RESOLU
+- `index.ts` applique un `writeLimit` global sur `/ops` : 30 ecritures/min/IP, skip GET + webhooks + auth (qui ont leur propre limite).
+
+### #27 — [SEC] [LOW] Pas de CSP (Content-Security-Policy) ops-admin
+- helmet config par défaut.
+- **Mitigation** : OK API-only.
+- **Action** : durcir CSP quand `apps/ops-admin` shipper.
+
+### #28 — [OBS] [MED] Pas de métriques Prometheus
+- Performance API, queue depth, etc. : invisibles sans logs.
+- **Mitigation** : pino logs ingestables.
+- **Action** : `/metrics` endpoint Prometheus avec `prom-client`. Surface : http_request_duration, bullmq_jobs_active, db_query_duration.
+
+### #29 — [DOC] [HIGH] Setup VPS hôte non documenté
+- Un nouveau VPS doit avoir : Docker, Caddy admin API, postgres+redis+minio shared, network `optipack-shared`.
+- **Mitigation** : doc inline dans README orchestrator.
+- **Action** : créer `docs/vps-setup.md` + script Ansible/bash `scripts/provision-vps-host.sh` qui prépare un VPS vierge.
+
+### #30 — [DEV] [LOW] Pas de hot-reload des secrets
+- Si on change `OPS_MASTER_KEY` en prod, on perd le déchiffrement des SSH keys existantes.
+- **Mitigation** : ne pas changer la masterKey. Si besoin : rotation via un script qui re-chiffre.
+- **Action** : documenter la rotation + script `scripts/rotate-master-key.ts`.
+
+---
+
+## Légende des tags
+
+- **[Phase X.Y]** : phase d'origine où la dette a été créée
+- **[SEC]** : sécurité
+- **[OBS]** : observabilité
+- **[DOC]** : documentation
+- **[DEV]** : developer experience
+
+## Workflow
+
+À chaque livraison de phase, **ajouter** les nouveaux items en bas de la section concernée.
+À chaque résolution, marquer `~~strikethrough~~` ou retirer + référencer le commit.

@@ -63,6 +63,8 @@ export interface JwtPayload {
   email: string;
   role: string;
   agencyIds: string[];
+  // Phase 0.2 : isolation multi-tenant. Toutes les requetes filtrent par cet ID.
+  organizationId: string;
   iat?: number;
   exp?: number;
 }

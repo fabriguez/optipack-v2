@@ -84,7 +84,19 @@ export const AppSelect = forwardRef<HTMLButtonElement, AppSelectProps>(
               className,
             )}
           >
-            <SelectValue placeholder={placeholder || 'Selectionner...'} />
+            {/*
+              Base UI Select.Value affiche la valeur BRUTE par defaut (l'UUID).
+              On lui passe un children-render qui resout value -> label depuis
+              `options` pour afficher le bon libelle.
+            */}
+            <SelectValue placeholder={placeholder || 'Selectionner...'}>
+              {(val: unknown) => {
+                const v = typeof val === 'string' ? val : '';
+                if (!v) return placeholder || 'Selectionner...';
+                const match = options.find((o) => o.value === v);
+                return match?.label ?? v;
+              }}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {options.map((opt) => (

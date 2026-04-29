@@ -1,0 +1,110 @@
+import { inject, injectable } from 'tsyringe';
+import { SSHService, SSH_SERVICE, type SshConnection } from '../ssh/SSHService';
+
+export interface ContainerRunOptions {
+  name: string;
+  image: string;
+  ports?: Record<number, number>; // hostPort -> containerPort
+  envFile?: string; // chemin sur le VPS
+  env?: Record<string, string>;
+  volumes?: string[]; // ex: ["volname:/data"]
+  network?: string;
+  restart?: 'no' | 'on-failure' | 'always' | 'unless-stopped';
+  command?: string;
+  // Limites de ressources (Phase 4)
+  cpuLimit?: number;        // ex: 0.5 -> --cpus=0.5
+  memoryMb?: number;        // ex: 512 -> --memory=512m
+  /** Memory swap = memoire physique (par defaut). Mettre a -1 pour swap illimite. */
+  memorySwapMb?: number;
+}
+
+/**
+ * Helpers Docker via SSH. On execute des commandes shell `docker ...` sur le VPS.
+ * Volontairement rudimentaire : pas de wrapper TypeScript autour de l'API Docker
+ * (qui demanderait d'exposer le socket Docker, risque de securite).
+ */
+@injectable()
+export class DockerService {
+  constructor(@inject(SSH_SERVICE) private ssh: SSHService) {}
+
+  async loginGhcr(creds: SshConnection, username: string, token: string): Promise<void> {
+    // Echappement minimal - le token est cense etre alphanumerique
+    const cmd = `echo '${token.replace(/'/g, "")}' | docker login ghcr.io -u '${username}' --password-stdin`;
+    const r = await this.ssh.exec(creds, cmd);
+    if (r.code !== 0) {
+      throw new Error(`docker login ghcr.io echoue : ${r.stderr || r.stdout}`);
+    }
+  }
+
+  async pull(creds: SshConnection, image: string): Promise<string> {
+    const r = await this.ssh.exec(creds, `docker pull ${image}`);
+    if (r.code !== 0) throw new Error(`docker pull ${image} : ${r.stderr || r.stdout}`);
+    return r.stdout;
+  }
+
+  async run(creds: SshConnection, opts: ContainerRunOptions): Promise<string> {
+    const parts: string[] = ['docker run -d', `--name ${opts.name}`];
+    if (opts.restart) parts.push(`--restart ${opts.restart}`);
+    if (opts.network) parts.push(`--network ${opts.network}`);
+    if (opts.envFile) parts.push(`--env-file ${opts.envFile}`);
+    // Limites de ressources (Phase 4)
+    if (opts.cpuLimit && opts.cpuLimit > 0) {
+      parts.push(`--cpus=${opts.cpuLimit}`);
+    }
+    if (opts.memoryMb && opts.memoryMb > 0) {
+      parts.push(`--memory=${opts.memoryMb}m`);
+      const swap = opts.memorySwapMb ?? opts.memoryMb;
+      if (swap > 0) parts.push(`--memory-swap=${swap}m`);
+    }
+    if (opts.env) {
+      for (const [k, v] of Object.entries(opts.env)) {
+        parts.push(`-e '${k}=${String(v).replace(/'/g, "'\\''")}'`);
+      }
+    }
+    if (opts.ports) {
+      for (const [host, container] of Object.entries(opts.ports)) {
+        parts.push(`-p 127.0.0.1:${host}:${container}`);
+      }
+    }
+    if (opts.volumes) {
+      for (const v of opts.volumes) parts.push(`-v ${v}`);
+    }
+    parts.push(opts.image);
+    if (opts.command) parts.push(opts.command);
+
+    const cmd = parts.join(' ');
+    const r = await this.ssh.exec(creds, cmd);
+    if (r.code !== 0) throw new Error(`docker run echoue : ${r.stderr || r.stdout}`);
+    return r.stdout.trim();
+  }
+
+  async exec(creds: SshConnection, container: string, cmd: string): Promise<{ stdout: string; stderr: string; code: number }> {
+    return this.ssh.exec(creds, `docker exec ${container} ${cmd}`);
+  }
+
+  async stop(creds: SshConnection, name: string): Promise<void> {
+    await this.ssh.exec(creds, `docker stop ${name} || true`);
+  }
+
+  async start(creds: SshConnection, name: string): Promise<void> {
+    await this.ssh.exec(creds, `docker start ${name}`);
+  }
+
+  async remove(creds: SshConnection, name: string, force = false): Promise<void> {
+    await this.ssh.exec(creds, `docker rm ${force ? '-f' : ''} ${name} || true`);
+  }
+
+  async exists(creds: SshConnection, name: string): Promise<boolean> {
+    const r = await this.ssh.exec(creds, `docker ps -a --format '{{.Names}}' | grep -w ${name} || true`);
+    return r.stdout.trim() === name;
+  }
+
+  async healthCheck(creds: SshConnection, port: number, path = '/api/v1/tenant-meta', timeoutSec = 60): Promise<boolean> {
+    // Attend qu'un GET local revoie 2xx, polling toutes les 2s
+    const cmd = `for i in $(seq 1 ${Math.ceil(timeoutSec / 2)}); do code=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:${port}${path} || echo 000); if [ "$code" -ge 200 ] && [ "$code" -lt 500 ]; then echo OK; exit 0; fi; sleep 2; done; echo TIMEOUT; exit 1`;
+    const r = await this.ssh.exec(creds, cmd);
+    return r.code === 0 && r.stdout.includes('OK');
+  }
+}
+
+export const DOCKER_SERVICE = Symbol.for('DockerService');

@@ -21,6 +21,7 @@ interface LoginResult {
     lastName: string;
     role: string;
     agencyIds: string[];
+    organizationId: string;
   };
   requires2FA?: boolean;
 }
@@ -62,6 +63,7 @@ export class LoginUseCase {
           lastName: user.lastName,
           role: user.role,
           agencyIds: user.userAgencies.map((ua) => ua.agencyId),
+          organizationId: user.organizationId,
         },
         requires2FA: true,
       };
@@ -69,8 +71,15 @@ export class LoginUseCase {
 
     const agencyIds = user.userAgencies.map((ua) => ua.agencyId);
 
+    // Phase 0.2 : organizationId injecte dans le JWT pour data isolation multi-tenant
     const accessToken = jwt.sign(
-      { userId: user.id, email: user.email, role: user.role, agencyIds },
+      {
+        userId: user.id,
+        email: user.email,
+        role: user.role,
+        agencyIds,
+        organizationId: user.organizationId,
+      },
       config.jwt.secret as jwt.Secret,
       { expiresIn: config.jwt.accessExpiry } as jwt.SignOptions,
     );
@@ -94,6 +103,7 @@ export class LoginUseCase {
         lastName: user.lastName,
         role: user.role,
         agencyIds,
+        organizationId: user.organizationId,
       },
     };
   }

@@ -1,0 +1,39 @@
+# ---- Build stage ----
+FROM node:20-alpine AS builder
+
+RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
+
+WORKDIR /app
+
+# Copy workspace config
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
+COPY apps/ops-admin/package.json ./apps/ops-admin/
+COPY packages/config/package.json ./packages/config/
+COPY packages/config/tsconfig/package.json ./packages/config/tsconfig/
+
+RUN pnpm install --frozen-lockfile || pnpm install
+
+# Copy source
+COPY packages/ ./packages/
+COPY apps/ops-admin/ ./apps/ops-admin/
+
+# Accept NEXT_PUBLIC_* vars at build time
+ARG NEXT_PUBLIC_ORCHESTRATOR_URL
+ENV NEXT_PUBLIC_ORCHESTRATOR_URL=$NEXT_PUBLIC_ORCHESTRATOR_URL
+
+RUN pnpm --filter @transitsoftservices/ops-admin build
+
+# ---- Production stage ----
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+COPY --from=builder /app/apps/ops-admin/.next/standalone ./
+COPY --from=builder /app/apps/ops-admin/.next/static ./apps/ops-admin/.next/static
+COPY --from=builder /app/apps/ops-admin/public ./apps/ops-admin/public
+
+EXPOSE 3020
+
+CMD ["node", "apps/ops-admin/server.js"]

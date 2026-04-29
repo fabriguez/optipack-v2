@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { ParcelController } from '../../controllers/ParcelController';
 import { authenticate } from '../../middleware/authMiddleware';
 import { validate } from '../../middleware/validate';
-import { createParcelSchema, paginationSchema } from '@transitsoftservices/shared';
+import { createParcelSchema, createBatchParcelsSchema, paginationSchema } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
 import { QRCodeService } from '../../../application/services/QRCodeService';
 import { PDFService } from '../../../application/services/PDFService';
@@ -15,6 +15,7 @@ router.get('/', validate(paginationSchema, 'query'), ParcelController.list);
 router.get('/tracking/:tracking', ParcelController.getByTracking);
 router.get('/:id', ParcelController.getById);
 router.post('/', validate(createParcelSchema), ParcelController.create);
+router.post('/batch', validate(createBatchParcelsSchema), ParcelController.createBatch);
 router.patch('/:id', ParcelController.update);
 router.patch('/:id/status', ParcelController.updateStatus);
 

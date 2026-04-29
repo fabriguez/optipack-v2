@@ -1,0 +1,91 @@
+name: Build & deploy ops-admin
+
+# Phase 5 — image ops-admin pour le control plane SaaS.
+# DESACTIVE pour l'instant : ne tourne qu'au workflow_dispatch manuel.
+# Activer en remplacant la liste `on:` par :
+#   on:
+#     push:
+#       branches: [main]
+#       paths:
+#         - 'apps/ops-admin/**'
+#         - 'packages/**'
+#         - 'docker/ops-admin/**'
+#         - '.github/workflows/deploy-ops-admin.yml'
+#     workflow_dispatch:
+
+on:
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE: ghcr.io/${{ github.repository_owner }}/optipack-ops-admin
+
+jobs:
+  build:
+    name: Build & push ops-admin image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags + labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=tag
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build & push ops-admin image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/ops-admin/Dockerfile.prod
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            NEXT_PUBLIC_ORCHESTRATOR_URL=${{ secrets.OPS_ORCHESTRATOR_URL }}
+          cache-from: type=gha,scope=ops-admin
+          cache-to: type=gha,scope=ops-admin,mode=max
+
+  deploy:
+    name: Deploy to control plane VPS
+    needs: build
+    runs-on: ubuntu-latest
+    # Le deploy est manuel pour l'instant (pas de SSH automatise vers le control plane).
+    # Pour l'activer : ajouter SSH_HOST/USER/KEY dans secrets et decommenter la step.
+    if: false
+    steps:
+      - name: Pull & restart ops-admin container on control plane
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.OPS_CONTROL_PLANE_HOST }}
+          username: ${{ secrets.OPS_CONTROL_PLANE_USER }}
+          key: ${{ secrets.OPS_CONTROL_PLANE_SSH_KEY }}
+          script: |
+            docker pull ${{ env.IMAGE }}:latest
+            docker stop ops-admin || true
+            docker rm ops-admin || true
+            docker run -d --name ops-admin \
+              --restart unless-stopped \
+              --network optipack-shared \
+              -p 3020:3020 \
+              -e NEXT_PUBLIC_ORCHESTRATOR_URL=${{ secrets.OPS_ORCHESTRATOR_URL }} \
+              ${{ env.IMAGE }}:latest

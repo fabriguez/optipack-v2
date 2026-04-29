@@ -7,6 +7,20 @@ import { CASH_REGISTER_REPOSITORY, type ICashRegisterRepository } from '../../in
 import { JOURNAL_ENTRY_REPOSITORY, type IJournalEntryRepository } from '../../interfaces/IJournalEntryRepository';
 import { BusinessError, NotFoundError } from '../../../domain/errors/BusinessError';
 import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
+import { prisma } from '../../../config/database';
+
+// Audit fix #12 : 1 point de fidelite par tranche de 1000 XAF payee.
+const LOYALTY_POINTS_PER_XAF = 1 / 1000;
+const LOYALTY_TIER_THRESHOLDS: Array<{ tier: 'STANDARD' | 'SILVER' | 'GOLD' | 'VIP'; minPoints: number }> = [
+  { tier: 'VIP', minPoints: 5000 },
+  { tier: 'GOLD', minPoints: 1500 },
+  { tier: 'SILVER', minPoints: 500 },
+  { tier: 'STANDARD', minPoints: 0 },
+];
+
+function tierFor(points: number): 'STANDARD' | 'SILVER' | 'GOLD' | 'VIP' {
+  return LOYALTY_TIER_THRESHOLDS.find((t) => points >= t.minPoints)!.tier;
+}
 
 @injectable()
 export class RecordPaymentUseCase {
@@ -100,7 +114,42 @@ export class RecordPaymentUseCase {
       },
     });
 
-    // 8. Emit event
+    // 8. Attribution loyalty points (audit fix #12)
+    if (invoice.clientId) {
+      const earnedPoints = Math.floor(input.amount * LOYALTY_POINTS_PER_XAF);
+      if (earnedPoints > 0) {
+        const client = await prisma.client.findUnique({
+          where: { id: invoice.clientId },
+          select: { loyaltyPoints: true, loyaltyTier: true, totalSpent: true },
+        });
+        if (client) {
+          const newPoints = client.loyaltyPoints + earnedPoints;
+          const newTier = tierFor(newPoints);
+          const tierUpgraded = newTier !== client.loyaltyTier;
+          await prisma.$transaction([
+            prisma.client.update({
+              where: { id: invoice.clientId },
+              data: {
+                loyaltyPoints: newPoints,
+                loyaltyTier: newTier,
+                totalSpent: { increment: input.amount },
+              },
+            }),
+            prisma.loyaltyTransaction.create({
+              data: {
+                clientId: invoice.clientId,
+                points: earnedPoints,
+                type: 'EARN',
+                source: `payment:${payment.id}`,
+                description: `Paiement ${reference} - +${earnedPoints} pts${tierUpgraded ? ` (passage ${newTier})` : ''}`,
+              },
+            }),
+          ]);
+        }
+      }
+    }
+
+    // 9. Emit event
     eventBus.emit({
       type: DomainEvents.PAYMENT_RECEIVED,
       payload: {

@@ -38,7 +38,7 @@ router.get('/', validate(paginationSchema, 'query'), async (req, res, next) => {
         include: {
           client: { select: { id: true, fullName: true, phone: true } },
           agency: { select: { id: true, name: true, code: true } },
-          parcel: { select: { id: true, trackingNumber: true, designation: true } },
+          parcels: { select: { id: true, trackingNumber: true, designation: true } },
         },
       }),
       prisma.invoice.count({ where }),
@@ -59,7 +59,7 @@ router.get('/:id', async (req, res, next) => {
       include: {
         client: { select: { id: true, fullName: true, phone: true, email: true } },
         agency: { select: { id: true, name: true, code: true, address: true, phone: true } },
-        parcel: { select: { id: true, trackingNumber: true, designation: true, weight: true, destination: true, price: true } },
+        parcels: { select: { id: true, trackingNumber: true, designation: true, weight: true, destination: true, price: true } },
         payments: { orderBy: { createdAt: 'asc' }, include: { agency: { select: { name: true } }, receivedBy: { select: { firstName: true, lastName: true } } } },
       },
     });
@@ -76,7 +76,7 @@ router.get('/:id/pdf', async (req, res, next) => {
       include: {
         client: { select: { id: true, fullName: true, phone: true, email: true } },
         agency: { select: { id: true, name: true, code: true, address: true, phone: true } },
-        parcel: { select: { id: true, trackingNumber: true, designation: true, weight: true, destination: true, price: true } },
+        parcels: { select: { id: true, trackingNumber: true, designation: true, weight: true, destination: true, price: true } },
         payments: {
           orderBy: { createdAt: 'asc' },
           include: {
@@ -102,21 +102,14 @@ router.get('/:id/pdf', async (req, res, next) => {
       agency: invoice.agency
         ? { name: invoice.agency.name, code: invoice.agency.code, address: invoice.agency.address, phone: invoice.agency.phone }
         : null,
-      parcel: Array.isArray(invoice.parcel)
-        ? invoice.parcel.map((p: any) => ({
-            trackingNumber: p.trackingNumber,
-            designation: p.designation,
-            weight: Number(p.weight),
-            destination: p.destination,
-            price: Number(p.price),
-          }))
-        : {
-            trackingNumber: (invoice.parcel as any).trackingNumber,
-            designation: (invoice.parcel as any).designation,
-            weight: Number((invoice.parcel as any).weight),
-            destination: (invoice.parcel as any).destination,
-            price: Number((invoice.parcel as any).price),
-          },
+      // Audit fix #5 : 1 facture peut couvrir N colis (toujours un array maintenant)
+      parcel: ((invoice as unknown as { parcels?: any[] }).parcels ?? []).map((p: any) => ({
+        trackingNumber: p.trackingNumber,
+        designation: p.designation,
+        weight: Number(p.weight),
+        destination: p.destination,
+        price: Number(p.price),
+      })),
       payments: invoice.payments.map((p: any) => ({
         createdAt: p.createdAt,
         method: p.method,

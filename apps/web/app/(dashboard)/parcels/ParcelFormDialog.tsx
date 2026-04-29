@@ -6,10 +6,15 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { createParcelSchema, type CreateParcelInput } from '@transitsoftservices/shared';
 import { AppDialog } from '@/components/ui/AppDialog';
 import { AppInput } from '@/components/ui/AppInput';
+import { AppTextarea } from '@/components/ui/AppTextarea';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppSearchSelect, type SearchOption } from '@/components/ui/AppSearchSelect';
+import { AppSelect } from '@/components/ui/AppSelect';
+import { AppSwitch } from '@/components/ui/AppSwitch';
 import { useCreateParcel, useUpdateParcel } from '@/lib/hooks/useParcels';
 import { searchers } from '@/lib/api/searchers';
+import { ParcelCategoryValues } from '@transitsoftservices/shared';
+import { RecipientQuickCreateDialog } from './RecipientQuickCreateDialog';
 
 interface ParcelLike {
   id: string;
@@ -42,6 +47,9 @@ export function ParcelFormDialog({ open, onClose, parcel }: Props) {
   const [selectedWarehouse, setSelectedWarehouse] = useState<SearchOption | null>(null);
   const [selectedRoute, setSelectedRoute] = useState<SearchOption | null>(null);
   const [mode, setMode] = useState<Mode>('weight');
+  const [recipientCreateOpen, setRecipientCreateOpen] = useState(false);
+  const [recipientCreateName, setRecipientCreateName] = useState('');
+  const [recipientCreatePromise, setRecipientCreatePromise] = useState<((opt: SearchOption | null) => void) | null>(null);
 
   const {
     register,
@@ -194,10 +202,21 @@ export function ParcelFormDialog({ open, onClose, parcel }: Props) {
               <AppSearchSelect
                 label="Destinataire"
                 value={field.value || null}
-                onChange={(v) => field.onChange(v ?? undefined)}
+                onChange={(v) => {
+                  field.onChange(v ?? undefined);
+                  if (!v) setSelectedRecipient(null);
+                }}
                 search={(q, l) => searchers.recipients(q, l)}
                 selectedOption={selectedRecipient}
-                placeholder="Selectionner un destinataire (optionnel)"
+                placeholder="Selectionner ou creer un destinataire"
+                createLabel="Creer le destinataire"
+                onCreate={(query) =>
+                  new Promise<SearchOption | null>((resolve) => {
+                    setRecipientCreateName(query);
+                    setRecipientCreatePromise(() => resolve);
+                    setRecipientCreateOpen(true);
+                  })
+                }
               />
             )}
           />
@@ -236,7 +255,81 @@ export function ParcelFormDialog({ open, onClose, parcel }: Props) {
             )}
           />
 
-          <AppInput label="Observation" {...register('observation')} className="sm:col-span-2" />
+          {/* Audit fix #1 : destination structuree */}
+          <Controller
+            control={control}
+            name="destinationAgencyId"
+            render={({ field }) => (
+              <AppSearchSelect
+                label="Agence destination (optionnel)"
+                value={field.value || null}
+                onChange={(v) => field.onChange(v ?? null)}
+                search={(q, l) => searchers.agencies(q, l)}
+                placeholder="Selectionner une agence de reception"
+              />
+            )}
+          />
+          <AppInput
+            label="Adresse precise (optionnel)"
+            placeholder="Quartier, rue, point de repere..."
+            {...register('destinationAddress')}
+          />
+
+          {/* Audit fix #10 : categorie + flags */}
+          <Controller
+            control={control}
+            name="category"
+            render={({ field }) => (
+              <AppSelect
+                label="Categorie"
+                value={field.value || 'STANDARD'}
+                onValueChange={(v) => field.onChange(v)}
+                options={ParcelCategoryValues.map((v) => ({ value: v, label: categoryLabel(v) }))}
+              />
+            )}
+          />
+          <AppInput
+            label="Valeur declaree (XAF, optionnel)"
+            type="number"
+            step="100"
+            placeholder="Pour assurance"
+            {...register('declaredValue', { valueAsNumber: true })}
+          />
+
+          <Controller
+            control={control}
+            name="isFragile"
+            render={({ field }) => (
+              <div className="flex items-center justify-between rounded-xl bg-orange-50 p-3">
+                <div>
+                  <p className="text-sm font-medium text-orange-900">Fragile</p>
+                  <p className="text-xs text-orange-700">Manipulation prudente requise</p>
+                </div>
+                <AppSwitch checked={!!field.value} onCheckedChange={field.onChange} />
+              </div>
+            )}
+          />
+          <Controller
+            control={control}
+            name="isHazardous"
+            render={({ field }) => (
+              <div className="flex items-center justify-between rounded-xl bg-red-50 p-3">
+                <div>
+                  <p className="text-sm font-medium text-red-900">Marchandise dangereuse</p>
+                  <p className="text-xs text-red-700">Interdite en conteneur aerien</p>
+                </div>
+                <AppSwitch checked={!!field.value} onCheckedChange={field.onChange} />
+              </div>
+            )}
+          />
+
+          <AppTextarea
+            label="Observation"
+            rows={3}
+            placeholder="Notes sur le colis (optionnel)"
+            wrapperClassName="sm:col-span-2"
+            {...register('observation')}
+          />
         </div>
 
         {!isEdit && (
@@ -255,6 +348,41 @@ export function ParcelFormDialog({ open, onClose, parcel }: Props) {
           </AppButton>
         </div>
       </form>
+
+      <RecipientQuickCreateDialog
+        open={recipientCreateOpen}
+        initialName={recipientCreateName}
+        onClose={() => {
+          if (recipientCreatePromise) recipientCreatePromise(null);
+          setRecipientCreatePromise(null);
+          setRecipientCreateOpen(false);
+        }}
+        onCreated={(opt) => {
+          if (recipientCreatePromise) recipientCreatePromise(opt);
+          setSelectedRecipient(opt);
+          setRecipientCreatePromise(null);
+          setRecipientCreateOpen(false);
+        }}
+      />
     </AppDialog>
   );
+}
+
+function categoryLabel(v: string): string {
+  switch (v) {
+    case 'STANDARD':
+      return 'Standard';
+    case 'DOCUMENT':
+      return 'Document';
+    case 'FOOD':
+      return 'Alimentaire';
+    case 'ELECTRONICS':
+      return 'Electronique';
+    case 'CLOTHING':
+      return 'Vetements';
+    case 'OTHER':
+      return 'Autre';
+    default:
+      return v;
+  }
 }

@@ -15,8 +15,9 @@ const MANIFEST_INCLUDE = {
   container: { select: { id: true, designation: true, status: true } },
 };
 
-const DISPATCH_ALLOWED = new Set(['LOADING', 'IN_TRANSIT', 'ARRIVED', 'RECEIVED', 'UNLOADING', 'UNLOADED']);
-const RECEPTION_ALLOWED = new Set(['ARRIVED', 'RECEIVED', 'UNLOADING', 'UNLOADED']);
+// Statuts autorises pour generer un bordereau (audit fix #3 : statuts simplifies).
+const DISPATCH_ALLOWED = new Set(['LOADING', 'IN_TRANSIT', 'RECEIVED', 'UNLOADED']);
+const RECEPTION_ALLOWED = new Set(['RECEIVED', 'UNLOADED']);
 
 @injectable()
 export class PrismaManifestRepository implements IManifestRepository {

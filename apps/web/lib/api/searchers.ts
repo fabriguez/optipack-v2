@@ -41,9 +41,18 @@ export const searchers = {
     }));
   },
 
+  // Recipients ont fusionne avec clients : on cherche dans la meme table.
   recipients: async (q: string, limit = DEFAULT_LIMIT): Promise<SearchOption[]> => {
-    const items = await searchPaginated<{ id: string; fullName: string; phone: string }>('/recipients', q, limit);
-    return items.map((r) => ({ value: r.id, label: r.fullName, sublabel: r.phone }));
+    const items = await searchPaginated<{ id: string; fullName: string; phone: string; clientType?: string }>(
+      '/clients',
+      q,
+      limit,
+    );
+    return items.map((c) => ({
+      value: c.id,
+      label: c.fullName,
+      sublabel: `${c.phone}${c.clientType && c.clientType !== 'INDIVIDUAL' ? ` - ${c.clientType}` : ''}`,
+    }));
   },
 
   warehouses: async (q: string, limit = DEFAULT_LIMIT): Promise<SearchOption[]> => {
@@ -130,12 +139,14 @@ export const inlineCreators = {
     return { value: c.id, label: c.fullName, sublabel: c.phone };
   },
 
+  // Cree un Client (utilise comme destinataire). Ce champ est appele "recipient"
+  // pour l'historique mais fonctionnellement c'est un client.
   recipient: async (fullName: string, extra: { agencyId: string; phone?: string }): Promise<SearchOption | null> => {
     if (!fullName.trim()) return null;
     const phone = extra.phone || `temp-${Date.now()}`;
-    const res = await apiClient.post('/recipients', { fullName, phone, agencyId: extra.agencyId });
-    const r = res.data.data;
-    return { value: r.id, label: r.fullName, sublabel: r.phone };
+    const res = await clientsApi.create({ fullName, phone, agencyId: extra.agencyId } as never);
+    const c = res.data;
+    return { value: c.id, label: c.fullName, sublabel: c.phone };
   },
 
   warehouse: async (name: string, extra: { agencyId: string; location?: string }): Promise<SearchOption | null> => {

@@ -59,6 +59,16 @@ export class LoadParcelsUseCase {
         }
       }
 
+      // Audit fix #10 : refus des marchandises dangereuses dans les conteneurs AIR
+      // (sauf forwarding). Reglementation IATA standard.
+      if (parcel.isHazardous && container.type === 'AIR' && !container.isForwarding) {
+        errors.push({
+          parcelId,
+          reason: 'Marchandise dangereuse interdite en conteneur aerien (sauf acheminement)',
+        });
+        continue;
+      }
+
       // Verification capacite (si poids defini)
       const parcelWeight = parcel.weight ? Number(parcel.weight) : 0;
       const newLoad = runningLoad + parcelWeight;

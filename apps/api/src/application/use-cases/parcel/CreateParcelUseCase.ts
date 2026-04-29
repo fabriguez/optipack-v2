@@ -84,12 +84,21 @@ export class CreateParcelUseCase {
     });
 
     const parcel = await this.parcelRepo.create({
+      organizationId: client.organizationId,
       trackingNumber,
       designation: input.designation,
       weight: hasWeight ? Number(input.weight) : null,
       originalWeight: hasWeight ? Number(input.weight) : null,
       volume: hasVolume ? Number(input.volume) : null,
       destination: input.destination,
+      // Audit fix #1 : destination structuree
+      ...(input.destinationAgencyId && { destinationAgency: { connect: { id: input.destinationAgencyId } } }),
+      destinationAddress: input.destinationAddress ?? null,
+      // Audit fix #10 : categorie + flags
+      category: (input.category as never) ?? 'STANDARD',
+      isFragile: input.isFragile ?? false,
+      isHazardous: input.isHazardous ?? false,
+      declaredValue: input.declaredValue ?? null,
       observation: input.observation || null,
       originalObservation: input.observation || null,
       price: pricing.finalPrice,

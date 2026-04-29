@@ -4,10 +4,33 @@ import type { IPenaltyRepository } from '../../../application/interfaces/IPenalt
 import type { PaginationInput, PaginatedResponse } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
 
+/**
+ * Audit fix #8 : `daysAccumulated` et `totalAmount` ne sont PAS stockes a jour en BDD
+ * (ils drift dans le temps). On les recalcule a la lecture depuis startDate + dailyRate.
+ * Les valeurs DB ne sont snapshot qu'au moment de la facturation (penalty.invoiceId set).
+ */
+function computePenalty<T extends Penalty>(penalty: T): T {
+  // Si deja paye/facture, on garde les valeurs snapshot
+  if (penalty.isPaid || penalty.invoiceId) return penalty;
+
+  const start = penalty.startDate ? new Date(penalty.startDate as never) : null;
+  if (!start) return penalty;
+
+  const now = new Date();
+  const days = Math.max(0, Math.floor((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
+  const total = days * Number(penalty.dailyRate);
+
+  return {
+    ...penalty,
+    daysAccumulated: days as never,
+    totalAmount: total as never,
+  };
+}
+
 @injectable()
 export class PrismaPenaltyRepository implements IPenaltyRepository {
   async findById(id: string): Promise<Penalty | null> {
-    return prisma.penalty.findUnique({
+    const p = await prisma.penalty.findUnique({
       where: { id },
       include: {
         parcel: { select: { id: true, trackingNumber: true, designation: true } },
@@ -15,10 +38,12 @@ export class PrismaPenaltyRepository implements IPenaltyRepository {
         agency: { select: { id: true, name: true } },
       },
     });
+    return p ? computePenalty(p as Penalty) : null;
   }
 
   async findByParcel(parcelId: string): Promise<Penalty | null> {
-    return prisma.penalty.findFirst({ where: { parcelId, isPaid: false } });
+    const p = await prisma.penalty.findFirst({ where: { parcelId, isPaid: false } });
+    return p ? computePenalty(p) : null;
   }
 
   async findAll(
@@ -46,7 +71,10 @@ export class PrismaPenaltyRepository implements IPenaltyRepository {
       prisma.penalty.count({ where }),
     ]);
 
-    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+    return {
+      data: data.map((p) => computePenalty(p)),
+      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
+    };
   }
 
   async findParcelsEligibleForPenalty(graceDays: number) {

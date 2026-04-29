@@ -33,41 +33,45 @@ import {
   LogOut,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
+import { useTenantMeta } from '@/lib/providers/TenantProvider';
 
 interface NavItem {
   label: string;
   href: string;
   icon: React.ElementType;
+  /** Module flag pour filtrage par tenant (Phase 0.4) */
+  module?: string;
 }
 
 const mainNav: NavItem[] = [
   { label: 'Tableau de bord', href: '/', icon: LayoutDashboard },
-  { label: 'Agences', href: '/agencies', icon: Building2 },
-  { label: 'Magasins', href: '/warehouses', icon: Warehouse },
-  { label: 'Clients', href: '/clients', icon: Users },
-  { label: 'Colis', href: '/parcels', icon: Package },
-  { label: 'Conteneurs', href: '/containers', icon: Container },
-  { label: 'Routes transit', href: '/transit-routes', icon: Route },
+  { label: 'Agences', href: '/agencies', icon: Building2, module: 'agencies' },
+  { label: 'Magasins', href: '/warehouses', icon: Warehouse, module: 'warehouses' },
+  { label: 'Clients', href: '/clients', icon: Users, module: 'clients' },
+  { label: 'Colis', href: '/parcels', icon: Package, module: 'parcels' },
+  { label: 'Conteneurs', href: '/containers', icon: Container, module: 'containers' },
+  { label: 'Routes transit', href: '/transit-routes', icon: Route, module: 'transit-routes' },
 ];
 
 const financeNav: NavItem[] = [
-  { label: 'Factures', href: '/invoices', icon: FileText },
-  { label: 'Paiements', href: '/payments', icon: CreditCard },
-  { label: 'Caisse', href: '/cash-register', icon: Vault },
-  { label: 'Decaissements', href: '/disbursements', icon: Receipt },
-  { label: 'Transferts', href: '/fund-transfers', icon: ArrowRightLeft },
-  { label: 'Comptabilite', href: '/accounting', icon: BookOpen },
-  { label: 'Depenses', href: '/expenses', icon: HandCoins },
-  { label: 'Dettes', href: '/debts', icon: AlertTriangle },
+  { label: 'Factures', href: '/invoices', icon: FileText, module: 'invoices' },
+  { label: 'Paiements', href: '/payments', icon: CreditCard, module: 'payments' },
+  { label: 'Caisse', href: '/cash-register', icon: Vault, module: 'payments' },
+  { label: 'Decaissements', href: '/disbursements', icon: Receipt, module: 'disbursements' },
+  { label: 'Transferts', href: '/fund-transfers', icon: ArrowRightLeft, module: 'fund-transfers' },
+  { label: 'Comptabilite', href: '/accounting', icon: BookOpen, module: 'accounting' },
+  { label: 'Depenses', href: '/expenses', icon: HandCoins, module: 'expenses' },
+  { label: 'Dettes', href: '/debts', icon: AlertTriangle, module: 'debts' },
 ];
 
 const systemNav: NavItem[] = [
-  { label: 'Personnel', href: '/employees', icon: UserCog },
-  { label: 'Fidelite', href: '/loyalty', icon: Star },
-  { label: 'Penalites', href: '/penalties', icon: AlertTriangle },
+  { label: 'Personnel', href: '/employees', icon: UserCog, module: 'employees' },
+  { label: 'Fidelite', href: '/loyalty', icon: Star, module: 'loyalty' },
+  { label: 'Penalites', href: '/penalties', icon: AlertTriangle, module: 'penalties' },
   { label: 'Notifications', href: '/notifications', icon: Bell },
-  { label: 'Support', href: '/chat', icon: MessageSquare },
-  { label: 'Rapports', href: '/reports', icon: BarChart3 },
+  { label: 'Support', href: '/chat', icon: MessageSquare, module: 'chat' },
+  { label: 'Rapports', href: '/reports', icon: BarChart3, module: 'reports' },
+  { label: 'Personnalisation', href: '/settings/branding', icon: Settings },
   { label: 'Parametres', href: '/settings', icon: Settings },
   { label: 'Audit', href: '/audit-log', icon: Shield },
 ];
@@ -141,6 +145,15 @@ function NavSection({
 export function Sidebar() {
   const logoutMutation = useLogout();
   const { collapsed, setCollapsed } = useSidebar();
+  const { isModuleEnabled, meta } = useTenantMeta();
+
+  // Phase 0.4 : filtre les items selon les modules actives du tenant
+  const filterByModule = (items: NavItem[]) =>
+    items.filter((it) => !it.module || isModuleEnabled(it.module));
+
+  const filteredMain = filterByModule(mainNav);
+  const filteredFinance = filterByModule(financeNav);
+  const filteredSystem = filterByModule(systemNav);
 
   return (
     <aside
@@ -149,10 +162,17 @@ export function Sidebar() {
         collapsed ? 'w-[68px]' : 'w-[260px]',
       )}
     >
-      {/* Logo */}
+      {/* Logo + nom dynamique du tenant */}
       <div className="flex h-16 items-center justify-between px-4 border-b border-white/10">
         {!collapsed && (
-          <span className="text-xl font-bold text-white tracking-tight">TransitSoftServices</span>
+          <div className="flex items-center gap-2 min-w-0">
+            {meta?.logoUrl && (
+              <img src={meta.logoUrl} alt="logo" className="h-8 w-8 object-contain rounded" onError={(e) => ((e.target as HTMLImageElement).style.display = 'none')} />
+            )}
+            <span className="text-lg font-bold text-white tracking-tight truncate">
+              {meta?.name ?? 'TransitSoftServices'}
+            </span>
+          </div>
         )}
         <button
           onClick={() => setCollapsed(!collapsed)}
@@ -164,11 +184,11 @@ export function Sidebar() {
         </button>
       </div>
 
-      {/* Navigation */}
+      {/* Navigation : items filtres par modules actives */}
       <div className="flex-1 overflow-y-auto py-3">
-        <NavSection title="Menu" items={mainNav} collapsed={collapsed} defaultOpen={true} />
-        <NavSection title="Finance" items={financeNav} collapsed={collapsed} defaultOpen={true} />
-        <NavSection title="Systeme" items={systemNav} collapsed={collapsed} defaultOpen={false} />
+        {filteredMain.length > 0 && <NavSection title="Menu" items={filteredMain} collapsed={collapsed} defaultOpen={true} />}
+        {filteredFinance.length > 0 && <NavSection title="Finance" items={filteredFinance} collapsed={collapsed} defaultOpen={true} />}
+        {filteredSystem.length > 0 && <NavSection title="Systeme" items={filteredSystem} collapsed={collapsed} defaultOpen={false} />}
       </div>
 
       {/* Footer */}

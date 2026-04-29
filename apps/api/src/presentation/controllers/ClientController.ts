@@ -5,14 +5,13 @@ import { ListClientsUseCase } from '../../application/use-cases/client/ListClien
 import { GetClientUseCase } from '../../application/use-cases/client/GetClientUseCase';
 import { UpdateClientUseCase } from '../../application/use-cases/client/UpdateClientUseCase';
 import { DeleteClientUseCase } from '../../application/use-cases/client/DeleteClientUseCase';
-
-const DEFAULT_ORG_ID = '00000000-0000-4000-a000-000000000001';
+import { getOrgId } from '../middleware/tenantGuard';
 
 export class ClientController {
   static async create(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(CreateClientUseCase);
-      const client = await useCase.execute(req.body, DEFAULT_ORG_ID);
+      const client = await useCase.execute(req.body, getOrgId(req));
       res.status(201).json({ success: true, data: client });
     } catch (err) {
       next(err);
@@ -24,8 +23,8 @@ export class ClientController {
       const useCase = container.resolve(ListClientsUseCase);
       const agencyId = req.query.agencyId as string | undefined;
       const result = await useCase.execute(
-        { organizationId: DEFAULT_ORG_ID, agencyId },
-        req.query as any,
+        { organizationId: getOrgId(req), agencyId },
+        req.query as never,
       );
       res.json({ success: true, ...result });
     } catch (err) {

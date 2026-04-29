@@ -30,7 +30,12 @@ export function ExpenseFormDialog({ open, onClose }: Props) {
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <AppInput label="Titre" {...register('title', { required: true })} />
         <AppInput label="Motif" {...register('reason', { required: true })} />
-        <AppTextarea label="Description" {...register('description')} />
+        <AppTextarea
+          label="Description"
+          rows={3}
+          placeholder="Detail de la depense (optionnel)"
+          {...register('description')}
+        />
         <AppInput label="Categorie" {...register('category')} placeholder="Transport, fournitures..." />
         <AppSelect label="Agence" {...register('agencyId', { required: true })}
           options={(agencies?.data || []).map((a: any) => ({ value: a.id, label: a.name }))} placeholder="Selectionner" />

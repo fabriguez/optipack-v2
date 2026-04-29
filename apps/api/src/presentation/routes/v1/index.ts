@@ -29,11 +29,16 @@ import configRoutes from './config.routes';
 import manifestRoutes from './manifest.routes';
 import routingRoutes from './routing.routes';
 import clientPortalRoutes from './client-portal.routes';
+import tenantMetaRoutes from './tenant-meta.routes';
+import systemRoutes from './system.routes';
 
 const router = Router();
 
 // Public
 router.use(healthRoutes);
+router.use('/tenant-meta', tenantMetaRoutes);
+router.use('/organization', tenantMetaRoutes);  // alias pour PATCH /organization/branding
+router.use('/system', systemRoutes);  // Phase 4.5 : updates pilote par tenant
 router.use('/auth', authRoutes);
 router.use('/client-portal', clientPortalRoutes);
 

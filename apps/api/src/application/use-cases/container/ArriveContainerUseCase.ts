@@ -25,7 +25,7 @@ export class ArriveContainerUseCase {
 
     const arrivalDate = new Date();
     await this.containerRepo.update(containerId, {
-      status: 'ARRIVED',
+      status: 'RECEIVED',
       actualArrivalDate: arrivalDate,
     });
 
@@ -33,6 +33,8 @@ export class ArriveContainerUseCase {
     const parcelIds = parcels.map((p) => p.id);
 
     if (parcelIds.length > 0) {
+      // Cote colis : ARRIVED (= dans le conteneur a destination, en attente de dechargement).
+      // Quand le colis sera reellement decharge en magasin, il passera a RECEIVED.
       await this.parcelRepo.updateMany(parcelIds, {
         status: 'ARRIVED',
         arrivalDate,
@@ -56,9 +58,9 @@ export class ArriveContainerUseCase {
 
     await this.history.recordContainer({
       containerId,
-      action: 'ARRIVED',
+      action: 'RECEIVED',
       statusBefore: 'IN_TRANSIT',
-      statusAfter: 'ARRIVED',
+      statusAfter: 'RECEIVED',
       userId,
       comment: `Arrivee - ${parcelIds.length} colis a decharger`,
       changes: { arrivalDate: arrivalDate.toISOString(), parcelCount: parcelIds.length },
@@ -71,6 +73,6 @@ export class ArriveContainerUseCase {
       userId,
     });
 
-    return { containerId, parcelCount: parcelIds.length, status: 'ARRIVED' };
+    return { containerId, parcelCount: parcelIds.length, status: 'RECEIVED' };
   }
 }

@@ -11,13 +11,37 @@ const CONTAINER_INCLUDE = {
   _count: { select: { parcels: true } },
 };
 
+/**
+ * Audit fix #4 : `currentLoad` peut driver (transactions a moitie executees,
+ * weight de colis modifies, etc.). On recalcule a la volee a chaque lecture
+ * via SUM(parcels.weight). Le champ snapshot reste en DB pour requetes filtrees.
+ */
+async function refreshCurrentLoad(container: Container | null): Promise<Container | null> {
+  if (!container) return null;
+  const result = await prisma.parcel.aggregate({
+    _sum: { weight: true },
+    where: { containerId: container.id, isDeleted: false },
+  });
+  const real = Number(result._sum.weight ?? 0);
+  if (Math.abs(Number(container.currentLoad) - real) > 0.001) {
+    // Drift detecte : on update silencieusement et on retourne la vraie valeur
+    await prisma.container.update({
+      where: { id: container.id },
+      data: { currentLoad: real },
+    });
+    return { ...container, currentLoad: real as never };
+  }
+  return container;
+}
+
 @injectable()
 export class PrismaContainerRepository implements IContainerRepository {
   async findById(id: string): Promise<ContainerWithRelations | null> {
-    return prisma.container.findUnique({
+    const c = await prisma.container.findUnique({
       where: { id },
       include: CONTAINER_INCLUDE,
-    }) as Promise<ContainerWithRelations | null>;
+    });
+    return (await refreshCurrentLoad(c as never)) as ContainerWithRelations | null;
   }
 
   async findAll(
@@ -31,7 +55,7 @@ export class PrismaContainerRepository implements IContainerRepository {
       isDeleted: false,
       ...(filters.departureAgencyId && { departureAgencyId: filters.departureAgencyId }),
       ...(filters.arrivalAgencyId && { arrivalAgencyId: filters.arrivalAgencyId }),
-      ...(filters.status && { status: filters.status as any }),
+      ...(filters.status && { status: filters.status as never }),
       ...(filters.agencyIds?.length && {
         OR: [
           { departureAgencyId: { in: filters.agencyIds } },
@@ -55,6 +79,23 @@ export class PrismaContainerRepository implements IContainerRepository {
       }),
       prisma.container.count({ where }),
     ]);
+
+    // Recalcul en batch via aggregation groupBy pour eviter N+1
+    if (data.length > 0) {
+      const ids = data.map((d) => d.id);
+      const sums = await prisma.parcel.groupBy({
+        by: ['containerId'],
+        where: { containerId: { in: ids }, isDeleted: false },
+        _sum: { weight: true },
+      });
+      const sumByContainer = new Map(sums.map((s) => [s.containerId!, Number(s._sum.weight ?? 0)]));
+      for (const c of data) {
+        const real = sumByContainer.get(c.id) ?? 0;
+        if (Math.abs(Number(c.currentLoad) - real) > 0.001) {
+          (c as { currentLoad: unknown }).currentLoad = real;
+        }
+      }
+    }
 
     return {
       data: data as ContainerWithRelations[],

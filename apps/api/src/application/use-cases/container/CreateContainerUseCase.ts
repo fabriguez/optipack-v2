@@ -32,6 +32,7 @@ export class CreateContainerUseCase {
     if (!arrAgency) throw new NotFoundError("Agence d'arrivee", input.arrivalAgencyId);
 
     const created = await this.containerRepo.create({
+      organizationId: depAgency.organizationId,
       designation: input.designation,
       type: input.type,
       isForwarding,

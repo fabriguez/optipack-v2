@@ -10,14 +10,16 @@ const PARCEL_STATUS_MAP: Record<string, { label: string; variant: 'success' | 'w
   LOST: { label: 'Perdu', variant: 'error' },
 };
 
+// Audit fix #3 : conteneur reduit a 5 statuts
 const CONTAINER_STATUS_MAP: Record<string, { label: string; variant: 'success' | 'warning' | 'error' | 'info' | 'default' }> = {
   EMPTY: { label: 'Vide', variant: 'default' },
   LOADING: { label: 'En chargement', variant: 'info' },
   IN_TRANSIT: { label: 'En transit', variant: 'warning' },
-  ARRIVED: { label: 'Arrive', variant: 'info' },
-  RECEIVED: { label: 'Recu', variant: 'success' },
-  UNLOADING: { label: 'En dechargement', variant: 'warning' },
-  UNLOADED: { label: 'Decharge', variant: 'success' },
+  RECEIVED: { label: 'Receptionne', variant: 'success' },
+  UNLOADED: { label: 'Decharge', variant: 'default' },
+  // Compat ascendante (ancien dataset eventuel)
+  ARRIVED: { label: 'Receptionne', variant: 'success' },
+  UNLOADING: { label: 'Receptionne', variant: 'success' },
 };
 
 const INVOICE_STATUS_MAP: Record<string, { label: string; variant: 'success' | 'warning' | 'error' | 'info' | 'default' }> = {

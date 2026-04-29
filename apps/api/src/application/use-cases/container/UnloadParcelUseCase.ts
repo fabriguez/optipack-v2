@@ -12,7 +12,10 @@ interface UnloadResult {
   comment?: string;
 }
 
-const UNLOAD_ALLOWED_STATUSES = new Set(['ARRIVED', 'RECEIVED', 'UNLOADING']);
+// Audit fix #3 : statuts conteneur reduits a 5. Le dechargement n'est possible
+// qu'en RECEIVED (le conteneur est arrive). Quand tous les colis sont decharges,
+// le conteneur passe automatiquement a UNLOADED (terminal, plus reutilisable).
+const UNLOAD_ALLOWED_STATUSES = new Set(['RECEIVED']);
 
 @injectable()
 export class UnloadParcelUseCase {
@@ -50,18 +53,8 @@ export class UnloadParcelUseCase {
     const warehouse = await this.warehouseRepo.findById(warehouseId);
     if (!warehouse) throw new NotFoundError('Magasin', warehouseId);
 
-    const previousContainerStatus = container.status;
-    if (container.status !== 'UNLOADING') {
-      await this.containerRepo.update(containerId, { status: 'UNLOADING' });
-      await this.history.recordContainer({
-        containerId,
-        action: 'UNLOADING_STARTED',
-        statusBefore: previousContainerStatus,
-        statusAfter: 'UNLOADING',
-        userId,
-        comment: 'Debut de dechargement',
-      });
-    }
+    // Le conteneur reste en RECEIVED tant qu'il y a des colis dedans.
+    // Pas d'etat intermediaire UNLOADING (audit fix #3).
 
     switch (action) {
       case 'received':
@@ -95,7 +88,26 @@ export class UnloadParcelUseCase {
 
     const parcelWeight = parcel.weight ? Number(parcel.weight) : 0;
     const newLoad = Math.max(0, Number(container.currentLoad) - parcelWeight);
-    await this.containerRepo.update(containerId, { currentLoad: newLoad });
+
+    // Apres dechargement : si plus aucun colis dans le conteneur, on passe en UNLOADED (terminal).
+    const remaining = await this.parcelRepo.findByContainer(containerId);
+    const isLastParcel = remaining.length === 0;
+
+    await this.containerRepo.update(containerId, {
+      currentLoad: newLoad,
+      ...(isLastParcel && { status: 'UNLOADED' }),
+    });
+
+    if (isLastParcel) {
+      await this.history.recordContainer({
+        containerId,
+        action: 'UNLOADED',
+        statusBefore: 'RECEIVED',
+        statusAfter: 'UNLOADED',
+        userId,
+        comment: 'Tous les colis ont ete decharges. Conteneur cloture.',
+      });
+    }
 
     await this.history.recordParcel({
       parcelId,
