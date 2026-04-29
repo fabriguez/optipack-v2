@@ -16,11 +16,11 @@ fi
 echo "[entrypoint] Waiting for database..."
 ATTEMPTS=0
 MAX_ATTEMPTS="${DB_WAIT_MAX_ATTEMPTS:-60}"
-until echo "SELECT 1;" | "$PRISMA" db execute --stdin >/dev/null 2>&1; do
+until echo "SELECT 1;" | "$PRISMA" db execute --schema=./prisma/schema.prisma --stdin >/dev/null 2>&1; do
   ATTEMPTS=$((ATTEMPTS + 1))
   if [ "$ATTEMPTS" -eq 1 ] || [ $((ATTEMPTS % 10)) -eq 0 ]; then
     echo "[entrypoint] Attempt ${ATTEMPTS}/${MAX_ATTEMPTS} failed. Last error:" >&2
-    echo "SELECT 1;" | "$PRISMA" db execute --stdin >&2 || true
+    echo "SELECT 1;" | "$PRISMA" db execute --schema=./prisma/schema.prisma --stdin >&2 || true
   fi
   if [ "$ATTEMPTS" -ge "$MAX_ATTEMPTS" ]; then
     echo "[entrypoint] Database not reachable after ${MAX_ATTEMPTS} attempts. Aborting." >&2
