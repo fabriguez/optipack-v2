@@ -5,8 +5,10 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowLeft, Building2, Warehouse, Users, MapPin, Phone, Mail, Globe, Edit,
-  Plus, Package, CreditCard, Receipt, UserCog, Eye, Vault, Container,
+  Plus, Package, CreditCard, Receipt, UserCog, Eye, Vault, Container, Trash2,
 } from 'lucide-react';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { useDeleteAgency } from '@/lib/hooks/useAgencies';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard, AppCardHeader } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
@@ -17,6 +19,7 @@ import { StatusBadge } from '@/components/shared/StatusBadge';
 import { RowActions } from '@/components/shared/RowActions';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 import { useAgency } from '@/lib/hooks/useAgencies';
+import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { AgencyFormDialog } from '../AgencyFormDialog';
@@ -30,6 +33,8 @@ export default function AgencyDetailPage({ params }: { params: Promise<{ id: str
   const router = useRouter();
   const { data, isLoading } = useAgency(id);
   const [showEdit, setShowEdit] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
+  const deleteMutation = useDeleteAgency();
   const [showCreateWarehouse, setShowCreateWarehouse] = useState(false);
   const [showCreateClient, setShowCreateClient] = useState(false);
   const [showCreateEmployee, setShowCreateEmployee] = useState(false);
@@ -185,10 +190,16 @@ export default function AgencyDetailPage({ params }: { params: Promise<{ id: str
               <p className="text-sm text-gray-500 mt-0.5">{agency.city}, {agency.country}</p>
             </div>
           </div>
-          <AppButton variant="outline" onClick={() => setShowEdit(true)}>
-            <Edit className="h-4 w-4" />
-            Modifier
-          </AppButton>
+          <div className="flex items-center gap-2">
+            <AppButton variant="outline" onClick={() => setShowEdit(true)}>
+              <Edit className="h-4 w-4" />
+              Modifier
+            </AppButton>
+            <AppButton variant="outline" onClick={() => setShowDelete(true)}>
+              <Trash2 className="h-4 w-4 text-red-600" />
+              Supprimer
+            </AppButton>
+          </div>
         </div>
 
         {/* Tabs */}
@@ -200,6 +211,24 @@ export default function AgencyDetailPage({ params }: { params: Promise<{ id: str
 
         {/* Dialogs */}
         <AgencyFormDialog open={showEdit} onClose={() => setShowEdit(false)} agency={agency} />
+        <ConfirmDialog
+          open={showDelete}
+          onClose={() => setShowDelete(false)}
+          onConfirm={() => {
+            deleteMutation.mutate(agency.id, {
+              onSuccess: () => {
+                toast.success('Agence desactivee');
+                router.push('/agencies');
+              },
+              onError: () => toast.error('Erreur lors de la suppression'),
+            });
+          }}
+          title="Supprimer l'agence"
+          message={`L'agence "${agency.name}" sera desactivee. Vous pourrez la reactiver plus tard.`}
+          confirmLabel="Supprimer"
+          variant="destructive"
+          loading={deleteMutation.isPending}
+        />
         <WarehouseFormDialog
           open={showCreateWarehouse}
           onClose={() => setShowCreateWarehouse(false)}

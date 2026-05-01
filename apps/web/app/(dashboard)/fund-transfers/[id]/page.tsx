@@ -3,11 +3,13 @@
 import { use, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, ArrowRightLeft, Building2, UserCircle, CheckCircle, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, ArrowRightLeft, Building2, UserCircle, CheckCircle, AlertTriangle, Ban } from 'lucide-react';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppBadge } from '@/components/ui/AppBadge';
+import { AppDialog } from '@/components/ui/AppDialog';
+import { AppInput } from '@/components/ui/AppInput';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -31,6 +33,8 @@ export default function FundTransferDetailPage({ params }: { params: Promise<{ i
   const router = useRouter();
   const qc = useQueryClient();
   const [showConfirm, setShowConfirm] = useState(false);
+  const [showVoid, setShowVoid] = useState(false);
+  const [voidReason, setVoidReason] = useState('');
 
   const { data, isLoading } = useQuery({
     queryKey: ['fund-transfers', id],
@@ -46,6 +50,17 @@ export default function FundTransferDetailPage({ params }: { params: Promise<{ i
       setShowConfirm(false);
     },
     onError: () => toast.error('Erreur lors de la confirmation'),
+  });
+
+  const voidMutation = useMutation({
+    mutationFn: (reason: string) => apiClient.post(`/fund-transfers/${id}/void`, { reason }).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['fund-transfers'] });
+      toast.success('Transfert annule');
+      setShowVoid(false);
+      setVoidReason('');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || "Erreur lors de l'annulation"),
   });
 
   const transfer = data?.data;
@@ -71,12 +86,20 @@ export default function FundTransferDetailPage({ params }: { params: Promise<{ i
               <p className="text-sm text-gray-500 mt-0.5">Cree le {formatDate(transfer.createdAt)}</p>
             </div>
           </div>
-          {transfer.status === 'PENDING' && (
-            <AppButton onClick={() => setShowConfirm(true)}>
-              <CheckCircle className="h-4 w-4" />
-              Confirmer
-            </AppButton>
-          )}
+          <div className="flex items-center gap-2">
+            {transfer.status === 'PENDING' && (
+              <AppButton onClick={() => setShowConfirm(true)}>
+                <CheckCircle className="h-4 w-4" />
+                Confirmer
+              </AppButton>
+            )}
+            {!transfer.isVoided && transfer.status !== 'VOIDED' && (
+              <AppButton variant="outline" onClick={() => setShowVoid(true)}>
+                <Ban className="h-4 w-4 text-red-600" />
+                Annuler
+              </AppButton>
+            )}
+          </div>
         </div>
 
         {/* Voided warning */}
@@ -177,6 +200,30 @@ export default function FundTransferDetailPage({ params }: { params: Promise<{ i
         confirmLabel="Confirmer le transfert"
         loading={confirmMutation.isPending}
       />
+
+      <AppDialog
+        open={showVoid}
+        onClose={() => setShowVoid(false)}
+        title="Annuler le transfert"
+        size="sm"
+        footer={
+          <>
+            <AppButton variant="ghost" onClick={() => setShowVoid(false)}>Retour</AppButton>
+            <AppButton
+              variant="destructive"
+              onClick={() => voidMutation.mutate(voidReason || 'Annulation manuelle')}
+              loading={voidMutation.isPending}
+            >
+              Confirmer l'annulation
+            </AppButton>
+          </>
+        }
+      >
+        <p className="text-sm text-gray-600 mb-3">
+          Le transfert sera annule et la caisse source re-creditee de {formatAmount(Number(transfer.amount))}. Cette action est irreversible.
+        </p>
+        <AppInput label="Motif (optionnel)" value={voidReason} onChange={(e) => setVoidReason(e.target.value)} />
+      </AppDialog>
     </PageTransition>
   );
 }

@@ -88,7 +88,7 @@ export default function FundTransfersPage() {
         <RowActions actions={[
           { label: 'Voir details', icon: <Eye className="h-4 w-4" />, onClick: () => router.push(`/fund-transfers/${row.id}`) },
           { label: 'Confirmer', icon: <CheckCircle className="h-4 w-4" />, onClick: () => router.push(`/fund-transfers/${row.id}`), disabled: row.status !== 'PENDING' },
-          { label: 'Annuler', icon: <Ban className="h-4 w-4" />, onClick: () => router.push(`/fund-transfers/${row.id}`), variant: 'destructive' },
+          { label: 'Annuler', icon: <Ban className="h-4 w-4" />, onClick: () => router.push(`/fund-transfers/${row.id}`), variant: 'destructive', disabled: row.isVoided || row.status === 'VOIDED' },
         ]} />
       ),
     },

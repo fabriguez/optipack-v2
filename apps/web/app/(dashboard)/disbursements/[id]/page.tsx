@@ -1,25 +1,43 @@
 'use client';
 
-import { use } from 'react';
+import { use, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Receipt, Building2, UserCircle, FileText, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Receipt, Building2, UserCircle, FileText, AlertTriangle, Ban } from 'lucide-react';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppBadge } from '@/components/ui/AppBadge';
+import { AppButton } from '@/components/ui/AppButton';
+import { AppDialog } from '@/components/ui/AppDialog';
+import { AppInput } from '@/components/ui/AppInput';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
+import { toast } from 'sonner';
 
 export default function DisbursementDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const qc = useQueryClient();
+  const [showVoid, setShowVoid] = useState(false);
+  const [voidReason, setVoidReason] = useState('');
 
   const { data, isLoading } = useQuery({
     queryKey: ['disbursements', id],
     queryFn: () => apiClient.get(`/disbursements/${id}`).then((r) => r.data),
     enabled: !!id,
+  });
+
+  const voidMutation = useMutation({
+    mutationFn: (reason: string) => apiClient.post(`/disbursements/${id}/void`, { reason }).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['disbursements'] });
+      toast.success('Bon de decaissement annule');
+      setShowVoid(false);
+      setVoidReason('');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || "Erreur lors de l'annulation"),
   });
 
   const voucher = data?.data;
@@ -30,18 +48,48 @@ export default function DisbursementDetailPage({ params }: { params: Promise<{ i
     <PageTransition>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center gap-4">
-          <button onClick={() => router.back()} className="rounded-xl p-2 hover:bg-gray-100 transition-colors">
-            <ArrowLeft className="h-5 w-5 text-gray-500" />
-          </button>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-gray-900">Bon {voucher.reference}</h1>
-              <AppBadge variant={voucher.isVoided ? 'error' : 'success'}>{voucher.isVoided ? 'Annule' : 'Valide'}</AppBadge>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button onClick={() => router.back()} className="rounded-xl p-2 hover:bg-gray-100 transition-colors">
+              <ArrowLeft className="h-5 w-5 text-gray-500" />
+            </button>
+            <div>
+              <div className="flex items-center gap-3">
+                <h1 className="text-2xl font-bold text-gray-900">Bon {voucher.reference}</h1>
+                <AppBadge variant={voucher.isVoided ? 'error' : 'success'}>{voucher.isVoided ? 'Annule' : 'Valide'}</AppBadge>
+              </div>
+              <p className="text-sm text-gray-500 mt-0.5">Emis le {formatDate(voucher.createdAt)}</p>
             </div>
-            <p className="text-sm text-gray-500 mt-0.5">Emis le {formatDate(voucher.createdAt)}</p>
           </div>
+          {!voucher.isVoided && (
+            <AppButton variant="outline" onClick={() => setShowVoid(true)}>
+              <Ban className="h-4 w-4 text-red-600" />
+              Annuler
+            </AppButton>
+          )}
         </div>
+
+        <AppDialog
+          open={showVoid}
+          onClose={() => setShowVoid(false)}
+          title="Annuler le bon de decaissement"
+          size="sm"
+          footer={
+            <>
+              <AppButton variant="ghost" onClick={() => setShowVoid(false)}>Retour</AppButton>
+              <AppButton
+                variant="destructive"
+                onClick={() => voidMutation.mutate(voidReason || 'Annulation manuelle')}
+                loading={voidMutation.isPending}
+              >
+                Confirmer l'annulation
+              </AppButton>
+            </>
+          }
+        >
+          <p className="text-sm text-gray-600 mb-3">Cette action est irreversible. Le bon ne sera plus considere comme valide.</p>
+          <AppInput label="Motif (optionnel)" value={voidReason} onChange={(e) => setVoidReason(e.target.value)} />
+        </AppDialog>
 
         {/* Voided warning */}
         {voucher.isVoided && (

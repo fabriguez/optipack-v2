@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { container } from '../../container';
 import { CreateFundTransferUseCase } from '../../application/use-cases/fund-transfer/CreateFundTransferUseCase';
 import { ConfirmFundTransferUseCase } from '../../application/use-cases/fund-transfer/ConfirmFundTransferUseCase';
+import { VoidFundTransferUseCase } from '../../application/use-cases/fund-transfer/VoidFundTransferUseCase';
 import { FUND_TRANSFER_REPOSITORY } from '../../application/interfaces/IFundTransferRepository';
 import { NotFoundError } from '../../domain/errors/BusinessError';
 
@@ -44,6 +45,17 @@ export class FundTransferController {
     try {
       const useCase = container.resolve(ConfirmFundTransferUseCase);
       const result = await useCase.execute(req.params.id, req.user!.userId);
+      res.json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async void(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(VoidFundTransferUseCase);
+      const reason = (req.body?.reason as string) || 'Annulation manuelle';
+      const result = await useCase.execute(req.params.id, reason, req.user!.userId);
       res.json({ success: true, data: result });
     } catch (err) {
       next(err);

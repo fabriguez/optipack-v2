@@ -57,15 +57,27 @@ export function PartnerPricingsSection({ clientId, isPartner }: Props) {
     onError: () => toast.error('Erreur lors de la suppression'),
   });
 
+  const promoteMut = useMutation({
+    mutationFn: () => clientsApi.update(clientId, { clientType: 'PARTNER' } as any),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['clients', clientId] });
+      toast.success('Client promu Partenaire');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Erreur lors de la promotion'),
+  });
+
   const items: PartnerPricing[] = data?.data || [];
 
   if (!isPartner) {
     return (
       <AppCard>
         <AppCardHeader title="Tarification partenaire" />
-        <div className="flex items-center gap-2 rounded-xl bg-gray-50 p-3 text-sm text-gray-600">
-          <Tag className="h-4 w-4 text-gray-400" />
-          <span>Pour activer la tarification dediee, marquez le client comme <strong>Partenaire</strong> dans son profil.</span>
+        <div className="flex items-center gap-3 rounded-xl bg-gray-50 p-3 text-sm text-gray-600">
+          <Tag className="h-4 w-4 shrink-0 text-gray-400" />
+          <span className="flex-1">Pour activer la tarification dediee, marquez le client comme <strong>Partenaire</strong>.</span>
+          <AppButton size="sm" onClick={() => promoteMut.mutate()} disabled={promoteMut.isPending}>
+            {promoteMut.isPending ? 'En cours...' : 'Marquer comme Partenaire'}
+          </AppButton>
         </div>
       </AppCard>
     );

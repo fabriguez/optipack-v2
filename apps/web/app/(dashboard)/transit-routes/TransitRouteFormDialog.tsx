@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { createTransitRouteSchema, type CreateTransitRouteInput } from '@transitsoftservices/shared';
@@ -13,13 +13,33 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { toast } from 'sonner';
 
-interface Props { open: boolean; onClose: () => void; }
+interface Props {
+  open: boolean;
+  onClose: () => void;
+  /** Si fourni, le dialog passe en mode edition (la geographie n'est pas modifiable apres creation) */
+  route?: {
+    id: string;
+    name: string;
+    type: string;
+    pricePerKg: number | string;
+    pricePerVolume?: number | string | null;
+    estimatedDurationDays?: number | null;
+  } | null;
+}
 
-export function TransitRouteFormDialog({ open, onClose }: Props) {
+export function TransitRouteFormDialog({ open, onClose, route }: Props) {
   const qc = useQueryClient();
+  const isEdit = !!route;
   const mutation = useMutation({
-    mutationFn: (data: any) => apiClient.post('/transit-routes', data).then((r) => r.data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['transit-routes'] }); toast.success('Route creee'); onClose(); },
+    mutationFn: (data: any) =>
+      isEdit
+        ? apiClient.patch(`/transit-routes/${route!.id}`, data).then((r) => r.data)
+        : apiClient.post('/transit-routes', data).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['transit-routes'] });
+      toast.success(isEdit ? 'Route mise a jour' : 'Route creee');
+      onClose();
+    },
     onError: () => toast.error('Erreur'),
   });
 
@@ -29,21 +49,48 @@ export function TransitRouteFormDialog({ open, onClose }: Props) {
   const [arrStateId, setArrStateId] = useState<number>(0);
 
   const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<CreateTransitRouteInput>({
-    resolver: zodResolver(createTransitRouteSchema),
+    resolver: isEdit ? undefined : zodResolver(createTransitRouteSchema),
   });
 
-  const onSubmit = (data: CreateTransitRouteInput) => { mutation.mutate(data); reset(); };
+  useEffect(() => {
+    if (open && route) {
+      reset({
+        name: route.name,
+        type: route.type as any,
+        pricePerKg: Number(route.pricePerKg),
+        pricePerVolume: route.pricePerVolume != null ? Number(route.pricePerVolume) : undefined,
+        estimatedDurationDays: route.estimatedDurationDays ?? undefined,
+      } as any);
+    } else if (open && !route) {
+      reset();
+    }
+  }, [open, route, reset]);
+
+  const onSubmit = (data: CreateTransitRouteInput) => {
+    if (isEdit) {
+      mutation.mutate({
+        name: data.name,
+        type: data.type,
+        pricePerKg: data.pricePerKg,
+        pricePerVolume: data.pricePerVolume,
+        estimatedDurationDays: data.estimatedDurationDays,
+      });
+    } else {
+      mutation.mutate(data);
+    }
+    reset();
+  };
 
   return (
     <AppDialog
       open={open}
       onClose={onClose}
-      title="Nouvelle route de transit"
+      title={isEdit ? 'Modifier la route de transit' : 'Nouvelle route de transit'}
       size="lg"
       footer={
         <>
           <AppButton variant="ghost" type="button" onClick={onClose}>Annuler</AppButton>
-          <AppButton type="submit" form="transit-route-form" loading={mutation.isPending}>Creer</AppButton>
+          <AppButton type="submit" form="transit-route-form" loading={mutation.isPending}>{isEdit ? 'Enregistrer' : 'Creer'}</AppButton>
         </>
       }
     >
@@ -55,7 +102,7 @@ export function TransitRouteFormDialog({ open, onClose }: Props) {
           ]} placeholder="Selectionner" />
         </div>
 
-        <div className="border border-gray-100 rounded-xl p-4 space-y-3">
+        {!isEdit && <div className="border border-gray-100 rounded-xl p-4 space-y-3">
           <h4 className="text-sm font-semibold text-gray-700">Depart</h4>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <AppCountrySelect
@@ -78,9 +125,9 @@ export function TransitRouteFormDialog({ open, onClose }: Props) {
               onChange={(val) => setValue('departureCity', val)}
             />
           </div>
-        </div>
+        </div>}
 
-        <div className="border border-gray-100 rounded-xl p-4 space-y-3">
+        {!isEdit && <div className="border border-gray-100 rounded-xl p-4 space-y-3">
           <h4 className="text-sm font-semibold text-gray-700">Arrivee</h4>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <AppCountrySelect
@@ -103,7 +150,7 @@ export function TransitRouteFormDialog({ open, onClose }: Props) {
               onChange={(val) => setValue('arrivalCity', val)}
             />
           </div>
-        </div>
+        </div>}
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <AppInput label="Prix par kg" type="number" step="0.01" {...register('pricePerKg', { valueAsNumber: true })} error={errors.pricePerKg?.message} />

@@ -1,16 +1,18 @@
 'use client';
 
-import { use } from 'react';
+import { use, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, UserCircle, Building2, Phone, CreditCard, Calendar, Briefcase, Hash } from 'lucide-react';
+import { ArrowLeft, UserCircle, Building2, Phone, CreditCard, Calendar, Briefcase, Hash, Edit } from 'lucide-react';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppBadge } from '@/components/ui/AppBadge';
+import { AppButton } from '@/components/ui/AppButton';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
+import { EmployeeFormDialog } from '../EmployeeFormDialog';
 
 export default function EmployeeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -22,6 +24,8 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
     enabled: !!id,
   });
 
+  const [showEdit, setShowEdit] = useState(false);
+
   const employee = data?.data;
   if (isLoading) return <DashboardSkeleton />;
   if (!employee) return <p className="p-6 text-gray-500">Employe introuvable</p>;
@@ -30,18 +34,26 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
     <PageTransition>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center gap-4">
-          <button onClick={() => router.back()} className="rounded-xl p-2 hover:bg-gray-100 transition-colors">
-            <ArrowLeft className="h-5 w-5 text-gray-500" />
-          </button>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-gray-900">{employee.fullName}</h1>
-              <AppBadge variant={employee.isActive ? 'success' : 'error'}>{employee.isActive ? 'Actif' : 'Inactif'}</AppBadge>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button onClick={() => router.back()} className="rounded-xl p-2 hover:bg-gray-100 transition-colors">
+              <ArrowLeft className="h-5 w-5 text-gray-500" />
+            </button>
+            <div>
+              <div className="flex items-center gap-3">
+                <h1 className="text-2xl font-bold text-gray-900">{employee.fullName}</h1>
+                <AppBadge variant={employee.isActive ? 'success' : 'error'}>{employee.isActive ? 'Actif' : 'Inactif'}</AppBadge>
+              </div>
+              <p className="text-sm text-gray-500 mt-0.5">{employee.position}</p>
             </div>
-            <p className="text-sm text-gray-500 mt-0.5">{employee.position}</p>
           </div>
+          <AppButton variant="outline" onClick={() => setShowEdit(true)}>
+            <Edit className="h-4 w-4" />
+            Modifier
+          </AppButton>
         </div>
+
+        <EmployeeFormDialog open={showEdit} onClose={() => setShowEdit(false)} employee={employee} />
 
         {/* Info cards */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">

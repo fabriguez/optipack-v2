@@ -12,5 +12,6 @@ router.get('/', validate(paginationSchema, 'query'), FundTransferController.list
 router.get('/:id', FundTransferController.getById);
 router.post('/', authorize('SUPER_ADMIN', 'ADMIN'), validate(createFundTransferSchema), FundTransferController.create);
 router.post('/:id/confirm', authorize('SUPER_ADMIN', 'ADMIN'), FundTransferController.confirm);
+router.post('/:id/void', authorize('SUPER_ADMIN', 'ADMIN'), FundTransferController.void);
 
 export default router;

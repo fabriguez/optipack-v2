@@ -1,12 +1,14 @@
 'use client';
 
-import { use } from 'react';
+import { use, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Route, MapPin, Clock, DollarSign, Plane, Ship, Truck } from 'lucide-react';
+import { ArrowLeft, Route, MapPin, Clock, DollarSign, Plane, Ship, Truck, Edit } from 'lucide-react';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppBadge } from '@/components/ui/AppBadge';
+import { AppButton } from '@/components/ui/AppButton';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
+import { TransitRouteFormDialog } from '../TransitRouteFormDialog';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { formatAmount } from '@transitsoftservices/shared';
@@ -27,6 +29,8 @@ export default function TransitRouteDetailPage({ params }: { params: Promise<{ i
     enabled: !!id,
   });
 
+  const [showEdit, setShowEdit] = useState(false);
+
   const route = data?.data;
   if (isLoading) return <DashboardSkeleton />;
   if (!route) return <p className="p-6 text-gray-500">Route introuvable</p>;
@@ -38,21 +42,29 @@ export default function TransitRouteDetailPage({ params }: { params: Promise<{ i
     <PageTransition>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center gap-4">
-          <button onClick={() => router.back()} className="rounded-xl p-2 hover:bg-gray-100 transition-colors">
-            <ArrowLeft className="h-5 w-5 text-gray-500" />
-          </button>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-gray-900">{route.name}</h1>
-              <AppBadge variant={typeConfig.variant}>{typeConfig.label}</AppBadge>
-              <AppBadge variant={route.isActive ? 'success' : 'error'}>{route.isActive ? 'Active' : 'Inactive'}</AppBadge>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button onClick={() => router.back()} className="rounded-xl p-2 hover:bg-gray-100 transition-colors">
+              <ArrowLeft className="h-5 w-5 text-gray-500" />
+            </button>
+            <div>
+              <div className="flex items-center gap-3">
+                <h1 className="text-2xl font-bold text-gray-900">{route.name}</h1>
+                <AppBadge variant={typeConfig.variant}>{typeConfig.label}</AppBadge>
+                <AppBadge variant={route.isActive ? 'success' : 'error'}>{route.isActive ? 'Active' : 'Inactive'}</AppBadge>
+              </div>
+              <p className="text-sm text-gray-500 mt-0.5">
+                {route.departureCity}, {route.departureCountry} &rarr; {route.arrivalCity}, {route.arrivalCountry}
+              </p>
             </div>
-            <p className="text-sm text-gray-500 mt-0.5">
-              {route.departureCity}, {route.departureCountry} &rarr; {route.arrivalCity}, {route.arrivalCountry}
-            </p>
           </div>
+          <AppButton variant="outline" onClick={() => setShowEdit(true)}>
+            <Edit className="h-4 w-4" />
+            Modifier
+          </AppButton>
         </div>
+
+        <TransitRouteFormDialog open={showEdit} onClose={() => setShowEdit(false)} route={route} />
 
         {/* Route visual */}
         <AppCard>
