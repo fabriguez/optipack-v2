@@ -35,7 +35,7 @@ export class PrismaParcelRepository implements IParcelRepository {
   }
 
   async findAll(
-    filters: { warehouseId?: string; containerId?: string; clientId?: string; status?: string; agencyIds?: string[] },
+    filters: { warehouseId?: string; containerId?: string; clientId?: string; status?: string; agencyIds?: string[] | null },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<ParcelWithRelations>> {
     const { page, limit, sortBy, sortOrder, search } = pagination;

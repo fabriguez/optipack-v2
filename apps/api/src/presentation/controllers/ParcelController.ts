@@ -35,13 +35,14 @@ export class ParcelController {
     try {
       const useCase = container.resolve(ListParcelsUseCase);
       const { warehouseId, containerId, clientId, status } = req.query;
+      const scope = req.user!.role === 'SUPER_ADMIN' ? null : req.user!.agencyIds;
       const result = await useCase.execute(
         {
           warehouseId: warehouseId as string,
           containerId: containerId as string,
           clientId: clientId as string,
           status: status as string,
-          agencyIds: req.user!.agencyIds,
+          agencyIds: scope,
         },
         req.query as any,
       );

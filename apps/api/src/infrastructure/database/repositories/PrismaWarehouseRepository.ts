@@ -36,7 +36,7 @@ export class PrismaWarehouseRepository implements IWarehouseRepository {
         orderBy: sortBy ? { [sortBy]: sortOrder } : { createdAt: 'desc' },
         include: {
           agency: { select: { id: true, name: true, code: true } },
-          _count: { select: { parcels: true } },
+          _count: { select: { parcels: { where: { isDeleted: false } } } },
         },
       }),
       prisma.warehouse.count({ where }),
@@ -82,7 +82,7 @@ export class PrismaWarehouseRepository implements IWarehouseRepository {
         orderBy: sortBy ? { [sortBy]: sortOrder } : { createdAt: 'desc' },
         include: {
           agency: { select: { id: true, name: true, code: true } },
-          _count: { select: { parcels: true } },
+          _count: { select: { parcels: { where: { isDeleted: false } } } },
         },
       }),
       prisma.warehouse.count({ where }),
