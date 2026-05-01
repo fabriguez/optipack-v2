@@ -32,6 +32,7 @@ import { searchers } from '@/lib/api/searchers';
 import { formatDate, formatDateTime } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
 import { ComparisonDialog } from './ComparisonDialog';
+import { ParcelFormDialog } from '@/app/(dashboard)/parcels/ParcelFormDialog';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
 
@@ -43,6 +44,12 @@ const STATUS_LABELS: Record<string, string> = {
   RECEIVED: 'Receptionne',
   UNLOADING: 'En dechargement',
   UNLOADED: 'Decharge',
+};
+
+const TYPE_LABELS: Record<string, string> = {
+  AIR: 'Aerien',
+  SEA: 'Maritime',
+  LAND: 'Terrestre',
 };
 
 const ACTION_LABELS: Record<string, string> = {
@@ -85,15 +92,27 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
   const [unloading, setUnloading] = useState(false);
   const [selectedParcelIds, setSelectedParcelIds] = useState<string[]>([]);
   const [parcelSearch, setParcelSearch] = useState('');
+  const [parcelPage, setParcelPage] = useState(1);
   const [showComparison, setShowComparison] = useState(false);
+  const [showCreateParcel, setShowCreateParcel] = useState(false);
   const [busyManifest, setBusyManifest] = useState<'dispatch' | 'reception' | null>(null);
 
+  const PARCEL_PAGE_SIZE = 20;
+  const containerType = data?.data?.type as 'AIR' | 'SEA' | 'LAND' | undefined;
+  const isForwarding = !!data?.data?.isForwarding;
+
   const { data: availableParcels, isLoading: loadingAvailable } = useQuery({
-    queryKey: ['parcels-available', parcelSearch],
+    queryKey: ['parcels-available', parcelSearch, parcelPage, containerType, isForwarding],
     queryFn: () => apiClient.get('/parcels', {
-      params: { status: 'IN_STOCK', limit: 50, search: parcelSearch || undefined },
+      params: {
+        status: 'IN_STOCK',
+        page: parcelPage,
+        limit: PARCEL_PAGE_SIZE,
+        search: parcelSearch || undefined,
+        transitType: !isForwarding && containerType ? containerType : undefined,
+      },
     }).then((r) => r.data),
-    enabled: showLoadDialog,
+    enabled: showLoadDialog && !!containerType,
   });
 
   const container = data?.data;
@@ -106,6 +125,8 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
   const loadPercent = Number(container.capacity) > 0
     ? Math.round((Number(container.currentLoad) / Number(container.capacity)) * 100)
     : 0;
+  const capacityUnit = container.type === 'SEA' ? 'm3' : 'kg';
+  const containerTypeLabel = TYPE_LABELS[container.type] || container.type;
 
   const canLoad = container.status === 'EMPTY' || container.status === 'LOADING';
   const canUnload = container.status === 'ARRIVED' || container.status === 'UNLOADING' || container.status === 'RECEIVED';
@@ -229,7 +250,7 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
         <AppCard>
           <p className="text-sm text-gray-500">Type</p>
           <div className="mt-1 flex items-center gap-2">
-            <p className="text-lg font-bold">{container.type === 'AIR' ? 'Aerien' : container.type === 'SEA' ? 'Maritime' : 'Terrestre'}</p>
+            <p className="text-lg font-bold">{containerTypeLabel}</p>
             {container.isForwarding && (
               <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-primary-50 text-primary-700">Acheminement</span>
             )}
@@ -247,7 +268,7 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
             </div>
             <span className="text-sm font-bold">{loadPercent}%</span>
           </div>
-          <p className="text-xs text-gray-400 mt-1">{Number(container.currentLoad).toFixed(0)} / {Number(container.capacity).toFixed(0)} kg</p>
+          <p className="text-xs text-gray-400 mt-1">{Number(container.currentLoad).toFixed(capacityUnit === 'm3' ? 2 : 0)} / {Number(container.capacity).toFixed(capacityUnit === 'm3' ? 2 : 0)} {capacityUnit}</p>
         </AppCard>
         <AppCard>
           <p className="text-sm text-gray-500">Date creation</p>
@@ -417,61 +438,125 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
             </>
           }
         >
-          <div className="space-y-4">
-            <p className="text-xs text-gray-500">
-              Seuls les colis du meme type ({container.type}) peuvent etre charges
-              {container.isForwarding && ' (sauf pour ce conteneur d\'acheminement qui accepte tous les types).'}.
-            </p>
-            <AppInput placeholder="Rechercher par tracking, designation, client..." value={parcelSearch} onChange={(e) => setParcelSearch(e.target.value)} />
-            <div className="max-h-80 overflow-y-auto border border-gray-100 rounded-xl">
-              {loadingAvailable ? (
-                <p className="p-4 text-sm text-gray-400">Chargement...</p>
-              ) : (availableParcels?.data || []).length === 0 ? (
-                <p className="p-4 text-sm text-gray-400">Aucun colis en stock disponible</p>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 sticky top-0">
-                    <tr>
-                      <th className="w-10 p-3"></th>
-                      <th className="text-left p-3 font-medium text-gray-600">Tracking</th>
-                      <th className="text-left p-3 font-medium text-gray-600">Designation</th>
-                      <th className="text-left p-3 font-medium text-gray-600">Pesee</th>
-                      <th className="text-left p-3 font-medium text-gray-600">Type</th>
-                      <th className="text-left p-3 font-medium text-gray-600">Client</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {(availableParcels?.data || []).map((p: any) => {
-                      const compatible = container.isForwarding || !p.transitRoute?.type || p.transitRoute.type === container.type;
-                      return (
-                        <tr
-                          key={p.id}
-                          className={`cursor-pointer transition-colors ${selectedParcelIds.includes(p.id) ? 'bg-primary-50' : compatible ? 'hover:bg-primary-50/50' : 'opacity-50 cursor-not-allowed'}`}
-                          onClick={() => compatible && toggleParcelSelection(p.id)}
-                        >
-                          <td className="p-3">
-                            <AppCheckbox checked={selectedParcelIds.includes(p.id)} onCheckedChange={() => compatible && toggleParcelSelection(p.id)} disabled={!compatible} />
-                          </td>
-                          <td className="p-3 font-mono text-xs font-bold text-primary-700">{p.trackingNumber}</td>
-                          <td className="p-3">{p.designation}</td>
-                          <td className="p-3">{p.weight ? `${Number(p.weight).toFixed(1)} kg` : p.volume ? `${Number(p.volume).toFixed(2)} m3` : '-'}</td>
-                          <td className="p-3">
-                            {p.transitRoute?.type ? (
-                              <span className={compatible ? 'text-gray-600' : 'text-red-600'}>{p.transitRoute.type}</span>
-                            ) : '-'}
-                          </td>
-                          <td className="p-3">{p.client?.fullName || '-'}</td>
+          {(() => {
+            const rows: any[] = availableParcels?.data || [];
+            const meta = availableParcels?.meta || { total: 0, page: 1, totalPages: 1 };
+            const selectableIds = rows.map((p) => p.id);
+            const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedParcelIds.includes(id));
+            const toggleAll = () => {
+              if (allSelected) {
+                setSelectedParcelIds((prev) => prev.filter((id) => !selectableIds.includes(id)));
+              } else {
+                setSelectedParcelIds((prev) => Array.from(new Set([...prev, ...selectableIds])));
+              }
+            };
+            const isFiltered = parcelSearch.trim().length > 0;
+            const empty = !loadingAvailable && rows.length === 0;
+            return (
+              <div className="space-y-4">
+                <p className="text-xs text-gray-500">
+                  {container.isForwarding
+                    ? `Conteneur d'acheminement : tous les types de colis sont acceptes.`
+                    : `Seuls les colis ${containerTypeLabel.toLowerCase()} (${container.type}) sont affiches.`}
+                </p>
+                <AppInput
+                  placeholder="Rechercher par tracking, designation, client..."
+                  value={parcelSearch}
+                  onChange={(e) => { setParcelSearch(e.target.value); setParcelPage(1); }}
+                />
+                <div className="max-h-96 overflow-y-auto border border-gray-100 rounded-xl">
+                  {loadingAvailable ? (
+                    <p className="p-4 text-sm text-gray-400">Chargement...</p>
+                  ) : empty ? (
+                    <div className="flex flex-col items-center gap-3 p-8 text-center">
+                      <Package className="h-10 w-10 text-gray-300" />
+                      <p className="text-sm text-gray-500">
+                        {isFiltered
+                          ? 'Aucun colis ne correspond a votre recherche'
+                          : container.isForwarding
+                            ? 'Aucun colis en stock disponible'
+                            : `Aucun colis ${containerTypeLabel.toLowerCase()} en stock`}
+                      </p>
+                      <AppButton size="sm" onClick={() => setShowCreateParcel(true)}>
+                        <Plus className="h-3.5 w-3.5" />
+                        Nouveau colis {!container.isForwarding && containerType ? `(${TYPE_LABELS[containerType]})` : ''}
+                      </AppButton>
+                    </div>
+                  ) : (
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50 sticky top-0">
+                        <tr>
+                          <th className="w-10 p-3">
+                            <AppCheckbox
+                              checked={allSelected}
+                              onCheckedChange={toggleAll}
+                            />
+                          </th>
+                          <th className="text-left p-3 font-medium text-gray-600">Tracking</th>
+                          <th className="text-left p-3 font-medium text-gray-600">Designation</th>
+                          <th className="text-left p-3 font-medium text-gray-600">Pesee</th>
+                          <th className="text-left p-3 font-medium text-gray-600">Type</th>
+                          <th className="text-left p-3 font-medium text-gray-600">Client</th>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
-            </div>
-            {selectedParcelIds.length > 0 && (
-              <p className="text-sm text-primary-700 font-medium">{selectedParcelIds.length} colis selectionne(s)</p>
-            )}
-          </div>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {rows.map((p: any) => (
+                          <tr
+                            key={p.id}
+                            className={`cursor-pointer transition-colors ${selectedParcelIds.includes(p.id) ? 'bg-primary-50' : 'hover:bg-primary-50/50'}`}
+                            onClick={() => toggleParcelSelection(p.id)}
+                          >
+                            <td className="p-3">
+                              <AppCheckbox
+                                checked={selectedParcelIds.includes(p.id)}
+                                onCheckedChange={() => toggleParcelSelection(p.id)}
+                              />
+                            </td>
+                            <td className="p-3 font-mono text-xs font-bold text-primary-700">{p.trackingNumber}</td>
+                            <td className="p-3">{p.designation}</td>
+                            <td className="p-3">{p.weight ? `${Number(p.weight).toFixed(1)} kg` : p.volume ? `${Number(p.volume).toFixed(2)} m3` : '-'}</td>
+                            <td className="p-3">
+                              {p.transitRoute?.type ? (
+                                <span className="text-gray-600">{TYPE_LABELS[p.transitRoute.type] || p.transitRoute.type}</span>
+                              ) : '-'}
+                            </td>
+                            <td className="p-3">{p.client?.fullName || '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="text-xs text-gray-500">
+                    {selectedParcelIds.length > 0 && (
+                      <span className="text-primary-700 font-medium mr-3">{selectedParcelIds.length} selectionne(s)</span>
+                    )}
+                    {!loadingAvailable && rows.length > 0 && (
+                      <span>{meta.total} colis au total</span>
+                    )}
+                  </div>
+                  {meta.totalPages > 1 && (
+                    <div className="flex items-center gap-2 text-xs">
+                      <AppButton variant="ghost" size="sm" disabled={parcelPage <= 1} onClick={() => setParcelPage((p) => Math.max(1, p - 1))}>
+                        Precedent
+                      </AppButton>
+                      <span className="text-gray-500">Page {meta.page} / {meta.totalPages}</span>
+                      <AppButton variant="ghost" size="sm" disabled={parcelPage >= meta.totalPages} onClick={() => setParcelPage((p) => p + 1)}>
+                        Suivant
+                      </AppButton>
+                    </div>
+                  )}
+                  {!loadingAvailable && rows.length > 0 && (
+                    <AppButton variant="outline" size="sm" onClick={() => setShowCreateParcel(true)}>
+                      <Plus className="h-3.5 w-3.5" />
+                      Nouveau colis
+                    </AppButton>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
         </AppDialog>
 
         {/* Unload dialog */}
@@ -564,6 +649,15 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
           onClose={() => setShowComparison(false)}
           containerId={id}
           containerDesignation={container.designation}
+        />
+
+        <ParcelFormDialog
+          open={showCreateParcel}
+          onClose={() => {
+            setShowCreateParcel(false);
+            qc.invalidateQueries({ queryKey: ['parcels-available'] });
+          }}
+          defaultTransitType={container.isForwarding ? null : (container.type as 'AIR' | 'SEA' | 'LAND')}
         />
       </div>
     </PageTransition>

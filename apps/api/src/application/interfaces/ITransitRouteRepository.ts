@@ -6,6 +6,7 @@ export interface ITransitRouteRepository {
   findAll(
     organizationId: string,
     pagination: PaginationInput,
+    filters?: { type?: string },
   ): Promise<PaginatedResponse<TransitRoute>>;
   findActive(organizationId: string): Promise<TransitRoute[]>;
   create(data: Prisma.TransitRouteCreateInput): Promise<TransitRoute>;

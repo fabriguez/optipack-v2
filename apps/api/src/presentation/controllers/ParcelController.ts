@@ -34,7 +34,7 @@ export class ParcelController {
   static async list(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(ListParcelsUseCase);
-      const { warehouseId, containerId, clientId, status } = req.query;
+      const { warehouseId, containerId, clientId, status, transitType } = req.query;
       const scope = req.user!.role === 'SUPER_ADMIN' ? null : req.user!.agencyIds;
       const result = await useCase.execute(
         {
@@ -42,6 +42,7 @@ export class ParcelController {
           containerId: containerId as string,
           clientId: clientId as string,
           status: status as string,
+          transitType: transitType as string,
           agencyIds: scope,
         },
         req.query as any,

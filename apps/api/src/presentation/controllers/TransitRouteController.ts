@@ -22,7 +22,8 @@ export class TransitRouteController {
   static async list(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(ListTransitRoutesUseCase);
-      const result = await useCase.execute(getOrgId(req), req.query as never);
+      const type = (req.query.type as string) || undefined;
+      const result = await useCase.execute(getOrgId(req), req.query as never, { type });
       res.json({ success: true, ...result });
     } catch (err) {
       next(err);

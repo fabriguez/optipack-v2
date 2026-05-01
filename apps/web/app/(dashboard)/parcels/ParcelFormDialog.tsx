@@ -37,11 +37,13 @@ interface Props {
   defaultWarehouse?: { id: string; name: string; agency?: { name?: string | null } | null } | null;
   /** Pre-selection (lock) du client — utilise depuis la page detail client */
   defaultClient?: { id: string; fullName: string; phone?: string | null } | null;
+  /** Restreint la recherche de routes au type donne (utilise depuis le chargement d'un conteneur) */
+  defaultTransitType?: 'AIR' | 'SEA' | 'LAND' | null;
 }
 
 type Mode = 'weight' | 'volume' | 'both';
 
-export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defaultClient }: Props) {
+export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defaultClient, defaultTransitType }: Props) {
   const isEdit = !!parcel;
   const createMutation = useCreateParcel();
   const updateMutation = useUpdateParcel();
@@ -265,10 +267,10 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
             name="transitRouteId"
             render={({ field }) => (
               <AppSearchSelect
-                label="Route de transit"
+                label={defaultTransitType ? `Route de transit (${typeLabel(defaultTransitType)})` : 'Route de transit'}
                 value={field.value}
                 onChange={(v) => field.onChange(v ?? '')}
-                search={searchers.transitRoutes}
+                search={(q, l) => searchers.transitRoutes(q, l, defaultTransitType ? { type: defaultTransitType } : undefined)}
                 selectedOption={selectedRoute}
                 error={errors.transitRouteId?.message}
                 required
@@ -380,6 +382,10 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
       />
     </AppDialog>
   );
+}
+
+function typeLabel(t: 'AIR' | 'SEA' | 'LAND'): string {
+  return t === 'AIR' ? 'Aerien' : t === 'SEA' ? 'Maritime' : 'Terrestre';
 }
 
 function categoryLabel(v: string): string {

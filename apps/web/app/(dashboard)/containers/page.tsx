@@ -85,6 +85,7 @@ export default function ContainersPage() {
       options: [
         { value: 'AIR', label: 'Aerien' },
         { value: 'SEA', label: 'Maritime' },
+        { value: 'LAND', label: 'Terrestre' },
       ],
     },
     {
@@ -120,12 +121,15 @@ export default function ContainersPage() {
     )},
     { key: 'departureAgency', label: 'Depart', render: (row: any) => row.departureAgency?.name || '-' },
     { key: 'arrivalAgency', label: 'Arrivee', render: (row: any) => row.arrivalAgency?.name || '-' },
-    { key: 'capacity', label: 'Capacite', render: (row: any) => (
-      <div className="text-xs">
-        <span className="font-medium">{Number(row.currentLoad).toFixed(0)}</span>
-        <span className="text-gray-400"> / {Number(row.capacity).toFixed(0)} kg</span>
-      </div>
-    )},
+    { key: 'capacity', label: 'Capacite', render: (row: any) => {
+      const unit = row.type === 'SEA' ? 'm3' : 'kg';
+      return (
+        <div className="text-xs">
+          <span className="font-medium">{Number(row.currentLoad).toFixed(unit === 'm3' ? 2 : 0)}</span>
+          <span className="text-gray-400"> / {Number(row.capacity).toFixed(unit === 'm3' ? 2 : 0)} {unit}</span>
+        </div>
+      );
+    }},
     { key: '_count', label: 'Colis', render: (row: any) => row._count?.parcels ?? 0 },
     {
       key: 'status',

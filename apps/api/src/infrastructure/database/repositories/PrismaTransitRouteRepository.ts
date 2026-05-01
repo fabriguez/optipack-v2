@@ -13,12 +13,14 @@ export class PrismaTransitRouteRepository implements ITransitRouteRepository {
   async findAll(
     organizationId: string,
     pagination: PaginationInput,
+    filters?: { type?: string },
   ): Promise<PaginatedResponse<TransitRoute>> {
     const { page, limit, sortBy, sortOrder, search } = pagination;
     const skip = (page - 1) * limit;
 
     const where: Prisma.TransitRouteWhereInput = {
       organizationId,
+      ...(filters?.type && { type: filters.type as any }),
       ...(search && {
         OR: [
           { name: { contains: search, mode: 'insensitive' } },

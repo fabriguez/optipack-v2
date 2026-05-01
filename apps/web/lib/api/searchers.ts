@@ -73,7 +73,7 @@ export const searchers = {
     return items.map((a) => ({ value: a.id, label: a.name, sublabel: a.city }));
   },
 
-  transitRoutes: async (q: string, limit = DEFAULT_LIMIT): Promise<SearchOption[]> => {
+  transitRoutes: async (q: string, limit = DEFAULT_LIMIT, extra?: Record<string, unknown>): Promise<SearchOption[]> => {
     const items = await searchPaginated<{
       id: string;
       name: string;
@@ -81,7 +81,7 @@ export const searchers = {
       pricePerKg: string | number;
       departureCity?: string;
       arrivalCity?: string;
-    }>('/transit-routes', q, limit);
+    }>('/transit-routes', q, limit, extra);
     return items.map((r) => ({
       value: r.id,
       label: r.name,

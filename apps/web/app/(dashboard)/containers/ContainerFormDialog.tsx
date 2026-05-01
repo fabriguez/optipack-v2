@@ -42,16 +42,11 @@ export function ContainerFormDialog({ open, onClose }: ContainerFormDialogProps)
     onClose();
   };
 
-  const typeOptions = isForwarding
-    ? [
-        { value: 'AIR', label: 'Aerien' },
-        { value: 'SEA', label: 'Maritime' },
-        { value: 'LAND', label: 'Terrestre' },
-      ]
-    : [
-        { value: 'AIR', label: 'Aerien' },
-        { value: 'SEA', label: 'Maritime' },
-      ];
+  const typeOptions = [
+    { value: 'AIR', label: 'Aerien' },
+    { value: 'SEA', label: 'Maritime' },
+    { value: 'LAND', label: 'Terrestre' },
+  ];
 
   return (
     <AppDialog
@@ -85,7 +80,6 @@ export function ContainerFormDialog({ open, onClose }: ContainerFormDialogProps)
             onCheckedChange={(v) => {
               setIsForwarding(v);
               setValue('isForwarding', v);
-              if (!v && watch('type') === 'LAND') setValue('type', 'AIR' as never);
             }}
           />
         </div>
@@ -105,13 +99,22 @@ export function ContainerFormDialog({ open, onClose }: ContainerFormDialogProps)
           )}
         />
 
-        <AppInput
-          label="Capacite (kg)"
-          type="number"
-          step="0.01"
-          {...register('capacity', { valueAsNumber: true })}
-          error={errors.capacity?.message}
-        />
+        <div className="space-y-1">
+          <AppInput
+            label={`Capacite (${watch('type') === 'SEA' ? 'm3' : 'kg'})`}
+            type="number"
+            step="0.01"
+            {...register('capacity', { valueAsNumber: true })}
+            error={errors.capacity?.message}
+          />
+          <p className="text-xs text-gray-500">
+            {watch('type') === 'SEA'
+              ? 'Conteneur maritime : capacite exprimee en metres cubes (m3).'
+              : watch('type') === 'AIR'
+                ? 'Conteneur aerien : capacite exprimee en kilogrammes (kg).'
+                : 'Selectionnez un type pour adapter l\'unite.'}
+          </p>
+        </div>
 
         <Controller
           control={control}

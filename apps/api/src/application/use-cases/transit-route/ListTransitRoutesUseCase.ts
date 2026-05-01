@@ -8,7 +8,7 @@ export class ListTransitRoutesUseCase {
     @inject(TRANSIT_ROUTE_REPOSITORY) private transitRepo: ITransitRouteRepository,
   ) {}
 
-  async execute(organizationId: string, pagination: PaginationInput) {
-    return this.transitRepo.findAll(organizationId, pagination);
+  async execute(organizationId: string, pagination: PaginationInput, filters?: { type?: string }) {
+    return this.transitRepo.findAll(organizationId, pagination, filters);
   }
 }
