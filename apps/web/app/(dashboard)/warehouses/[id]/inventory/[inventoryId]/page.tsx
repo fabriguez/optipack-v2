@@ -3,7 +3,7 @@
 import { use, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, ScanLine, CheckCircle2, AlertTriangle, Package } from 'lucide-react';
+import { ArrowLeft, ScanLine, CheckCircle2, AlertTriangle, Package, Camera } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard } from '@/components/ui/AppCard';
@@ -11,6 +11,7 @@ import { AppButton } from '@/components/ui/AppButton';
 import { AppBadge } from '@/components/ui/AppBadge';
 import { AppInput } from '@/components/ui/AppInput';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { QRScannerDialog } from '@/components/shared/QRScannerDialog';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 import { apiClient } from '@/lib/api/client';
 import { formatDateTime } from '@transitsoftservices/shared';
@@ -28,6 +29,7 @@ export default function InventoryDetailPage({
   const [scanBusy, setScanBusy] = useState(false);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [closing, setClosing] = useState(false);
+  const [showCamera, setShowCamera] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['inventory', inventoryId],
@@ -47,8 +49,8 @@ export default function InventoryDetailPage({
   const missing = items.filter((i) => i.expected && !i.scanned);
   const extra = items.filter((i) => !i.expected && i.scanned);
 
-  const handleScan = async () => {
-    const v = scanInput.trim();
+  const submitScan = async (raw: string) => {
+    const v = raw.trim();
     if (!v) return;
     setScanBusy(true);
     try {
@@ -66,6 +68,8 @@ export default function InventoryDetailPage({
     }
     setScanBusy(false);
   };
+
+  const handleScan = () => submitScan(scanInput);
 
   const handleClose = async () => {
     setClosing(true);
@@ -142,6 +146,10 @@ export default function InventoryDetailPage({
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleScan(); } }}
                 autoFocus
               />
+              <AppButton variant="outline" onClick={() => setShowCamera(true)} type="button">
+                <Camera className="h-4 w-4" />
+                Camera
+              </AppButton>
               <AppButton onClick={handleScan} loading={scanBusy} disabled={!scanInput.trim()}>
                 <ScanLine className="h-4 w-4" />
                 Valider
@@ -216,6 +224,16 @@ export default function InventoryDetailPage({
         message={`Confirmer la cloture ? ${counts.missing} colis manquant(s) et ${counts.extra} colis inattendu(s).`}
         confirmLabel="Cloturer"
         loading={closing}
+      />
+
+      <QRScannerDialog
+        open={showCamera}
+        onClose={() => setShowCamera(false)}
+        onDetected={(decoded) => {
+          setShowCamera(false);
+          submitScan(decoded);
+        }}
+        title="Scanner pour inventorier un colis"
       />
     </PageTransition>
   );

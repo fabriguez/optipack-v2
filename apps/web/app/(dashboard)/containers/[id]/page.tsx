@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowLeft, Package, Play, PackageCheck, Plus, Eye, PackageMinus,
-  FileText, FileCheck, FileDiff, Printer, History, AlertCircle, Truck,
+  FileText, FileCheck, FileDiff, Printer, History, AlertCircle, Truck, Camera,
 } from 'lucide-react';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard, AppCardHeader } from '@/components/ui/AppCard';
@@ -33,6 +33,7 @@ import { formatDate, formatDateTime } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
 import { ComparisonDialog } from './ComparisonDialog';
 import { ParcelFormDialog } from '@/app/(dashboard)/parcels/ParcelFormDialog';
+import { QRScannerDialog } from '@/components/shared/QRScannerDialog';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
 
@@ -98,6 +99,7 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
   const [busyManifest, setBusyManifest] = useState<'dispatch' | 'reception' | null>(null);
   const [scanInput, setScanInput] = useState('');
   const [scanBusy, setScanBusy] = useState(false);
+  const [showCamera, setShowCamera] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<{ id: string; designation: string } | null>(null);
   const [removeReason, setRemoveReason] = useState('');
   const [removing, setRemoving] = useState(false);
@@ -182,8 +184,8 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
     );
   };
 
-  const handleScan = async () => {
-    const v = scanInput.trim();
+  const submitScan = async (raw: string) => {
+    const v = raw.trim();
     if (!v) return;
     setScanBusy(true);
     try {
@@ -203,6 +205,8 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
     }
     setScanBusy(false);
   };
+
+  const handleScan = () => submitScan(scanInput);
 
   const handleRemoveConfirm = async () => {
     if (!removeTarget) return;
@@ -521,6 +525,10 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
                     onChange={(e) => setScanInput(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleScan(); } }}
                   />
+                  <AppButton variant="outline" onClick={() => setShowCamera(true)} type="button" title="Ouvrir la camera">
+                    <Camera className="h-4 w-4" />
+                    Camera
+                  </AppButton>
                   <AppButton onClick={handleScan} loading={scanBusy} disabled={!scanInput.trim()}>
                     <Package className="h-4 w-4" />
                     Charger
@@ -766,6 +774,16 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
             qc.invalidateQueries({ queryKey: ['parcels-available'] });
           }}
           defaultTransitType={container.isForwarding ? null : (container.type as 'AIR' | 'SEA' | 'LAND')}
+        />
+
+        <QRScannerDialog
+          open={showCamera}
+          onClose={() => setShowCamera(false)}
+          onDetected={(decoded) => {
+            setShowCamera(false);
+            submitScan(decoded);
+          }}
+          title="Scanner pour charger un colis"
         />
       </div>
     </PageTransition>
