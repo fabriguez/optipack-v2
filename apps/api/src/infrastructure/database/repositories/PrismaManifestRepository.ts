@@ -70,16 +70,7 @@ export class PrismaManifestRepository implements IManifestRepository {
   }
 
   async createDispatchManifest(containerId: string, _userId: string): Promise<ManifestWithLines> {
-    const container = await prisma.container.findUnique({
-      where: { id: containerId },
-      include: {
-        parcels: { include: { client: { select: { fullName: true } } } },
-        departureAgency: { select: { city: true } },
-        arrivalAgency: { select: { city: true } },
-      },
-    });
-
-    if (!container) throw new NotFoundError('Conteneur', containerId);
+    const container = await this.loadContainerForManifest(containerId);
 
     if (!DISPATCH_ALLOWED.has(container.status)) {
       throw new BusinessError(
@@ -87,11 +78,17 @@ export class PrismaManifestRepository implements IManifestRepository {
       );
     }
 
-    if (container.parcels.length === 0) {
+    const parcels = await this.loadParcelsWithFinancials(
+      { containerId },
+      container.departureAgency.city,
+      container.arrivalAgency.city,
+    );
+
+    if (parcels.length === 0) {
       throw new BusinessError("Impossible de generer un bordereau d'envoi pour un conteneur vide.");
     }
 
-    const number = await this.generateUniqueNumber('BRD-DISP');
+    const number = await this.buildManifestName(container, 'DISPATCH');
 
     const manifest = await prisma.shippingManifest.create({
       data: {
@@ -99,18 +96,7 @@ export class PrismaManifestRepository implements IManifestRepository {
         number,
         type: 'DISPATCH',
         status: 'ACTIVE',
-        lines: {
-          create: container.parcels.map((parcel) => ({
-            parcelId: parcel.id,
-            designation: parcel.designation,
-            weight: parcel.weight ?? null,
-            origin: parcel.origin || container.departureAgency.city,
-            destination: parcel.destination || container.arrivalAgency.city,
-            transit: container.arrivalAgency.city,
-            price: parcel.price,
-            status: parcel.status,
-          })),
-        },
+        lines: { create: parcels },
       },
       include: MANIFEST_INCLUDE,
     });
@@ -119,17 +105,7 @@ export class PrismaManifestRepository implements IManifestRepository {
   }
 
   async createReceptionManifest(containerId: string, _userId: string): Promise<ManifestWithLines> {
-    // Le bordereau de reception inclut TOUS les colis qui ont transite par ce conteneur,
-    // y compris ceux qui en ont ete decharges (donc sans containerId courant).
-    const container = await prisma.container.findUnique({
-      where: { id: containerId },
-      include: {
-        departureAgency: { select: { city: true } },
-        arrivalAgency: { select: { city: true } },
-      },
-    });
-
-    if (!container) throw new NotFoundError('Conteneur', containerId);
+    const container = await this.loadContainerForManifest(containerId);
 
     if (!RECEPTION_ALLOWED.has(container.status)) {
       throw new BusinessError(
@@ -137,18 +113,25 @@ export class PrismaManifestRepository implements IManifestRepository {
       );
     }
 
-    const parcels = await prisma.parcel.findMany({
-      where: {
+    // SEULEMENT les colis effectivement RECUS (pas les disparus / non livres).
+    // Statuts post-arrivee qui indiquent reception physique :
+    // ARRIVED, RECEIVED, DELIVERED. Les colis en LOST ou toujours IN_TRANSIT
+    // sont exclus (ils figurent dans le bordereau de comparaison).
+    const RECEIVED_STATUSES = ['ARRIVED', 'RECEIVED', 'DELIVERED'];
+    const parcels = await this.loadParcelsWithFinancials(
+      {
         OR: [{ containerId }, { lastContainerId: containerId }],
+        status: { in: RECEIVED_STATUSES as never },
       },
-      orderBy: { trackingNumber: 'asc' },
-    });
+      container.departureAgency.city,
+      container.arrivalAgency.city,
+    );
 
     if (parcels.length === 0) {
-      throw new BusinessError("Aucun colis n'a transite par ce conteneur.");
+      throw new BusinessError("Aucun colis recu pour ce conteneur.");
     }
 
-    const number = await this.generateUniqueNumber('BRD-RECV');
+    const number = await this.buildManifestName(container, 'RECEPTION');
 
     const manifest = await prisma.shippingManifest.create({
       data: {
@@ -156,23 +139,144 @@ export class PrismaManifestRepository implements IManifestRepository {
         number,
         type: 'RECEPTION',
         status: 'ACTIVE',
-        lines: {
-          create: parcels.map((parcel) => ({
-            parcelId: parcel.id,
-            designation: parcel.designation,
-            weight: parcel.weight ?? null,
-            origin: parcel.origin || container.departureAgency.city,
-            destination: parcel.destination || container.arrivalAgency.city,
-            transit: container.arrivalAgency.city,
-            price: parcel.price,
-            status: parcel.status,
-          })),
-        },
+        lines: { create: parcels },
       },
       include: MANIFEST_INCLUDE,
     });
 
     return manifest as ManifestWithLines;
+  }
+
+  // Charge les donnees container necessaires au nommage et snapshot
+  private async loadContainerForManifest(containerId: string) {
+    const container = await prisma.container.findUnique({
+      where: { id: containerId },
+      include: {
+        departureAgency: { select: { id: true, name: true, city: true } },
+        arrivalAgency: { select: { id: true, name: true, city: true } },
+        parentContainer: { select: { id: true, designation: true } },
+        transitRoute: { select: { id: true, name: true } },
+      },
+    });
+    if (!container) throw new NotFoundError('Conteneur', containerId);
+    return container;
+  }
+
+  /**
+   * Charge les colis matchant `where` avec donnees financieres et client/recipient,
+   * puis transforme chaque colis en ligne de bordereau avec snapshot (designation,
+   * tracking, client, destinataire, ville, masse/volume, montant, avance, reste).
+   *
+   * Probleme : une facture peut couvrir N colis (audit fix #5). On repartit donc
+   * le `paidAmount` et le `balance` de la facture proportionnellement au prix
+   * de chaque colis dans la facture.
+   */
+  private async loadParcelsWithFinancials(
+    where: Prisma.ParcelWhereInput,
+    departureCity: string,
+    arrivalCity: string,
+  ) {
+    const parcels = await prisma.parcel.findMany({
+      where: { ...where, isDeleted: false },
+      orderBy: { trackingNumber: 'asc' },
+      include: {
+        client: { select: { fullName: true } },
+        recipient: { select: { fullName: true } },
+        destinationAgency: { select: { city: true } },
+        invoice: {
+          select: {
+            id: true,
+            totalAmount: true,
+            paidAmount: true,
+            balance: true,
+          },
+        },
+      },
+    });
+
+    // Pre-aggreger : pour chaque facture, somme des prix des colis qu'on emet
+    // afin de repartir l'avance proportionnellement au sein du bordereau.
+    const invoiceParcelsTotal = new Map<string, number>();
+    for (const p of parcels) {
+      if (!p.invoiceId) continue;
+      invoiceParcelsTotal.set(
+        p.invoiceId,
+        (invoiceParcelsTotal.get(p.invoiceId) ?? 0) + Number(p.price),
+      );
+    }
+
+    return parcels.map((parcel) => {
+      const price = Number(parcel.price);
+      let advance = 0;
+      let balance = price;
+      let invoiceTotal: number | null = null;
+
+      if (parcel.invoice) {
+        invoiceTotal = Number(parcel.invoice.totalAmount);
+        const invTotalPrice = invoiceParcelsTotal.get(parcel.invoiceId!) ?? price;
+        const ratio = invTotalPrice > 0 ? price / invTotalPrice : 0;
+        advance = Number(parcel.invoice.paidAmount) * ratio;
+        balance = Math.max(0, price - advance);
+      }
+
+      return {
+        parcelId: parcel.id,
+        trackingNumber: parcel.trackingNumber,
+        designation: parcel.designation,
+        clientName: parcel.client?.fullName ?? null,
+        recipientName: parcel.recipient?.fullName ?? null,
+        destinationCity: parcel.destinationAgency?.city ?? parcel.destination ?? null,
+        weight: parcel.weight ?? null,
+        volume: parcel.volume ?? null,
+        origin: parcel.origin || departureCity,
+        destination: parcel.destination || arrivalCity,
+        transit: arrivalCity,
+        price: parcel.price,
+        invoiceTotal,
+        advanceAmount: Number(advance.toFixed(2)),
+        balanceAmount: Number(balance.toFixed(2)),
+        status: parcel.status,
+      };
+    });
+  }
+
+  /**
+   * Construit le nom du bordereau selon la convention :
+   * "Bordereau <reception|envoi> - <Ville> - <ParentName> - <ChildName> - <Carrier>"
+   * - Ville = ville d'arrivee (= ville de reception)
+   * - ChildName = designation du conteneur courant
+   * - ParentName = designation du conteneur parent si dispo, sinon "-"
+   * - Carrier = transporteur si renseigne, sinon "-"
+   * Garantit l'unicite : si le nom existe deja on suffixe par #2, #3, ...
+   */
+  private async buildManifestName(
+    container: {
+      designation: string;
+      carrier?: string | null;
+      arrivalAgency: { city: string };
+      parentContainer: { designation: string } | null;
+    },
+    type: 'DISPATCH' | 'RECEPTION',
+  ): Promise<string> {
+    const typeLabel = type === 'DISPATCH' ? 'envoi' : 'reception';
+    const ville = container.arrivalAgency.city;
+    const parentName = container.parentContainer?.designation ?? '-';
+    const childName = container.designation;
+    const carrier = (container.carrier?.trim() || '-');
+
+    const base = `Bordereau ${typeLabel} - ${ville} - ${parentName} - ${childName} - ${carrier}`;
+
+    let candidate = base;
+    let suffix = 2;
+    while (await prisma.shippingManifest.findUnique({ where: { number: candidate } })) {
+      candidate = `${base} #${suffix++}`;
+      if (suffix > 999) {
+        // garde-fou : suffix timestamp
+        candidate = `${base} #${Date.now().toString().slice(-6)}`;
+        break;
+      }
+    }
+    return candidate;
   }
 
   async getComparison(containerId: string): Promise<ManifestComparison> {
@@ -239,30 +343,4 @@ export class PrismaManifestRepository implements IManifestRepository {
     });
   }
 
-  /**
-   * Genere un numero de bordereau unique GLOBALEMENT.
-   * Format : <prefix>-<YYMM>-<seq>
-   * Le seq est calcule a partir du nombre total de bordereaux du mois.
-   */
-  private async generateUniqueNumber(prefix: string): Promise<string> {
-    const now = new Date();
-    const yymm = `${String(now.getFullYear()).slice(2)}${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-
-    let attempt = 0;
-    while (attempt < 5) {
-      const count = await prisma.shippingManifest.count({
-        where: {
-          number: { startsWith: `${prefix}-${yymm}-` },
-          createdAt: { gte: startOfMonth },
-        },
-      });
-      const candidate = `${prefix}-${yymm}-${String(count + 1 + attempt).padStart(4, '0')}`;
-      const existing = await prisma.shippingManifest.findUnique({ where: { number: candidate } });
-      if (!existing) return candidate;
-      attempt += 1;
-    }
-    // Fallback : suffix avec timestamp pour garantir l'unicite
-    return `${prefix}-${yymm}-${Date.now().toString().slice(-6)}`;
-  }
 }

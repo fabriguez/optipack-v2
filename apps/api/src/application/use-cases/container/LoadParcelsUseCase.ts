@@ -47,6 +47,16 @@ export class LoadParcelsUseCase {
         continue;
       }
 
+      // On refuse de charger un colis dont la destination est l'agence de depart
+      // du conteneur : il est deja a destination, l'expedier serait une erreur.
+      if (parcel.destinationAgencyId && parcel.destinationAgencyId === container.departureAgencyId) {
+        errors.push({
+          parcelId,
+          reason: "Destination du colis = agence de depart du conteneur",
+        });
+        continue;
+      }
+
       // Regle de matching de type : conteneur d'acheminement accepte tout
       if (!container.isForwarding) {
         const parcelType = parcel.transitRoute?.type;

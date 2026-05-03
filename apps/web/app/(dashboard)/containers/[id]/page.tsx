@@ -96,20 +96,23 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
   const [showComparison, setShowComparison] = useState(false);
   const [showCreateParcel, setShowCreateParcel] = useState(false);
   const [busyManifest, setBusyManifest] = useState<'dispatch' | 'reception' | null>(null);
+  const [scanInput, setScanInput] = useState('');
+  const [scanBusy, setScanBusy] = useState(false);
+  const [removeTarget, setRemoveTarget] = useState<{ id: string; designation: string } | null>(null);
+  const [removeReason, setRemoveReason] = useState('');
+  const [removing, setRemoving] = useState(false);
 
   const PARCEL_PAGE_SIZE = 20;
   const containerType = data?.data?.type as 'AIR' | 'SEA' | 'LAND' | undefined;
   const isForwarding = !!data?.data?.isForwarding;
 
   const { data: availableParcels, isLoading: loadingAvailable } = useQuery({
-    queryKey: ['parcels-available', parcelSearch, parcelPage, containerType, isForwarding],
-    queryFn: () => apiClient.get('/parcels', {
+    queryKey: ['containers', id, 'loadable', parcelSearch, parcelPage],
+    queryFn: () => apiClient.get(`/containers/${id}/loadable-parcels`, {
       params: {
-        status: 'IN_STOCK',
         page: parcelPage,
         limit: PARCEL_PAGE_SIZE,
         search: parcelSearch || undefined,
-        transitType: !isForwarding && containerType ? containerType : undefined,
       },
     }).then((r) => r.data),
     enabled: showLoadDialog && !!containerType,
@@ -125,7 +128,7 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
   const loadPercent = Number(container.capacity) > 0
     ? Math.round((Number(container.currentLoad) / Number(container.capacity)) * 100)
     : 0;
-  const capacityUnit = container.type === 'SEA' ? 'm3' : 'kg';
+  const capacityUnit = container.type === 'AIR' ? 'kg' : 'm3';
   const containerTypeLabel = TYPE_LABELS[container.type] || container.type;
 
   const canLoad = container.status === 'EMPTY' || container.status === 'LOADING';
@@ -177,6 +180,50 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
     setSelectedParcelIds((prev) =>
       prev.includes(parcelId) ? prev.filter((p) => p !== parcelId) : [...prev, parcelId],
     );
+  };
+
+  const handleScan = async () => {
+    const v = scanInput.trim();
+    if (!v) return;
+    setScanBusy(true);
+    try {
+      const res = await containersApi.loadByQr(id, v);
+      const ok = res?.data?.success;
+      if (ok) {
+        toast.success(`Charge : ${res.data.trackingNumber}`);
+        setScanInput('');
+        qc.invalidateQueries({ queryKey: ['containers', id] });
+        qc.invalidateQueries({ queryKey: ['containers', id, 'parcels'] });
+        qc.invalidateQueries({ queryKey: ['containers', id, 'loadable'] });
+      } else {
+        toast.error(res?.data?.reason || 'Echec du chargement');
+      }
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Colis introuvable');
+    }
+    setScanBusy(false);
+  };
+
+  const handleRemoveConfirm = async () => {
+    if (!removeTarget) return;
+    if (removeReason.trim().length < 2) {
+      toast.error('Indiquez la raison du retrait');
+      return;
+    }
+    setRemoving(true);
+    try {
+      await containersApi.removeParcel(id, removeTarget.id, removeReason.trim());
+      toast.success('Colis retire du conteneur');
+      setRemoveTarget(null);
+      setRemoveReason('');
+      qc.invalidateQueries({ queryKey: ['containers', id] });
+      qc.invalidateQueries({ queryKey: ['containers', id, 'parcels'] });
+      qc.invalidateQueries({ queryKey: ['containers', id, 'history'] });
+      qc.invalidateQueries({ queryKey: ['containers', id, 'loadable'] });
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Retrait impossible');
+    }
+    setRemoving(false);
   };
 
   const handleGenerateDispatch = async () => {
@@ -235,6 +282,13 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
         <RowActions
           actions={[
             { label: 'Voir', icon: <Eye className="h-4 w-4" />, onClick: () => router.push(`/parcels/${row.id}`) },
+            ...(container.status === 'LOADING'
+              ? [{
+                  label: 'Retirer (chargement par erreur)',
+                  icon: <PackageMinus className="h-4 w-4" />,
+                  onClick: () => { setRemoveTarget({ id: row.id, designation: row.designation }); setRemoveReason(''); },
+                }]
+              : []),
             ...(canUnload
               ? [{ label: 'Decharger', icon: <PackageMinus className="h-4 w-4" />, onClick: () => setUnloadTarget({ id: row.id, designation: row.designation }) }]
               : []),
@@ -457,8 +511,21 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
                 <p className="text-xs text-gray-500">
                   {container.isForwarding
                     ? `Conteneur d'acheminement : tous les types de colis sont acceptes.`
-                    : `Seuls les colis ${containerTypeLabel.toLowerCase()} (${container.type}) sont affiches.`}
+                    : `Seuls les colis ${containerTypeLabel.toLowerCase()} sont affiches.`}
+                  {' '}Les colis a destination de l&apos;agence de depart sont masques. Ordre : payes en priorite, puis les non-payes du plus ancien au plus recent.
                 </p>
+                <div className="flex gap-2 rounded-xl border border-primary-100 bg-primary-50/40 p-2">
+                  <AppInput
+                    placeholder="Scanner ou coller un QR / numero de tracking..."
+                    value={scanInput}
+                    onChange={(e) => setScanInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleScan(); } }}
+                  />
+                  <AppButton onClick={handleScan} loading={scanBusy} disabled={!scanInput.trim()}>
+                    <Package className="h-4 w-4" />
+                    Charger
+                  </AppButton>
+                </div>
                 <AppInput
                   placeholder="Rechercher par tracking, designation, client..."
                   value={parcelSearch}
@@ -486,13 +553,14 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50 sticky top-0">
                         <tr>
-                          <th className="w-10 p-3">
+                          <th className="w-10 p-3" onClick={(e) => e.stopPropagation()}>
                             <AppCheckbox
                               checked={allSelected}
                               onCheckedChange={toggleAll}
                             />
                           </th>
                           <th className="text-left p-3 font-medium text-gray-600">Tracking</th>
+                          <th className="text-left p-3 font-medium text-gray-600">Paiement</th>
                           <th className="text-left p-3 font-medium text-gray-600">Designation</th>
                           <th className="text-left p-3 font-medium text-gray-600">Pesee</th>
                           <th className="text-left p-3 font-medium text-gray-600">Type</th>
@@ -506,13 +574,22 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
                             className={`cursor-pointer transition-colors ${selectedParcelIds.includes(p.id) ? 'bg-primary-50' : 'hover:bg-primary-50/50'}`}
                             onClick={() => toggleParcelSelection(p.id)}
                           >
-                            <td className="p-3">
+                            <td className="p-3" onClick={(e) => e.stopPropagation()}>
                               <AppCheckbox
                                 checked={selectedParcelIds.includes(p.id)}
                                 onCheckedChange={() => toggleParcelSelection(p.id)}
                               />
                             </td>
                             <td className="p-3 font-mono text-xs font-bold text-primary-700">{p.trackingNumber}</td>
+                            <td className="p-3">
+                              {(() => {
+                                const st = p.invoice?.status;
+                                if (st === 'PAID') return <AppBadge variant="success">Paye</AppBadge>;
+                                if (st === 'PARTIAL') return <AppBadge variant="warning">Partiel</AppBadge>;
+                                if (st === 'CANCELLED') return <AppBadge variant="default">Annule</AppBadge>;
+                                return <AppBadge variant="error">Impaye</AppBadge>;
+                              })()}
+                            </td>
                             <td className="p-3">{p.designation}</td>
                             <td className="p-3">{p.weight ? `${Number(p.weight).toFixed(1)} kg` : p.volume ? `${Number(p.volume).toFixed(2)} m3` : '-'}</td>
                             <td className="p-3">
@@ -621,6 +698,37 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
               label="Commentaire (optionnel)"
               value={unloadComment}
               onChange={(e) => setUnloadComment(e.target.value)}
+            />
+          </div>
+        </AppDialog>
+
+        {/* Remove-from-container dialog (chargement par erreur) */}
+        <AppDialog
+          open={!!removeTarget}
+          onClose={() => { setRemoveTarget(null); setRemoveReason(''); }}
+          title={removeTarget ? `Retirer ${removeTarget.designation}` : 'Retirer du conteneur'}
+          size="md"
+          footer={
+            <>
+              <AppButton variant="ghost" onClick={() => { setRemoveTarget(null); setRemoveReason(''); }}>Annuler</AppButton>
+              <AppButton onClick={handleRemoveConfirm} loading={removing}>
+                <PackageMinus className="h-4 w-4" />
+                Retirer
+              </AppButton>
+            </>
+          }
+        >
+          <div className="space-y-3">
+            <p className="text-sm text-gray-600">
+              Le colis sera renvoye dans son magasin d&apos;origine et son retrait sera trace dans l&apos;historique.
+              Le retrait n&apos;est autorise que pendant le chargement (statut LOADING).
+            </p>
+            <AppInput
+              label="Raison du retrait"
+              value={removeReason}
+              onChange={(e) => setRemoveReason(e.target.value)}
+              placeholder="Ex : chargement par erreur, mauvais conteneur, ..."
+              required
             />
           </div>
         </AppDialog>

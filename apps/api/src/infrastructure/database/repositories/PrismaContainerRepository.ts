@@ -8,7 +8,9 @@ const CONTAINER_INCLUDE = {
   departureAgency: { select: { id: true, name: true, code: true } },
   arrivalAgency: { select: { id: true, name: true, code: true } },
   transitRoute: { select: { id: true, name: true, type: true } },
-  _count: { select: { parcels: true } },
+  parentContainer: { select: { id: true, designation: true, type: true, isForwarding: true } },
+  childContainers: { select: { id: true, designation: true, type: true } },
+  _count: { select: { parcels: true, childContainers: true } },
 };
 
 /**
@@ -45,17 +47,31 @@ export class PrismaContainerRepository implements IContainerRepository {
   }
 
   async findAll(
-    filters: { departureAgencyId?: string; arrivalAgencyId?: string; status?: string; agencyIds?: string[] },
+    filters: {
+      departureAgencyId?: string;
+      arrivalAgencyId?: string;
+      status?: string;
+      isForwarding?: boolean;
+      agencyIds?: string[];
+    },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<ContainerWithRelations>> {
     const { page, limit, sortBy, sortOrder, search } = pagination;
     const skip = (page - 1) * limit;
 
+    // status peut etre une liste separee par virgule (ex : "EMPTY,LOADING")
+    const statusFilter = filters.status?.includes(',')
+      ? { in: filters.status.split(',').map((s) => s.trim()) as never }
+      : filters.status
+        ? (filters.status as never)
+        : undefined;
+
     const where: Prisma.ContainerWhereInput = {
       isDeleted: false,
       ...(filters.departureAgencyId && { departureAgencyId: filters.departureAgencyId }),
       ...(filters.arrivalAgencyId && { arrivalAgencyId: filters.arrivalAgencyId }),
-      ...(filters.status && { status: filters.status as never }),
+      ...(statusFilter !== undefined && { status: statusFilter }),
+      ...(filters.isForwarding !== undefined && { isForwarding: filters.isForwarding }),
       ...(filters.agencyIds?.length && {
         OR: [
           { departureAgencyId: { in: filters.agencyIds } },

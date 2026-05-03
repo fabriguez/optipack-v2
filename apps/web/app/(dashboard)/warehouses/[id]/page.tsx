@@ -3,7 +3,7 @@
 import { use, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Package, Plus, Eye, Edit, Trash2, ArrowRightLeft } from 'lucide-react';
+import { ArrowLeft, Package, Plus, Eye, Edit, Trash2, ArrowRightLeft, ClipboardCheck, PlayCircle } from 'lucide-react';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
@@ -40,7 +40,39 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
     enabled: !!id,
   });
 
+  const { data: summaryData } = useQuery({
+    queryKey: ['warehouses', id, 'summary'],
+    queryFn: () => apiClient.get(`/warehouses/${id}/summary`).then((r) => r.data),
+    enabled: !!id,
+  });
+
+  const { data: inventoriesData } = useQuery({
+    queryKey: ['warehouses', id, 'inventories'],
+    queryFn: () => apiClient.get(`/warehouses/${id}/inventories`).then((r) => r.data),
+    enabled: !!id,
+  });
+
   const { data: parcelsData, isLoading: parcelsLoading } = useParcels({ warehouseId: id, limit: 20, page: parcelPage } as any);
+
+  const handleStartInventory = async () => {
+    try {
+      const res = await apiClient.post(`/warehouses/${id}/inventories`, {});
+      toast.success('Inventaire demarre');
+      qc.invalidateQueries({ queryKey: ['warehouses', id, 'inventories'] });
+      router.push(`/warehouses/${id}/inventory/${res.data.data.id}`);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Impossible de demarrer l\'inventaire');
+    }
+  };
+
+  const CATEGORY_LABELS: Record<string, string> = {
+    STANDARD: 'Standard',
+    DOCUMENT: 'Documents',
+    FOOD: 'Alimentaire',
+    ELECTRONICS: 'Electronique',
+    CLOTHING: 'Vetements',
+    OTHER: 'Autres',
+  };
 
   // Load all warehouses for transfer dialog
   const { data: allWarehousesData } = useQuery({
@@ -180,17 +212,156 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-4">
-          <AppCard>
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50"><Package className="h-5 w-5 text-primary-600" /></div>
-              <div>
-                <p className="text-xs text-gray-400">Colis en stock</p>
-                <p className="text-sm font-bold">{parcelsData?.meta?.total ?? 0}</p>
+        {(() => {
+          const summary = summaryData?.data;
+          const totals = summary?.totals;
+          const byCategory = summary?.byCategory || [];
+          const byRoute = summary?.byTransitRoute || [];
+
+          return (
+            <>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
+                <AppCard>
+                  <p className="text-xs text-gray-500">Colis en stock</p>
+                  <p className="mt-1 text-lg font-bold">{totals?.parcelCount ?? 0}</p>
+                </AppCard>
+                <AppCard>
+                  <p className="text-xs text-gray-500">Valeur attendue</p>
+                  <p className="mt-1 text-lg font-bold text-primary-700">
+                    {formatAmount(Number(totals?.expectedValue ?? 0))}
+                  </p>
+                </AppCard>
+                <AppCard>
+                  <p className="text-xs text-gray-500">Masse totale</p>
+                  <p className="mt-1 text-lg font-bold">{Number(totals?.totalWeight ?? 0).toFixed(2)} kg</p>
+                </AppCard>
+                <AppCard>
+                  <p className="text-xs text-gray-500">Volume total</p>
+                  <p className="mt-1 text-lg font-bold">{Number(totals?.totalVolume ?? 0).toFixed(3)} m3</p>
+                </AppCard>
               </div>
-            </div>
-          </AppCard>
-        </div>
+
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <AppCard>
+                  <h3 className="text-base font-semibold text-gray-900 mb-3">Par categorie</h3>
+                  {byCategory.length === 0 ? (
+                    <p className="text-sm text-gray-400">Aucun colis en stock.</p>
+                  ) : (
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-xs text-gray-500">
+                          <th className="pb-2">Categorie</th>
+                          <th className="pb-2 text-right">Colis</th>
+                          <th className="pb-2 text-right">Valeur attendue</th>
+                          <th className="pb-2 text-right">Masse</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {byCategory.map((c: any) => (
+                          <tr key={c.category}>
+                            <td className="py-2">{CATEGORY_LABELS[c.category] || c.category}</td>
+                            <td className="py-2 text-right font-medium">{c.parcelCount}</td>
+                            <td className="py-2 text-right text-primary-700 font-medium">{formatAmount(c.expectedValue)}</td>
+                            <td className="py-2 text-right text-gray-600">{c.totalWeight.toFixed(2)} kg</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </AppCard>
+
+                <AppCard>
+                  <h3 className="text-base font-semibold text-gray-900 mb-3">Par route de transit</h3>
+                  {byRoute.length === 0 ? (
+                    <p className="text-sm text-gray-400">Aucune route active.</p>
+                  ) : (
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-xs text-gray-500">
+                          <th className="pb-2">Route</th>
+                          <th className="pb-2 text-right">Colis</th>
+                          <th className="pb-2 text-right">Masse</th>
+                          <th className="pb-2 text-right">Volume</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {byRoute.map((r: any) => (
+                          <tr key={r.transitRouteId ?? '__none__'}>
+                            <td className="py-2">
+                              <span className="font-medium">{r.transitRouteName}</span>
+                              {r.transitType && (
+                                <span className="ml-2 text-[10px] uppercase text-gray-400">{r.transitType}</span>
+                              )}
+                            </td>
+                            <td className="py-2 text-right font-medium">{r.parcelCount}</td>
+                            <td className="py-2 text-right text-gray-600">{r.totalWeight.toFixed(2)} kg</td>
+                            <td className="py-2 text-right text-gray-600">{r.totalVolume.toFixed(3)} m3</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </AppCard>
+              </div>
+
+              <AppCard>
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h3 className="text-base font-semibold text-gray-900">Inventaires</h3>
+                    <p className="text-xs text-gray-500">Lancez un inventaire pour reconcilier le stock theorique avec le stock physique.</p>
+                  </div>
+                  <AppButton size="sm" onClick={handleStartInventory}>
+                    <PlayCircle className="h-4 w-4" />
+                    Lancer un inventaire
+                  </AppButton>
+                </div>
+                {(() => {
+                  const items = inventoriesData?.data || [];
+                  if (items.length === 0) {
+                    return <p className="text-sm text-gray-400">Aucun inventaire enregistre pour ce magasin.</p>;
+                  }
+                  return (
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-xs text-gray-500">
+                          <th className="pb-2">Date</th>
+                          <th className="pb-2">Statut</th>
+                          <th className="pb-2 text-right">Items</th>
+                          <th className="pb-2">Demarre par</th>
+                          <th className="pb-2"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {items.map((inv: any) => (
+                          <tr key={inv.id} className="hover:bg-gray-50">
+                            <td className="py-2">{formatDate(inv.startedAt)}</td>
+                            <td className="py-2">
+                              {inv.status === 'IN_PROGRESS' && <AppBadge variant="warning">En cours</AppBadge>}
+                              {inv.status === 'CLOSED' && <AppBadge variant="success">Cloture</AppBadge>}
+                              {inv.status === 'CANCELLED' && <AppBadge variant="error">Annule</AppBadge>}
+                            </td>
+                            <td className="py-2 text-right">{inv._count?.items ?? 0}</td>
+                            <td className="py-2 text-gray-600">
+                              {inv.startedBy ? `${inv.startedBy.firstName} ${inv.startedBy.lastName}` : '-'}
+                            </td>
+                            <td className="py-2 text-right">
+                              <Link href={`/warehouses/${id}/inventory/${inv.id}`}>
+                                <AppButton variant="ghost" size="sm">
+                                  <ClipboardCheck className="h-3.5 w-3.5" />
+                                  Ouvrir
+                                </AppButton>
+                              </Link>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  );
+                })()}
+              </AppCard>
+            </>
+          );
+        })()}
 
         <AppCard>
           <div className="flex items-center justify-between mb-4">

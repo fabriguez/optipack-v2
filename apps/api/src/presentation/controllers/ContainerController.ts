@@ -3,6 +3,9 @@ import { container } from '../../container';
 import { CreateContainerUseCase } from '../../application/use-cases/container/CreateContainerUseCase';
 import { ListContainersUseCase } from '../../application/use-cases/container/ListContainersUseCase';
 import { LoadParcelsUseCase } from '../../application/use-cases/container/LoadParcelsUseCase';
+import { ListLoadableParcelsUseCase } from '../../application/use-cases/container/ListLoadableParcelsUseCase';
+import { LoadByQRCodeUseCase } from '../../application/use-cases/container/LoadByQRCodeUseCase';
+import { RemoveParcelFromContainerUseCase } from '../../application/use-cases/container/RemoveParcelFromContainerUseCase';
 import { DepartContainerUseCase } from '../../application/use-cases/container/DepartContainerUseCase';
 import { ArriveContainerUseCase } from '../../application/use-cases/container/ArriveContainerUseCase';
 import { UnloadParcelUseCase } from '../../application/use-cases/container/UnloadParcelUseCase';
@@ -35,12 +38,15 @@ export class ContainerController {
   static async list(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(ListContainersUseCase);
-      const { departureAgencyId, arrivalAgencyId, status } = req.query;
+      const { departureAgencyId, arrivalAgencyId, status, isForwarding } = req.query;
+      const isForwardingFlag =
+        isForwarding === 'true' ? true : isForwarding === 'false' ? false : undefined;
       const result = await useCase.execute(
         {
           departureAgencyId: departureAgencyId as string,
           arrivalAgencyId: arrivalAgencyId as string,
           status: status as string,
+          isForwarding: isForwardingFlag,
           agencyIds: req.user!.agencyIds,
         },
         req.query as any,
@@ -76,6 +82,50 @@ export class ContainerController {
     try {
       const useCase = container.resolve(LoadParcelsUseCase);
       const result = await useCase.execute(req.params.id, req.body.parcelIds, req.user!.userId);
+      res.json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async getLoadableParcels(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(ListLoadableParcelsUseCase);
+      const { search, page, limit } = req.query;
+      const result = await useCase.execute(req.params.id, {
+        search: search as string | undefined,
+        page: page ? Number(page) : undefined,
+        limit: limit ? Number(limit) : undefined,
+      });
+      res.json({ success: true, ...result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async loadByQr(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(LoadByQRCodeUseCase);
+      const result = await useCase.execute(
+        req.params.id,
+        req.body.trackingNumber,
+        req.user!.userId,
+      );
+      res.json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async removeParcel(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(RemoveParcelFromContainerUseCase);
+      const result = await useCase.execute(
+        req.params.id,
+        req.body.parcelId,
+        req.body.reason,
+        req.user!.userId,
+      );
       res.json({ success: true, data: result });
     } catch (err) {
       next(err);

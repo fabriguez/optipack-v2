@@ -36,7 +36,13 @@ export function ContainerFormDialog({ open, onClose }: ContainerFormDialogProps)
   });
 
   const onSubmit = async (data: CreateContainerInput) => {
-    await createMutation.mutateAsync({ ...data, isForwarding });
+    // si on coupe le mode acheminement, on retire le parent
+    const payload: CreateContainerInput = {
+      ...data,
+      isForwarding,
+      ...(isForwarding ? {} : { parentContainerId: undefined }),
+    };
+    await createMutation.mutateAsync(payload);
     reset();
     setIsForwarding(false);
     onClose();
@@ -80,9 +86,40 @@ export function ContainerFormDialog({ open, onClose }: ContainerFormDialogProps)
             onCheckedChange={(v) => {
               setIsForwarding(v);
               setValue('isForwarding', v);
+              if (!v) setValue('parentContainerId', undefined);
             }}
           />
         </div>
+
+        {isForwarding && (
+          <Controller
+            control={control}
+            name="parentContainerId"
+            render={({ field }) => (
+              <AppSearchSelect
+                label="Conteneur parent"
+                value={field.value || null}
+                onChange={(v) => field.onChange(v ?? undefined)}
+                search={(q, limit) =>
+                  searchers.containers(q, limit, {
+                    isForwarding: 'false',
+                    status: 'EMPTY,LOADING',
+                  })
+                }
+                error={errors.parentContainerId?.message}
+                placeholder="Selectionner un conteneur parent (AIR/SEA)"
+                required
+              />
+            )}
+          />
+        )}
+
+        <AppInput
+          label="Transporteur (optionnel)"
+          {...register('carrier')}
+          error={errors.carrier?.message}
+          placeholder="Compagnie / nom du transporteur"
+        />
 
         <Controller
           control={control}
@@ -101,18 +138,20 @@ export function ContainerFormDialog({ open, onClose }: ContainerFormDialogProps)
 
         <div className="space-y-1">
           <AppInput
-            label={`Capacite (${watch('type') === 'SEA' ? 'm3' : 'kg'})`}
+            label={`Capacite (${watch('type') === 'AIR' ? 'kg' : 'm3'})`}
             type="number"
             step="0.01"
             {...register('capacity', { valueAsNumber: true })}
             error={errors.capacity?.message}
           />
           <p className="text-xs text-gray-500">
-            {watch('type') === 'SEA'
-              ? 'Conteneur maritime : capacite exprimee en metres cubes (m3).'
-              : watch('type') === 'AIR'
-                ? 'Conteneur aerien : capacite exprimee en kilogrammes (kg).'
-                : 'Selectionnez un type pour adapter l\'unite.'}
+            {watch('type') === 'AIR'
+              ? 'Conteneur aerien : capacite exprimee en kilogrammes (kg).'
+              : watch('type') === 'SEA'
+                ? 'Conteneur maritime : capacite exprimee en metres cubes (m3).'
+                : watch('type') === 'LAND'
+                  ? 'Conteneur terrestre : capacite exprimee en metres cubes (m3).'
+                  : 'Selectionnez un type pour adapter l\'unite.'}
           </p>
         </div>
 

@@ -19,9 +19,9 @@ model Organization {
   email           String?
   logoUrl         String?
   // Branding tenant : controle par l'admin du tenant via /settings/branding
-  primaryColor    String   @default("#1B5E20")  // primary-900 (vert fonce)
-  secondaryColor  String   @default("#4CAF50")  // primary-500 (vert moyen)
-  accentColor     String   @default("#E8F5E9")  // primary-50 (vert clair)
+  primaryColor    String   @default("#1B5E20") // primary-900 (vert fonce)
+  secondaryColor  String   @default("#4CAF50") // primary-500 (vert moyen)
+  accentColor     String   @default("#E8F5E9") // primary-50 (vert clair)
   // Modules actives pour ce tenant. Vide = tous actifs (compat ascendante).
   enabledModules  String[] @default([])
   defaultCurrency String   @default("XAF")
@@ -105,12 +105,64 @@ model Warehouse {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  agency          Agency   @relation(fields: [agencyId], references: [id])
-  parcels         Parcel[] @relation("CurrentWarehouse")
-  originalParcels Parcel[] @relation("OriginalWarehouse")
+  agency          Agency               @relation(fields: [agencyId], references: [id])
+  parcels         Parcel[]             @relation("CurrentWarehouse")
+  originalParcels Parcel[]             @relation("OriginalWarehouse")
+  inventories     WarehouseInventory[]
 
   @@index([agencyId])
   @@map("warehouses")
+}
+
+// Inventaire d'un magasin : declenche par un operateur, on scanne les colis
+// presents physiquement, puis on cloture pour reconcilier avec le stock theorique.
+model WarehouseInventory {
+  id          String                   @id @default(uuid())
+  warehouseId String
+  status      WarehouseInventoryStatus @default(IN_PROGRESS)
+  startedById String?
+  closedById  String?
+  startedAt   DateTime                 @default(now())
+  closedAt    DateTime?
+  comment     String?
+
+  warehouse Warehouse                @relation(fields: [warehouseId], references: [id])
+  startedBy User?                    @relation("InventoryStartedBy", fields: [startedById], references: [id])
+  closedBy  User?                    @relation("InventoryClosedBy", fields: [closedById], references: [id])
+  items     WarehouseInventoryItem[]
+
+  @@index([warehouseId])
+  @@index([status])
+  @@map("warehouse_inventories")
+}
+
+enum WarehouseInventoryStatus {
+  IN_PROGRESS
+  CLOSED
+  CANCELLED
+}
+
+// Une ligne par colis scanne / detecte pendant l'inventaire.
+// expected = colis dans le stock theorique au moment du demarrage
+// scanned  = a-t-il ete vu pendant l'inventaire
+model WarehouseInventoryItem {
+  id          String    @id @default(uuid())
+  inventoryId String
+  parcelId    String
+  expected    Boolean   @default(true)
+  scanned     Boolean   @default(false)
+  scannedAt   DateTime?
+  scannedById String?
+  comment     String?
+
+  inventory WarehouseInventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  parcel    Parcel             @relation(fields: [parcelId], references: [id])
+  scannedBy User?              @relation("InventoryItemScannedBy", fields: [scannedById], references: [id])
+
+  @@unique([inventoryId, parcelId])
+  @@index([inventoryId])
+  @@index([parcelId])
+  @@map("warehouse_inventory_items")
 }
 
 // ============================================================
@@ -138,14 +190,14 @@ model User {
   organization Organization @relation(fields: [organizationId], references: [id])
 
   userAgencies          UserAgency[]
-  responsibleAgencies   Agency[]              @relation("AgencyResponsible")
+  responsibleAgencies   Agency[]                 @relation("AgencyResponsible")
   refreshTokens         RefreshToken[]
   paymentsReceived      Payment[]
-  voidedPayments        Payment[]             @relation("VoidedByUser")
-  disbursementsIssued   DisbursementVoucher[] @relation("IssuedByUser")
-  disbursementsApproved DisbursementVoucher[] @relation("ApprovedByUser")
-  transfersInitiated    FundTransfer[]        @relation("InitiatedByUser")
-  transfersConfirmed    FundTransfer[]        @relation("ConfirmedByUser")
+  voidedPayments        Payment[]                @relation("VoidedByUser")
+  disbursementsIssued   DisbursementVoucher[]    @relation("IssuedByUser")
+  disbursementsApproved DisbursementVoucher[]    @relation("ApprovedByUser")
+  transfersInitiated    FundTransfer[]           @relation("InitiatedByUser")
+  transfersConfirmed    FundTransfer[]           @relation("ConfirmedByUser")
   closedCashRegisters   AgencyCashRegister[]
   journalEntriesCreated JournalEntry[]
   expensesApproved      Expense[]
@@ -154,6 +206,9 @@ model User {
   auditLogs             AuditLog[]
   chatMessagesAgent     ChatMessage[]
   assignedConversations ChatConversation[]
+  inventoriesStarted    WarehouseInventory[]     @relation("InventoryStartedBy")
+  inventoriesClosed     WarehouseInventory[]     @relation("InventoryClosedBy")
+  inventoryItemsScanned WarehouseInventoryItem[] @relation("InventoryItemScannedBy")
 
   @@index([organizationId])
   @@index([email])
@@ -367,6 +422,11 @@ model Container {
   designation          String
   type                 TransitType
   isForwarding         Boolean         @default(false)
+  // Hierarchie : un conteneur d'acheminement (isForwarding=true) peut etre place
+  // dans un conteneur parent AIR/SEA. Le parent ne peut pas etre lui-meme forwarding.
+  parentContainerId    String?
+  // Transporteur (facultatif) : nom/reference de la compagnie/personne en charge.
+  carrier              String?
   capacity             Decimal         @db.Decimal(15, 2)
   // currentLoad : valeur snapshot, peut driver. Repository la recalcule a la lecture.
   currentLoad          Decimal         @default(0) @db.Decimal(15, 2)
@@ -386,6 +446,8 @@ model Container {
   transitRoute     TransitRoute?         @relation(fields: [transitRouteId], references: [id])
   departureAgency  Agency                @relation("DepartureAgency", fields: [departureAgencyId], references: [id])
   arrivalAgency    Agency                @relation("ArrivalAgency", fields: [arrivalAgencyId], references: [id])
+  parentContainer  Container?            @relation("ContainerHierarchy", fields: [parentContainerId], references: [id])
+  childContainers  Container[]           @relation("ContainerHierarchy")
   parcels          Parcel[]              @relation("CurrentContainer")
   lastContainerFor Parcel[]              @relation("LastContainer")
   histories        ContainerHistory[]
@@ -400,6 +462,7 @@ model Container {
   @@index([departureAgencyId])
   @@index([arrivalAgencyId])
   @@index([status])
+  @@index([parentContainerId])
   @@map("containers")
 }
 
@@ -444,10 +507,10 @@ model Parcel {
   price               Decimal      @default(0) @db.Decimal(15, 2)
 
   // Categorie + flags metiers (audit fix #10)
-  category       ParcelCategory @default(STANDARD)
-  isFragile      Boolean        @default(false)
-  isHazardous    Boolean        @default(false)
-  declaredValue  Decimal?       @db.Decimal(15, 2)  // pour assurance
+  category      ParcelCategory @default(STANDARD)
+  isFragile     Boolean        @default(false)
+  isHazardous   Boolean        @default(false)
+  declaredValue Decimal?       @db.Decimal(15, 2) // pour assurance
 
   clientId            String
   recipientId         String?
@@ -479,12 +542,13 @@ model Parcel {
   transitRoute      TransitRoute? @relation(fields: [transitRouteId], references: [id])
   invoice           Invoice?      @relation(fields: [invoiceId], references: [id])
 
-  histories     ParcelHistory[]
-  manifestLines ManifestLine[]
-  penalties     Penalty[]
-  routings      InterAgencyRouting[]
-  images        ParcelImage[]
-  discrepancies ManifestDiscrepancy[]
+  histories      ParcelHistory[]
+  manifestLines  ManifestLine[]
+  penalties      Penalty[]
+  routings       InterAgencyRouting[]
+  images         ParcelImage[]
+  discrepancies  ManifestDiscrepancy[]
+  inventoryItems WarehouseInventoryItem[]
 
   @@index([organizationId])
   @@index([clientId])
@@ -991,17 +1055,29 @@ enum ManifestStatus {
 }
 
 model ManifestLine {
-  id          String   @id @default(uuid())
-  manifestId  String
-  parcelId    String?
-  designation String
-  weight      Decimal? @db.Decimal(15, 3)
-  origin      String?
-  destination String?
-  transit     String?
-  price       Decimal  @default(0) @db.Decimal(15, 2)
-  status      String?
-  addedAt     DateTime @default(now())
+  id             String   @id @default(uuid())
+  manifestId     String
+  parcelId       String?
+  // Snapshot des donnees du colis au moment de l'emission (immuable)
+  trackingNumber String?
+  designation    String
+  clientName     String?
+  recipientName  String?
+  destinationCity String?
+  weight         Decimal? @db.Decimal(15, 3)
+  volume         Decimal? @db.Decimal(15, 3)
+  origin         String?
+  destination    String?
+  transit        String?
+  price          Decimal  @default(0) @db.Decimal(15, 2)
+  // montant total facture (peut etre > price si la facture couvre plusieurs colis)
+  invoiceTotal   Decimal? @db.Decimal(15, 2)
+  // avance / montant deja paye attribue a ce colis
+  advanceAmount  Decimal  @default(0) @db.Decimal(15, 2)
+  // reste a payer
+  balanceAmount  Decimal  @default(0) @db.Decimal(15, 2)
+  status         String?
+  addedAt        DateTime @default(now())
 
   manifest ShippingManifest @relation(fields: [manifestId], references: [id], onDelete: Cascade)
   parcel   Parcel?          @relation(fields: [parcelId], references: [id])

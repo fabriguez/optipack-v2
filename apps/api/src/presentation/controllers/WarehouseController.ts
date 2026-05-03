@@ -4,6 +4,11 @@ import { CreateWarehouseUseCase } from '../../application/use-cases/warehouse/Cr
 import { ListWarehousesUseCase } from '../../application/use-cases/warehouse/ListWarehousesUseCase';
 import { UpdateWarehouseUseCase } from '../../application/use-cases/warehouse/UpdateWarehouseUseCase';
 import { DeleteWarehouseUseCase } from '../../application/use-cases/warehouse/DeleteWarehouseUseCase';
+import { GetWarehouseSummaryUseCase } from '../../application/use-cases/warehouse/GetWarehouseSummaryUseCase';
+import { StartInventoryUseCase } from '../../application/use-cases/warehouse/StartInventoryUseCase';
+import { ScanInventoryParcelUseCase } from '../../application/use-cases/warehouse/ScanInventoryParcelUseCase';
+import { CloseInventoryUseCase } from '../../application/use-cases/warehouse/CloseInventoryUseCase';
+import { GetInventoryUseCase } from '../../application/use-cases/warehouse/GetInventoryUseCase';
 import { WAREHOUSE_REPOSITORY } from '../../application/interfaces/IWarehouseRepository';
 import { NotFoundError } from '../../domain/errors/BusinessError';
 
@@ -71,6 +76,70 @@ export class WarehouseController {
       const useCase = container.resolve(DeleteWarehouseUseCase);
       await useCase.execute(req.params.id);
       res.json({ success: true, message: 'Magasin desactive' });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async getSummary(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(GetWarehouseSummaryUseCase);
+      const data = await useCase.execute(req.params.id);
+      res.json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async startInventory(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(StartInventoryUseCase);
+      const data = await useCase.execute(req.params.id, req.user!.userId, req.body?.comment);
+      res.status(201).json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async listInventories(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(GetInventoryUseCase);
+      const data = await useCase.listByWarehouse(req.params.id);
+      res.json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async getInventory(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(GetInventoryUseCase);
+      const data = await useCase.execute(req.params.inventoryId);
+      res.json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async scanInventory(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(ScanInventoryParcelUseCase);
+      const data = await useCase.execute(
+        req.params.inventoryId,
+        req.body.trackingNumber,
+        req.user!.userId,
+      );
+      res.json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async closeInventory(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(CloseInventoryUseCase);
+      const data = await useCase.execute(req.params.inventoryId, req.user!.userId);
+      res.json({ success: true, data });
     } catch (err) {
       next(err);
     }

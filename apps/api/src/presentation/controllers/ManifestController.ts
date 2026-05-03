@@ -157,15 +157,13 @@ export class ManifestController {
       const manifest = await prisma.shippingManifest.findUnique({
         where: { id: req.params.id },
         include: {
-          lines: {
-            include: {
-              parcel: { include: { client: { select: { fullName: true } }, transitRoute: { select: { type: true } } } },
-            },
-          },
+          lines: { orderBy: { addedAt: 'asc' } },
           container: {
             include: {
               departureAgency: { select: { name: true, city: true } },
               arrivalAgency: { select: { name: true, city: true } },
+              parentContainer: { select: { designation: true } },
+              transitRoute: { select: { name: true } },
             },
           },
         },
@@ -178,17 +176,24 @@ export class ManifestController {
         containerDesignation: manifest.container.designation,
         containerType: manifest.container.type,
         isForwarding: manifest.container.isForwarding,
+        parentContainerName: manifest.container.parentContainer?.designation ?? null,
+        carrier: manifest.container.carrier ?? null,
+        transitRoute: manifest.container.transitRoute?.name ?? null,
         departureAgency: `${manifest.container.departureAgency.name} (${manifest.container.departureAgency.city})`,
         arrivalAgency: `${manifest.container.arrivalAgency.name} (${manifest.container.arrivalAgency.city})`,
         date: manifest.createdAt,
         parcels: manifest.lines.map((l) => ({
-          trackingNumber: l.parcel?.trackingNumber || '-',
+          trackingNumber: l.trackingNumber || '-',
           designation: l.designation,
           weight: l.weight ? Number(l.weight) : null,
-          volume: l.parcel?.volume ? Number(l.parcel.volume) : null,
+          volume: l.volume ? Number(l.volume) : null,
           destination: l.destination || '-',
+          destinationCity: l.destinationCity ?? null,
           price: Number(l.price),
-          clientName: l.parcel?.client?.fullName ?? '-',
+          clientName: l.clientName ?? '-',
+          recipientName: l.recipientName ?? '-',
+          advanceAmount: Number(l.advanceAmount),
+          balanceAmount: Number(l.balanceAmount),
           status: l.status ?? undefined,
         })),
       });

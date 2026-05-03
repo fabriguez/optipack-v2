@@ -9,7 +9,13 @@ export class ListContainersUseCase {
   ) {}
 
   async execute(
-    filters: { departureAgencyId?: string; arrivalAgencyId?: string; status?: string; agencyIds?: string[] },
+    filters: {
+      departureAgencyId?: string;
+      arrivalAgencyId?: string;
+      status?: string;
+      isForwarding?: boolean;
+      agencyIds?: string[];
+    },
     pagination: PaginationInput,
   ) {
     return this.containerRepo.findAll(filters, pagination);

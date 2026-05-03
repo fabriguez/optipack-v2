@@ -53,8 +53,12 @@ interface ManifestParcel {
   weight?: number | null;
   volume?: number | null;
   destination: string;
+  destinationCity?: string | null;
   price: number;
-  clientName?: string;
+  clientName?: string | null;
+  recipientName?: string | null;
+  advanceAmount?: number;
+  balanceAmount?: number;
   status?: string;
 }
 
@@ -64,6 +68,9 @@ export interface ManifestData {
   containerDesignation: string;
   containerType: string;
   isForwarding?: boolean;
+  parentContainerName?: string | null;
+  carrier?: string | null;
+  transitRoute?: string | null;
   departureAgency: string;
   arrivalAgency: string;
   date: Date | string;
@@ -409,6 +416,17 @@ export class PDFService {
       : manifestData.containerType;
     doc.text(`Type: ${typeLabel}`, 300, y, { width: pageWidth - 250 });
     y += 18;
+    if (manifestData.parentContainerName) {
+      doc.text(`Conteneur parent: ${manifestData.parentContainerName}`, 50, y);
+      y += 18;
+    }
+    if (manifestData.carrier) {
+      doc.text(`Transporteur: ${manifestData.carrier}`, 50, y);
+    }
+    if (manifestData.transitRoute) {
+      doc.text(`Route: ${manifestData.transitRoute}`, 300, y, { width: pageWidth - 250 });
+    }
+    if (manifestData.carrier || manifestData.transitRoute) y += 18;
     doc.text(`Agence depart: ${manifestData.departureAgency}`, 50, y);
     doc.text(`Agence arrivee: ${manifestData.arrivalAgency}`, 300, y, { width: pageWidth - 250 });
 
@@ -426,30 +444,33 @@ export class PDFService {
       y += 30;
     } else {
       const cols = [
-        { label: '#', width: 22, key: 'index' },
-        { label: 'Tracking', width: 95, key: 'tracking' },
-        { label: 'Designation', width: 120, key: 'designation' },
-        { label: 'Client', width: 90, key: 'client' },
-        { label: 'P/V', width: 55, key: 'pv' },
-        { label: 'Destination', width: 90, key: 'destination' },
-        { label: 'Prix', width: 60, key: 'price' },
+        { label: '#', width: 18 },
+        { label: 'Tracking', width: 70 },
+        { label: 'Designation', width: 78 },
+        { label: 'Client', width: 70 },
+        { label: 'Destinataire', width: 70 },
+        { label: 'Ville', width: 60 },
+        { label: 'P/V', width: 45 },
+        { label: 'A payer', width: 55 },
+        { label: 'Avance', width: 50 },
       ];
+      const tableWidth = cols.reduce((s, c) => s + c.width, 0);
 
-      doc.rect(50, y, pageWidth, 22).fill(COLORS.primary);
+      doc.rect(50, y, tableWidth, 22).fill(COLORS.primary);
       let xCol = 55;
-      doc.fontSize(8).fillColor(COLORS.white);
+      doc.fontSize(7).fillColor(COLORS.white);
       for (const col of cols) {
-        doc.text(col.label, xCol, y + 7, { width: col.width });
+        doc.text(col.label, xCol, y + 7, { width: col.width - 2 });
         xCol += col.width;
       }
       y += 22;
 
-      doc.fillColor(COLORS.dark).fontSize(8);
+      doc.fillColor(COLORS.dark).fontSize(7);
       parcels.forEach((p, i) => {
         if (y > 700) { doc.addPage(); y = 50; }
         const bg = i % 2 === 0 ? COLORS.white : COLORS.lightGray;
         const rowH = 22;
-        doc.rect(50, y, pageWidth, rowH).fill(bg);
+        doc.rect(50, y, tableWidth, rowH).fill(bg);
         doc.fillColor(COLORS.dark);
         xCol = 55;
 
@@ -464,9 +485,11 @@ export class PDFService {
           p.trackingNumber || '-',
           p.designation || '-',
           p.clientName || '-',
+          p.recipientName || '-',
+          p.destinationCity || p.destination || '-',
           pv,
-          p.destination || '-',
           formatCurrency(Number(p.price) || 0),
+          formatCurrency(Number(p.advanceAmount) || 0),
         ];
         for (let c = 0; c < cols.length; c++) {
           doc.text(row[c], xCol, y + 6, { width: cols[c].width - 2, lineBreak: false, ellipsis: true });
@@ -483,18 +506,24 @@ export class PDFService {
     const totalWeight = parcels.reduce((s, p) => s + (Number(p.weight) || 0), 0);
     const totalVolume = parcels.reduce((s, p) => s + (Number(p.volume) || 0), 0);
     const totalValue = parcels.reduce((s, p) => s + (Number(p.price) || 0), 0);
+    const totalAdvance = parcels.reduce((s, p) => s + (Number(p.advanceAmount) || 0), 0);
 
-    doc.rect(50, y, pageWidth, 75).fill(COLORS.lightGray);
+    doc.rect(50, y, pageWidth, 95).fill(COLORS.lightGray);
     doc.fontSize(10).fillColor(COLORS.dark);
     doc.text(`Total colis: ${totalParcels}`, 60, y + 10);
     doc.text(`Poids total: ${totalWeight.toFixed(2)} kg`, 60, y + 28);
     if (totalVolume > 0) {
       doc.text(`Volume total: ${totalVolume.toFixed(3)} m3`, 60, y + 46);
     }
-    doc.text(`Valeur totale: ${formatCurrency(totalValue)}`, 300, y + 28);
+    doc.text(`Valeur totale: ${formatCurrency(totalValue)}`, 300, y + 10);
+    doc
+      .fontSize(11)
+      .fillColor(COLORS.primary)
+      .text(`Total attendu (avances): ${formatCurrency(totalAdvance)}`, 300, y + 32);
+    doc.fontSize(10).fillColor(COLORS.dark);
 
     // --- Signatures ---
-    y += 105;
+    y += 125;
     if (y > 720) { doc.addPage(); y = 50; }
 
     doc.fontSize(10).fillColor(COLORS.dark);

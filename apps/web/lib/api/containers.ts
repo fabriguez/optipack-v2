@@ -39,6 +39,14 @@ export const containersApi = {
     apiClient.post('/containers', data).then((r) => r.data),
   loadParcels: (id: string, parcelIds: string[]) =>
     apiClient.post(`/containers/${id}/load`, { parcelIds }).then((r) => r.data),
+  loadByQr: (id: string, trackingNumber: string) =>
+    apiClient.post(`/containers/${id}/load-by-qr`, { trackingNumber }).then((r) => r.data),
+  removeParcel: (id: string, parcelId: string, reason: string) =>
+    apiClient.post(`/containers/${id}/remove-parcel`, { parcelId, reason }).then((r) => r.data),
+  loadableParcels: (
+    id: string,
+    params?: { search?: string; page?: number; limit?: number },
+  ) => apiClient.get(`/containers/${id}/loadable-parcels`, { params }).then((r) => r.data),
   depart: (id: string) =>
     apiClient.post(`/containers/${id}/depart`).then((r) => r.data),
   arrive: (id: string) =>
