@@ -15,6 +15,12 @@ export class DeleteAgencyChargeUseCase {
     });
     if (!charge) throw new NotFoundError('Charge', chargeId);
 
+    if ((charge as any).isAutoManaged) {
+      throw new BusinessError(
+        'La charge masse salariale auto-geree ne peut pas etre supprimee.',
+      );
+    }
+
     if (charge._count.expenses > 0) {
       // Desactivation : preserve l'historique
       return prisma.agencyCharge.update({

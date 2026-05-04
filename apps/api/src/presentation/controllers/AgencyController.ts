@@ -12,6 +12,7 @@ import { PayAgencyChargeUseCase } from '../../application/use-cases/agency/PayAg
 import { DeleteAgencyChargeUseCase } from '../../application/use-cases/agency/DeleteAgencyChargeUseCase';
 import { UploadAgencyImageUseCase } from '../../application/use-cases/agency/UploadAgencyImageUseCase';
 import { DeleteAgencyImageUseCase } from '../../application/use-cases/agency/DeleteAgencyImageUseCase';
+import { SetAgencyOpeningHoursUseCase } from '../../application/use-cases/agency/SetAgencyOpeningHoursUseCase';
 import { StorageService } from '../../infrastructure/storage/StorageService';
 import { prisma } from '../../config/database';
 import { NotFoundError } from '../../domain/errors/BusinessError';
@@ -177,6 +178,31 @@ export class AgencyController {
         'Cross-Origin-Resource-Policy': 'cross-origin',
       });
       obj.stream.pipe(res);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  // ----- Horaires d'ouverture -----
+
+  static async listOpeningHours(req: Request, res: Response, next: NextFunction) {
+    try {
+      const hours = await prisma.agencyOpeningHours.findMany({
+        where: { agencyId: req.params.id },
+        orderBy: [{ dayOfWeek: 'asc' }, { openTime: 'asc' }],
+      });
+      res.json({ success: true, data: hours });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async setOpeningHours(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(SetAgencyOpeningHoursUseCase);
+      const hours = Array.isArray(req.body?.hours) ? req.body.hours : [];
+      const result = await useCase.execute(req.params.id, hours);
+      res.json({ success: true, data: result });
     } catch (err) {
       next(err);
     }

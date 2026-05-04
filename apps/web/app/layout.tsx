@@ -6,6 +6,7 @@ import { TenantProvider } from '@/lib/providers/TenantProvider';
 import { NextIntlClientProvider } from 'next-intl';
 import { getLocale, getMessages } from 'next-intl/server';
 import { AppToaster } from '@/components/ui/AppToast';
+import NextTopLoader from 'nextjs-toploader';
 import './globals.css';
 import { Geist } from "next/font/google";
 import { cn } from "@/lib/utils";
@@ -24,6 +25,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang={locale} className={cn("font-sans", geist.variable)}>
       <body>
+        <NextTopLoader
+          color="#4CAF50"
+          height={3}
+          showSpinner={false}
+          shadow="0 0 8px #4CAF50, 0 0 4px #4CAF50"
+          easing="ease"
+          speed={250}
+        />
         <NuqsAdapter>
           <SessionProvider>
             <QueryProvider>

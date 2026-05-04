@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import { container } from '../../container';
 import { CalculatePenaltiesUseCase } from '../../application/use-cases/penalty/CalculatePenaltiesUseCase';
 import { CoherenceService } from '../../application/services/CoherenceService';
+import { AutoCloseCashRegistersUseCase } from '../../application/use-cases/cash-register/AutoCloseCashRegistersUseCase';
 import { prisma } from '../../config/database';
 import { eventBus, DomainEvents } from '../events/EventBus';
 import { createChildLogger } from '../../config/logger';
@@ -54,8 +55,22 @@ export function startCronJobs(): void {
     }
   });
 
+  // Cloture automatique des caisses : toutes les 10 minutes, on regarde si l'heure
+  // de fermeture configuree est passee dans le fuseau de l'agence ; si oui on ferme.
+  cron.schedule('*/10 * * * *', async () => {
+    try {
+      const useCase = container.resolve(AutoCloseCashRegistersUseCase);
+      const result = await useCase.execute();
+      if (result.closed > 0) {
+        logger.info(result, 'Cash registers auto-closed');
+      }
+    } catch (err) {
+      logger.error({ err }, 'Auto cash register closing failed');
+    }
+  });
+
   logger.info(
-    'Cron jobs scheduled: penalty (2AM), debt alerts (8AM), overdue debts (1AM), parcel coherence (every 6h)',
+    'Cron jobs scheduled: penalty (2AM), debt alerts (8AM), overdue debts (1AM), parcel coherence (every 6h), auto cash close (every 10min)',
   );
 }
 

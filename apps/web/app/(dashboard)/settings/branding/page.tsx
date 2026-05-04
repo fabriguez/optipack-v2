@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Save, RotateCcw, Image as ImageIcon } from 'lucide-react';
+import { Save, RotateCcw } from 'lucide-react';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard, AppCardHeader } from '@/components/ui/AppCard';
 import { AppInput } from '@/components/ui/AppInput';
+import { ImageUrlField } from '@/components/shared/ImageUrlField';
 import { AppButton } from '@/components/ui/AppButton';
 import { useTenantMeta } from '@/lib/providers/TenantProvider';
 import { organizationApi } from '@/lib/api/organization';
@@ -99,21 +100,16 @@ export default function BrandingSettingsPage() {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <AppInput label="Nom de l'organisation" value={name} onChange={(e) => setName(e.target.value)} />
                 <AppInput label="Email de support" type="email" value={supportEmail} onChange={(e) => setSupportEmail(e.target.value)} placeholder="support@..." />
-                <AppInput
-                  label="URL du logo"
-                  value={logoUrl}
-                  onChange={(e) => setLogoUrl(e.target.value)}
-                  placeholder="https://..."
-                  className="sm:col-span-2"
+              </div>
+              <div className="mt-4">
+                <ImageUrlField
+                  label="Logo de l'organisation"
+                  value={logoUrl || null}
+                  onChange={(url) => setLogoUrl(url ?? '')}
+                  height={140}
+                  hint="Glissez le logo, choisissez un fichier ou utilisez la camera"
                 />
               </div>
-              {logoUrl && (
-                <div className="mt-3 flex items-center gap-3 rounded-xl bg-gray-50 p-3">
-                  <ImageIcon className="h-4 w-4 text-gray-400" />
-                  <img src={logoUrl} alt="Logo preview" className="h-10 object-contain" onError={(e) => ((e.target as HTMLImageElement).style.display = 'none')} />
-                  <span className="text-xs text-gray-500 truncate">{logoUrl}</span>
-                </div>
-              )}
             </AppCard>
 
             <AppCard>

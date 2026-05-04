@@ -28,8 +28,8 @@ export const config = {
   jwt: {
     secret: process.env.JWT_SECRET || 'change-me-in-production',
     refreshSecret: process.env.JWT_REFRESH_SECRET || 'change-me-refresh',
-    accessExpiry: process.env.JWT_ACCESS_EXPIRY || '15m',
-    refreshExpiry: process.env.JWT_REFRESH_EXPIRY || '7d',
+    accessExpiry: process.env.JWT_ACCESS_EXPIRY || '12h',
+    refreshExpiry: process.env.JWT_REFRESH_EXPIRY || '30d',
   },
 
   smtp: {

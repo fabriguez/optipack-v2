@@ -20,6 +20,7 @@ import { AppDialog } from '@/components/ui/AppDialog';
 import { AppInput } from '@/components/ui/AppInput';
 import { AppSelect } from '@/components/ui/AppSelect';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { ImageUrlField } from '@/components/shared/ImageUrlField';
 import { formatAmount } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
 
@@ -154,7 +155,14 @@ export function AgencyChargesTab({ agencyId }: Props) {
                     <Icon className="h-5 w-5 text-primary-600" />
                   </div>
                   <div className="min-w-[180px] flex-1">
-                    <p className="text-sm font-medium">{c.label}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium">{c.label}</p>
+                      {c.isAutoManaged && (
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-primary-50 text-primary-700">
+                          Auto
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-gray-500">
                       {TYPE_LABELS[c.type] || c.type}
                       {c.dueDayOfMonth && ` - du ${c.dueDayOfMonth}`}
@@ -186,17 +194,21 @@ export function AgencyChargesTab({ agencyId }: Props) {
                     </AppButton>
                     <button
                       type="button"
-                      className="rounded-lg p-2 hover:bg-gray-100"
+                      className="rounded-lg p-2 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
                       onClick={() => setEditCharge(c)}
+                      disabled={c.isAutoManaged}
                       aria-label="Modifier"
+                      title={c.isAutoManaged ? 'Charge auto-geree, modifiable via les salaires des employes.' : 'Modifier'}
                     >
                       <Edit2 className="h-3.5 w-3.5 text-gray-500" />
                     </button>
                     <button
                       type="button"
-                      className="rounded-lg p-2 hover:bg-red-50"
+                      className="rounded-lg p-2 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed"
                       onClick={() => setDeleteCharge(c)}
+                      disabled={c.isAutoManaged}
                       aria-label="Supprimer"
+                      title={c.isAutoManaged ? 'Charge auto-geree, ne peut pas etre supprimee.' : 'Supprimer'}
                     >
                       <Trash2 className="h-3.5 w-3.5 text-red-500" />
                     </button>
@@ -297,7 +309,9 @@ function ChargeFormDialog({ open, onClose, agencyId, charge, onSaved }: ChargeFo
     }
   };
 
-  const typeOptions = CHARGE_TYPES.map((t) => ({ value: t, label: TYPE_LABELS[t] || t }));
+  // SALARY (masse salariale) est generee automatiquement par le serveur a partir
+  // des employes : on l'exclut du selecteur de creation manuelle.
+  const typeOptions = CHARGE_TYPES.filter((t) => t !== 'SALARY').map((t) => ({ value: t, label: TYPE_LABELS[t] || t }));
 
   return (
     <AppDialog
@@ -372,6 +386,7 @@ function PayChargeDialog({ open, onClose, charge, period, onSaved }: PayProps) {
     register,
     handleSubmit,
     reset,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<PayAgencyChargeInput>({
     resolver: zodResolver(payAgencyChargeSchema),
@@ -439,12 +454,18 @@ function PayChargeDialog({ open, onClose, charge, period, onSaved }: PayProps) {
           {...register('description')}
           error={errors.description?.message}
         />
-        <AppInput
-          label="URL recu (optionnel)"
-          type="url"
-          placeholder="https://..."
-          {...register('receiptUrl')}
-          error={errors.receiptUrl?.message}
+        <Controller
+          name="receiptUrl"
+          control={control}
+          render={({ field }) => (
+            <ImageUrlField
+              label="Recu (optionnel)"
+              value={(field.value as string | null | undefined) ?? null}
+              onChange={(url) => field.onChange(url ?? '')}
+              hint="Photographiez le recu papier ou deposez un fichier"
+              height={160}
+            />
+          )}
         />
       </form>
     </AppDialog>

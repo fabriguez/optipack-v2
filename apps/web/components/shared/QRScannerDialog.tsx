@@ -17,17 +17,19 @@ interface QRScannerDialogProps {
   closeOnDetect?: boolean;
 }
 
-const QR_REGION_ID = 'qr-scanner-region';
-
 /**
- * Scanner QR base sur html5-qrcode. Demande l'acces camera, prefere la
+ * Scanner polyvalent : QR codes ET codes-barres (EAN, UPC, Code128/39/93, ITF,
+ * Codabar, Aztec, Data Matrix, PDF417). Demande l'acces camera, prefere la
  * camera arriere (`facingMode: environment`) sur mobile.
  */
+
+const QR_REGION_ID = 'qr-scanner-region';
+
 export function QRScannerDialog({
   open,
   onClose,
   onDetected,
-  title = 'Scanner un QR code',
+  title = 'Scanner (QR / code-barres)',
   closeOnDetect = true,
 }: QRScannerDialogProps) {
   const scannerRef = useRef<any>(null);
@@ -43,7 +45,19 @@ export function QRScannerDialog({
     const start = async () => {
       setError(null);
       try {
-        const { Html5Qrcode } = await import('html5-qrcode');
+        // Pre-flight : sur certains navigateurs (Safari iOS, Chrome strict), getCameras
+        // ne renvoie rien tant que getUserMedia n'a pas ete appele au moins une fois.
+        // On declenche un getUserMedia pour deverrouiller la liste, puis on l'arrete.
+        if (typeof navigator !== 'undefined' && navigator.mediaDevices?.getUserMedia) {
+          try {
+            const probe = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } } });
+            probe.getTracks().forEach((t) => t.stop());
+          } catch {
+            // sera capte plus bas par Html5Qrcode si vraiment refuse
+          }
+        }
+
+        const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import('html5-qrcode');
         if (cancelled) return;
 
         // Liste des cameras disponibles
@@ -53,21 +67,54 @@ export function QRScannerDialog({
             setCameras(devices.map((d) => ({ id: d.id, label: d.label || 'Camera' })));
           }
         } catch {
-          // certains navigateurs requierent que getUserMedia soit appele d'abord ;
-          // on tombera dans le start() ci-dessous qui lance getUserMedia.
+          // ignore
         }
 
         if (cancelled) return;
-        const inst = new Html5Qrcode(QR_REGION_ID, { verbose: false });
+
+        // Polyvalent : QR + codes-barres usuels (EAN, UPC, Code128, Code39, ITF, Codabar)
+        const supportedFormats = [
+          Html5QrcodeSupportedFormats.QR_CODE,
+          Html5QrcodeSupportedFormats.AZTEC,
+          Html5QrcodeSupportedFormats.DATA_MATRIX,
+          Html5QrcodeSupportedFormats.PDF_417,
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.CODE_93,
+          Html5QrcodeSupportedFormats.CODABAR,
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.UPC_E,
+          Html5QrcodeSupportedFormats.ITF,
+        ];
+
+        const inst = new Html5Qrcode(QR_REGION_ID, {
+          verbose: false,
+          formatsToSupport: supportedFormats,
+        });
         scannerRef.current = inst;
 
         const cameraConfig = cameraId
           ? cameraId
           : ({ facingMode: { ideal: 'environment' } } as MediaTrackConstraints);
 
+        // qrbox plus large + ratio adapte aux codes-barres lineaires
+        const qrbox = (vw: number, vh: number) => {
+          const min = Math.min(vw, vh);
+          const w = Math.floor(min * 0.8);
+          const h = Math.floor(min * 0.5);
+          return { width: w, height: h };
+        };
+
         await inst.start(
           cameraConfig,
-          { fps: 10, qrbox: { width: 240, height: 240 } },
+          {
+            fps: 15,
+            qrbox,
+            aspectRatio: 1.0,
+            disableFlip: false,
+          },
           (decodedText) => {
             onDetected(decodedText);
             if (closeOnDetect) {
@@ -76,15 +123,19 @@ export function QRScannerDialog({
             }
           },
           () => {
-            // erreur de scan par frame (ignoree, normale)
+            // erreur par frame (ignoree)
           },
         );
         if (!cancelled) setRunning(true);
       } catch (e: any) {
         const msg =
-          e?.message?.includes('Permission')
+          e?.name === 'NotAllowedError' || e?.message?.toLowerCase()?.includes('permission')
             ? "Acces camera refuse. Autorisez la camera dans les parametres du navigateur."
-            : e?.message || 'Impossible de demarrer la camera.';
+            : e?.name === 'NotFoundError'
+              ? "Aucune camera detectee sur cet appareil."
+              : e?.name === 'NotReadableError'
+                ? "Camera deja utilisee par une autre application."
+                : e?.message || 'Impossible de demarrer la camera.';
         setError(msg);
         setRunning(false);
       }
@@ -131,7 +182,7 @@ export function QRScannerDialog({
         ) : (
           <p className="text-xs text-gray-500 flex items-center gap-1">
             <Camera className="h-3.5 w-3.5" />
-            Placez le QR code dans le cadre. La detection est automatique.
+            Placez le QR ou le code-barres dans le cadre. La detection est automatique.
           </p>
         )}
 

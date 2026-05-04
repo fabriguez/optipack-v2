@@ -30,10 +30,11 @@ import { formatAmount, formatDate } from '@transitsoftservices/shared';
 import { AgencyChargesTab } from './AgencyChargesTab';
 import { AgencyAvatar } from '@/components/shared/AgencyAvatar';
 import { ImageDropzone } from '@/components/shared/ImageDropzone';
+import { AgencyOpeningHoursEditor } from '@/components/shared/AgencyOpeningHoursEditor';
 import { AppDialog } from '@/components/ui/AppDialog';
 import { agenciesApi } from '@/lib/api/agencies';
 import { useQueryClient } from '@tanstack/react-query';
-import { Camera } from 'lucide-react';
+import { Camera, Clock } from 'lucide-react';
 
 export default function AgencyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -108,6 +109,12 @@ export default function AgencyDetailPage({ params }: { params: Promise<{ id: str
     enabled: !!id,
   });
 
+  const { data: disbursementsData } = useQuery({
+    queryKey: ['disbursements', 'agency', id],
+    queryFn: () => apiClient.get('/disbursements', { params: { agencyId: id, limit: 10 } }).then((r) => r.data),
+    enabled: !!id,
+  });
+
   const agency = data?.data;
   if (isLoading) return <DashboardSkeleton />;
   if (!agency) return <p className="p-6 text-gray-500">Agence introuvable</p>;
@@ -135,6 +142,15 @@ export default function AgencyDetailPage({ params }: { params: Promise<{ id: str
     { key: 'position', label: 'Poste' },
     { key: 'phone', label: 'Telephone', render: (row: any) => row.phone || '-' },
     { key: 'baseSalary', label: 'Salaire', render: (row: any) => formatAmount(Number(row.baseSalary)) },
+  ];
+
+  const disbursementColumns = [
+    { key: 'reference', label: 'Reference', render: (row: any) => <Link href={`/disbursements/${row.id}`} className="font-mono text-xs text-primary-700 hover:underline">{row.reference}</Link> },
+    { key: 'reason', label: 'Motif', render: (row: any) => <span className="truncate max-w-50 block">{row.reason}</span> },
+    { key: 'orderer', label: 'Ordonnateur' },
+    { key: 'amount', label: 'Montant', render: (row: any) => <span className="font-bold text-red-600">-{formatAmount(Number(row.amount))}</span> },
+    { key: 'isVoided', label: 'Statut', render: (row: any) => <AppBadge variant={row.isVoided ? 'error' : 'success'}>{row.isVoided ? 'Annule' : 'Valide'}</AppBadge> },
+    { key: 'createdAt', label: 'Date', render: (row: any) => formatDate(row.createdAt) },
   ];
 
   const paymentColumns = [
@@ -198,6 +214,13 @@ export default function AgencyDetailPage({ params }: { params: Promise<{ id: str
         data={paymentsData?.data || []}
         seeAllHref={`/payments?agencyId=${id}`}
       />
+
+      <RelationTable
+        title={`Sorties / Decaissements (${disbursementsData?.meta?.total || 0})`}
+        columns={disbursementColumns}
+        data={disbursementsData?.data || []}
+        seeAllHref={`/disbursements?agencyId=${id}`}
+      />
     </div>
   );
 
@@ -258,6 +281,7 @@ export default function AgencyDetailPage({ params }: { params: Promise<{ id: str
           { value: 'finance', label: 'Finance', icon: <CreditCard className="h-4 w-4" />, content: financeTab },
           { value: 'charges', label: 'Charges', icon: <Wallet className="h-4 w-4" />, content: <AgencyChargesTab agencyId={id} /> },
           { value: 'personnel', label: 'Personnel', icon: <UserCog className="h-4 w-4" />, content: personnelTab },
+          { value: 'hours', label: 'Horaires', icon: <Clock className="h-4 w-4" />, content: <AgencyOpeningHoursEditor agencyId={id} /> },
         ]} />
 
         {/* Dialogs */}

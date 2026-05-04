@@ -1,6 +1,11 @@
 import type { Request, Response, NextFunction } from 'express';
 import { container } from '../../container';
 import { CreateEmployeeUseCase } from '../../application/use-cases/employee/CreateEmployeeUseCase';
+import { UpdateEmployeeUseCase } from '../../application/use-cases/employee/UpdateEmployeeUseCase';
+import { DeleteEmployeeUseCase } from '../../application/use-cases/employee/DeleteEmployeeUseCase';
+import { UploadEmployeeImageUseCase } from '../../application/use-cases/employee/UploadEmployeeImageUseCase';
+import { DeleteEmployeeImageUseCase } from '../../application/use-cases/employee/DeleteEmployeeImageUseCase';
+import { GetEmployeeImageUseCase } from '../../application/use-cases/employee/GetEmployeeImageUseCase';
 import { EMPLOYEE_REPOSITORY } from '../../application/interfaces/IEmployeeRepository';
 import { NotFoundError } from '../../domain/errors/BusinessError';
 
@@ -53,8 +58,8 @@ export class EmployeeController {
 
   static async update(req: Request, res: Response, next: NextFunction) {
     try {
-      const repo = container.resolve<any>(EMPLOYEE_REPOSITORY);
-      const employee = await repo.update(req.params.id, req.body);
+      const useCase = container.resolve(UpdateEmployeeUseCase);
+      const employee = await useCase.execute(req.params.id, req.body);
       res.json({ success: true, data: employee });
     } catch (err) {
       next(err);
@@ -63,9 +68,61 @@ export class EmployeeController {
 
   static async delete(req: Request, res: Response, next: NextFunction) {
     try {
-      const repo = container.resolve<any>(EMPLOYEE_REPOSITORY);
-      await repo.delete(req.params.id);
+      const useCase = container.resolve(DeleteEmployeeUseCase);
+      await useCase.execute(req.params.id);
       res.json({ success: true, message: 'Employe desactive' });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  // ----- Photos employe (selfie / plan / document d'identite) -----
+
+  static async uploadImage(req: Request, res: Response, next: NextFunction) {
+    try {
+      const slot = req.params.slot as 'selfie' | 'locationPlan' | 'idDocument';
+      if (!['selfie', 'locationPlan', 'idDocument'].includes(slot)) {
+        throw new NotFoundError('Slot photo employe', slot);
+      }
+      const file = (req as any).file as Express.Multer.File | undefined;
+      if (!file) {
+        return res.status(400).json({ success: false, message: 'Aucun fichier fourni' });
+      }
+      const useCase = container.resolve(UploadEmployeeImageUseCase);
+      const result = await useCase.execute(req.params.id, slot, file);
+      res.json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async deleteImage(req: Request, res: Response, next: NextFunction) {
+    try {
+      const slot = req.params.slot as 'selfie' | 'locationPlan' | 'idDocument';
+      if (!['selfie', 'locationPlan', 'idDocument'].includes(slot)) {
+        throw new NotFoundError('Slot photo employe', slot);
+      }
+      const useCase = container.resolve(DeleteEmployeeImageUseCase);
+      const result = await useCase.execute(req.params.id, slot);
+      res.json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async getImage(req: Request, res: Response, next: NextFunction) {
+    try {
+      const slot = req.params.slot as 'selfie' | 'locationPlan' | 'idDocument';
+      if (!['selfie', 'locationPlan', 'idDocument'].includes(slot)) {
+        throw new NotFoundError('Slot photo employe', slot);
+      }
+      const useCase = container.resolve(GetEmployeeImageUseCase);
+      const obj = await useCase.execute(req.params.id, slot);
+      if (!obj) return res.status(404).end();
+      res.setHeader('Content-Type', obj.contentType);
+      res.setHeader('Content-Length', String(obj.size));
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      obj.stream.pipe(res);
     } catch (err) {
       next(err);
     }

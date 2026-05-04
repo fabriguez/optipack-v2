@@ -17,6 +17,9 @@ const router = Router();
 // Endpoint PUBLIC : sert l'image agence pour <img src>. Doit etre AVANT authenticate.
 router.get('/:id/image', AgencyController.getImage);
 
+// Lecture des horaires d'ouverture (publique pour pouvoir afficher les agences sur le portail client)
+router.get('/:id/opening-hours', AgencyController.listOpeningHours);
+
 router.use(authenticate);
 
 router.get('/', validate(paginationSchema, 'query'), AgencyController.list);
@@ -62,6 +65,13 @@ router.delete(
   '/:id/image',
   authorize('SUPER_ADMIN', 'ADMIN'),
   AgencyController.deleteImage,
+);
+
+// Mise a jour complete des horaires d'ouverture (replace-all)
+router.put(
+  '/:id/opening-hours',
+  authorize('SUPER_ADMIN', 'ADMIN'),
+  AgencyController.setOpeningHours,
 );
 
 export default router;

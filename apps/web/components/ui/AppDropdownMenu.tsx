@@ -35,7 +35,11 @@ export function AppDropdownMenu({ trigger, items, align = 'end' }: AppDropdownMe
         {items.map((item, i) => (
           <DropdownMenuItem
             key={i}
-            onClick={item.onClick}
+            onClick={(e: any) => {
+              // Empeche le clic de remonter jusqu'a une row cliquable derriere le menu
+              e?.stopPropagation?.();
+              item.onClick();
+            }}
             disabled={item.disabled}
             variant={item.variant === 'destructive' ? 'destructive' : 'default'}
             className={cn(

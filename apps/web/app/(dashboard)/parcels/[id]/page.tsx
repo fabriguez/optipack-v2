@@ -26,6 +26,9 @@ import {
 import { apiClient } from '@/lib/api/client';
 import { formatAmount, formatDate, formatDateTime } from '@transitsoftservices/shared';
 import { ParcelFormDialog } from '../ParcelFormDialog';
+import { ImageInput } from '@/components/shared/ImageInput';
+import { uploadImage } from '@/lib/api/uploads';
+import { toast } from 'sonner';
 
 const STATUS_STEPS = ['IN_STOCK', 'LOADING', 'IN_TRANSIT', 'ARRIVED', 'RECEIVED', 'DELIVERED'];
 const STEP_LABELS: Record<string, string> = {
@@ -64,8 +67,8 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
   const removeImage = useRemoveParcelImage(id);
 
   const [editOpen, setEditOpen] = useState(false);
-  const [imageUrl, setImageUrl] = useState('');
   const [imageCaption, setImageCaption] = useState('');
+  const [imageUploading, setImageUploading] = useState(false);
   const [imageToDelete, setImageToDelete] = useState<string | null>(null);
 
   const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
@@ -85,11 +88,17 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
     }
   };
 
-  const handleAddImage = async () => {
-    if (!imageUrl.trim()) return;
-    await addImage.mutateAsync({ url: imageUrl.trim(), caption: imageCaption.trim() || undefined });
-    setImageUrl('');
-    setImageCaption('');
+  const handleAddImageFile = async (file: File) => {
+    setImageUploading(true);
+    try {
+      const uploaded = await uploadImage(file);
+      await addImage.mutateAsync({ url: uploaded.url, caption: imageCaption.trim() || undefined });
+      setImageCaption('');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || "Echec de l'ajout de l'image");
+    } finally {
+      setImageUploading(false);
+    }
   };
 
   if (isLoading) return <DashboardSkeleton />;
@@ -202,24 +211,22 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
     <AppCard>
       <AppCardHeader title={`Galerie (${images.length} image${images.length > 1 ? 's' : ''})`} />
       <div className="space-y-4">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <AppInput
-            label="URL de l'image"
-            value={imageUrl}
-            onChange={(e) => setImageUrl(e.target.value)}
-            placeholder="https://..."
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <ImageInput
+            label="Ajouter une image (drop, fichier ou camera)"
+            onFile={handleAddImageFile}
+            uploading={imageUploading || addImage.isPending}
+            height={160}
+            allowClear={false}
+            hint="Une fois selectionnee, l'image est uploadee et ajoutee automatiquement"
           />
-          <AppInput
-            label="Legende"
-            value={imageCaption}
-            onChange={(e) => setImageCaption(e.target.value)}
-            placeholder="Optionnel"
-          />
-          <div className="flex items-end">
-            <AppButton onClick={handleAddImage} disabled={!imageUrl.trim()} loading={addImage.isPending} className="w-full">
-              <Plus className="h-4 w-4" />
-              Ajouter
-            </AppButton>
+          <div className="flex flex-col justify-end">
+            <AppInput
+              label="Legende (appliquee a la prochaine image)"
+              value={imageCaption}
+              onChange={(e) => setImageCaption(e.target.value)}
+              placeholder="Optionnel"
+            />
           </div>
         </div>
 

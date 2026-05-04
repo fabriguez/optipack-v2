@@ -64,12 +64,16 @@ model Agency {
   imageKey          String?
   googleMapsLink    String?
   responsibleUserId String?
+  // Fuseau horaire IANA (ex: "Africa/Douala"). Sert au calcul de fin de journee
+  // pour la fermeture automatique de caisse.
+  timezone          String   @default("Africa/Douala")
   isActive          Boolean  @default(true)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  organization    Organization @relation(fields: [organizationId], references: [id])
-  responsibleUser User?        @relation("AgencyResponsible", fields: [responsibleUserId], references: [id])
+  organization    Organization         @relation(fields: [organizationId], references: [id])
+  responsibleUser User?                @relation("AgencyResponsible", fields: [responsibleUserId], references: [id])
+  openingHours    AgencyOpeningHours[]
 
   warehouses            Warehouse[]
   userAgencies          UserAgency[]
@@ -97,28 +101,56 @@ model Agency {
   @@map("agencies")
 }
 
+// Plage horaire d'ouverture d'une agence pour un jour de la semaine.
+// dayOfWeek = 0 (dimanche) .. 6 (samedi). Plusieurs lignes possibles par jour
+// (ex : 8h-12h puis 14h-18h).
+model AgencyOpeningHours {
+  id        String   @id @default(uuid())
+  agencyId  String
+  dayOfWeek Int
+  // Format HH:mm (24h, ex : "08:00", "18:30"). Vide -> agence fermee ce jour.
+  openTime  String
+  closeTime String
+  // Active le jour ; si false, ce jour est ferme meme avec des creneaux configures.
+  isOpen    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  agency Agency @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  @@index([agencyId])
+  @@index([agencyId, dayOfWeek])
+  @@map("agency_opening_hours")
+}
+
 // Charge recurrente d'une agence : eau, electricite, loyer, masse salariale, internet...
 // Sert de configuration : chaque mois, l'utilisateur enregistre un paiement (Expense)
 // rattache a la charge via Expense.agencyChargeId + Expense.period (YYYY-MM).
 // La charge elle-meme est mutable (montant et echeance peuvent evoluer) ; les paiements
 // passent par le ledger immuable Expense (regle finance).
 model AgencyCharge {
-  id              String         @id @default(uuid())
-  agencyId        String
-  type            ChargeType
-  label           String
-  defaultAmount   Decimal        @db.Decimal(15, 2)
+  id            String     @id @default(uuid())
+  agencyId      String
+  type          ChargeType
+  label         String
+  defaultAmount Decimal    @db.Decimal(15, 2)
   // jour du mois ou la charge est due (1-31). Optionnel.
-  dueDayOfMonth   Int?
+  dueDayOfMonth Int?
   // commentaire ou reference (n compteur eau, contrat de bail, ...)
-  reference       String?
-  isActive        Boolean        @default(true)
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  reference     String?
+  // Charge auto-geree par le systeme (ex : masse salariale = somme des salaires).
+  // Si true, l'utilisateur ne peut pas modifier defaultAmount manuellement ;
+  // le serveur recalcule le montant a chaque ajout/MAJ d'employe.
+  isAutoManaged Boolean    @default(false)
+  isActive      Boolean    @default(true)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 
   agency   Agency    @relation(fields: [agencyId], references: [id])
   expenses Expense[]
 
+  // Une seule charge auto-geree par agence et par type (ex: une seule SALARY auto)
+  @@unique([agencyId, type, isAutoManaged])
   @@index([agencyId])
   @@index([type])
   @@map("agency_charges")
@@ -299,19 +331,27 @@ model RefreshToken {
 // ============================================================
 
 model Employee {
-  id         String    @id @default(uuid())
-  agencyId   String
-  fullName   String
-  idNumber   String?
-  phone      String?
-  position   String
-  level      String?
-  baseSalary Decimal   @default(0) @db.Decimal(15, 2)
-  startDate  DateTime  @default(now())
-  endDate    DateTime?
-  isActive   Boolean   @default(true)
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  id              String    @id @default(uuid())
+  agencyId        String
+  fullName        String
+  idNumber        String?
+  phone           String?
+  position        String
+  level           String?
+  baseSalary      Decimal   @default(0) @db.Decimal(15, 2)
+  startDate       DateTime  @default(now())
+  endDate         DateTime?
+  // Photos employe : selfie (visage), plan (localisation domicile),
+  // document d'identification (CNI, passeport...). Toutes uploadees via /employees/:id/image
+  selfieUrl       String?
+  selfieKey       String?
+  locationPlanUrl String?
+  locationPlanKey String?
+  idDocumentUrl   String?
+  idDocumentKey   String?
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   agency   Agency    @relation(fields: [agencyId], references: [id])
   payslips Payslip[]
@@ -1107,29 +1147,29 @@ enum ManifestStatus {
 }
 
 model ManifestLine {
-  id             String   @id @default(uuid())
-  manifestId     String
-  parcelId       String?
+  id              String   @id @default(uuid())
+  manifestId      String
+  parcelId        String?
   // Snapshot des donnees du colis au moment de l'emission (immuable)
-  trackingNumber String?
-  designation    String
-  clientName     String?
-  recipientName  String?
+  trackingNumber  String?
+  designation     String
+  clientName      String?
+  recipientName   String?
   destinationCity String?
-  weight         Decimal? @db.Decimal(15, 3)
-  volume         Decimal? @db.Decimal(15, 3)
-  origin         String?
-  destination    String?
-  transit        String?
-  price          Decimal  @default(0) @db.Decimal(15, 2)
+  weight          Decimal? @db.Decimal(15, 3)
+  volume          Decimal? @db.Decimal(15, 3)
+  origin          String?
+  destination     String?
+  transit         String?
+  price           Decimal  @default(0) @db.Decimal(15, 2)
   // montant total facture (peut etre > price si la facture couvre plusieurs colis)
-  invoiceTotal   Decimal? @db.Decimal(15, 2)
+  invoiceTotal    Decimal? @db.Decimal(15, 2)
   // avance / montant deja paye attribue a ce colis
-  advanceAmount  Decimal  @default(0) @db.Decimal(15, 2)
+  advanceAmount   Decimal  @default(0) @db.Decimal(15, 2)
   // reste a payer
-  balanceAmount  Decimal  @default(0) @db.Decimal(15, 2)
-  status         String?
-  addedAt        DateTime @default(now())
+  balanceAmount   Decimal  @default(0) @db.Decimal(15, 2)
+  status          String?
+  addedAt         DateTime @default(now())
 
   manifest ShippingManifest @relation(fields: [manifestId], references: [id], onDelete: Cascade)
   parcel   Parcel?          @relation(fields: [parcelId], references: [id])

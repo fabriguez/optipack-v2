@@ -98,6 +98,24 @@ export class UnloadParcelUseCase {
       ...(isLastParcel && { status: 'UNLOADED' }),
     });
 
+    // Trace par colis dans l'historique du conteneur (chaque dechargement).
+    await this.history.recordContainer({
+      containerId,
+      action: `PARCEL_UNLOADED_${action.toUpperCase()}`,
+      statusBefore: container.status,
+      statusAfter: container.status,
+      userId,
+      comment: `Colis ${parcel.trackingNumber} - ${parcel.designation}${options?.comment ? ` (${options.comment})` : ''}`,
+      changes: {
+        parcelId,
+        trackingNumber: parcel.trackingNumber,
+        designation: parcel.designation,
+        action,
+        warehouseId: action === 'not_found' ? null : warehouseId,
+        ...(options?.newWeight && { newWeight: options.newWeight, previousWeight: parcelWeight }),
+      },
+    });
+
     if (isLastParcel) {
       await this.history.recordContainer({
         containerId,

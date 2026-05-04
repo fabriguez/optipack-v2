@@ -31,6 +31,7 @@ import routingRoutes from './routing.routes';
 import clientPortalRoutes from './client-portal.routes';
 import tenantMetaRoutes from './tenant-meta.routes';
 import systemRoutes from './system.routes';
+import uploadRoutes from './upload.routes';
 
 const router = Router();
 
@@ -76,5 +77,8 @@ router.use('/notifications', notificationRoutes);
 // Rapports & Config
 router.use('/reports', reportRoutes);
 router.use(configRoutes);
+
+// Uploads generiques (recus, justificatifs, photos colis, ...)
+router.use('/uploads', uploadRoutes);
 
 export default router;
