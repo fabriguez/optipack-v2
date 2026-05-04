@@ -105,6 +105,20 @@ export function AgencyFormDialog({ open, onClose, agency }: AgencyFormDialogProp
           <AppInput label="Email" type="email" {...register('email')} error={errors.email?.message} />
           <AppInput label="Lien Google Maps" {...register('googleMapsLink')} error={errors.googleMapsLink?.message} />
         </div>
+        <AppInput
+          label="Image / photo de l'agence (URL)"
+          type="url"
+          placeholder="https://..."
+          {...register('imageUrl')}
+          error={errors.imageUrl?.message}
+        />
+        {agency?.imageUrl && (
+          <img
+            src={agency.imageUrl}
+            alt={agency.name}
+            className="h-24 w-24 rounded-xl object-cover border border-gray-100"
+          />
+        )}
       </form>
     </AppDialog>
   );

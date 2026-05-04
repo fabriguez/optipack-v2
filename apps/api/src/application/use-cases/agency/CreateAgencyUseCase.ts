@@ -36,6 +36,7 @@ export class CreateAgencyUseCase {
       country: input.country,
       phone: input.phone,
       email: input.email || null,
+      imageUrl: input.imageUrl || null,
       googleMapsLink: input.googleMapsLink || null,
       organization: { connect: { id: organizationId } },
       ...(input.responsibleUserId && {

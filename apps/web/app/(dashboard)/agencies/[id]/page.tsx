@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowLeft, Building2, Warehouse, Users, MapPin, Phone, Mail, Globe, Edit,
-  Plus, Package, CreditCard, Receipt, UserCog, Eye, Vault, Container, Trash2,
+  Plus, Package, CreditCard, Receipt, UserCog, Eye, Vault, Container, Trash2, Wallet,
 } from 'lucide-react';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { useDeleteAgency } from '@/lib/hooks/useAgencies';
@@ -27,6 +27,7 @@ import { WarehouseFormDialog } from '../../warehouses/WarehouseFormDialog';
 import { ClientFormDialog } from '../../clients/ClientFormDialog';
 import { EmployeeFormDialog } from '../../employees/EmployeeFormDialog';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
+import { AgencyChargesTab } from './AgencyChargesTab';
 
 export default function AgencyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -181,6 +182,17 @@ export default function AgencyDetailPage({ params }: { params: Promise<{ id: str
             <button onClick={() => router.back()} className="rounded-xl p-2 hover:bg-gray-100 transition-colors">
               <ArrowLeft className="h-5 w-5 text-gray-500" />
             </button>
+            {agency.imageUrl ? (
+              <img
+                src={agency.imageUrl}
+                alt={agency.name}
+                className="h-14 w-14 rounded-xl object-cover border border-gray-100"
+              />
+            ) : (
+              <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary-50">
+                <Building2 className="h-6 w-6 text-primary-600" />
+              </div>
+            )}
             <div>
               <div className="flex items-center gap-3">
                 <h1 className="text-2xl font-bold text-gray-900">{agency.name}</h1>
@@ -206,6 +218,7 @@ export default function AgencyDetailPage({ params }: { params: Promise<{ id: str
         <AppTabs tabs={[
           { value: 'overview', label: 'Vue d\'ensemble', icon: <Building2 className="h-4 w-4" />, content: overviewTab },
           { value: 'finance', label: 'Finance', icon: <CreditCard className="h-4 w-4" />, content: financeTab },
+          { value: 'charges', label: 'Charges', icon: <Wallet className="h-4 w-4" />, content: <AgencyChargesTab agencyId={id} /> },
           { value: 'personnel', label: 'Personnel', icon: <UserCog className="h-4 w-4" />, content: personnelTab },
         ]} />
 

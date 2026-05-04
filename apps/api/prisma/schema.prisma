@@ -58,6 +58,7 @@ model Agency {
   country           String
   phone             String
   email             String?
+  imageUrl          String?
   googleMapsLink    String?
   responsibleUserId String?
   isActive          Boolean  @default(true)
@@ -86,10 +87,51 @@ model Agency {
   auditLogs             AuditLog[]
   chatConversations     ChatConversation[]
   notifications         Notification[]
+  charges               AgencyCharge[]
 
   @@index([organizationId])
   @@index([city])
   @@map("agencies")
+}
+
+// Charge recurrente d'une agence : eau, electricite, loyer, masse salariale, internet...
+// Sert de configuration : chaque mois, l'utilisateur enregistre un paiement (Expense)
+// rattache a la charge via Expense.agencyChargeId + Expense.period (YYYY-MM).
+// La charge elle-meme est mutable (montant et echeance peuvent evoluer) ; les paiements
+// passent par le ledger immuable Expense (regle finance).
+model AgencyCharge {
+  id              String         @id @default(uuid())
+  agencyId        String
+  type            ChargeType
+  label           String
+  defaultAmount   Decimal        @db.Decimal(15, 2)
+  // jour du mois ou la charge est due (1-31). Optionnel.
+  dueDayOfMonth   Int?
+  // commentaire ou reference (n compteur eau, contrat de bail, ...)
+  reference       String?
+  isActive        Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  agency   Agency    @relation(fields: [agencyId], references: [id])
+  expenses Expense[]
+
+  @@index([agencyId])
+  @@index([type])
+  @@map("agency_charges")
+}
+
+enum ChargeType {
+  WATER
+  ELECTRICITY
+  RENT
+  SALARY
+  INTERNET
+  PHONE
+  CLEANING
+  SECURITY
+  MAINTENANCE
+  OTHER
 }
 
 // ============================================================
@@ -857,14 +899,21 @@ model Expense {
   parcelId         String?
   associationType  String?
   approvedByUserId String?
+  // Lien optionnel vers une charge recurrente (eau, electricite, loyer, ...)
+  agencyChargeId   String?
+  // Periode de la charge au format YYYY-MM (ex : "2025-11"). Permet de detecter
+  // les charges deja payees pour un mois donne (= idempotence metier).
+  period           String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  agency     Agency     @relation(fields: [agencyId], references: [id])
-  container  Container? @relation(fields: [containerId], references: [id])
-  approvedBy User?      @relation(fields: [approvedByUserId], references: [id])
+  agency       Agency        @relation(fields: [agencyId], references: [id])
+  container    Container?    @relation(fields: [containerId], references: [id])
+  approvedBy   User?         @relation(fields: [approvedByUserId], references: [id])
+  agencyCharge AgencyCharge? @relation(fields: [agencyChargeId], references: [id])
 
   @@index([agencyId])
+  @@index([agencyChargeId, period])
   @@map("expenses")
 }
 
