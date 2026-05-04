@@ -12,4 +12,16 @@ export const agenciesApi = {
     apiClient.patch(`/agencies/${id}`, data).then((r) => r.data),
   delete: (id: string) =>
     apiClient.delete(`/agencies/${id}`).then((r) => r.data),
+
+  uploadImage: (id: string, file: File) => {
+    const fd = new FormData();
+    fd.append('image', file);
+    return apiClient
+      .post(`/agencies/${id}/image`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      .then((r) => r.data);
+  },
+  deleteImage: (id: string) =>
+    apiClient.delete(`/agencies/${id}/image`).then((r) => r.data),
 };

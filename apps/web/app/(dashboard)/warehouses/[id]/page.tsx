@@ -21,6 +21,7 @@ import { apiClient } from '@/lib/api/client';
 import { formatAmount, formatDate, formatDurationSince } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
 import { ParcelFormDialog } from '../../parcels/ParcelFormDialog';
+import { AgencyAvatar } from '@/components/shared/AgencyAvatar';
 
 export default function WarehouseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -193,6 +194,11 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
           <button onClick={() => router.back()} className="rounded-xl p-2 hover:bg-gray-100 transition-colors">
             <ArrowLeft className="h-5 w-5 text-gray-500" />
           </button>
+          {warehouse.agency && (
+            <Link href={`/agencies/${warehouse.agency.id}`} title={warehouse.agency.name}>
+              <AgencyAvatar agency={warehouse.agency} size={48} rounded="lg" />
+            </Link>
+          )}
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold text-gray-900">{warehouse.name}</h1>

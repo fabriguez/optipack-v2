@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useQueryClient } from '@tanstack/react-query';
 import { createAgencySchema, type CreateAgencyInput } from '@transitsoftservices/shared';
 import { AppDialog } from '@/components/ui/AppDialog';
 import { AppInput } from '@/components/ui/AppInput';
@@ -10,6 +11,9 @@ import { AppButton } from '@/components/ui/AppButton';
 import { AppPhoneInput } from '@/components/ui/AppPhoneInput';
 import { AppCountrySelect, AppCitySelect, AppStateSelect } from '@/components/ui/AppCountryCitySelect';
 import { useCreateAgency, useUpdateAgency } from '@/lib/hooks/useAgencies';
+import { ImageDropzone } from '@/components/shared/ImageDropzone';
+import { agenciesApi } from '@/lib/api/agencies';
+import { toast } from 'sonner';
 
 interface AgencyFormDialogProps {
   open: boolean;
@@ -21,10 +25,53 @@ export function AgencyFormDialog({ open, onClose, agency }: AgencyFormDialogProp
   const isEdit = !!agency;
   const createMutation = useCreateAgency();
   const updateMutation = useUpdateAgency();
+  const qc = useQueryClient();
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
   const [countryId, setCountryId] = useState<number>(0);
   const [stateId, setStateId] = useState<number>(0);
   const [phoneCountryIso, setPhoneCountryIso] = useState<string | undefined>();
+  const [pendingImage, setPendingImage] = useState<File | null>(null);
+  const [pendingPreview, setPendingPreview] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+
+  const invalidateAgencies = () => {
+    qc.invalidateQueries({ queryKey: ['agencies'] });
+    if (agency?.id) qc.invalidateQueries({ queryKey: ['agencies', agency.id] });
+  };
+
+  const handleImageUploadInline = async (file: File) => {
+    if (!agency?.id) {
+      // Mode creation : on memorise le fichier, on l'enverra apres la creation
+      setPendingImage(file);
+      setPendingPreview(URL.createObjectURL(file));
+      return;
+    }
+    // Mode edition : upload immediat
+    setUploadingImage(true);
+    try {
+      await agenciesApi.uploadImage(agency.id, file);
+      toast.success('Image mise a jour');
+      invalidateAgencies();
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const handleImageClear = async () => {
+    if (!agency?.id) {
+      setPendingImage(null);
+      setPendingPreview(null);
+      return;
+    }
+    setUploadingImage(true);
+    try {
+      await agenciesApi.deleteImage(agency.id);
+      toast.success('Image supprimee');
+      invalidateAgencies();
+    } finally {
+      setUploadingImage(false);
+    }
+  };
 
   const {
     register,
@@ -39,11 +86,26 @@ export function AgencyFormDialog({ open, onClose, agency }: AgencyFormDialogProp
   });
 
   const onSubmit = async (data: CreateAgencyInput) => {
+    // imageUrl est gere via l'endpoint d'upload dedie, pas via ce form
+    const { imageUrl: _ignore, ...payload } = data as CreateAgencyInput & { imageUrl?: string };
+    void _ignore;
+
     if (isEdit) {
-      await updateMutation.mutateAsync({ id: agency.id, data });
+      await updateMutation.mutateAsync({ id: agency.id, data: payload });
     } else {
-      await createMutation.mutateAsync(data);
+      const created = await createMutation.mutateAsync(payload);
+      const newAgencyId = (created as any)?.data?.id;
+      if (newAgencyId && pendingImage) {
+        try {
+          await agenciesApi.uploadImage(newAgencyId, pendingImage);
+        } catch (e: any) {
+          toast.error("L'agence a ete creee mais l'image n'a pas pu etre uploadee.");
+        }
+      }
     }
+    setPendingImage(null);
+    if (pendingPreview) URL.revokeObjectURL(pendingPreview);
+    setPendingPreview(null);
     reset();
     onClose();
   };
@@ -105,20 +167,18 @@ export function AgencyFormDialog({ open, onClose, agency }: AgencyFormDialogProp
           <AppInput label="Email" type="email" {...register('email')} error={errors.email?.message} />
           <AppInput label="Lien Google Maps" {...register('googleMapsLink')} error={errors.googleMapsLink?.message} />
         </div>
-        <AppInput
-          label="Image / photo de l'agence (URL)"
-          type="url"
-          placeholder="https://..."
-          {...register('imageUrl')}
-          error={errors.imageUrl?.message}
+        <ImageDropzone
+          label="Photo de l'agence"
+          value={pendingPreview ?? agency?.imageUrl ?? null}
+          onFile={handleImageUploadInline}
+          onClear={agency?.imageUrl || pendingPreview ? handleImageClear : undefined}
+          uploading={uploadingImage}
+          hint={
+            isEdit
+              ? 'Glissez une nouvelle image pour la remplacer (JPG, PNG, WEBP, max 5 MB)'
+              : 'Glissez une image. Elle sera enregistree juste apres la creation.'
+          }
         />
-        {agency?.imageUrl && (
-          <img
-            src={agency.imageUrl}
-            alt={agency.name}
-            className="h-24 w-24 rounded-xl object-cover border border-gray-100"
-          />
-        )}
       </form>
     </AppDialog>
   );

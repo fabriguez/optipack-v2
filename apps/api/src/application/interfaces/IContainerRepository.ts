@@ -2,8 +2,8 @@ import type { Container, Prisma } from '@prisma/client';
 import type { PaginationInput, PaginatedResponse } from '@transitsoftservices/shared';
 
 export interface ContainerWithRelations extends Container {
-  departureAgency?: { id: string; name: string; code: string };
-  arrivalAgency?: { id: string; name: string; code: string };
+  departureAgency?: { id: string; name: string; code: string; imageUrl?: string | null; city?: string };
+  arrivalAgency?: { id: string; name: string; code: string; imageUrl?: string | null; city?: string };
   transitRoute?: { id: string; name: string; type: string } | null;
   parentContainer?: { id: string; designation: string; type: string; isForwarding: boolean } | null;
   childContainers?: { id: string; designation: string; type: string }[];

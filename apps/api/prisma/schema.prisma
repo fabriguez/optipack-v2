@@ -59,6 +59,9 @@ model Agency {
   phone             String
   email             String?
   imageUrl          String?
+  // Cle de l'objet MinIO (pour pouvoir le supprimer/remplacer). Sert d'audit interne ;
+  // pas exposee a l'API publique. Si NULL et imageUrl est set, c'est une URL externe.
+  imageKey          String?
   googleMapsLink    String?
   responsibleUserId String?
   isActive          Boolean  @default(true)

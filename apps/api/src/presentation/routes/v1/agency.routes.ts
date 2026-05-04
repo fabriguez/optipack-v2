@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { AgencyController } from '../../controllers/AgencyController';
 import { authenticate, authorize } from '../../middleware/authMiddleware';
 import { validate } from '../../middleware/validate';
+import { uploadImageMiddleware } from '../../middleware/upload';
 import {
   createAgencySchema,
   updateAgencySchema,
@@ -12,6 +13,9 @@ import {
 } from '@transitsoftservices/shared';
 
 const router = Router();
+
+// Endpoint PUBLIC : sert l'image agence pour <img src>. Doit etre AVANT authenticate.
+router.get('/:id/image', AgencyController.getImage);
 
 router.use(authenticate);
 
@@ -45,6 +49,19 @@ router.post(
   authorize('SUPER_ADMIN', 'ADMIN', 'COMPTABLE'),
   validate(payAgencyChargeSchema),
   AgencyController.payCharge,
+);
+
+// Image upload / delete (auth requise)
+router.post(
+  '/:id/image',
+  authorize('SUPER_ADMIN', 'ADMIN'),
+  uploadImageMiddleware,
+  AgencyController.uploadImage,
+);
+router.delete(
+  '/:id/image',
+  authorize('SUPER_ADMIN', 'ADMIN'),
+  AgencyController.deleteImage,
 );
 
 export default router;

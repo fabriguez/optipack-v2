@@ -34,6 +34,7 @@ import { toast } from 'sonner';
 import { ComparisonDialog } from './ComparisonDialog';
 import { ParcelFormDialog } from '@/app/(dashboard)/parcels/ParcelFormDialog';
 import { QRScannerDialog } from '@/components/shared/QRScannerDialog';
+import { AgencyAvatar } from '@/components/shared/AgencyAvatar';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
 
@@ -452,9 +453,13 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
                   </span>
                 )}
               </div>
-              <p className="text-sm text-gray-500 mt-0.5">
-                {container.departureAgency?.name || '-'} → {container.arrivalAgency?.name || '-'}
-              </p>
+              <div className="mt-1 flex items-center gap-2 text-sm text-gray-500">
+                <AgencyAvatar agency={container.departureAgency} size={20} rounded="md" />
+                <span>{container.departureAgency?.name || '-'}</span>
+                <span className="text-gray-300">→</span>
+                <AgencyAvatar agency={container.arrivalAgency} size={20} rounded="md" />
+                <span>{container.arrivalAgency?.name || '-'}</span>
+              </div>
             </div>
           </div>
           <div className="flex gap-2">

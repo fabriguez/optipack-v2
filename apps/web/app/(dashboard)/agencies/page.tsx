@@ -3,7 +3,8 @@
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Upload, Building2, Eye, Edit, Trash2 } from 'lucide-react';
+import { Plus, Upload, Eye, Edit, Trash2 } from 'lucide-react';
+import { AgencyAvatar } from '@/components/shared/AgencyAvatar';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
@@ -75,9 +76,7 @@ function AgenciesContent() {
       label: 'Code',
       render: (row: any) => (
         <div className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-50">
-            <Building2 className="h-4 w-4 text-primary-600" />
-          </div>
+          <AgencyAvatar agency={row} size={36} rounded="lg" />
           <Link href={`/agencies/${row.id}`} className="font-mono text-xs font-bold text-primary-700 hover:underline" onClick={(e) => e.stopPropagation()}>{row.code}</Link>
         </div>
       ),

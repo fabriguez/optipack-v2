@@ -7,7 +7,12 @@ import { prisma } from '../../../config/database';
 @injectable()
 export class PrismaWarehouseRepository implements IWarehouseRepository {
   async findById(id: string): Promise<Warehouse | null> {
-    return prisma.warehouse.findUnique({ where: { id } });
+    return prisma.warehouse.findUnique({
+      where: { id },
+      include: {
+        agency: { select: { id: true, name: true, code: true, imageUrl: true, city: true } },
+      },
+    }) as Promise<Warehouse | null>;
   }
 
   async findByAgency(
@@ -35,7 +40,7 @@ export class PrismaWarehouseRepository implements IWarehouseRepository {
         take: limit,
         orderBy: sortBy ? { [sortBy]: sortOrder } : { createdAt: 'desc' },
         include: {
-          agency: { select: { id: true, name: true, code: true } },
+          agency: { select: { id: true, name: true, code: true, imageUrl: true, city: true } },
           _count: { select: { parcels: { where: { isDeleted: false } } } },
         },
       }),
@@ -81,7 +86,7 @@ export class PrismaWarehouseRepository implements IWarehouseRepository {
         take: limit,
         orderBy: sortBy ? { [sortBy]: sortOrder } : { createdAt: 'desc' },
         include: {
-          agency: { select: { id: true, name: true, code: true } },
+          agency: { select: { id: true, name: true, code: true, imageUrl: true, city: true } },
           _count: { select: { parcels: { where: { isDeleted: false } } } },
         },
       }),

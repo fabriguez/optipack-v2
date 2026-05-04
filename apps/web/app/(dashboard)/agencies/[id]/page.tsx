@@ -28,6 +28,12 @@ import { ClientFormDialog } from '../../clients/ClientFormDialog';
 import { EmployeeFormDialog } from '../../employees/EmployeeFormDialog';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
 import { AgencyChargesTab } from './AgencyChargesTab';
+import { AgencyAvatar } from '@/components/shared/AgencyAvatar';
+import { ImageDropzone } from '@/components/shared/ImageDropzone';
+import { AppDialog } from '@/components/ui/AppDialog';
+import { agenciesApi } from '@/lib/api/agencies';
+import { useQueryClient } from '@tanstack/react-query';
+import { Camera } from 'lucide-react';
 
 export default function AgencyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -39,6 +45,38 @@ export default function AgencyDetailPage({ params }: { params: Promise<{ id: str
   const [showCreateWarehouse, setShowCreateWarehouse] = useState(false);
   const [showCreateClient, setShowCreateClient] = useState(false);
   const [showCreateEmployee, setShowCreateEmployee] = useState(false);
+  const [imageBusy, setImageBusy] = useState(false);
+  const [showImageDialog, setShowImageDialog] = useState(false);
+  const qc = useQueryClient();
+
+  const refreshAgency = () => {
+    qc.invalidateQueries({ queryKey: ['agencies', id] });
+    qc.invalidateQueries({ queryKey: ['agencies'] });
+  };
+
+  const handleAgencyImageUpload = async (file: File) => {
+    setImageBusy(true);
+    try {
+      await agenciesApi.uploadImage(id, file);
+      toast.success('Image mise a jour');
+      refreshAgency();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Echec de l\'upload');
+    }
+    setImageBusy(false);
+  };
+
+  const handleAgencyImageDelete = async () => {
+    setImageBusy(true);
+    try {
+      await agenciesApi.deleteImage(id);
+      toast.success('Image supprimee');
+      refreshAgency();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Suppression impossible');
+    }
+    setImageBusy(false);
+  };
 
   const { data: warehousesData } = useQuery({
     queryKey: ['warehouses', id],
@@ -182,17 +220,17 @@ export default function AgencyDetailPage({ params }: { params: Promise<{ id: str
             <button onClick={() => router.back()} className="rounded-xl p-2 hover:bg-gray-100 transition-colors">
               <ArrowLeft className="h-5 w-5 text-gray-500" />
             </button>
-            {agency.imageUrl ? (
-              <img
-                src={agency.imageUrl}
-                alt={agency.name}
-                className="h-14 w-14 rounded-xl object-cover border border-gray-100"
-              />
-            ) : (
-              <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary-50">
-                <Building2 className="h-6 w-6 text-primary-600" />
-              </div>
-            )}
+            <button
+              type="button"
+              onClick={() => setShowImageDialog(true)}
+              className="group relative"
+              title="Modifier l'image de l'agence"
+            >
+              <AgencyAvatar agency={agency} size={56} rounded="lg" />
+              <span className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+                <Camera className="h-5 w-5 text-white" />
+              </span>
+            </button>
             <div>
               <div className="flex items-center gap-3">
                 <h1 className="text-2xl font-bold text-gray-900">{agency.name}</h1>
@@ -257,6 +295,28 @@ export default function AgencyDetailPage({ params }: { params: Promise<{ id: str
           onClose={() => setShowCreateEmployee(false)}
           defaultAgency={agencyRef}
         />
+
+        <AppDialog
+          open={showImageDialog}
+          onClose={() => setShowImageDialog(false)}
+          title="Image de l'agence"
+          size="md"
+          footer={
+            <AppButton variant="ghost" onClick={() => setShowImageDialog(false)}>
+              Fermer
+            </AppButton>
+          }
+        >
+          <ImageDropzone
+            value={agency.imageUrl ?? null}
+            onFile={async (f) => {
+              await handleAgencyImageUpload(f);
+            }}
+            onClear={agency.imageUrl ? handleAgencyImageDelete : undefined}
+            uploading={imageBusy}
+            height={260}
+          />
+        </AppDialog>
       </div>
     </PageTransition>
   );

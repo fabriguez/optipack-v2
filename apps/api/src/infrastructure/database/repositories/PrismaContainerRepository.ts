@@ -5,8 +5,8 @@ import type { PaginationInput, PaginatedResponse } from '@transitsoftservices/sh
 import { prisma } from '../../../config/database';
 
 const CONTAINER_INCLUDE = {
-  departureAgency: { select: { id: true, name: true, code: true } },
-  arrivalAgency: { select: { id: true, name: true, code: true } },
+  departureAgency: { select: { id: true, name: true, code: true, imageUrl: true, city: true } },
+  arrivalAgency: { select: { id: true, name: true, code: true, imageUrl: true, city: true } },
   transitRoute: { select: { id: true, name: true, type: true } },
   parentContainer: { select: { id: true, designation: true, type: true, isForwarding: true } },
   childContainers: { select: { id: true, designation: true, type: true } },
