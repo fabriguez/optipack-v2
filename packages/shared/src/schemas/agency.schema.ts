@@ -7,7 +7,6 @@ export const createAgencySchema = z.object({
   country: z.string().min(2, 'Pays requis'),
   phone: z.string().min(8, 'Numero de telephone invalide'),
   email: z.string().email('Email invalide').optional().or(z.literal('')),
-  imageUrl: z.string().url('URL image invalide').optional().or(z.literal('')),
   googleMapsLink: z.string().url('Lien Google Maps invalide').optional().or(z.literal('')),
   responsibleUserId: z.string().uuid('ID responsable invalide').optional(),
 });

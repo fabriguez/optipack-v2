@@ -73,6 +73,21 @@ export function AgencyFormDialog({ open, onClose, agency }: AgencyFormDialogProp
     }
   };
 
+  // Defauts : on retire imageUrl/imageKey/code etc. (pas dans le formulaire ou non
+  // editables). Sinon le resolver zod recoit des champs inattendus.
+  const formDefaults: Partial<CreateAgencyInput> = agency
+    ? {
+        name: agency.name,
+        address: agency.address,
+        city: agency.city,
+        country: agency.country,
+        phone: agency.phone,
+        email: agency.email ?? '',
+        googleMapsLink: agency.googleMapsLink ?? '',
+        responsibleUserId: agency.responsibleUserId ?? undefined,
+      }
+    : {};
+
   const {
     register,
     handleSubmit,
@@ -82,23 +97,19 @@ export function AgencyFormDialog({ open, onClose, agency }: AgencyFormDialogProp
     formState: { errors },
   } = useForm<CreateAgencyInput>({
     resolver: zodResolver(createAgencySchema),
-    defaultValues: agency || {},
+    defaultValues: formDefaults,
   });
 
   const onSubmit = async (data: CreateAgencyInput) => {
-    // imageUrl est gere via l'endpoint d'upload dedie, pas via ce form
-    const { imageUrl: _ignore, ...payload } = data as CreateAgencyInput & { imageUrl?: string };
-    void _ignore;
-
     if (isEdit) {
-      await updateMutation.mutateAsync({ id: agency.id, data: payload });
+      await updateMutation.mutateAsync({ id: agency.id, data });
     } else {
-      const created = await createMutation.mutateAsync(payload);
+      const created = await createMutation.mutateAsync(data);
       const newAgencyId = (created as any)?.data?.id;
       if (newAgencyId && pendingImage) {
         try {
           await agenciesApi.uploadImage(newAgencyId, pendingImage);
-        } catch (e: any) {
+        } catch {
           toast.error("L'agence a ete creee mais l'image n'a pas pu etre uploadee.");
         }
       }

@@ -22,7 +22,6 @@ export class UpdateAgencyUseCase {
       ...(input.country !== undefined && { country: input.country }),
       ...(input.phone !== undefined && { phone: input.phone }),
       ...(input.email !== undefined && { email: input.email || null }),
-      ...(input.imageUrl !== undefined && { imageUrl: input.imageUrl || null }),
       ...(input.googleMapsLink !== undefined && { googleMapsLink: input.googleMapsLink || null }),
       ...(input.responsibleUserId !== undefined && {
         responsibleUser: { connect: { id: input.responsibleUserId } },

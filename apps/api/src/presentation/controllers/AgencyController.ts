@@ -172,6 +172,9 @@ export class AgencyController {
         'Content-Type': obj.contentType,
         'Content-Length': String(obj.size),
         'Cache-Control': 'public, max-age=3600',
+        // L'image est consommee par <img> sur l'origine du frontend (port different).
+        // Helmet pose CORP: same-origin par defaut, ce qui bloque <img> cross-origin.
+        'Cross-Origin-Resource-Policy': 'cross-origin',
       });
       obj.stream.pipe(res);
     } catch (err) {
