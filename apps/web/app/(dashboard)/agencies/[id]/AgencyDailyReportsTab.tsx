@@ -340,7 +340,7 @@ function Stat({ label, value, positive, negative }: { label: string; value: stri
 
 function NonImageAttachmentInput({ onUpload, uploading }: { onUpload: (f: File) => void; uploading: boolean }) {
   return (
-    <label className="flex h-30 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-200 p-6 text-center text-xs text-gray-500 hover:border-primary-300 hover:bg-primary-50/40">
+    <label className="flex h-full cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-200 p-6 text-center text-xs text-gray-500 hover:border-primary-300 hover:bg-primary-50/40">
       <Paperclip className="mb-2 h-5 w-5 text-gray-400" />
       <span>Ajouter PDF / XLSX / Word / autre</span>
       {uploading && <span className="mt-1 text-primary-600">Upload en cours...</span>}
