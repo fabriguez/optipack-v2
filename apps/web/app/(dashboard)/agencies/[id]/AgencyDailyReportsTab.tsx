@@ -293,7 +293,7 @@ function ReportDetails({
             onFile={handleAttachment}
             uploading={uploading}
             allowClear={false}
-            height={120}
+            height={250}
             hint="Glissez ou photographiez une piece justificative (image)"
           />
           <NonImageAttachmentInput onUpload={handleAttachment} uploading={uploading} />

@@ -427,7 +427,7 @@ function ChargeFormDialog({ open, onClose, agencyId, charge, onSaved }: ChargeFo
             onFile={handleDocUpload}
             uploading={docBusy}
             allowClear={false}
-            height={120}
+            height={250}
             hint="Glissez ou photographiez un document (image)"
           />
           <label className="flex h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-200 px-4 text-xs text-gray-500 hover:border-primary-300">
