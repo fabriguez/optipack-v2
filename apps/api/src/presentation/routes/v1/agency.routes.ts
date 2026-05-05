@@ -14,13 +14,13 @@ import {
 
 const router = Router();
 
-// Endpoint PUBLIC : sert l'image agence pour <img src>. Doit etre AVANT authenticate.
+router.use(authenticate);
+
+// L'image agence est protegee par le token (front-end utilise AuthedImage).
 router.get('/:id/image', AgencyController.getImage);
 
-// Lecture des horaires d'ouverture (publique pour pouvoir afficher les agences sur le portail client)
+// Lecture des horaires d'ouverture
 router.get('/:id/opening-hours', AgencyController.listOpeningHours);
-
-router.use(authenticate);
 
 router.get('/', validate(paginationSchema, 'query'), AgencyController.list);
 router.get('/:id', AgencyController.getById);

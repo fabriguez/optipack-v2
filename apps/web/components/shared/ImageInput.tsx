@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Camera, ImagePlus, Loader2, RotateCw, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { resolveImageUrl } from '@/lib/api/imageUrl';
+import { AuthedImage } from './AuthedImage';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppDialog } from '@/components/ui/AppDialog';
 
@@ -114,12 +115,11 @@ export function ImageInput({
       >
         {showPreview ? (
           <>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={resolvedSrc!}
+            <AuthedImage
+              src={value ?? null}
               alt="Apercu"
               className="h-full w-full object-cover"
-              onError={() => setPreviewError(true)}
+              fallback={<div className="flex h-full w-full items-center justify-center text-xs text-gray-400">Image indisponible</div>}
             />
             <div className="absolute inset-0 flex items-end justify-end gap-2 bg-gradient-to-t from-black/60 to-transparent p-3 opacity-0 transition-opacity hover:opacity-100">
               <button

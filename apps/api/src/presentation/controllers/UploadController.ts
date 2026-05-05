@@ -11,7 +11,11 @@ import { prisma } from '../../config/database';
  * fonctionnel meme si l'env n'est pas posee.
  */
 function buildAbsoluteUrl(req: Request, key: string): string {
-  const path = `/api/v1/uploads/object/${encodeURIComponent(key)}`;
+  // On encode chaque segment individuellement (pour preserver les slashes
+  // separateurs) plutot que toute la cle d'un coup avec encodeURIComponent
+  // (qui transformerait les / en %2F et casserait certains reverse proxies).
+  const safeKey = key.split('/').map(encodeURIComponent).join('/');
+  const path = `/api/v1/uploads/object/${safeKey}`;
   const fromEnv = config.apiUrl;
   if (fromEnv && /^https?:\/\//i.test(fromEnv)) {
     return `${fromEnv.replace(/\/$/, '')}${path}`;
@@ -72,7 +76,15 @@ export class UploadController {
 
   static async getObject(req: Request, res: Response, next: NextFunction) {
     try {
-      const key = decodeURIComponent(req.params.key);
+      // La route est /object/* -> req.params[0] = la cle complete (avec slashes).
+      // En fallback (au cas ou Express decoderait differemment), on lit aussi req.params.key.
+      const raw = (req.params as any)[0] ?? (req.params as any).key ?? '';
+      let key: string;
+      try {
+        key = decodeURIComponent(raw);
+      } catch {
+        key = raw;
+      }
       // Securite : le prefixe `uploads/` est obligatoire pour eviter de servir
       // n'importe quel objet du bucket via cette route.
       if (!key.startsWith('uploads/')) {

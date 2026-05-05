@@ -5,10 +5,14 @@ import { uploadImageMiddleware, uploadDocumentMiddleware } from '../../middlewar
 
 const router = Router();
 
-// Public : sert les objets uploades pour <img src>.
-router.get('/object/:key', UploadController.getObject);
-
+// Toutes les routes uploads necessitent un Bearer token. Le frontend utilise
+// AuthedImage / AuthedDownload qui fetch en Authorization: Bearer <token>
+// puis creent un blob URL.
 router.use(authenticate);
+
+// Sert les objets uploades. Le `*` est obligatoire car la cle MinIO contient
+// des slashes : req.params[0] = la cle complete (ex: "uploads/<userId>/<rand>.jpg").
+router.get('/object/*', UploadController.getObject);
 
 // Upload generique (recus, justificatifs, preuves de paiement, photos colis, ...)
 router.post('/image', uploadImageMiddleware, UploadController.uploadImage);

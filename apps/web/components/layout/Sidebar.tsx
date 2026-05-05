@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { useTenantMeta } from '@/lib/providers/TenantProvider';
+import { AuthedImage } from '@/components/shared/AuthedImage';
 
 interface NavItem {
   label: string;
@@ -167,7 +168,7 @@ export function Sidebar() {
         {!collapsed && (
           <div className="flex items-center gap-2 min-w-0">
             {meta?.logoUrl && (
-              <img src={meta.logoUrl} alt="logo" className="h-8 w-8 object-contain rounded" onError={(e) => ((e.target as HTMLImageElement).style.display = 'none')} />
+              <AuthedImage src={meta.logoUrl} alt="logo" className="h-8 w-8 object-contain rounded" fallback={<div className="h-8 w-8" />} />
             )}
             <span className="text-lg font-bold text-white tracking-tight truncate">
               {meta?.name ?? 'TransitSoftServices'}

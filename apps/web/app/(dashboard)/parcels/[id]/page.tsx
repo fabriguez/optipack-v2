@@ -27,8 +27,8 @@ import { apiClient } from '@/lib/api/client';
 import { formatAmount, formatDate, formatDateTime } from '@transitsoftservices/shared';
 import { ParcelFormDialog } from '../ParcelFormDialog';
 import { ImageInput } from '@/components/shared/ImageInput';
+import { AuthedImage } from '@/components/shared/AuthedImage';
 import { uploadImage } from '@/lib/api/uploads';
-import { resolveImageUrl } from '@/lib/api/imageUrl';
 import { toast } from 'sonner';
 
 const STATUS_STEPS = ['IN_STOCK', 'LOADING', 'IN_TRANSIT', 'ARRIVED', 'RECEIVED', 'DELIVERED'];
@@ -190,11 +190,11 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
           <AppCardHeader title="QR Code / Etiquette" />
           <div className="flex flex-col items-center gap-4">
             <div className="rounded-xl border border-gray-100 p-3 bg-white">
-              <img
-                src={`${API_BASE}/parcels/${id}/qrcode`}
+              <AuthedImage
+                src={`/api/v1/parcels/${id}/qrcode`}
                 alt={`QR Code - ${parcel.trackingNumber}`}
                 className="h-40 w-40 object-contain"
-                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                fallback={<div className="h-40 w-40 rounded-lg bg-gray-100" />}
               />
             </div>
             <p className="font-mono text-xs text-gray-500">{parcel.trackingNumber}</p>
@@ -240,7 +240,7 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
             {images.map((img) => (
               <div key={img.id} className="group relative overflow-hidden rounded-xl border border-gray-100">
-                <img src={resolveImageUrl(img.url) ?? img.url} alt={img.caption || 'Image colis'} className="h-32 w-full object-cover" />
+                <AuthedImage src={img.url} alt={img.caption || 'Image colis'} className="h-32 w-full object-cover" />
                 {img.caption && (
                   <p className="px-2 py-1 text-xs text-gray-600 truncate">{img.caption}</p>
                 )}

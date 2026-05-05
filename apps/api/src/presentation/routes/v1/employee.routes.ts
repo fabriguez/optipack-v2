@@ -7,10 +7,10 @@ import { paginationSchema } from '@transitsoftservices/shared';
 
 const router = Router();
 
-// Endpoint PUBLIC : sert les photos employes pour <img src>. Doit etre AVANT authenticate.
-router.get('/:id/image/:slot', EmployeeController.getImage);
-
 router.use(authenticate);
+
+// Photos employes protegees par token (frontend utilise AuthedImage).
+router.get('/:id/image/:slot', EmployeeController.getImage);
 router.use(authorize('SUPER_ADMIN', 'ADMIN'));
 
 router.get('/', validate(paginationSchema, 'query'), EmployeeController.listAll);

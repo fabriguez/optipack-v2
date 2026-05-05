@@ -9,8 +9,9 @@ import { PDFService } from '../../../application/services/PDFService';
 
 const router = Router();
 
-// Endpoint PUBLIC : sert le QR code d'un colis pour <img src>. Doit etre AVANT authenticate
-// (le navigateur charge le QR sans header Authorization).
+router.use(authenticate);
+
+// QR code (rendu via AuthedImage cote front-end : fetch + blob URL)
 router.get('/:id/qrcode', async (req, res, next) => {
   try {
     const parcel = await prisma.parcel.findUnique({
@@ -27,8 +28,7 @@ router.get('/:id/qrcode', async (req, res, next) => {
       'Content-Type': 'image/png',
       'Content-Disposition': `inline; filename="qr-${parcel.trackingNumber}.png"`,
       'Content-Length': qrBuffer.length.toString(),
-      'Cache-Control': 'public, max-age=86400',
-      // Helmet pose CORP: same-origin par defaut, ce qui bloque <img> cross-origin (api/web).
+      'Cache-Control': 'private, max-age=3600',
       'Cross-Origin-Resource-Policy': 'cross-origin',
     });
     res.send(qrBuffer);
@@ -36,8 +36,6 @@ router.get('/:id/qrcode', async (req, res, next) => {
     next(err);
   }
 });
-
-router.use(authenticate);
 
 router.get('/', validate(paginationSchema, 'query'), ParcelController.list);
 router.get('/tracking/:tracking', ParcelController.getByTracking);

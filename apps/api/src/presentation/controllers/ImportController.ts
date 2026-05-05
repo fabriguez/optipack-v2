@@ -89,7 +89,10 @@ export class ImportController {
             const key = storage.buildKey(`employees/import/${agencyId}`, img.extension);
             const contentType = img.extension === 'png' ? 'image/png' : img.extension === 'gif' ? 'image/gif' : 'image/jpeg';
             await storage.uploadBuffer(key, img.buffer, contentType);
-            uploads[`${slot}Url`] = absoluteApiUrl(`/api/v1/uploads/object/${encodeURIComponent(key)}`);
+            // encode segment-par-segment pour preserver les slashes
+            uploads[`${slot}Url`] = absoluteApiUrl(
+              `/api/v1/uploads/object/${key.split('/').map(encodeURIComponent).join('/')}`,
+            );
             uploads[`${slot}Key`] = key;
           }
 

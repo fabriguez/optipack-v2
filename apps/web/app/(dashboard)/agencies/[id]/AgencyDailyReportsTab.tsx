@@ -8,7 +8,7 @@ import { AppButton } from '@/components/ui/AppButton';
 import { AppBadge } from '@/components/ui/AppBadge';
 import { ImageInput } from '@/components/shared/ImageInput';
 import { uploadImage, uploadFile } from '@/lib/api/uploads';
-import { resolveImageUrl } from '@/lib/api/imageUrl';
+import { openAuthedFile } from '@/components/shared/AuthedImage';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
 import { ChevronDown, ChevronRight, FileText, Lock, Paperclip, RefreshCw, Save, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -303,11 +303,15 @@ function ReportDetails({
           <ul className="mt-3 space-y-2">
             {report.attachments.map((att) => (
               <li key={att.id} className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-xs">
-                <a href={resolveImageUrl(att.url) ?? att.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-primary-700 hover:underline truncate">
+                <button
+                  type="button"
+                  onClick={() => openAuthedFile(att.url, att.fileName ?? 'piece-jointe').catch(() => toast.error('Echec du telechargement'))}
+                  className="flex items-center gap-2 text-primary-700 hover:underline truncate"
+                >
                   <FileText className="h-3.5 w-3.5 shrink-0" />
                   <span className="truncate">{att.fileName ?? 'piece-jointe'}</span>
                   {att.contentType && <span className="text-gray-400">({att.contentType})</span>}
-                </a>
+                </button>
                 <button
                   type="button"
                   onClick={() => deleteAttachment(att.id)}

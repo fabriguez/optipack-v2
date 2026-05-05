@@ -4,6 +4,7 @@ import { useCallback, useRef, useState } from 'react';
 import { ImagePlus, Upload, X, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { resolveImageUrl } from '@/lib/api/imageUrl';
+import { AuthedImage } from './AuthedImage';
 
 const MAX_SIZE = 5 * 1024 * 1024; // 5 MB
 const ACCEPTED = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
@@ -114,12 +115,11 @@ export function ImageDropzone({
       >
         {showPreview ? (
           <>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={resolvedSrc!}
+            <AuthedImage
+              src={value ?? null}
               alt="Apercu"
               className="h-full w-full object-cover"
-              onError={() => setPreviewError(true)}
+              fallback={<div className="flex h-full w-full items-center justify-center text-xs text-gray-400">Image indisponible</div>}
             />
             <div className="absolute inset-0 flex items-end justify-end gap-2 bg-gradient-to-t from-black/60 to-transparent p-3 opacity-0 transition-opacity hover:opacity-100">
               <button

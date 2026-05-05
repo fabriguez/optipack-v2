@@ -1,8 +1,7 @@
 'use client';
 
-import { useState } from 'react';
 import { Building2 } from 'lucide-react';
-import { resolveImageUrl } from '@/lib/api/imageUrl';
+import { AuthedImage } from './AuthedImage';
 
 interface AgencyLike {
   id?: string;
@@ -34,29 +33,12 @@ export function AgencyAvatar({
   className,
   rounded = 'md',
 }: AgencyAvatarProps) {
-  const [errored, setErrored] = useState(false);
-  const url = resolveImageUrl(agency?.imageUrl);
-  const showImage = !!url && !errored;
   const roundClass = ROUND_CLASSES[rounded];
   const iconSize = Math.max(12, Math.round(size * 0.55));
-
   const baseClass = `inline-flex shrink-0 items-center justify-center overflow-hidden border border-gray-100 ${roundClass}`;
   const style = { width: size, height: size } as const;
 
-  if (showImage) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={url!}
-        alt={agency?.name || 'Agence'}
-        className={`${baseClass} object-cover bg-gray-50 ${className ?? ''}`}
-        style={style}
-        onError={() => setErrored(true)}
-      />
-    );
-  }
-
-  return (
+  const fallback = (
     <span
       className={`${baseClass} bg-primary-50 ${className ?? ''}`}
       style={style}
@@ -64,5 +46,17 @@ export function AgencyAvatar({
     >
       <Building2 style={{ width: iconSize, height: iconSize }} className="text-primary-600" />
     </span>
+  );
+
+  if (!agency?.imageUrl) return fallback;
+
+  return (
+    <AuthedImage
+      src={agency.imageUrl}
+      alt={agency.name || 'Agence'}
+      className={`${baseClass} object-cover bg-gray-50 ${className ?? ''}`}
+      style={style}
+      fallback={fallback}
+    />
   );
 }
