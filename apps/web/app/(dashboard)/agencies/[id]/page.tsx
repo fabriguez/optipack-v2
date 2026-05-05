@@ -54,6 +54,7 @@ export default function AgencyDetailPage({ params }: { params: Promise<{ id: str
   const [imageBusy, setImageBusy] = useState(false);
   const [showImageDialog, setShowImageDialog] = useState(false);
   const [showImportEmployees, setShowImportEmployees] = useState(false);
+  const [payEmployee, setPayEmployee] = useState<any | null>(null);
   const qc = useQueryClient();
 
   const refreshAgency = () => {
@@ -142,8 +143,6 @@ export default function AgencyDetailPage({ params }: { params: Promise<{ id: str
     { key: 'loyaltyTier', label: 'Fidelite', render: (row: any) => <AppBadge>{row.loyaltyTier}</AppBadge> },
     { key: 'actions', label: '', className: 'w-10', render: (row: any) => <RowActions actions={[{ label: 'Voir', icon: <Eye className="h-4 w-4" />, onClick: () => router.push(`/clients/${row.id}`) }]} /> },
   ];
-
-  const [payEmployee, setPayEmployee] = useState<any | null>(null);
 
   const employeeColumns = [
     { key: 'fullName', label: 'Nom', render: (row: any) => <span className="font-medium">{row.fullName}</span> },
