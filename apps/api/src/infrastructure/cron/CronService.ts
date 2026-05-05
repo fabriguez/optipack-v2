@@ -3,6 +3,7 @@ import { container } from '../../container';
 import { CalculatePenaltiesUseCase } from '../../application/use-cases/penalty/CalculatePenaltiesUseCase';
 import { CoherenceService } from '../../application/services/CoherenceService';
 import { AutoCloseCashRegistersUseCase } from '../../application/use-cases/cash-register/AutoCloseCashRegistersUseCase';
+import { CheckChargeAlertsUseCase } from '../../application/use-cases/agency/CheckChargeAlertsUseCase';
 import { prisma } from '../../config/database';
 import { eventBus, DomainEvents } from '../events/EventBus';
 import { createChildLogger } from '../../config/logger';
@@ -69,8 +70,19 @@ export function startCronJobs(): void {
     }
   });
 
+  // Verification des charges chaque jour a 7h : rappels de paiement + alerte fonds insuffisants.
+  cron.schedule('0 7 * * *', async () => {
+    try {
+      const useCase = container.resolve(CheckChargeAlertsUseCase);
+      const result = await useCase.execute();
+      logger.info(result, 'Charge alerts processed');
+    } catch (err) {
+      logger.error({ err }, 'Charge alerts check failed');
+    }
+  });
+
   logger.info(
-    'Cron jobs scheduled: penalty (2AM), debt alerts (8AM), overdue debts (1AM), parcel coherence (every 6h), auto cash close (every 10min)',
+    'Cron jobs scheduled: penalty (2AM), debt alerts (8AM), overdue debts (1AM), parcel coherence (every 6h), auto cash close (every 10min), charge alerts (7AM)',
   );
 }
 

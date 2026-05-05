@@ -2,6 +2,7 @@ import { inject, injectable } from 'tsyringe';
 import { prisma } from '../../../config/database';
 import { CASH_REGISTER_REPOSITORY, type ICashRegisterRepository } from '../../interfaces/ICashRegisterRepository';
 import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
+import { DailyReportService } from '../../services/DailyReportService';
 
 /**
  * Cloture automatique de fin de journee.
@@ -20,6 +21,7 @@ import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus'
 export class AutoCloseCashRegistersUseCase {
   constructor(
     @inject(CASH_REGISTER_REPOSITORY) private cashRegisterRepo: ICashRegisterRepository,
+    private reportService: DailyReportService,
   ) {}
 
   async execute(): Promise<{ closed: number; checked: number }> {
@@ -73,6 +75,13 @@ export class AutoCloseCashRegistersUseCase {
             (register.notes ? register.notes + '\n' : '') +
             `Cloture automatique de fin de journee (${tz}, ${localTime}).`,
         });
+
+        // Genere le rapport journalier
+        try {
+          await this.reportService.generate(register.agencyId, register.date);
+        } catch {
+          // Best-effort : un echec rapport ne doit pas bloquer la fermeture caisse
+        }
 
         eventBus.emit({
           type: DomainEvents.CASH_REGISTER_CLOSED,

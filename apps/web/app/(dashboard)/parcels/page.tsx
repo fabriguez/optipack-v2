@@ -11,7 +11,7 @@ import { AppDataTable } from '@/components/ui/AppDataTable';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { SearchBar } from '@/components/shared/SearchBar';
 import { FilterDialog } from '@/components/shared/FilterDialog';
-import { ExportButton } from '@/components/shared/ExportButton';
+import { XlsxExportButton } from '@/components/shared/XlsxExportButton';
 import { CsvImportDialog } from '@/components/shared/CsvImportDialog';
 import { RowActions } from '@/components/shared/RowActions';
 import { useServerPagination } from '@/lib/hooks/useServerPagination';
@@ -183,7 +183,7 @@ function ParcelsContent() {
             <SearchBar value={search} onChange={setSearch} placeholder="Tracking, designation, client..." />
           </div>
           <div className="flex items-center gap-2">
-            <ExportButton data={data?.data || []} columns={exportColumns} fileName="colis" />
+            <XlsxExportButton endpoint="parcels" fileName="colis" />
             <FilterDialog fields={filterFields} />
           </div>
         </div>

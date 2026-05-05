@@ -11,6 +11,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { formatAmount } from '@transitsoftservices/shared';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { cashRegisterApi } from '@/lib/api/finance';
+import { apiClient } from '@/lib/api/client';
 import { useAgencies } from '@/lib/hooks/useAgencies';
 import { toast } from 'sonner';
 
@@ -25,6 +26,12 @@ export default function CashRegisterPage() {
   const { data: register, isLoading } = useQuery({
     queryKey: ['cash-register', agencyId],
     queryFn: () => cashRegisterApi.get(agencyId),
+    enabled: !!agencyId,
+  });
+
+  const { data: breakdown } = useQuery({
+    queryKey: ['cash-register', agencyId, 'breakdown'],
+    queryFn: () => apiClient.get(`/agencies/${agencyId}/breakdown`).then((r) => r.data),
     enabled: !!agencyId,
   });
 
@@ -109,6 +116,38 @@ export default function CashRegisterPage() {
                 </p>
               </AppCard>
             </div>
+            {breakdown?.data && (
+              <AppCard>
+                <h3 className="mb-3 text-base font-semibold text-gray-900">
+                  Entrees par route de transit (30 derniers jours)
+                </h3>
+                {breakdown.data.entriesByRoute.length === 0 ? (
+                  <p className="text-sm text-gray-400">Aucune entree.</p>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-xs text-gray-500">
+                        <th className="pb-2">Route</th>
+                        <th className="pb-2 text-right">Nb paiements</th>
+                        <th className="pb-2 text-right">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {breakdown.data.entriesByRoute.map((r: any) => (
+                        <tr key={r.routeId ?? r.routeName}>
+                          <td className="py-2">
+                            <span className="font-medium">{r.routeName}</span>
+                            {r.type && <span className="ml-2 text-[10px] uppercase text-gray-400">{r.type}</span>}
+                          </td>
+                          <td className="py-2 text-right">{r.count}</td>
+                          <td className="py-2 text-right font-bold text-primary-700">{formatAmount(r.total)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </AppCard>
+            )}
           </>
         ) : null}
 

@@ -13,6 +13,8 @@ import { DeleteAgencyChargeUseCase } from '../../application/use-cases/agency/De
 import { UploadAgencyImageUseCase } from '../../application/use-cases/agency/UploadAgencyImageUseCase';
 import { DeleteAgencyImageUseCase } from '../../application/use-cases/agency/DeleteAgencyImageUseCase';
 import { SetAgencyOpeningHoursUseCase } from '../../application/use-cases/agency/SetAgencyOpeningHoursUseCase';
+import { AgencyBreakdownUseCase } from '../../application/use-cases/agency/AgencyBreakdownUseCase';
+import { DailyReportService } from '../../application/services/DailyReportService';
 import { StorageService } from '../../infrastructure/storage/StorageService';
 import { prisma } from '../../config/database';
 import { NotFoundError } from '../../domain/errors/BusinessError';
@@ -87,7 +89,7 @@ export class AgencyController {
   static async createCharge(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(CreateAgencyChargeUseCase);
-      const charge = await useCase.execute(req.params.id, req.body);
+      const charge = await useCase.execute(req.params.id, req.body, req.user!.userId);
       res.status(201).json({ success: true, data: charge });
     } catch (err) {
       next(err);
@@ -178,6 +180,212 @@ export class AgencyController {
         'Cross-Origin-Resource-Policy': 'cross-origin',
       });
       obj.stream.pipe(res);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  // ----- Breakdowns financiers -----
+
+  static async breakdown(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(AgencyBreakdownUseCase);
+      const from = req.query.from ? new Date(req.query.from as string) : undefined;
+      const to = req.query.to ? new Date(req.query.to as string) : undefined;
+      const result = await useCase.execute({ agencyId: req.params.id, from, to });
+      res.json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  // ----- Rapports journaliers -----
+
+  static async listDailyReports(req: Request, res: Response, next: NextFunction) {
+    try {
+      const items = await prisma.agencyDailyReport.findMany({
+        where: { agencyId: req.params.id },
+        orderBy: { date: 'desc' },
+        take: 60,
+        include: { _count: { select: { attachments: true } } },
+      });
+      res.json({ success: true, data: items });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async getDailyReport(req: Request, res: Response, next: NextFunction) {
+    try {
+      const item = await prisma.agencyDailyReport.findUnique({
+        where: { id: req.params.reportId },
+        include: { attachments: true, closedByUser: { select: { id: true, firstName: true, lastName: true } } },
+      });
+      if (!item) throw new NotFoundError('Rapport journalier', req.params.reportId);
+      res.json({ success: true, data: item });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async generateDailyReport(req: Request, res: Response, next: NextFunction) {
+    try {
+      const svc = container.resolve(DailyReportService);
+      const date = req.body?.date ? new Date(req.body.date) : new Date();
+      const result = await svc.generate(req.params.id, date);
+      res.status(201).json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async updateDailyReportObservation(req: Request, res: Response, next: NextFunction) {
+    try {
+      const observation = (req.body?.observation as string | undefined) ?? null;
+      const status = req.body?.status as 'CLOSED' | 'AMENDED' | undefined;
+      const updated = await prisma.agencyDailyReport.update({
+        where: { id: req.params.reportId },
+        data: {
+          observation,
+          ...(status === 'CLOSED' && {
+            status: 'CLOSED',
+            closedAt: new Date(),
+            closedBy: req.user!.userId,
+          }),
+          ...(status === 'AMENDED' && { status: 'AMENDED' }),
+        },
+      });
+      res.json({ success: true, data: updated });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async addDailyReportAttachment(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { url, storageKey, fileName, contentType, size, caption } = req.body;
+      if (!url) return res.status(400).json({ success: false, message: 'url requis' });
+      const att = await prisma.agencyDailyReportAttachment.create({
+        data: {
+          reportId: req.params.reportId,
+          url,
+          storageKey: storageKey ?? null,
+          fileName: fileName ?? null,
+          contentType: contentType ?? null,
+          size: size ?? null,
+          caption: caption ?? null,
+          uploadedBy: req.user!.userId,
+        },
+      });
+      res.status(201).json({ success: true, data: att });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async deleteDailyReportAttachment(req: Request, res: Response, next: NextFunction) {
+    try {
+      const att = await prisma.agencyDailyReportAttachment.findUnique({
+        where: { id: req.params.attachmentId },
+      });
+      if (!att || att.reportId !== req.params.reportId) {
+        return res.status(404).json({ success: false, message: 'Piece jointe introuvable' });
+      }
+      await prisma.agencyDailyReportAttachment.delete({ where: { id: att.id } });
+      res.json({ success: true });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  // ----- Documents et historique d'une charge -----
+
+  static async listChargeDocuments(req: Request, res: Response, next: NextFunction) {
+    try {
+      const docs = await prisma.agencyChargeDocument.findMany({
+        where: { chargeId: req.params.chargeId },
+        orderBy: { createdAt: 'desc' },
+      });
+      res.json({ success: true, data: docs });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async addChargeDocument(req: Request, res: Response, next: NextFunction) {
+    try {
+      const charge = await prisma.agencyCharge.findUnique({ where: { id: req.params.chargeId } });
+      if (!charge) throw new NotFoundError('Charge', req.params.chargeId);
+
+      const { url, storageKey, fileName, contentType, size, caption } = req.body as {
+        url: string;
+        storageKey?: string;
+        fileName?: string;
+        contentType?: string;
+        size?: number;
+        caption?: string;
+      };
+      if (!url) {
+        return res.status(400).json({ success: false, message: 'url requis' });
+      }
+
+      const doc = await prisma.agencyChargeDocument.create({
+        data: {
+          chargeId: charge.id,
+          url,
+          storageKey: storageKey ?? null,
+          fileName: fileName ?? null,
+          contentType: contentType ?? null,
+          size: size ?? null,
+          caption: caption ?? null,
+          uploadedBy: req.user!.userId,
+        },
+      });
+
+      await prisma.agencyChargeHistory.create({
+        data: {
+          chargeId: charge.id,
+          action: 'DOCUMENT_ADDED',
+          userId: req.user!.userId,
+          changes: { documentId: doc.id, fileName: doc.fileName, url: doc.url } as any,
+        },
+      });
+
+      res.status(201).json({ success: true, data: doc });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async deleteChargeDocument(req: Request, res: Response, next: NextFunction) {
+    try {
+      const doc = await prisma.agencyChargeDocument.findUnique({ where: { id: req.params.documentId } });
+      if (!doc || doc.chargeId !== req.params.chargeId) {
+        return res.status(404).json({ success: false, message: 'Document introuvable' });
+      }
+      await prisma.agencyChargeDocument.delete({ where: { id: doc.id } });
+      await prisma.agencyChargeHistory.create({
+        data: {
+          chargeId: doc.chargeId,
+          action: 'DOCUMENT_REMOVED',
+          userId: req.user!.userId,
+          changes: { documentId: doc.id, fileName: doc.fileName } as any,
+        },
+      });
+      res.json({ success: true });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async listChargeHistory(req: Request, res: Response, next: NextFunction) {
+    try {
+      const items = await prisma.agencyChargeHistory.findMany({
+        where: { chargeId: req.params.chargeId },
+        include: { user: { select: { id: true, firstName: true, lastName: true } } },
+        orderBy: { createdAt: 'desc' },
+      });
+      res.json({ success: true, data: items });
     } catch (err) {
       next(err);
     }

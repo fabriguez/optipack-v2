@@ -34,6 +34,27 @@ export class UploadController {
     }
   }
 
+  static async uploadFile(req: Request, res: Response, next: NextFunction) {
+    try {
+      const file = (req as any).file as Express.Multer.File | undefined;
+      if (!file) return res.status(400).json({ success: false, message: 'Aucun fichier fourni' });
+
+      const storage = container.resolve(StorageService);
+      const ext = extFromMime(file.mimetype);
+      const userId = req.user?.userId || 'anon';
+      const key = storage.buildKey(`uploads/${userId}`, ext);
+      await storage.uploadBuffer(key, file.buffer, file.mimetype);
+
+      const url = `/api/v1/uploads/object/${encodeURIComponent(key)}`;
+      res.json({
+        success: true,
+        data: { url, key, contentType: file.mimetype, size: file.size, fileName: file.originalname },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   static async getObject(req: Request, res: Response, next: NextFunction) {
     try {
       const key = decodeURIComponent(req.params.key);

@@ -95,10 +95,72 @@ model Agency {
   chatConversations     ChatConversation[]
   notifications         Notification[]
   charges               AgencyCharge[]
+  dailyReports          AgencyDailyReport[]
 
   @@index([organizationId])
   @@index([city])
   @@map("agencies")
+}
+
+// Rapport journalier d'une agence.
+// Genere automatiquement a la fermeture de caisse (auto ou manuelle), il agrege :
+//  - colis recus dans la journee, par categorie et par route de transit
+//  - somme du reste a payer pour chaque colis
+//  - paiements recus par route et par mode de paiement
+//  - total decaissements
+// Les observations utilisateur (texte, images, xlsx, pdf) sont stockees dans
+// AgencyDailyReportAttachment + champ `observation` pour completer le rapport.
+model AgencyDailyReport {
+  id          String                  @id @default(uuid())
+  agencyId    String
+  // Date du jour rapporte (00:00 UTC, comme AgencyCashRegister.date)
+  date        DateTime                @db.Date
+  // Snapshot JSON pour eviter de recalculer (immutable apres cloture)
+  // Contient : { byCategory, byTransitRoute, paymentsByRouteAndMethod,
+  //             disbursementsByCategory, totalParcels, totalRemainingAmount, ... }
+  payload     Json
+  // Status: GENERATED (cron auto), CLOSED (cloture manuelle/auto), AMENDED (observation ajoutee).
+  status      AgencyDailyReportStatus @default(GENERATED)
+  // Texte libre saisi par l'utilisateur (peut etre tres long, formatte en markdown plain)
+  observation String?
+  generatedAt DateTime                @default(now())
+  closedAt    DateTime?
+  closedBy    String?
+
+  agency       Agency                        @relation(fields: [agencyId], references: [id])
+  closedByUser User?                         @relation("DailyReportClosedBy", fields: [closedBy], references: [id])
+  attachments  AgencyDailyReportAttachment[]
+
+  @@unique([agencyId, date])
+  @@index([agencyId])
+  @@index([date])
+  @@map("agency_daily_reports")
+}
+
+enum AgencyDailyReportStatus {
+  GENERATED
+  CLOSED
+  AMENDED
+}
+
+// Pieces jointes d'un rapport journalier : images, xlsx, pdf, etc.
+model AgencyDailyReportAttachment {
+  id          String   @id @default(uuid())
+  reportId    String
+  url         String
+  storageKey  String?
+  fileName    String?
+  contentType String?
+  size        Int?
+  caption     String?
+  uploadedBy  String?
+  createdAt   DateTime @default(now())
+
+  report   AgencyDailyReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  uploader User?             @relation("DailyReportAttachmentBy", fields: [uploadedBy], references: [id])
+
+  @@index([reportId])
+  @@map("agency_daily_report_attachments")
 }
 
 // Plage horaire d'ouverture d'une agence pour un jour de la semaine.
@@ -129,31 +191,80 @@ model AgencyOpeningHours {
 // La charge elle-meme est mutable (montant et echeance peuvent evoluer) ; les paiements
 // passent par le ledger immuable Expense (regle finance).
 model AgencyCharge {
-  id            String     @id @default(uuid())
-  agencyId      String
-  type          ChargeType
-  label         String
-  defaultAmount Decimal    @db.Decimal(15, 2)
+  id               String     @id @default(uuid())
+  agencyId         String
+  type             ChargeType
+  label            String
+  defaultAmount    Decimal    @db.Decimal(15, 2)
   // jour du mois ou la charge est due (1-31). Optionnel.
-  dueDayOfMonth Int?
+  dueDayOfMonth    Int?
   // commentaire ou reference (n compteur eau, contrat de bail, ...)
-  reference     String?
+  reference        String?
+  // Indique que le montant n'est pas fixe (ex: facture d'eau, electricite).
+  // L'UI propose de saisir un montant a chaque paiement plutot que de prefiller
+  // avec defaultAmount. Pour le calcul de "charges dues", on prend max(defaultAmount, 0).
+  isAmountFlexible Boolean    @default(false)
   // Charge auto-geree par le systeme (ex : masse salariale = somme des salaires).
   // Si true, l'utilisateur ne peut pas modifier defaultAmount manuellement ;
   // le serveur recalcule le montant a chaque ajout/MAJ d'employe.
-  isAutoManaged Boolean    @default(false)
-  isActive      Boolean    @default(true)
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  isAutoManaged    Boolean    @default(false)
+  isActive         Boolean    @default(true)
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
 
-  agency   Agency    @relation(fields: [agencyId], references: [id])
-  expenses Expense[]
+  agency    Agency                 @relation(fields: [agencyId], references: [id])
+  expenses  Expense[]
+  documents AgencyChargeDocument[]
+  history   AgencyChargeHistory[]
 
   // Une seule charge auto-geree par agence et par type (ex: une seule SALARY auto)
   @@unique([agencyId, type, isAutoManaged])
   @@index([agencyId])
   @@index([type])
   @@map("agency_charges")
+}
+
+// Documents attaches a une charge (factures, contrats, releves, ...).
+// Ces documents servent de justificatifs et peuvent etre uploades a la creation
+// ou ajoutes ulterieurement (ex: facture d'eau du mois).
+model AgencyChargeDocument {
+  id          String   @id @default(uuid())
+  chargeId    String
+  url         String
+  // Cle MinIO pour pouvoir supprimer / re-uploader. Optionnel pour les liens externes.
+  storageKey  String?
+  fileName    String?
+  contentType String?
+  size        Int?
+  caption     String?
+  uploadedBy  String?
+  createdAt   DateTime @default(now())
+
+  charge   AgencyCharge @relation(fields: [chargeId], references: [id], onDelete: Cascade)
+  uploader User?        @relation("ChargeDocUploader", fields: [uploadedBy], references: [id])
+
+  @@index([chargeId])
+  @@map("agency_charge_documents")
+}
+
+// Audit log des modifications d'une charge (creation, MAJ champs, paiements,
+// activation/desactivation). Sert d'historique pour la consultation utilisateur.
+model AgencyChargeHistory {
+  id        String   @id @default(uuid())
+  chargeId  String
+  action    String // CREATED, UPDATED, PAID, DEACTIVATED, REACTIVATED, DOCUMENT_ADDED, ...
+  // Snapshot des champs modifies (avant / apres) ou metadonnees (montant paye, periode...).
+  changes   Json?
+  comment   String?
+  userId    String?
+  createdAt DateTime @default(now())
+
+  charge AgencyCharge @relation(fields: [chargeId], references: [id], onDelete: Cascade)
+  user   User?        @relation("ChargeHistoryUser", fields: [userId], references: [id])
+
+  @@index([chargeId])
+  @@index([action])
+  @@map("agency_charge_history")
 }
 
 enum ChargeType {
@@ -266,26 +377,30 @@ model User {
 
   organization Organization @relation(fields: [organizationId], references: [id])
 
-  userAgencies          UserAgency[]
-  responsibleAgencies   Agency[]                 @relation("AgencyResponsible")
-  refreshTokens         RefreshToken[]
-  paymentsReceived      Payment[]
-  voidedPayments        Payment[]                @relation("VoidedByUser")
-  disbursementsIssued   DisbursementVoucher[]    @relation("IssuedByUser")
-  disbursementsApproved DisbursementVoucher[]    @relation("ApprovedByUser")
-  transfersInitiated    FundTransfer[]           @relation("InitiatedByUser")
-  transfersConfirmed    FundTransfer[]           @relation("ConfirmedByUser")
-  closedCashRegisters   AgencyCashRegister[]
-  journalEntriesCreated JournalEntry[]
-  expensesApproved      Expense[]
-  parcelHistories       ParcelHistory[]
-  containerHistories    ContainerHistory[]
-  auditLogs             AuditLog[]
-  chatMessagesAgent     ChatMessage[]
-  assignedConversations ChatConversation[]
-  inventoriesStarted    WarehouseInventory[]     @relation("InventoryStartedBy")
-  inventoriesClosed     WarehouseInventory[]     @relation("InventoryClosedBy")
-  inventoryItemsScanned WarehouseInventoryItem[] @relation("InventoryItemScannedBy")
+  userAgencies           UserAgency[]
+  responsibleAgencies    Agency[]                      @relation("AgencyResponsible")
+  refreshTokens          RefreshToken[]
+  paymentsReceived       Payment[]
+  voidedPayments         Payment[]                     @relation("VoidedByUser")
+  disbursementsIssued    DisbursementVoucher[]         @relation("IssuedByUser")
+  disbursementsApproved  DisbursementVoucher[]         @relation("ApprovedByUser")
+  transfersInitiated     FundTransfer[]                @relation("InitiatedByUser")
+  transfersConfirmed     FundTransfer[]                @relation("ConfirmedByUser")
+  closedCashRegisters    AgencyCashRegister[]
+  journalEntriesCreated  JournalEntry[]
+  expensesApproved       Expense[]
+  parcelHistories        ParcelHistory[]
+  containerHistories     ContainerHistory[]
+  auditLogs              AuditLog[]
+  chatMessagesAgent      ChatMessage[]
+  assignedConversations  ChatConversation[]
+  inventoriesStarted     WarehouseInventory[]          @relation("InventoryStartedBy")
+  inventoriesClosed      WarehouseInventory[]          @relation("InventoryClosedBy")
+  inventoryItemsScanned  WarehouseInventoryItem[]      @relation("InventoryItemScannedBy")
+  chargeDocsUploaded     AgencyChargeDocument[]        @relation("ChargeDocUploader")
+  chargeHistoryActions   AgencyChargeHistory[]         @relation("ChargeHistoryUser")
+  dailyReportsClosed     AgencyDailyReport[]           @relation("DailyReportClosedBy")
+  dailyReportAttachments AgencyDailyReportAttachment[] @relation("DailyReportAttachmentBy")
 
   @@index([organizationId])
   @@index([email])
@@ -361,19 +476,27 @@ model Employee {
 }
 
 model Payslip {
-  id                  String   @id @default(uuid())
+  id                  String    @id @default(uuid())
   employeeId          String
   period              String
-  baseSalary          Decimal  @db.Decimal(15, 2)
-  bonuses             Decimal  @default(0) @db.Decimal(15, 2)
-  benefitsInKind      Decimal  @default(0) @db.Decimal(15, 2)
-  socialContributions Decimal  @default(0) @db.Decimal(15, 2)
-  grossSalary         Decimal  @db.Decimal(15, 2)
-  netSalary           Decimal  @db.Decimal(15, 2)
-  isPaid              Boolean  @default(false)
-  generatedAt         DateTime @default(now())
+  baseSalary          Decimal   @db.Decimal(15, 2)
+  bonuses             Decimal   @default(0) @db.Decimal(15, 2)
+  benefitsInKind      Decimal   @default(0) @db.Decimal(15, 2)
+  socialContributions Decimal   @default(0) @db.Decimal(15, 2)
+  grossSalary         Decimal   @db.Decimal(15, 2)
+  netSalary           Decimal   @db.Decimal(15, 2)
+  isPaid              Boolean   @default(false)
+  // Date effective du paiement (nul tant que isPaid=false). Mise a jour
+  // lorsqu'on declenche PayEmployeeFromCashRegisterUseCase.
+  paidAt              DateTime?
+  // Reference vers l'Expense de paiement (immutable). Permet de remonter
+  // depuis le payslip vers la caisse qui a ete debitee.
+  paidExpenseId       String?   @unique
 
-  employee Employee @relation(fields: [employeeId], references: [id])
+  generatedAt DateTime @default(now())
+
+  employee    Employee @relation(fields: [employeeId], references: [id])
+  paidExpense Expense? @relation("PayslipPaidExpense", fields: [paidExpenseId], references: [id])
 
   @@index([employeeId])
   @@map("payslips")
@@ -827,6 +950,7 @@ model AgencyCashRegister {
   closedBy User?  @relation(fields: [closedByUserId], references: [id])
 
   disbursements DisbursementVoucher[]
+  expenses      Expense[]
 
   @@unique([agencyId, date])
   @@index([agencyId])
@@ -947,16 +1071,22 @@ model Expense {
   // Periode de la charge au format YYYY-MM (ex : "2025-11"). Permet de detecter
   // les charges deja payees pour un mois donne (= idempotence metier).
   period           String?
+  // Caisse depuis laquelle le paiement a ete effectue. Permet de remonter
+  // depuis l'Expense vers le compte qui a ete debite, et inversement.
+  cashRegisterId   String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  agency       Agency        @relation(fields: [agencyId], references: [id])
-  container    Container?    @relation(fields: [containerId], references: [id])
-  approvedBy   User?         @relation(fields: [approvedByUserId], references: [id])
-  agencyCharge AgencyCharge? @relation(fields: [agencyChargeId], references: [id])
+  agency       Agency              @relation(fields: [agencyId], references: [id])
+  container    Container?          @relation(fields: [containerId], references: [id])
+  approvedBy   User?               @relation(fields: [approvedByUserId], references: [id])
+  agencyCharge AgencyCharge?       @relation(fields: [agencyChargeId], references: [id])
+  cashRegister AgencyCashRegister? @relation(fields: [cashRegisterId], references: [id])
+  paidPayslip  Payslip?            @relation("PayslipPaidExpense")
 
   @@index([agencyId])
   @@index([agencyChargeId, period])
+  @@index([cashRegisterId])
   @@map("expenses")
 }
 

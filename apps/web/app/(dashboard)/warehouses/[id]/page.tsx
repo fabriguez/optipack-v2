@@ -53,7 +53,14 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
     enabled: !!id,
   });
 
-  const { data: parcelsData, isLoading: parcelsLoading } = useParcels({ warehouseId: id, limit: 20, page: parcelPage } as any);
+  // onlyPresent=true : retient uniquement les colis physiquement presents dans
+  // ce magasin (cree ici et toujours en stock, ou decharge ici depuis un conteneur).
+  const { data: parcelsData, isLoading: parcelsLoading } = useParcels({
+    warehouseId: id,
+    onlyPresent: true,
+    limit: 20,
+    page: parcelPage,
+  } as any);
 
   const handleStartInventory = async () => {
     try {

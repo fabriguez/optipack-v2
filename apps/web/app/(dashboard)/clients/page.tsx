@@ -11,7 +11,7 @@ import { AppBadge } from '@/components/ui/AppBadge';
 import { AppDataTable } from '@/components/ui/AppDataTable';
 import { SearchBar } from '@/components/shared/SearchBar';
 import { FilterDialog } from '@/components/shared/FilterDialog';
-import { ExportButton } from '@/components/shared/ExportButton';
+import { XlsxExportButton } from '@/components/shared/XlsxExportButton';
 import { CsvImportDialog } from '@/components/shared/CsvImportDialog';
 import { RowActions } from '@/components/shared/RowActions';
 import { useServerPagination } from '@/lib/hooks/useServerPagination';
@@ -159,7 +159,7 @@ function ClientsContent() {
             <SearchBar value={search} onChange={setSearch} placeholder="Nom, telephone, email..." />
           </div>
           <div className="flex items-center gap-2">
-            <ExportButton data={data?.data || []} columns={exportColumns} fileName="clients" />
+            <XlsxExportButton endpoint="clients" fileName="clients" />
             <FilterDialog fields={filterFields} />
           </div>
         </div>

@@ -14,7 +14,15 @@ export interface IParcelRepository {
   findById(id: string): Promise<ParcelWithRelations | null>;
   findByTracking(trackingNumber: string): Promise<ParcelWithRelations | null>;
   findAll(
-    filters: { warehouseId?: string; containerId?: string; clientId?: string; status?: string; transitType?: string; agencyIds?: string[] | null },
+    filters: {
+      warehouseId?: string;
+      containerId?: string;
+      clientId?: string;
+      status?: string;
+      transitType?: string;
+      agencyIds?: string[] | null;
+      onlyPresent?: boolean;
+    },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<ParcelWithRelations>>;
   findByContainer(containerId: string): Promise<Parcel[]>;

@@ -22,3 +22,18 @@ export async function uploadImage(file: File): Promise<UploadResult> {
   );
   return res.data.data;
 }
+
+/**
+ * Upload generique d'un fichier (PDF, XLSX, Word, image, ...).
+ * Utilise pour les pieces jointes de rapports journaliers, etc.
+ */
+export async function uploadFile(file: File): Promise<UploadResult & { fileName?: string }> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await apiClient.post<{ success: boolean; data: UploadResult & { fileName?: string } }>(
+    '/uploads/file',
+    formData,
+    { headers: { 'Content-Type': 'multipart/form-data' } },
+  );
+  return res.data.data;
+}

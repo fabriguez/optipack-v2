@@ -20,6 +20,10 @@ router.post('/', EmployeeController.create);
 router.patch('/:id', EmployeeController.update);
 router.delete('/:id', EmployeeController.delete);
 
+// Paiement effectif depuis une caisse (Expense + Payslip + debit caisse)
+router.post('/:id/pay', EmployeeController.pay);
+router.get('/:id/payslips', EmployeeController.listPayslips);
+
 // Photo upload / delete (auth requise). slot in {selfie, locationPlan, idDocument}.
 router.post('/:id/image/:slot', uploadImageMiddleware, EmployeeController.uploadImage);
 router.delete('/:id/image/:slot', EmployeeController.deleteImage);

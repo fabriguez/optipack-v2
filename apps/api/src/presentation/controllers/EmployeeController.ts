@@ -6,6 +6,7 @@ import { DeleteEmployeeUseCase } from '../../application/use-cases/employee/Dele
 import { UploadEmployeeImageUseCase } from '../../application/use-cases/employee/UploadEmployeeImageUseCase';
 import { DeleteEmployeeImageUseCase } from '../../application/use-cases/employee/DeleteEmployeeImageUseCase';
 import { GetEmployeeImageUseCase } from '../../application/use-cases/employee/GetEmployeeImageUseCase';
+import { PayEmployeeFromCashRegisterUseCase } from '../../application/use-cases/employee/PayEmployeeFromCashRegisterUseCase';
 import { EMPLOYEE_REPOSITORY } from '../../application/interfaces/IEmployeeRepository';
 import { NotFoundError } from '../../domain/errors/BusinessError';
 
@@ -105,6 +106,29 @@ export class EmployeeController {
       const useCase = container.resolve(DeleteEmployeeImageUseCase);
       const result = await useCase.execute(req.params.id, slot);
       res.json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async pay(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(PayEmployeeFromCashRegisterUseCase);
+      const result = await useCase.execute(req.params.id, req.body, req.user!.userId);
+      res.status(201).json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async listPayslips(req: Request, res: Response, next: NextFunction) {
+    try {
+      const items = await (await import('../../config/database')).prisma.payslip.findMany({
+        where: { employeeId: req.params.id },
+        orderBy: { generatedAt: 'desc' },
+        include: { paidExpense: { select: { id: true, cashRegisterId: true, createdAt: true } } },
+      });
+      res.json({ success: true, data: items });
     } catch (err) {
       next(err);
     }

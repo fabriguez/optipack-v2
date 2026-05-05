@@ -21,8 +21,11 @@ import { AppInput } from '@/components/ui/AppInput';
 import { AppSelect } from '@/components/ui/AppSelect';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { ImageUrlField } from '@/components/shared/ImageUrlField';
+import { ImageInput } from '@/components/shared/ImageInput';
+import { uploadImage, uploadFile } from '@/lib/api/uploads';
 import { formatAmount } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
+import { Paperclip, X } from 'lucide-react';
 
 const TYPE_LABELS: Record<string, string> = {
   WATER: 'Eau',
@@ -273,6 +276,9 @@ interface ChargeFormProps {
 
 function ChargeFormDialog({ open, onClose, agencyId, charge, onSaved }: ChargeFormProps) {
   const isEdit = !!charge;
+  const [isAmountFlexible, setIsAmountFlexible] = useState<boolean>(!!charge?.isAmountFlexible);
+  const [pendingDocs, setPendingDocs] = useState<Array<{ url: string; storageKey?: string; fileName?: string; contentType?: string; size?: number }>>([]);
+  const [docBusy, setDocBusy] = useState(false);
   const {
     register,
     handleSubmit,
@@ -295,17 +301,47 @@ function ChargeFormDialog({ open, onClose, agencyId, charge, onSaved }: ChargeFo
   const onSubmit = async (data: CreateAgencyChargeInput) => {
     try {
       if (isEdit) {
-        await apiClient.patch(`/agencies/charges/${charge.id}`, data);
+        await apiClient.patch(`/agencies/charges/${charge.id}`, { ...data, isAmountFlexible });
+        // Documents : on les uploade comme additions independantes
+        for (const doc of pendingDocs) {
+          await apiClient.post(`/agencies/charges/${charge.id}/documents`, doc);
+        }
         toast.success('Charge modifiee');
       } else {
-        await apiClient.post(`/agencies/${agencyId}/charges`, data);
+        await apiClient.post(`/agencies/${agencyId}/charges`, {
+          ...data,
+          isAmountFlexible,
+          documents: pendingDocs,
+        });
         toast.success('Charge creee');
       }
       onSaved();
+      setPendingDocs([]);
+      setIsAmountFlexible(false);
       reset();
       onClose();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || 'Erreur');
+    }
+  };
+
+  const handleDocUpload = async (file: File) => {
+    setDocBusy(true);
+    try {
+      const isImage = file.type.startsWith('image/');
+      const uploaded = isImage ? await uploadImage(file) : await uploadFile(file);
+      setPendingDocs((prev) => [...prev, {
+        url: uploaded.url,
+        storageKey: uploaded.key,
+        fileName: file.name,
+        contentType: uploaded.contentType,
+        size: uploaded.size,
+      }]);
+      toast.success('Document ajoute');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || "Echec de l'upload");
+    } finally {
+      setDocBusy(false);
     }
   };
 
@@ -366,6 +402,65 @@ function ChargeFormDialog({ open, onClose, agencyId, charge, onSaved }: ChargeFo
           {...register('reference')}
           error={errors.reference?.message}
         />
+
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={isAmountFlexible}
+            onChange={(e) => setIsAmountFlexible(e.target.checked)}
+            className="h-4 w-4 rounded border-gray-300"
+          />
+          <span>
+            Montant variable (ex : facture eau / electricite)
+            <span className="block text-[11px] text-gray-500">
+              A chaque paiement, l&apos;utilisateur saisira le montant reel au lieu d&apos;utiliser le montant par defaut.
+            </span>
+          </span>
+        </label>
+
+        <div className="space-y-2">
+          <p className="flex items-center gap-1 text-sm font-medium text-gray-700">
+            <Paperclip className="h-3.5 w-3.5" /> Documents (factures, contrats, releves)
+          </p>
+          <ImageInput
+            value={null}
+            onFile={handleDocUpload}
+            uploading={docBusy}
+            allowClear={false}
+            height={120}
+            hint="Glissez ou photographiez un document (image)"
+          />
+          <label className="flex h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-200 px-4 text-xs text-gray-500 hover:border-primary-300">
+            <Paperclip className="h-3.5 w-3.5" />
+            Ajouter PDF / XLSX / Word
+            <input
+              type="file"
+              accept=".pdf,.xlsx,.xls,.doc,.docx,.csv,.txt"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handleDocUpload(f);
+                e.target.value = '';
+              }}
+            />
+          </label>
+          {pendingDocs.length > 0 && (
+            <ul className="space-y-1">
+              {pendingDocs.map((d, i) => (
+                <li key={i} className="flex items-center justify-between rounded-lg bg-gray-50 px-2 py-1.5 text-xs">
+                  <span className="truncate">{d.fileName ?? d.url}</span>
+                  <button
+                    type="button"
+                    onClick={() => setPendingDocs((prev) => prev.filter((_, j) => j !== i))}
+                    className="rounded p-0.5 text-red-500 hover:bg-red-50"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </form>
     </AppDialog>
   );
@@ -382,6 +477,7 @@ interface PayProps {
 }
 
 function PayChargeDialog({ open, onClose, charge, period, onSaved }: PayProps) {
+  const [cashRegisterId, setCashRegisterId] = useState<string>('');
   const {
     register,
     handleSubmit,
@@ -391,16 +487,51 @@ function PayChargeDialog({ open, onClose, charge, period, onSaved }: PayProps) {
   } = useForm<PayAgencyChargeInput>({
     resolver: zodResolver(payAgencyChargeSchema),
     defaultValues: {
-      amount: Number(charge?.balance ?? charge?.defaultAmount ?? 0),
+      amount: charge?.isAmountFlexible ? 0 : Number(charge?.balance ?? charge?.defaultAmount ?? 0),
       period,
     },
   });
 
+  // Liste des caisses du jour pour selection (multi-agences)
+  const { data: agencies } = useQuery({
+    queryKey: ['agencies', 'all'],
+    queryFn: () => apiClient.get('/agencies', { params: { limit: 50 } }).then((r) => r.data),
+    enabled: open,
+  });
+  const agencyIds: string[] = (agencies?.data ?? []).map((a: any) => a.id);
+  const { data: cashRegisters } = useQuery({
+    queryKey: ['cash-registers-for-pay', agencyIds.join(',')],
+    queryFn: async () => {
+      const list = await Promise.all(
+        agencyIds.map(async (id) => {
+          try {
+            const res = await apiClient.get(`/cash-registers/${id}`);
+            const cr = res.data?.data;
+            const agency = (agencies?.data ?? []).find((a: any) => a.id === id);
+            return { ...cr, agency };
+          } catch {
+            return null;
+          }
+        }),
+      );
+      return list.filter(Boolean);
+    },
+    enabled: open && agencyIds.length > 0,
+  });
+  const cashOptions = (cashRegisters ?? []).map((cr: any) => ({
+    value: cr.id,
+    label: `${cr.agency?.name ?? 'Agence'} (${formatAmount(Number(cr.isClosed ? (cr.closingBalance ?? cr.currentBalance) : cr.currentBalance))})${cr.isClosed ? ' [fermee]' : ''}`,
+  }));
+
   const onSubmit = async (data: PayAgencyChargeInput) => {
     try {
-      await apiClient.post(`/agencies/charges/${charge.id}/pay`, data);
+      await apiClient.post(`/agencies/charges/${charge.id}/pay`, {
+        ...data,
+        cashRegisterId: cashRegisterId || undefined,
+      });
       toast.success('Paiement enregistre');
       onSaved();
+      setCashRegisterId('');
       reset();
       onClose();
     } catch (e: any) {
@@ -436,6 +567,13 @@ function PayChargeDialog({ open, onClose, charge, period, onSaved }: PayProps) {
             </p>
           </div>
         )}
+        <AppSelect
+          label="Caisse a debiter"
+          options={cashOptions}
+          value={cashRegisterId}
+          onValueChange={setCashRegisterId}
+          placeholder="Caisse du jour de l'agence (defaut)"
+        />
         <AppInput
           label="Montant"
           type="number"

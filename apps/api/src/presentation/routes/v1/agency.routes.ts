@@ -54,6 +54,47 @@ router.post(
   AgencyController.payCharge,
 );
 
+// Documents et historique des charges
+router.get('/charges/:chargeId/documents', AgencyController.listChargeDocuments);
+router.post(
+  '/charges/:chargeId/documents',
+  authorize('SUPER_ADMIN', 'ADMIN', 'COMPTABLE'),
+  AgencyController.addChargeDocument,
+);
+router.delete(
+  '/charges/:chargeId/documents/:documentId',
+  authorize('SUPER_ADMIN', 'ADMIN', 'COMPTABLE'),
+  AgencyController.deleteChargeDocument,
+);
+router.get('/charges/:chargeId/history', AgencyController.listChargeHistory);
+
+// Breakdowns financiers (paiements par route+methode, decaissements par categorie)
+router.get('/:id/breakdown', AgencyController.breakdown);
+
+// Rapports journaliers (auto + observations)
+router.get('/:id/daily-reports', AgencyController.listDailyReports);
+router.post(
+  '/:id/daily-reports',
+  authorize('SUPER_ADMIN', 'ADMIN', 'COMPTABLE'),
+  AgencyController.generateDailyReport,
+);
+router.get('/daily-reports/:reportId', AgencyController.getDailyReport);
+router.patch(
+  '/daily-reports/:reportId',
+  authorize('SUPER_ADMIN', 'ADMIN', 'COMPTABLE'),
+  AgencyController.updateDailyReportObservation,
+);
+router.post(
+  '/daily-reports/:reportId/attachments',
+  authorize('SUPER_ADMIN', 'ADMIN', 'COMPTABLE'),
+  AgencyController.addDailyReportAttachment,
+);
+router.delete(
+  '/daily-reports/:reportId/attachments/:attachmentId',
+  authorize('SUPER_ADMIN', 'ADMIN', 'COMPTABLE'),
+  AgencyController.deleteDailyReportAttachment,
+);
+
 // Image upload / delete (auth requise)
 router.post(
   '/:id/image',

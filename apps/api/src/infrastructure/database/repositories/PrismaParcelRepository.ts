@@ -35,11 +35,25 @@ export class PrismaParcelRepository implements IParcelRepository {
   }
 
   async findAll(
-    filters: { warehouseId?: string; containerId?: string; clientId?: string; status?: string; transitType?: string; agencyIds?: string[] | null },
+    filters: {
+      warehouseId?: string;
+      containerId?: string;
+      clientId?: string;
+      status?: string;
+      transitType?: string;
+      agencyIds?: string[] | null;
+      // Si true et warehouseId est fourni, restreint aux colis physiquement
+      // presents dans le magasin (isPresent=true, status IN_STOCK ou RECEIVED).
+      onlyPresent?: boolean;
+    },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<ParcelWithRelations>> {
     const { page, limit, sortBy, sortOrder, search } = pagination;
     const skip = (page - 1) * limit;
+
+    const presenceFilter = filters.onlyPresent
+      ? { isPresent: true, status: { in: ['IN_STOCK', 'RECEIVED'] as any } }
+      : {};
 
     const where: Prisma.ParcelWhereInput = {
       isDeleted: false,
@@ -51,6 +65,7 @@ export class PrismaParcelRepository implements IParcelRepository {
       ...(filters.agencyIds?.length && {
         warehouse: { agencyId: { in: filters.agencyIds } },
       }),
+      ...presenceFilter,
       ...(search && {
         OR: [
           { trackingNumber: { contains: search, mode: 'insensitive' } },

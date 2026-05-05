@@ -26,15 +26,20 @@ import { AgencyFormDialog } from '../AgencyFormDialog';
 import { WarehouseFormDialog } from '../../warehouses/WarehouseFormDialog';
 import { ClientFormDialog } from '../../clients/ClientFormDialog';
 import { EmployeeFormDialog } from '../../employees/EmployeeFormDialog';
+import { PayEmployeeDialog } from '../../employees/PayEmployeeDialog';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
 import { AgencyChargesTab } from './AgencyChargesTab';
+import { AgencyBreakdownTab } from './AgencyBreakdownTab';
+import { AgencyDailyReportsTab } from './AgencyDailyReportsTab';
 import { AgencyAvatar } from '@/components/shared/AgencyAvatar';
 import { ImageDropzone } from '@/components/shared/ImageDropzone';
 import { AgencyOpeningHoursEditor } from '@/components/shared/AgencyOpeningHoursEditor';
+import { XlsxImportDialog } from '@/components/shared/XlsxImportDialog';
+import { XlsxExportButton } from '@/components/shared/XlsxExportButton';
 import { AppDialog } from '@/components/ui/AppDialog';
 import { agenciesApi } from '@/lib/api/agencies';
 import { useQueryClient } from '@tanstack/react-query';
-import { Camera, Clock } from 'lucide-react';
+import { Camera, Clock, FileText, BarChart3, Upload } from 'lucide-react';
 
 export default function AgencyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -48,6 +53,7 @@ export default function AgencyDetailPage({ params }: { params: Promise<{ id: str
   const [showCreateEmployee, setShowCreateEmployee] = useState(false);
   const [imageBusy, setImageBusy] = useState(false);
   const [showImageDialog, setShowImageDialog] = useState(false);
+  const [showImportEmployees, setShowImportEmployees] = useState(false);
   const qc = useQueryClient();
 
   const refreshAgency = () => {
@@ -137,11 +143,26 @@ export default function AgencyDetailPage({ params }: { params: Promise<{ id: str
     { key: 'actions', label: '', className: 'w-10', render: (row: any) => <RowActions actions={[{ label: 'Voir', icon: <Eye className="h-4 w-4" />, onClick: () => router.push(`/clients/${row.id}`) }]} /> },
   ];
 
+  const [payEmployee, setPayEmployee] = useState<any | null>(null);
+
   const employeeColumns = [
     { key: 'fullName', label: 'Nom', render: (row: any) => <span className="font-medium">{row.fullName}</span> },
     { key: 'position', label: 'Poste' },
     { key: 'phone', label: 'Telephone', render: (row: any) => row.phone || '-' },
     { key: 'baseSalary', label: 'Salaire', render: (row: any) => formatAmount(Number(row.baseSalary)) },
+    {
+      key: 'actions',
+      label: '',
+      className: 'w-10',
+      render: (row: any) => (
+        <RowActions
+          actions={[
+            { label: 'Voir', icon: <Eye className="h-4 w-4" />, onClick: () => router.push(`/employees/${row.id}`) },
+            { label: 'Payer salaire', icon: <CreditCard className="h-4 w-4" />, onClick: () => setPayEmployee(row) },
+          ]}
+        />
+      ),
+    },
   ];
 
   const disbursementColumns = [
@@ -225,13 +246,22 @@ export default function AgencyDetailPage({ params }: { params: Promise<{ id: str
   );
 
   const personnelTab = (
-    <RelationTable
-      title={`Employes (${employeesData?.data?.length || 0})`}
-      columns={employeeColumns}
-      data={employeesData?.data || []}
-      onAdd={() => setShowCreateEmployee(true)}
-      addLabel="Ajouter employe"
-    />
+    <div className="space-y-4">
+      <div className="flex items-center justify-end gap-2">
+        <XlsxExportButton endpoint="employees" params={{ agencyId: id }} fileName="personnel" label="Exporter (XLSX)" />
+        <AppButton size="sm" variant="outline" onClick={() => setShowImportEmployees(true)}>
+          <Upload className="h-3.5 w-3.5" />
+          Importer (XLSX)
+        </AppButton>
+      </div>
+      <RelationTable
+        title={`Employes (${employeesData?.data?.length || 0})`}
+        columns={employeeColumns}
+        data={employeesData?.data || []}
+        onAdd={() => setShowCreateEmployee(true)}
+        addLabel="Ajouter employe"
+      />
+    </div>
   );
 
   return (
@@ -279,8 +309,10 @@ export default function AgencyDetailPage({ params }: { params: Promise<{ id: str
         <AppTabs tabs={[
           { value: 'overview', label: 'Vue d\'ensemble', icon: <Building2 className="h-4 w-4" />, content: overviewTab },
           { value: 'finance', label: 'Finance', icon: <CreditCard className="h-4 w-4" />, content: financeTab },
+          { value: 'breakdown', label: 'Repartition', icon: <BarChart3 className="h-4 w-4" />, content: <AgencyBreakdownTab agencyId={id} /> },
           { value: 'charges', label: 'Charges', icon: <Wallet className="h-4 w-4" />, content: <AgencyChargesTab agencyId={id} /> },
           { value: 'personnel', label: 'Personnel', icon: <UserCog className="h-4 w-4" />, content: personnelTab },
+          { value: 'reports', label: 'Observations', icon: <FileText className="h-4 w-4" />, content: <AgencyDailyReportsTab agencyId={id} /> },
           { value: 'hours', label: 'Horaires', icon: <Clock className="h-4 w-4" />, content: <AgencyOpeningHoursEditor agencyId={id} /> },
         ]} />
 
@@ -318,6 +350,20 @@ export default function AgencyDetailPage({ params }: { params: Promise<{ id: str
           open={showCreateEmployee}
           onClose={() => setShowCreateEmployee(false)}
           defaultAgency={agencyRef}
+        />
+        <PayEmployeeDialog
+          open={!!payEmployee}
+          onClose={() => setPayEmployee(null)}
+          employee={payEmployee}
+        />
+
+        <XlsxImportDialog
+          open={showImportEmployees}
+          onClose={() => setShowImportEmployees(false)}
+          endpoint={`agencies/${id}/employees`}
+          title="Importer le personnel (XLSX avec photos)"
+          hint="Le fichier doit contenir au minimum 'Nom complet' et 'Poste'. Les colonnes 'Selfie', 'Plan localisation', 'Document identite' acceptent des images embarquees qui seront uploadees automatiquement."
+          onDone={() => qc.invalidateQueries({ queryKey: ['employees'] })}
         />
 
         <AppDialog

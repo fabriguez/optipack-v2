@@ -9,7 +9,15 @@ export class ListParcelsUseCase {
   ) {}
 
   async execute(
-    filters: { warehouseId?: string; containerId?: string; clientId?: string; status?: string; transitType?: string; agencyIds?: string[] | null },
+    filters: {
+      warehouseId?: string;
+      containerId?: string;
+      clientId?: string;
+      status?: string;
+      transitType?: string;
+      agencyIds?: string[] | null;
+      onlyPresent?: boolean;
+    },
     pagination: PaginationInput,
   ) {
     return this.parcelRepo.findAll(filters, pagination);
