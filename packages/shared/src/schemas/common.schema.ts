@@ -1,12 +1,18 @@
 import { z } from 'zod';
 
-export const paginationSchema = z.object({
-  page: z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(200).default(20),
-  sortBy: z.string().optional(),
-  sortOrder: z.enum(['asc', 'desc']).optional().default('desc'),
-  search: z.string().optional(),
-});
+export const paginationSchema = z
+  .object({
+    page: z.coerce.number().int().min(1).default(1),
+    limit: z.coerce.number().int().min(1).max(200).default(20),
+    sortBy: z.string().optional(),
+    sortOrder: z.enum(['asc', 'desc']).optional().default('desc'),
+    search: z.string().optional(),
+  })
+  // passthrough() : les filtres metiers (warehouseId, containerId, status, onlyPresent, ...)
+  // sont lus directement depuis req.query par chaque controller. On les conserve donc
+  // au lieu de les dropper silencieusement, ce qui faisait que les listings ignoraient
+  // les filtres specifiques et retournaient toute la table.
+  .passthrough();
 
 export const idParamSchema = z.object({
   id: z.string().uuid('ID invalide'),
