@@ -1,8 +1,15 @@
 import { injectable } from 'tsyringe';
 import { prisma } from '../../../config/database';
+import { config } from '../../../config';
 import { StorageService } from '../../../infrastructure/storage/StorageService';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
 import { extFromMime } from '../../../presentation/middleware/upload';
+
+function absoluteApiUrl(path: string): string {
+  const base = config.apiUrl?.replace(/\/$/, '') || '';
+  if (/^https?:\/\//i.test(base)) return `${base}${path}`;
+  return path;
+}
 
 type Slot = 'selfie' | 'locationPlan' | 'idDocument';
 
@@ -33,7 +40,7 @@ export class UploadEmployeeImageUseCase {
     const key = this.storage.buildKey(`employees/${employeeId}/${slot}`, ext);
     await this.storage.uploadBuffer(key, file.buffer, file.mimetype);
 
-    const imageUrl = `/api/v1/employees/${employeeId}/image/${slot}?v=${Date.now()}`;
+    const imageUrl = absoluteApiUrl(`/api/v1/employees/${employeeId}/image/${slot}?v=${Date.now()}`);
 
     const oldKey = (employee as any)[KEY_FIELD[slot]] as string | null;
     if (oldKey) {

@@ -1,8 +1,15 @@
 import { injectable } from 'tsyringe';
 import { prisma } from '../../../config/database';
+import { config } from '../../../config';
 import { StorageService } from '../../../infrastructure/storage/StorageService';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
 import { extFromMime } from '../../../presentation/middleware/upload';
+
+function absoluteApiUrl(path: string): string {
+  const base = config.apiUrl?.replace(/\/$/, '') || '';
+  if (/^https?:\/\//i.test(base)) return `${base}${path}`;
+  return path;
+}
 
 @injectable()
 export class UploadAgencyImageUseCase {
@@ -20,9 +27,9 @@ export class UploadAgencyImageUseCase {
     const key = this.storage.buildKey(`agencies/${agencyId}`, ext);
     await this.storage.uploadBuffer(key, file.buffer, file.mimetype);
 
-    // URL servie par notre API (relative pour fonctionner derriere reverse proxy).
-    // Le frontend prefixe avec NEXT_PUBLIC_API_URL si necessaire.
-    const imageUrl = `/api/v1/agencies/${agencyId}/image?v=${Date.now()}`;
+    // URL absolue (basee sur API_URL) pour rester correcte meme si le navigateur
+    // est sur un domaine different. Inclut un cache-buster.
+    const imageUrl = absoluteApiUrl(`/api/v1/agencies/${agencyId}/image?v=${Date.now()}`);
 
     // Best-effort : supprime l'ancienne image si elle etait stockee chez nous
     if (agency.imageKey) {

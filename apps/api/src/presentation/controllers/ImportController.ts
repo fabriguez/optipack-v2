@@ -7,6 +7,13 @@ import { StorageService } from '../../infrastructure/storage/StorageService';
 import { PayrollChargeService } from '../../application/services/PayrollChargeService';
 import { NotFoundError, BusinessError } from '../../domain/errors/BusinessError';
 import { logger } from '../../config/logger';
+import { config } from '../../config';
+
+function absoluteApiUrl(path: string): string {
+  const base = config.apiUrl?.replace(/\/$/, '') || '';
+  if (/^https?:\/\//i.test(base)) return `${base}${path}`;
+  return path;
+}
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -82,7 +89,7 @@ export class ImportController {
             const key = storage.buildKey(`employees/import/${agencyId}`, img.extension);
             const contentType = img.extension === 'png' ? 'image/png' : img.extension === 'gif' ? 'image/gif' : 'image/jpeg';
             await storage.uploadBuffer(key, img.buffer, contentType);
-            uploads[`${slot}Url`] = `/api/v1/uploads/object/${encodeURIComponent(key)}`;
+            uploads[`${slot}Url`] = absoluteApiUrl(`/api/v1/uploads/object/${encodeURIComponent(key)}`);
             uploads[`${slot}Key`] = key;
           }
 

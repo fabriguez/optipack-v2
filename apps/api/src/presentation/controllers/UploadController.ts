@@ -2,7 +2,25 @@ import type { Request, Response, NextFunction } from 'express';
 import { container } from '../../container';
 import { StorageService } from '../../infrastructure/storage/StorageService';
 import { extFromMime } from '../middleware/upload';
+import { config } from '../../config';
 import { prisma } from '../../config/database';
+
+/**
+ * Construit l'URL absolue d'un objet uploade. Prefere config.apiUrl (env API_URL),
+ * sinon utilise l'origine de la requete (req.protocol + req.host) pour rester
+ * fonctionnel meme si l'env n'est pas posee.
+ */
+function buildAbsoluteUrl(req: Request, key: string): string {
+  const path = `/api/v1/uploads/object/${encodeURIComponent(key)}`;
+  const fromEnv = config.apiUrl;
+  if (fromEnv && /^https?:\/\//i.test(fromEnv)) {
+    return `${fromEnv.replace(/\/$/, '')}${path}`;
+  }
+  // Fallback : derive from request (utile en dev quand API_URL n'est pas posee)
+  const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'http';
+  const host = (req.headers['x-forwarded-host'] as string) || req.get('host') || 'localhost';
+  return `${proto}://${host}${path}`;
+}
 
 /**
  * Upload generique d'image (recus, justificatifs, preuves de paiement, ...).
@@ -24,10 +42,7 @@ export class UploadController {
       const key = storage.buildKey(`uploads/${userId}`, ext);
       await storage.uploadBuffer(key, file.buffer, file.mimetype);
 
-      // Trace minimale pour pouvoir purger / auditer si besoin (best-effort).
-      // On evite un nouveau modele Prisma : on s'appuie sur la cle pour la URL.
-      const url = `/api/v1/uploads/object/${encodeURIComponent(key)}`;
-
+      const url = buildAbsoluteUrl(req, key);
       res.json({ success: true, data: { url, key, contentType: file.mimetype, size: file.size } });
     } catch (err) {
       next(err);
@@ -45,7 +60,7 @@ export class UploadController {
       const key = storage.buildKey(`uploads/${userId}`, ext);
       await storage.uploadBuffer(key, file.buffer, file.mimetype);
 
-      const url = `/api/v1/uploads/object/${encodeURIComponent(key)}`;
+      const url = buildAbsoluteUrl(req, key);
       res.json({
         success: true,
         data: { url, key, contentType: file.mimetype, size: file.size, fileName: file.originalname },

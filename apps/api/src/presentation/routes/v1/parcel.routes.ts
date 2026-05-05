@@ -9,22 +9,8 @@ import { PDFService } from '../../../application/services/PDFService';
 
 const router = Router();
 
-router.use(authenticate);
-
-router.get('/', validate(paginationSchema, 'query'), ParcelController.list);
-router.get('/tracking/:tracking', ParcelController.getByTracking);
-router.get('/:id', ParcelController.getById);
-router.post('/', validate(createParcelSchema), ParcelController.create);
-router.post('/batch', validate(createBatchParcelsSchema), ParcelController.createBatch);
-router.patch('/:id', ParcelController.update);
-router.patch('/:id/status', ParcelController.updateStatus);
-
-// Galerie d'images
-router.get('/:id/images', ParcelController.listImages);
-router.post('/:id/images', ParcelController.addImage);
-router.delete('/:id/images/:imageId', ParcelController.deleteImage);
-
-// QR code
+// Endpoint PUBLIC : sert le QR code d'un colis pour <img src>. Doit etre AVANT authenticate
+// (le navigateur charge le QR sans header Authorization).
 router.get('/:id/qrcode', async (req, res, next) => {
   try {
     const parcel = await prisma.parcel.findUnique({
@@ -41,12 +27,30 @@ router.get('/:id/qrcode', async (req, res, next) => {
       'Content-Type': 'image/png',
       'Content-Disposition': `inline; filename="qr-${parcel.trackingNumber}.png"`,
       'Content-Length': qrBuffer.length.toString(),
+      'Cache-Control': 'public, max-age=86400',
+      // Helmet pose CORP: same-origin par defaut, ce qui bloque <img> cross-origin (api/web).
+      'Cross-Origin-Resource-Policy': 'cross-origin',
     });
     res.send(qrBuffer);
   } catch (err) {
     next(err);
   }
 });
+
+router.use(authenticate);
+
+router.get('/', validate(paginationSchema, 'query'), ParcelController.list);
+router.get('/tracking/:tracking', ParcelController.getByTracking);
+router.get('/:id', ParcelController.getById);
+router.post('/', validate(createParcelSchema), ParcelController.create);
+router.post('/batch', validate(createBatchParcelsSchema), ParcelController.createBatch);
+router.patch('/:id', ParcelController.update);
+router.patch('/:id/status', ParcelController.updateStatus);
+
+// Galerie d'images
+router.get('/:id/images', ParcelController.listImages);
+router.post('/:id/images', ParcelController.addImage);
+router.delete('/:id/images/:imageId', ParcelController.deleteImage);
 
 // Etiquette enrichie
 router.get('/:id/label', async (req, res, next) => {

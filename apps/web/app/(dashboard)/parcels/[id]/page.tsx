@@ -28,6 +28,7 @@ import { formatAmount, formatDate, formatDateTime } from '@transitsoftservices/s
 import { ParcelFormDialog } from '../ParcelFormDialog';
 import { ImageInput } from '@/components/shared/ImageInput';
 import { uploadImage } from '@/lib/api/uploads';
+import { resolveImageUrl } from '@/lib/api/imageUrl';
 import { toast } from 'sonner';
 
 const STATUS_STEPS = ['IN_STOCK', 'LOADING', 'IN_TRANSIT', 'ARRIVED', 'RECEIVED', 'DELIVERED'];
@@ -239,7 +240,7 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
             {images.map((img) => (
               <div key={img.id} className="group relative overflow-hidden rounded-xl border border-gray-100">
-                <img src={img.url} alt={img.caption || 'Image colis'} className="h-32 w-full object-cover" />
+                <img src={resolveImageUrl(img.url) ?? img.url} alt={img.caption || 'Image colis'} className="h-32 w-full object-cover" />
                 {img.caption && (
                   <p className="px-2 py-1 text-xs text-gray-600 truncate">{img.caption}</p>
                 )}
