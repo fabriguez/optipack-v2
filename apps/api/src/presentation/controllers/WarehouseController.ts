@@ -9,6 +9,8 @@ import { StartInventoryUseCase } from '../../application/use-cases/warehouse/Sta
 import { ScanInventoryParcelUseCase } from '../../application/use-cases/warehouse/ScanInventoryParcelUseCase';
 import { CloseInventoryUseCase } from '../../application/use-cases/warehouse/CloseInventoryUseCase';
 import { GetInventoryUseCase } from '../../application/use-cases/warehouse/GetInventoryUseCase';
+import { MarkInventoryItemManuallyUseCase } from '../../application/use-cases/warehouse/MarkInventoryItemManuallyUseCase';
+import { ListUninventoriedParcelsUseCase } from '../../application/use-cases/warehouse/ListUninventoriedParcelsUseCase';
 import { WAREHOUSE_REPOSITORY } from '../../application/interfaces/IWarehouseRepository';
 import { NotFoundError } from '../../domain/errors/BusinessError';
 
@@ -128,7 +130,42 @@ export class WarehouseController {
         req.params.inventoryId,
         req.body.trackingNumber,
         req.user!.userId,
+        req.body.observation,
       );
+      res.json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * Marquage manuel (sans scan) : present/absent + observation libre.
+   * Le flag markedManually = true sur l'item permettra au rapport d'inventaire
+   * de distinguer les items physiquement scannes des items pointes a la main.
+   */
+  static async markInventoryItemManual(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(MarkInventoryItemManuallyUseCase);
+      const data = await useCase.execute(
+        req.params.inventoryId,
+        {
+          parcelId: req.body.parcelId,
+          present: req.body.present !== false,
+          observation: req.body.observation,
+        },
+        req.user!.userId,
+      );
+      res.json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** Liste les colis du magasin pas encore inventories (= aucun item enregistre). */
+  static async listUninventoried(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(ListUninventoriedParcelsUseCase);
+      const data = await useCase.execute(req.params.inventoryId);
       res.json({ success: true, data });
     } catch (err) {
       next(err);

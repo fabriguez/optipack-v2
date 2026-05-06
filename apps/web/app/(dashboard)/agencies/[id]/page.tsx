@@ -27,6 +27,7 @@ import { WarehouseFormDialog } from '../../warehouses/WarehouseFormDialog';
 import { ClientFormDialog } from '../../clients/ClientFormDialog';
 import { EmployeeFormDialog } from '../../employees/EmployeeFormDialog';
 import { PayEmployeeDialog } from '../../employees/PayEmployeeDialog';
+import { SalaryDeductionDialog } from '../../employees/SalaryDeductionDialog';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
 import { AgencyChargesTab } from './AgencyChargesTab';
 import { AgencyBreakdownTab } from './AgencyBreakdownTab';
@@ -55,6 +56,7 @@ export default function AgencyDetailPage({ params }: { params: Promise<{ id: str
   const [showImageDialog, setShowImageDialog] = useState(false);
   const [showImportEmployees, setShowImportEmployees] = useState(false);
   const [payEmployee, setPayEmployee] = useState<any | null>(null);
+  const [deductionEmployee, setDeductionEmployee] = useState<any | null>(null);
   const qc = useQueryClient();
 
   const refreshAgency = () => {
@@ -144,10 +146,40 @@ export default function AgencyDetailPage({ params }: { params: Promise<{ id: str
     { key: 'actions', label: '', className: 'w-10', render: (row: any) => <RowActions actions={[{ label: 'Voir', icon: <Eye className="h-4 w-4" />, onClick: () => router.push(`/clients/${row.id}`) }]} /> },
   ];
 
+  const toggleManagerFlag = async (row: any) => {
+    try {
+      await apiClient.post(`/employees/${row.id}/set-manager-flag`, {
+        isAgencyManager: !row.isAgencyManager,
+      });
+      toast.success(row.isAgencyManager ? 'Retire du role chef d\'agence' : 'Promu chef d\'agence');
+      qc.invalidateQueries({ queryKey: ['employees'] });
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Erreur');
+    }
+  };
+
   const employeeColumns = [
-    { key: 'fullName', label: 'Nom', render: (row: any) => <span className="font-medium">{row.fullName}</span> },
+    {
+      key: 'fullName',
+      label: 'Nom',
+      render: (row: any) => (
+        <div className="flex items-center gap-2">
+          <span className="font-medium">{row.fullName}</span>
+          {row.isAgencyManager && (
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-primary-50 text-primary-700">
+              Chef
+            </span>
+          )}
+        </div>
+      ),
+    },
     { key: 'position', label: 'Poste' },
     { key: 'phone', label: 'Telephone', render: (row: any) => row.phone || '-' },
+    {
+      key: 'contractType',
+      label: 'Contrat',
+      render: (row: any) => row.contractType || 'CDI',
+    },
     { key: 'baseSalary', label: 'Salaire', render: (row: any) => formatAmount(Number(row.baseSalary)) },
     {
       key: 'actions',
@@ -158,6 +190,12 @@ export default function AgencyDetailPage({ params }: { params: Promise<{ id: str
           actions={[
             { label: 'Voir', icon: <Eye className="h-4 w-4" />, onClick: () => router.push(`/employees/${row.id}`) },
             { label: 'Payer salaire', icon: <CreditCard className="h-4 w-4" />, onClick: () => setPayEmployee(row) },
+            { label: 'Retenues sur salaire', icon: <Wallet className="h-4 w-4" />, onClick: () => setDeductionEmployee(row) },
+            {
+              label: row.isAgencyManager ? 'Retirer chef d\'agence' : 'Promouvoir chef d\'agence',
+              icon: <UserCog className="h-4 w-4" />,
+              onClick: () => toggleManagerFlag(row),
+            },
           ]}
         />
       ),
@@ -354,6 +392,11 @@ export default function AgencyDetailPage({ params }: { params: Promise<{ id: str
           open={!!payEmployee}
           onClose={() => setPayEmployee(null)}
           employee={payEmployee}
+        />
+        <SalaryDeductionDialog
+          open={!!deductionEmployee}
+          onClose={() => setDeductionEmployee(null)}
+          employee={deductionEmployee}
         />
 
         <XlsxImportDialog

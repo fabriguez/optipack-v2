@@ -341,6 +341,12 @@ model WarehouseInventoryItem {
   scanned     Boolean   @default(false)
   scannedAt   DateTime?
   scannedById String?
+  // True si le colis a ete marque present manuellement (sans scan).
+  // Utile pour distinguer le check physique camera-confirm vs cocher a la main.
+  markedManually Boolean @default(false)
+  // Observation libre laissee au moment du marquage (ex : "emballage abime",
+  // "client present", "manque etiquette").
+  observation String?
   comment     String?
 
   inventory WarehouseInventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
@@ -377,30 +383,33 @@ model User {
 
   organization Organization @relation(fields: [organizationId], references: [id])
 
-  userAgencies           UserAgency[]
-  responsibleAgencies    Agency[]                      @relation("AgencyResponsible")
-  refreshTokens          RefreshToken[]
-  paymentsReceived       Payment[]
-  voidedPayments         Payment[]                     @relation("VoidedByUser")
-  disbursementsIssued    DisbursementVoucher[]         @relation("IssuedByUser")
-  disbursementsApproved  DisbursementVoucher[]         @relation("ApprovedByUser")
-  transfersInitiated     FundTransfer[]                @relation("InitiatedByUser")
-  transfersConfirmed     FundTransfer[]                @relation("ConfirmedByUser")
-  closedCashRegisters    AgencyCashRegister[]
-  journalEntriesCreated  JournalEntry[]
-  expensesApproved       Expense[]
-  parcelHistories        ParcelHistory[]
-  containerHistories     ContainerHistory[]
-  auditLogs              AuditLog[]
-  chatMessagesAgent      ChatMessage[]
-  assignedConversations  ChatConversation[]
-  inventoriesStarted     WarehouseInventory[]          @relation("InventoryStartedBy")
-  inventoriesClosed      WarehouseInventory[]          @relation("InventoryClosedBy")
-  inventoryItemsScanned  WarehouseInventoryItem[]      @relation("InventoryItemScannedBy")
-  chargeDocsUploaded     AgencyChargeDocument[]        @relation("ChargeDocUploader")
-  chargeHistoryActions   AgencyChargeHistory[]         @relation("ChargeHistoryUser")
-  dailyReportsClosed     AgencyDailyReport[]           @relation("DailyReportClosedBy")
-  dailyReportAttachments AgencyDailyReportAttachment[] @relation("DailyReportAttachmentBy")
+  userAgencies            UserAgency[]
+  responsibleAgencies     Agency[]                      @relation("AgencyResponsible")
+  refreshTokens           RefreshToken[]
+  paymentsReceived        Payment[]
+  voidedPayments          Payment[]                     @relation("VoidedByUser")
+  disbursementsIssued     DisbursementVoucher[]         @relation("IssuedByUser")
+  disbursementsApproved   DisbursementVoucher[]         @relation("ApprovedByUser")
+  transfersInitiated      FundTransfer[]                @relation("InitiatedByUser")
+  transfersConfirmed      FundTransfer[]                @relation("ConfirmedByUser")
+  closedCashRegisters     AgencyCashRegister[]
+  journalEntriesCreated   JournalEntry[]
+  expensesApproved        Expense[]
+  parcelHistories         ParcelHistory[]
+  containerHistories      ContainerHistory[]
+  auditLogs               AuditLog[]
+  chatMessagesAgent       ChatMessage[]
+  assignedConversations   ChatConversation[]
+  inventoriesStarted      WarehouseInventory[]          @relation("InventoryStartedBy")
+  inventoriesClosed       WarehouseInventory[]          @relation("InventoryClosedBy")
+  inventoryItemsScanned   WarehouseInventoryItem[]      @relation("InventoryItemScannedBy")
+  chargeDocsUploaded      AgencyChargeDocument[]        @relation("ChargeDocUploader")
+  chargeHistoryActions    AgencyChargeHistory[]         @relation("ChargeHistoryUser")
+  dailyReportsClosed      AgencyDailyReport[]           @relation("DailyReportClosedBy")
+  dailyReportAttachments  AgencyDailyReportAttachment[] @relation("DailyReportAttachmentBy")
+  // Lien optionnel 1-1 avec un Employee (pour la connexion personnel/chef d'agence)
+  employee                Employee?                     @relation("EmployeeUser")
+  salaryDeductionsCreated SalaryDeduction[]             @relation("SalaryDeductionCreator")
 
   @@index([organizationId])
   @@index([email])
@@ -414,6 +423,11 @@ enum UserRole {
   COMPTABLE
   MAGASINIER
   SUPERVISEUR
+  // Chef d'une agence : peut gerer le personnel de son agence (validations conges,
+  // sanctions, pointage). Hierarchiquement au-dessus des PERSONNEL d'une meme agence.
+  CHEF_AGENCE
+  // Employe simple : se connecte pour pointer, demander conges, voir son profil.
+  PERSONNEL
 }
 
 model UserAgency {
@@ -446,33 +460,129 @@ model RefreshToken {
 // ============================================================
 
 model Employee {
-  id              String    @id @default(uuid())
-  agencyId        String
-  fullName        String
-  idNumber        String?
-  phone           String?
-  position        String
-  level           String?
-  baseSalary      Decimal   @default(0) @db.Decimal(15, 2)
-  startDate       DateTime  @default(now())
-  endDate         DateTime?
+  id                String               @id @default(uuid())
+  agencyId          String
+  fullName          String
+  idNumber          String?
+  phone             String?
+  position          String
+  level             String?
+  // Niveau d'etudes (ex : Licence, Master, BAC+3, ...) et specialite (ex : Logistique, Comptabilite)
+  educationLevel    String?
+  specialty         String?
+  baseSalary        Decimal              @default(0) @db.Decimal(15, 2)
+  startDate         DateTime             @default(now())
+  endDate           DateTime?
   // Photos employe : selfie (visage), plan (localisation domicile),
-  // document d'identification (CNI, passeport...). Toutes uploadees via /employees/:id/image
-  selfieUrl       String?
-  selfieKey       String?
-  locationPlanUrl String?
-  locationPlanKey String?
-  idDocumentUrl   String?
-  idDocumentKey   String?
-  isActive        Boolean   @default(true)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  // document d'identification (CNI, passeport...).
+  // idDocumentBack* pour le verso (CNI a 2 faces, passeport peut avoir page d'identification recto/verso).
+  selfieUrl         String?
+  selfieKey         String?
+  locationPlanUrl   String?
+  locationPlanKey   String?
+  idDocumentUrl     String?
+  idDocumentKey     String?
+  idDocumentBackUrl String?
+  idDocumentBackKey String?
+  // Type de contrat
+  contractType      EmployeeContractType @default(CDI)
+  // Superieur hierarchique direct (FK self vers Employee)
+  managerId         String?
+  // Lien optionnel vers User pour permettre la connexion de l'employe sur la plateforme
+  // (role PERSONNEL ou CHEF_AGENCE). Un meme User <-> 1 Employee.
+  userId            String?              @unique
+  // Marqueur "chef d'agence" (utilise pour validation hierarchique meme si role User est PERSONNEL).
+  // Permet de promouvoir un employe en chef sans toucher au User.
+  isAgencyManager   Boolean              @default(false)
+  isActive          Boolean              @default(true)
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
 
-  agency   Agency    @relation(fields: [agencyId], references: [id])
-  payslips Payslip[]
+  agency     Agency             @relation(fields: [agencyId], references: [id])
+  manager    Employee?          @relation("EmployeeManager", fields: [managerId], references: [id])
+  reports    Employee[]         @relation("EmployeeManager")
+  user       User?              @relation("EmployeeUser", fields: [userId], references: [id])
+  payslips   Payslip[]
+  documents  EmployeeDocument[]
+  deductions SalaryDeduction[]
 
   @@index([agencyId])
+  @@index([managerId])
   @@map("employees")
+}
+
+enum EmployeeContractType {
+  STAGIAIRE
+  CDD
+  CDI
+  PRESTATAIRE
+}
+
+// Documents joints au profil d'un employe : diplomes, contrats, certificats, etc.
+// Multi-fichiers et types varies (image, PDF, ...).
+model EmployeeDocument {
+  id          String               @id @default(uuid())
+  employeeId  String
+  type        EmployeeDocumentType
+  label       String
+  url         String
+  storageKey  String?
+  contentType String?
+  size        Int?
+  // Date de validite optionnelle (ex: certificat medical valable 1 an)
+  validUntil  DateTime?
+  uploadedBy  String?
+  createdAt   DateTime             @default(now())
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@index([type])
+  @@map("employee_documents")
+}
+
+enum EmployeeDocumentType {
+  DIPLOMA
+  CV
+  CONTRACT
+  ID_DOCUMENT
+  CERTIFICATE
+  OTHER
+}
+
+// Retenue ponctuelle sur salaire avec motif et historisation.
+// Appliquee une seule fois lors du prochain paiement (ou paiement choisi).
+// Quand `appliedToExpenseId` est rempli, la retenue est consommee.
+model SalaryDeduction {
+  id                 String                @id @default(uuid())
+  employeeId         String
+  amount             Decimal               @db.Decimal(15, 2)
+  reason             String
+  // Periode (YYYY-MM) cible si l'utilisateur veut limiter a un mois donne
+  period             String?
+  // Statut : PENDING -> APPLIED -> CANCELLED
+  status             SalaryDeductionStatus @default(PENDING)
+  // Lien vers l'Expense / Payslip qui a deduit cette retenue (immuable)
+  appliedToExpenseId String?
+  appliedToPayslipId String?
+  createdById        String?
+  cancelledReason    String?
+  createdAt          DateTime              @default(now())
+  appliedAt          DateTime?
+  cancelledAt        DateTime?
+
+  employee  Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  createdBy User?    @relation("SalaryDeductionCreator", fields: [createdById], references: [id])
+
+  @@index([employeeId])
+  @@index([status])
+  @@map("salary_deductions")
+}
+
+enum SalaryDeductionStatus {
+  PENDING
+  APPLIED
+  CANCELLED
 }
 
 model Payslip {
@@ -492,6 +602,11 @@ model Payslip {
   // Reference vers l'Expense de paiement (immutable). Permet de remonter
   // depuis le payslip vers la caisse qui a ete debitee.
   paidExpenseId       String?   @unique
+
+  // Note libre saisie au paiement (motif, contexte, ...).
+  paymentNote     String?
+  // Total des retenues effectivement appliquees au moment du paiement (resume).
+  deductionsTotal Decimal? @db.Decimal(15, 2)
 
   generatedAt DateTime @default(now())
 

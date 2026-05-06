@@ -7,6 +7,17 @@ import { UploadEmployeeImageUseCase } from '../../application/use-cases/employee
 import { DeleteEmployeeImageUseCase } from '../../application/use-cases/employee/DeleteEmployeeImageUseCase';
 import { GetEmployeeImageUseCase } from '../../application/use-cases/employee/GetEmployeeImageUseCase';
 import { PayEmployeeFromCashRegisterUseCase } from '../../application/use-cases/employee/PayEmployeeFromCashRegisterUseCase';
+import {
+  CreateSalaryDeductionUseCase,
+  CancelSalaryDeductionUseCase,
+  ListSalaryDeductionsUseCase,
+} from '../../application/use-cases/employee/SalaryDeductionUseCases';
+import {
+  AddEmployeeDocumentUseCase,
+  ListEmployeeDocumentsUseCase,
+  DeleteEmployeeDocumentUseCase,
+} from '../../application/use-cases/employee/EmployeeDocumentUseCases';
+import { SetEmployeeManagerFlagUseCase } from '../../application/use-cases/employee/SetEmployeeManagerFlagUseCase';
 import { EMPLOYEE_REPOSITORY } from '../../application/interfaces/IEmployeeRepository';
 import { NotFoundError } from '../../domain/errors/BusinessError';
 
@@ -81,8 +92,8 @@ export class EmployeeController {
 
   static async uploadImage(req: Request, res: Response, next: NextFunction) {
     try {
-      const slot = req.params.slot as 'selfie' | 'locationPlan' | 'idDocument';
-      if (!['selfie', 'locationPlan', 'idDocument'].includes(slot)) {
+      const slot = req.params.slot as 'selfie' | 'locationPlan' | 'idDocument' | 'idDocumentBack';
+      if (!['selfie', 'locationPlan', 'idDocument', 'idDocumentBack'].includes(slot)) {
         throw new NotFoundError('Slot photo employe', slot);
       }
       const file = (req as any).file as Express.Multer.File | undefined;
@@ -99,8 +110,8 @@ export class EmployeeController {
 
   static async deleteImage(req: Request, res: Response, next: NextFunction) {
     try {
-      const slot = req.params.slot as 'selfie' | 'locationPlan' | 'idDocument';
-      if (!['selfie', 'locationPlan', 'idDocument'].includes(slot)) {
+      const slot = req.params.slot as 'selfie' | 'locationPlan' | 'idDocument' | 'idDocumentBack';
+      if (!['selfie', 'locationPlan', 'idDocument', 'idDocumentBack'].includes(slot)) {
         throw new NotFoundError('Slot photo employe', slot);
       }
       const useCase = container.resolve(DeleteEmployeeImageUseCase);
@@ -134,10 +145,97 @@ export class EmployeeController {
     }
   }
 
+  // ----- Retenues sur salaire -----
+
+  static async listDeductions(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(ListSalaryDeductionsUseCase);
+      const items = await useCase.execute(req.params.id);
+      res.json({ success: true, data: items });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async createDeduction(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(CreateSalaryDeductionUseCase);
+      const item = await useCase.execute(
+        { employeeId: req.params.id, ...req.body },
+        req.user!.userId,
+      );
+      res.status(201).json({ success: true, data: item });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async cancelDeduction(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(CancelSalaryDeductionUseCase);
+      const item = await useCase.execute(
+        req.params.deductionId,
+        req.body?.reason,
+        req.user!.userId,
+      );
+      res.json({ success: true, data: item });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  // ----- Documents (diplomes, contrats, ...) -----
+
+  static async listDocuments(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(ListEmployeeDocumentsUseCase);
+      const items = await useCase.execute(req.params.id);
+      res.json({ success: true, data: items });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async addDocument(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(AddEmployeeDocumentUseCase);
+      const doc = await useCase.execute(
+        { employeeId: req.params.id, ...req.body },
+        req.user!.userId,
+      );
+      res.status(201).json({ success: true, data: doc });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async deleteDocument(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(DeleteEmployeeDocumentUseCase);
+      const result = await useCase.execute(req.params.documentId);
+      res.json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  // ----- Promotion chef d'agence -----
+
+  static async setManagerFlag(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(SetEmployeeManagerFlagUseCase);
+      const isManager = !!req.body?.isAgencyManager;
+      const item = await useCase.execute(req.params.id, isManager);
+      res.json({ success: true, data: item });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   static async getImage(req: Request, res: Response, next: NextFunction) {
     try {
-      const slot = req.params.slot as 'selfie' | 'locationPlan' | 'idDocument';
-      if (!['selfie', 'locationPlan', 'idDocument'].includes(slot)) {
+      const slot = req.params.slot as 'selfie' | 'locationPlan' | 'idDocument' | 'idDocumentBack';
+      if (!['selfie', 'locationPlan', 'idDocument', 'idDocumentBack'].includes(slot)) {
         throw new NotFoundError('Slot photo employe', slot);
       }
       const useCase = container.resolve(GetEmployeeImageUseCase);

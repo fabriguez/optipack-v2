@@ -20,11 +20,24 @@ router.post('/', EmployeeController.create);
 router.patch('/:id', EmployeeController.update);
 router.delete('/:id', EmployeeController.delete);
 
-// Paiement effectif depuis une caisse (Expense + Payslip + debit caisse)
+// Paiement effectif depuis une caisse (Expense + DisbursementVoucher + Payslip + debit caisse)
 router.post('/:id/pay', EmployeeController.pay);
 router.get('/:id/payslips', EmployeeController.listPayslips);
 
-// Photo upload / delete (auth requise). slot in {selfie, locationPlan, idDocument}.
+// Retenues sur salaire (motif obligatoire, ponctuelles)
+router.get('/:id/deductions', EmployeeController.listDeductions);
+router.post('/:id/deductions', EmployeeController.createDeduction);
+router.post('/deductions/:deductionId/cancel', EmployeeController.cancelDeduction);
+
+// Documents employes (diplomes, contrats, certificats, ...)
+router.get('/:id/documents', EmployeeController.listDocuments);
+router.post('/:id/documents', EmployeeController.addDocument);
+router.delete('/documents/:documentId', EmployeeController.deleteDocument);
+
+// Promotion / retrogradation chef d'agence
+router.post('/:id/set-manager-flag', EmployeeController.setManagerFlag);
+
+// Photo upload / delete (auth requise). slot in {selfie, locationPlan, idDocument, idDocumentBack}.
 router.post('/:id/image/:slot', uploadImageMiddleware, EmployeeController.uploadImage);
 router.delete('/:id/image/:slot', EmployeeController.deleteImage);
 

@@ -11,7 +11,7 @@ import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessErr
  */
 @injectable()
 export class ScanInventoryParcelUseCase {
-  async execute(inventoryId: string, trackingOrId: string, userId: string) {
+  async execute(inventoryId: string, trackingOrId: string, userId: string, observation?: string) {
     const inventory = await prisma.warehouseInventory.findUnique({
       where: { id: inventoryId },
     });
@@ -50,6 +50,8 @@ export class ScanInventoryParcelUseCase {
           scanned: true,
           scannedAt: new Date(),
           scannedById: userId,
+          markedManually: false, // confirme par scan -> demarque manual
+          ...(observation?.trim() && { observation: observation.trim() }),
         },
       });
       return { status: 'scanned', item: updated, parcel };
@@ -64,6 +66,7 @@ export class ScanInventoryParcelUseCase {
         scanned: true,
         scannedAt: new Date(),
         scannedById: userId,
+        observation: observation?.trim() || null,
         comment: parcel.warehouseId !== inventory.warehouseId
           ? `Colis enregistre dans un autre magasin (${parcel.warehouseId})`
           : null,

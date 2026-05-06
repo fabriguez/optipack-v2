@@ -55,7 +55,7 @@ export const { handlers, signIn, signOut, auth }: any = NextAuth({
     signIn: '/login',
   },
   callbacks: {
-    async jwt({ token, user, trigger }) {
+    async jwt({ token, user, trigger, session: updateInput }) {
       // 1) Initial login : on copie tout depuis l'utilisateur
       if (user) {
         token.id = user.id;
@@ -65,6 +65,12 @@ export const { handlers, signIn, signOut, auth }: any = NextAuth({
         token.refreshToken = (user as any).refreshToken;
         token.accessTokenExpiresAt = (user as any).accessTokenExpiresAt;
         return token;
+      }
+
+      // Update force par le client (axios interceptor sur 401) : on invalide
+      // accessTokenExpiresAt pour forcer le refresh ci-dessous.
+      if (trigger === 'update' && (updateInput as any)?.forceRefresh) {
+        (token as any).accessTokenExpiresAt = 0;
       }
 
       // 2) Token encore valide (avec marge de 60s) -> on garde

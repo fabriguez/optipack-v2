@@ -29,6 +29,17 @@ router.post(
   authorize('SUPER_ADMIN', 'ADMIN', 'AGENT', 'MAGASINIER'),
   WarehouseController.scanInventory,
 );
+// Marquage manuel sans scan (avec observation libre + flag markedManually=true)
+router.post(
+  '/inventories/:inventoryId/mark',
+  authorize('SUPER_ADMIN', 'ADMIN', 'AGENT', 'MAGASINIER'),
+  WarehouseController.markInventoryItemManual,
+);
+// Liste des colis non encore inventories (pour saisie rapide / batch manuel)
+router.get(
+  '/inventories/:inventoryId/uninventoried',
+  WarehouseController.listUninventoried,
+);
 router.post(
   '/inventories/:inventoryId/close',
   authorize('SUPER_ADMIN', 'ADMIN', 'AGENT', 'MAGASINIER'),

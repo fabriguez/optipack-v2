@@ -8,6 +8,7 @@ import { AppButton } from '@/components/ui/AppButton';
 import { AppSearchSelect } from '@/components/ui/AppSearchSelect';
 import { AppPhoneInput } from '@/components/ui/AppPhoneInput';
 import { ImageInput } from '@/components/shared/ImageInput';
+import { AppSelect } from '@/components/ui/AppSelect';
 import { searchers, toSearchOption } from '@/lib/api/searchers';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
@@ -27,25 +28,40 @@ interface Props {
     phone?: string | null;
     idNumber?: string | null;
     baseSalary?: number | string | null;
+    educationLevel?: string | null;
+    specialty?: string | null;
+    contractType?: 'STAGIAIRE' | 'CDD' | 'CDI' | 'PRESTATAIRE' | null;
+    managerId?: string | null;
+    isAgencyManager?: boolean | null;
     selfieUrl?: string | null;
     locationPlanUrl?: string | null;
     idDocumentUrl?: string | null;
+    idDocumentBackUrl?: string | null;
   } | null;
 }
 
-type Slot = 'selfie' | 'locationPlan' | 'idDocument';
+type Slot = 'selfie' | 'locationPlan' | 'idDocument' | 'idDocumentBack';
 
 const SLOT_LABELS: Record<Slot, string> = {
   selfie: 'Photo selfie',
   locationPlan: 'Plan de localisation',
-  idDocument: 'Document d\'identification',
+  idDocument: "Document d'identification (recto)",
+  idDocumentBack: "Document d'identification (verso)",
 };
 
 const SLOT_FACING: Record<Slot, 'user' | 'environment'> = {
   selfie: 'user',
   locationPlan: 'environment',
   idDocument: 'environment',
+  idDocumentBack: 'environment',
 };
+
+const CONTRACT_TYPE_OPTIONS = [
+  { value: 'CDI', label: 'CDI' },
+  { value: 'CDD', label: 'CDD' },
+  { value: 'STAGIAIRE', label: 'Stagiaire' },
+  { value: 'PRESTATAIRE', label: 'Prestataire' },
+];
 
 export function EmployeeFormDialog({ open, onClose, defaultAgency, employee }: Props) {
   const qc = useQueryClient();
@@ -71,8 +87,19 @@ export function EmployeeFormDialog({ open, onClose, defaultAgency, employee }: P
     onError: () => toast.error('Erreur'),
   });
 
-  const { register, handleSubmit, reset, control } = useForm();
-  const onSubmit = (data: any) => mutation.mutate({ ...data, baseSalary: Number(data.baseSalary || 0) });
+  const { register, handleSubmit, reset, control, setValue, formState } = useForm<any>({
+    // defaultValues garantit que `agencyId` est defini des le premier render
+    // (sinon Controller render avec field.value=undefined puis reset n'est pas
+    // toujours respectee par les sous-composants disabled -> formulaire bloque).
+    defaultValues: { agencyId: defaultAgency?.id ?? '' },
+  });
+  const onSubmit = (data: any) => {
+    if (!data.agencyId) {
+      toast.error('Agence manquante');
+      return;
+    }
+    mutation.mutate({ ...data, baseSalary: Number(data.baseSalary || 0) });
+  };
 
   // editableId : ID utilisable pour uploader les photos (employe.id en edition,
   // ou ID retourne par la creation).
@@ -81,6 +108,7 @@ export function EmployeeFormDialog({ open, onClose, defaultAgency, employee }: P
     selfie: null,
     locationPlan: null,
     idDocument: null,
+    idDocumentBack: null,
   });
   const [busy, setBusy] = useState<Slot | null>(null);
 
@@ -94,19 +122,28 @@ export function EmployeeFormDialog({ open, onClose, defaultAgency, employee }: P
         phone: employee.phone ?? '',
         idNumber: employee.idNumber ?? '',
         baseSalary: employee.baseSalary != null ? Number(employee.baseSalary) : undefined,
+        educationLevel: employee.educationLevel ?? '',
+        specialty: employee.specialty ?? '',
+        contractType: employee.contractType ?? 'CDI',
+        managerId: employee.managerId ?? '',
+        isAgencyManager: !!employee.isAgencyManager,
       });
       setEditableId(employee.id);
       setPhotoUrls({
         selfie: employee.selfieUrl ?? null,
         locationPlan: employee.locationPlanUrl ?? null,
         idDocument: employee.idDocumentUrl ?? null,
+        idDocumentBack: employee.idDocumentBackUrl ?? null,
       });
     } else {
-      reset(defaultAgency ? { agencyId: defaultAgency.id } : {});
+      reset(defaultAgency ? { agencyId: defaultAgency.id, contractType: 'CDI', isAgencyManager: false } : { agencyId: '', contractType: 'CDI', isAgencyManager: false });
+      // setValue garantit que la Controller agencyId voit la valeur meme si
+      // disabled (le AppSearchSelect ne peut pas declencher onChange tout seul).
+      if (defaultAgency?.id) setValue('agencyId', defaultAgency.id, { shouldValidate: true });
       setEditableId(null);
-      setPhotoUrls({ selfie: null, locationPlan: null, idDocument: null });
+      setPhotoUrls({ selfie: null, locationPlan: null, idDocument: null, idDocumentBack: null });
     }
-  }, [open, defaultAgency, employee, reset]);
+  }, [open, defaultAgency, employee, reset, setValue]);
 
   const uploadPhoto = async (slot: Slot, file: File) => {
     if (!editableId) {
@@ -148,7 +185,10 @@ export function EmployeeFormDialog({ open, onClose, defaultAgency, employee }: P
 
   const dialogTitle = isEdit ? "Modifier l'employe" : 'Nouvel employe';
   const submitLabel = isEdit ? 'Enregistrer' : editableId ? 'Termine' : 'Creer';
-  const slotKeys: Slot[] = useMemo(() => ['selfie', 'locationPlan', 'idDocument'], []);
+  const slotKeys: Slot[] = useMemo(
+    () => ['selfie', 'locationPlan', 'idDocument', 'idDocumentBack'],
+    [],
+  );
 
   return (
     <AppDialog
@@ -204,7 +244,48 @@ export function EmployeeFormDialog({ open, onClose, defaultAgency, employee }: P
           />
           <AppInput label="N. identite" {...register('idNumber')} />
           <AppInput label="Salaire de base" type="number" {...register('baseSalary')} />
+          <AppInput label="Niveau d'etudes" placeholder="Licence, Master, BAC+3..." {...register('educationLevel')} />
+          <AppInput label="Specialite" placeholder="Logistique, Comptabilite..." {...register('specialty')} />
+          <Controller
+            name="contractType"
+            control={control}
+            render={({ field }) => (
+              <AppSelect
+                label="Type de contrat"
+                options={CONTRACT_TYPE_OPTIONS}
+                value={field.value || 'CDI'}
+                onValueChange={field.onChange}
+              />
+            )}
+          />
+          <Controller
+            name="managerId"
+            control={control}
+            render={({ field }) => (
+              <AppSearchSelect
+                label="Superieur hierarchique (optionnel)"
+                value={field.value as string | null | undefined}
+                onChange={(v) => field.onChange(v ?? '')}
+                search={(q, limit) => searchers.employees(q, limit, defaultAgency?.id ? { agencyId: defaultAgency.id } : undefined)}
+                placeholder="Aucun"
+                clearable
+              />
+            )}
+          />
         </div>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="h-4 w-4 rounded border-gray-300"
+            {...register('isAgencyManager')}
+          />
+          <span>
+            Marquer comme <strong>Chef d&apos;agence</strong>
+            <span className="block text-[11px] text-gray-500">
+              Permet de valider les conges, sanctions et pointages des employes de cette agence.
+            </span>
+          </span>
+        </label>
       </form>
 
       <div className="mt-6 border-t border-gray-100 pt-4">

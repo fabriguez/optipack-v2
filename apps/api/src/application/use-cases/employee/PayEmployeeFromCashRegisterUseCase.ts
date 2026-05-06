@@ -1,4 +1,5 @@
 import { inject, injectable } from 'tsyringe';
+import { generateReference } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
 import { CASH_REGISTER_REPOSITORY, type ICashRegisterRepository } from '../../interfaces/ICashRegisterRepository';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
@@ -6,11 +7,16 @@ import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessErr
 interface PayEmployeeInput {
   /** Periode au format YYYY-MM. Defaut : mois courant. */
   period?: string;
-  /** Montant verse (par defaut : baseSalary de l'employe). */
+  /** Montant brut verse (par defaut : baseSalary de l'employe). Les retenues
+   *  PENDING sont automatiquement appliquees et deduites de ce montant. */
   amount?: number;
   /** Caisse depuis laquelle on paye. Defaut : caisse du jour de l'agence de l'employe. */
   cashRegisterId?: string;
   description?: string;
+  /** Note libre stockee sur le payslip (motif, contexte). */
+  note?: string;
+  /** IDs des retenues a appliquer (defaut: toutes les retenues PENDING de l'employe). */
+  applyDeductionIds?: string[];
 }
 
 /**
@@ -34,8 +40,24 @@ export class PayEmployeeFromCashRegisterUseCase {
     if (!employee.isActive) throw new BusinessError('Employe inactif, paiement impossible.');
 
     const period = input.period ?? this.currentPeriod();
-    const amount = input.amount ?? Number(employee.baseSalary);
-    if (amount <= 0) throw new BusinessError('Le montant doit etre superieur a zero.');
+    const grossAmount = input.amount ?? Number(employee.baseSalary);
+    if (grossAmount <= 0) throw new BusinessError('Le montant doit etre superieur a zero.');
+
+    // Resolution des retenues a appliquer
+    const deductionsQuery = {
+      employeeId,
+      status: 'PENDING' as const,
+      ...(input.applyDeductionIds?.length && { id: { in: input.applyDeductionIds } }),
+    };
+    const pendingDeductions = await prisma.salaryDeduction.findMany({ where: deductionsQuery });
+    const deductionsTotal = pendingDeductions.reduce((sum, d) => sum + Number(d.amount), 0);
+    const netAmount = Math.max(0, grossAmount - deductionsTotal);
+
+    if (netAmount <= 0 && deductionsTotal > 0) {
+      throw new BusinessError(
+        `Les retenues (${deductionsTotal}) atteignent ou depassent le brut (${grossAmount}). Ajustez les retenues a appliquer.`,
+      );
+    }
 
     let cashRegister = input.cashRegisterId
       ? await prisma.agencyCashRegister.findUnique({ where: { id: input.cashRegisterId } })
@@ -46,9 +68,9 @@ export class PayEmployeeFromCashRegisterUseCase {
       cashRegister = await this.cashRegisterRepo.findOrCreateForToday(cashRegister.agencyId);
     }
 
-    if (Number(cashRegister.currentBalance) < amount) {
+    if (Number(cashRegister.currentBalance) < netAmount) {
       throw new BusinessError(
-        `Solde caisse insuffisant (${Number(cashRegister.currentBalance)} dispo) pour payer ${amount}.`,
+        `Solde caisse insuffisant (${Number(cashRegister.currentBalance)} dispo) pour payer ${netAmount}.`,
       );
     }
 
@@ -58,21 +80,43 @@ export class PayEmployeeFromCashRegisterUseCase {
           agencyId: employee.agencyId,
           title: `Salaire - ${employee.fullName}`,
           reason: `Paiement salaire ${period}`,
-          description: input.description ?? null,
+          description: [
+            input.description ?? '',
+            input.note ? `Note: ${input.note}` : '',
+            deductionsTotal > 0 ? `Retenues appliquees: ${deductionsTotal} (${pendingDeductions.length} ligne(s))` : '',
+          ]
+            .filter(Boolean)
+            .join('\n') || null,
           category: 'SALARY',
-          amount,
+          amount: netAmount,
           approvedByUserId: userId,
           period,
           cashRegisterId: cashRegister!.id,
         },
       });
 
-      // Upsert payslip pour la periode (1 par employe/periode)
-      const existing = await tx.payslip.findFirst({
-        where: { employeeId, period },
+      // Bon de decaissement (DisbursementVoucher) immuable pour tracabilite
+      // financiere (chaque mouvement de caisse a son bon).
+      const disbursementCount = await tx.disbursementVoucher.count({
+        where: { agencyId: employee.agencyId },
       });
-      const grossSalary = amount;
-      const netSalary = amount;
+      const disbursement = await tx.disbursementVoucher.create({
+        data: {
+          reference: generateReference('DEC-SAL', disbursementCount + 1),
+          agencyId: employee.agencyId,
+          cashRegisterId: cashRegister!.id,
+          reason: `Salaire ${period} - ${employee.fullName}`,
+          description: input.note ?? input.description ?? null,
+          orderer: 'RH',
+          amount: netAmount,
+          amountInWords: String(netAmount),
+          issuedByUserId: userId,
+          approvedByUserId: userId,
+        },
+      });
+
+      // Upsert payslip pour la periode (1 par employe/periode)
+      const existing = await tx.payslip.findFirst({ where: { employeeId, period } });
       const payslip = existing
         ? await tx.payslip.update({
             where: { id: existing.id },
@@ -80,6 +124,10 @@ export class PayEmployeeFromCashRegisterUseCase {
               isPaid: true,
               paidAt: new Date(),
               paidExpenseId: expense.id,
+              paymentNote: input.note ?? null,
+              deductionsTotal: deductionsTotal,
+              grossSalary: grossAmount,
+              netSalary: netAmount,
             },
           })
         : await tx.payslip.create({
@@ -87,24 +135,45 @@ export class PayEmployeeFromCashRegisterUseCase {
               employeeId,
               period,
               baseSalary: employee.baseSalary,
-              grossSalary,
-              netSalary,
+              grossSalary: grossAmount,
+              netSalary: netAmount,
               isPaid: true,
               paidAt: new Date(),
               paidExpenseId: expense.id,
+              paymentNote: input.note ?? null,
+              deductionsTotal: deductionsTotal,
             },
           });
+
+      // Marque les retenues comme APPLIED (ponctuelles)
+      if (pendingDeductions.length > 0) {
+        await tx.salaryDeduction.updateMany({
+          where: { id: { in: pendingDeductions.map((d) => d.id) } },
+          data: {
+            status: 'APPLIED',
+            appliedAt: new Date(),
+            appliedToExpenseId: expense.id,
+            appliedToPayslipId: payslip.id,
+          },
+        });
+      }
 
       // Debit caisse
       await tx.agencyCashRegister.update({
         where: { id: cashRegister!.id },
         data: {
-          totalExits: { increment: amount },
-          currentBalance: { decrement: amount },
+          totalExits: { increment: netAmount },
+          currentBalance: { decrement: netAmount },
         },
       });
 
-      return { expense, payslip };
+      return {
+        expense,
+        disbursement,
+        payslip,
+        deductionsApplied: pendingDeductions.length,
+        deductionsTotal,
+      };
     });
   }
 

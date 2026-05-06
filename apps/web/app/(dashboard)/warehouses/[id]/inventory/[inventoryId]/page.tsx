@@ -3,7 +3,8 @@
 import { use, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, ScanLine, CheckCircle2, AlertTriangle, Package, Camera } from 'lucide-react';
+import { ArrowLeft, ScanLine, CheckCircle2, AlertTriangle, Package, Camera, MessageSquarePlus, Hand } from 'lucide-react';
+import { AppDialog } from '@/components/ui/AppDialog';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard } from '@/components/ui/AppCard';
@@ -27,15 +28,28 @@ export default function InventoryDetailPage({
   const qc = useQueryClient();
   const [scanInput, setScanInput] = useState('');
   const [scanBusy, setScanBusy] = useState(false);
+  const [scanObservation, setScanObservation] = useState('');
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [closing, setClosing] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
+  // Marquage manuel
+  const [manualTarget, setManualTarget] = useState<any | null>(null);
+  const [manualObservation, setManualObservation] = useState('');
+  const [manualBusy, setManualBusy] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['inventory', inventoryId],
     queryFn: () => apiClient.get(`/warehouses/inventories/${inventoryId}`).then((r) => r.data),
     enabled: !!inventoryId,
   });
+
+  // Liste des colis du magasin pas encore inventories.
+  const { data: uninventoriedData } = useQuery({
+    queryKey: ['inventory', inventoryId, 'uninventoried'],
+    queryFn: () => apiClient.get(`/warehouses/inventories/${inventoryId}/uninventoried`).then((r) => r.data),
+    enabled: !!inventoryId,
+  });
+  const uninventoried: any[] = uninventoriedData?.data || [];
 
   const inventory = data?.data;
   if (isLoading) return <DashboardSkeleton />;
@@ -56,17 +70,40 @@ export default function InventoryDetailPage({
     try {
       const res = await apiClient.post(`/warehouses/inventories/${inventoryId}/scan`, {
         trackingNumber: v,
+        observation: scanObservation.trim() || undefined,
       });
       const status = res.data.data.status;
       if (status === 'scanned') toast.success(`Scanne : ${res.data.data.parcel.trackingNumber}`);
       else if (status === 'extra') toast.warning(`Inattendu : ${res.data.data.parcel.trackingNumber}`);
       else if (status === 'already_scanned') toast.info('Deja scanne');
       setScanInput('');
+      setScanObservation('');
       qc.invalidateQueries({ queryKey: ['inventory', inventoryId] });
+      qc.invalidateQueries({ queryKey: ['inventory', inventoryId, 'uninventoried'] });
     } catch (e: any) {
       toast.error(e?.response?.data?.message || 'Colis introuvable');
     }
     setScanBusy(false);
+  };
+
+  const handleManualMark = async () => {
+    if (!manualTarget) return;
+    setManualBusy(true);
+    try {
+      await apiClient.post(`/warehouses/inventories/${inventoryId}/mark`, {
+        parcelId: manualTarget.id,
+        present: true,
+        observation: manualObservation.trim() || undefined,
+      });
+      toast.success(`Marque present sans scan : ${manualTarget.trackingNumber}`);
+      setManualTarget(null);
+      setManualObservation('');
+      qc.invalidateQueries({ queryKey: ['inventory', inventoryId] });
+      qc.invalidateQueries({ queryKey: ['inventory', inventoryId, 'uninventoried'] });
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Erreur');
+    }
+    setManualBusy(false);
   };
 
   const handleScan = () => submitScan(scanInput);
@@ -140,7 +177,7 @@ export default function InventoryDetailPage({
             <h3 className="text-base font-semibold text-gray-900 mb-3">Scanner un colis</h3>
             <div className="flex gap-2">
               <AppInput
-                placeholder="Scanner ou coller un QR / numero de tracking..."
+                placeholder="Scanner ou coller un QR / code-barres / numero de tracking..."
                 value={scanInput}
                 onChange={(e) => setScanInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleScan(); } }}
@@ -155,12 +192,70 @@ export default function InventoryDetailPage({
                 Valider
               </AppButton>
             </div>
+            <div className="mt-2">
+              <AppInput
+                label="Observation (optionnelle)"
+                placeholder="Ex : emballage abime, poids different..."
+                value={scanObservation}
+                onChange={(e) => setScanObservation(e.target.value)}
+              />
+            </div>
             <div className="mt-4 flex justify-end">
               <AppButton variant="outline" onClick={() => setShowCloseConfirm(true)}>
                 <CheckCircle2 className="h-4 w-4" />
                 Cloturer l&apos;inventaire
               </AppButton>
             </div>
+          </AppCard>
+        )}
+
+        {/* Liste des colis non inventories : marquage rapide manuel */}
+        {isOpen && (
+          <AppCard>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="flex items-center gap-2 text-base font-semibold text-gray-900">
+                <Package className="h-4 w-4 text-amber-600" />
+                Colis non inventories ({uninventoried.length})
+              </h3>
+              <p className="text-xs text-gray-500">
+                Cliquez sur un colis pour le marquer present manuellement (sans scan).
+              </p>
+            </div>
+            {uninventoried.length === 0 ? (
+              <p className="py-6 text-center text-sm text-gray-400">
+                Tous les colis du magasin ont ete inventories.
+              </p>
+            ) : (
+              <div className="max-h-80 overflow-y-auto">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-gray-50 text-left text-xs text-gray-500">
+                    <tr>
+                      <th className="p-2">Tracking</th>
+                      <th className="p-2">Designation</th>
+                      <th className="p-2">Categorie</th>
+                      <th className="p-2">Client</th>
+                      <th className="p-2 text-right"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {uninventoried.map((p) => (
+                      <tr key={p.id} className="hover:bg-gray-50">
+                        <td className="p-2 font-mono text-xs font-bold text-primary-700">{p.trackingNumber}</td>
+                        <td className="p-2">{p.designation}</td>
+                        <td className="p-2 text-gray-500">{p.category}</td>
+                        <td className="p-2 text-gray-500">{p.client?.fullName ?? '-'}</td>
+                        <td className="p-2 text-right">
+                          <AppButton size="sm" variant="outline" onClick={() => { setManualTarget(p); setManualObservation(''); }}>
+                            <Hand className="h-3.5 w-3.5" />
+                            Marquer present
+                          </AppButton>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </AppCard>
         )}
 
@@ -174,8 +269,21 @@ export default function InventoryDetailPage({
               {matched.length === 0 && <li className="py-2 text-sm text-gray-400">Aucun colis</li>}
               {matched.map((it) => (
                 <li key={it.id} className="py-2 text-sm">
-                  <p className="font-mono text-xs text-primary-700 font-bold">{it.parcel?.trackingNumber}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-mono text-xs text-primary-700 font-bold">{it.parcel?.trackingNumber}</p>
+                    {it.markedManually && (
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700">
+                        Manuel (sans scan)
+                      </span>
+                    )}
+                  </div>
                   <p className="text-gray-600">{it.parcel?.designation}</p>
+                  {it.observation && (
+                    <p className="mt-0.5 text-xs italic text-gray-500">
+                      <MessageSquarePlus className="inline h-3 w-3 mr-1" />
+                      {it.observation}
+                    </p>
+                  )}
                 </li>
               ))}
             </ul>
@@ -235,6 +343,45 @@ export default function InventoryDetailPage({
         }}
         title="Scanner pour inventorier un colis"
       />
+
+      {/* Marquage manuel sans scan */}
+      <AppDialog
+        open={!!manualTarget}
+        onClose={() => setManualTarget(null)}
+        title={manualTarget ? `Marquer present : ${manualTarget.trackingNumber}` : 'Marquage manuel'}
+        size="md"
+        footer={
+          <>
+            <AppButton variant="ghost" onClick={() => setManualTarget(null)}>Annuler</AppButton>
+            <AppButton onClick={handleManualMark} loading={manualBusy}>
+              <Hand className="h-4 w-4" />
+              Confirmer (sans scan)
+            </AppButton>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
+            Ce colis sera marque present <strong>sans avoir ete scanne</strong>. Il sera flagge
+            &quot;Manuel (sans scan)&quot; dans le rapport. Utilisez plutot le scanner si possible.
+          </div>
+          {manualTarget && (
+            <div className="rounded-xl bg-gray-50 p-3">
+              <p className="font-mono text-xs font-bold text-primary-700">{manualTarget.trackingNumber}</p>
+              <p className="text-sm text-gray-700">{manualTarget.designation}</p>
+              <p className="text-xs text-gray-500">
+                {manualTarget.client?.fullName} &middot; {manualTarget.category}
+              </p>
+            </div>
+          )}
+          <AppInput
+            label="Observation (recommandee)"
+            placeholder="Pourquoi sans scan ? Etat du colis ?"
+            value={manualObservation}
+            onChange={(e) => setManualObservation(e.target.value)}
+          />
+        </div>
+      </AppDialog>
     </PageTransition>
   );
 }

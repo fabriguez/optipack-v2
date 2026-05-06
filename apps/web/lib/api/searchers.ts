@@ -73,6 +73,25 @@ export const searchers = {
     return items.map((a) => ({ value: a.id, label: a.name, sublabel: a.city }));
   },
 
+  employees: async (q: string, limit = DEFAULT_LIMIT, extra?: Record<string, unknown>): Promise<SearchOption[]> => {
+    // Recherche dans le scope de l'utilisateur (toutes ses agences). Si extra.agencyId
+    // est fourni, on filtre cote API via l'endpoint scope par agence.
+    const endpoint = extra?.agencyId
+      ? `/employees/agency/${extra.agencyId}`
+      : '/employees';
+    const items = await searchPaginated<{
+      id: string;
+      fullName: string;
+      position: string;
+      agency?: { name: string };
+    }>(endpoint, q, limit);
+    return items.map((e) => ({
+      value: e.id,
+      label: e.fullName,
+      sublabel: [e.position, e.agency?.name].filter(Boolean).join(' - '),
+    }));
+  },
+
   transitRoutes: async (q: string, limit = DEFAULT_LIMIT, extra?: Record<string, unknown>): Promise<SearchOption[]> => {
     const items = await searchPaginated<{
       id: string;

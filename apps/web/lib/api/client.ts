@@ -55,11 +55,25 @@ apiClient.interceptors.response.use(
     if (status === 401 && original && !original._retry && typeof window !== 'undefined') {
       original._retry = true;
       try {
+        // Force le callback jwt() cote NextAuth a invalider accessTokenExpiresAt
+        // et a rejouer /auth/refresh, sinon il croit le token encore valide
+        // (cas : server restart, secret rotate, exp local pas synchro avec API).
+        try {
+          const { getSession: _gs } = await import('next-auth/react');
+          await fetch('/api/auth/session?update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ forceRefresh: true }),
+          }).catch(() => {});
+          await _gs();
+        } catch {}
+
         const session = await getSession();
+        const oldToken = (original.headers?.Authorization as string | undefined)?.replace(/^Bearer\s+/i, '');
         const newToken = (session as any)?.accessToken;
         const sessionError = (session as any)?.error;
 
-        if (newToken && !sessionError) {
+        if (newToken && !sessionError && newToken !== oldToken) {
           original.headers = {
             ...(original.headers || {}),
             Authorization: `Bearer ${newToken}`,

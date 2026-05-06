@@ -1,10 +1,22 @@
 'use client';
 
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppBadge } from '@/components/ui/AppBadge';
+import { AppInput } from '@/components/ui/AppInput';
+import { AppButton } from '@/components/ui/AppButton';
 import { formatAmount } from '@transitsoftservices/shared';
+
+function defaultFromDate(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - 30);
+  return d.toISOString().slice(0, 10);
+}
+function todayDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
 
 const METHOD_LABELS: Record<string, string> = {
   CASH: 'Especes',
@@ -42,9 +54,20 @@ interface Props {
 }
 
 export function AgencyBreakdownTab({ agencyId }: Props) {
-  const { data, isLoading } = useQuery({
-    queryKey: ['agencies', agencyId, 'breakdown'],
-    queryFn: () => apiClient.get(`/agencies/${agencyId}/breakdown`).then((r) => r.data),
+  const [from, setFrom] = useState<string>(defaultFromDate());
+  const [to, setTo] = useState<string>(todayDate());
+
+  const { data, isLoading, refetch, isFetching } = useQuery({
+    queryKey: ['agencies', agencyId, 'breakdown', from, to],
+    queryFn: () =>
+      apiClient
+        .get(`/agencies/${agencyId}/breakdown`, {
+          params: {
+            from: new Date(from).toISOString(),
+            to: new Date(`${to}T23:59:59.999Z`).toISOString(),
+          },
+        })
+        .then((r) => r.data),
     enabled: !!agencyId,
   });
 
@@ -58,13 +81,50 @@ export function AgencyBreakdownTab({ agencyId }: Props) {
 
   return (
     <div className="space-y-6">
+      <AppCard>
+        <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <p className="text-xs text-gray-500 mb-1">Du</p>
+            <AppInput type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+          </div>
+          <div>
+            <p className="text-xs text-gray-500 mb-1">Au</p>
+            <AppInput type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+          </div>
+          <AppButton variant="outline" size="sm" onClick={() => refetch()} loading={isFetching}>
+            Appliquer
+          </AppButton>
+          <div className="ml-auto flex gap-2 text-xs">
+            {[
+              { label: '7 j', days: 7 },
+              { label: '30 j', days: 30 },
+              { label: '90 j', days: 90 },
+            ].map((p) => (
+              <button
+                key={p.days}
+                type="button"
+                onClick={() => {
+                  const d = new Date();
+                  d.setDate(d.getDate() - p.days);
+                  setFrom(d.toISOString().slice(0, 10));
+                  setTo(todayDate());
+                }}
+                className="rounded-lg border border-gray-200 px-2 py-1 hover:bg-gray-50"
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </AppCard>
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <AppCard>
-          <p className="text-xs uppercase tracking-wider text-gray-400">Paiements (30 j)</p>
+          <p className="text-xs uppercase tracking-wider text-gray-400">Paiements</p>
           <p className="mt-1 text-2xl font-bold text-green-600">+{formatAmount(breakdown.paymentsTotal)}</p>
         </AppCard>
         <AppCard>
-          <p className="text-xs uppercase tracking-wider text-gray-400">Decaissements (30 j)</p>
+          <p className="text-xs uppercase tracking-wider text-gray-400">Decaissements</p>
           <p className="mt-1 text-2xl font-bold text-red-600">-{formatAmount(breakdown.disbursementsTotal)}</p>
         </AppCard>
       </div>
