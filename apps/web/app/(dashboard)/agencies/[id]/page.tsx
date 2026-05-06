@@ -32,6 +32,9 @@ import { formatAmount, formatDate } from '@transitsoftservices/shared';
 import { AgencyChargesTab } from './AgencyChargesTab';
 import { AgencyBreakdownTab } from './AgencyBreakdownTab';
 import { AgencyDailyReportsTab } from './AgencyDailyReportsTab';
+import { AgencyAttendanceTab } from './AgencyAttendanceTab';
+import { AgencyLeavesTab } from './AgencyLeavesTab';
+import { AgencyReviewConfigTab } from './AgencyReviewConfigTab';
 import { AgencyAvatar } from '@/components/shared/AgencyAvatar';
 import { ImageDropzone } from '@/components/shared/ImageDropzone';
 import { AgencyOpeningHoursEditor } from '@/components/shared/AgencyOpeningHoursEditor';
@@ -40,7 +43,7 @@ import { XlsxExportButton } from '@/components/shared/XlsxExportButton';
 import { AppDialog } from '@/components/ui/AppDialog';
 import { agenciesApi } from '@/lib/api/agencies';
 import { useQueryClient } from '@tanstack/react-query';
-import { Camera, Clock, FileText, BarChart3, Upload } from 'lucide-react';
+import { Camera, Clock, FileText, BarChart3, Upload, ListChecks, Plane, Star } from 'lucide-react';
 
 export default function AgencyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -349,6 +352,9 @@ export default function AgencyDetailPage({ params }: { params: Promise<{ id: str
           { value: 'breakdown', label: 'Repartition', icon: <BarChart3 className="h-4 w-4" />, content: <AgencyBreakdownTab agencyId={id} /> },
           { value: 'charges', label: 'Charges', icon: <Wallet className="h-4 w-4" />, content: <AgencyChargesTab agencyId={id} /> },
           { value: 'personnel', label: 'Personnel', icon: <UserCog className="h-4 w-4" />, content: personnelTab },
+          { value: 'attendance', label: 'Pointage', icon: <ListChecks className="h-4 w-4" />, content: <AgencyAttendanceTab agencyId={id} /> },
+          { value: 'leaves', label: 'Conges', icon: <Plane className="h-4 w-4" />, content: <AgencyLeavesTab agencyId={id} /> },
+          { value: 'review-config', label: 'Grille eval.', icon: <Star className="h-4 w-4" />, content: <AgencyReviewConfigTab agencyId={id} /> },
           { value: 'reports', label: 'Observations', icon: <FileText className="h-4 w-4" />, content: <AgencyDailyReportsTab agencyId={id} /> },
           { value: 'hours', label: 'Horaires', icon: <Clock className="h-4 w-4" />, content: <AgencyOpeningHoursEditor agencyId={id} /> },
         ]} />

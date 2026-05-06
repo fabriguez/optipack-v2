@@ -22,6 +22,8 @@ import { EmployeeAttendanceTab } from './EmployeeAttendanceTab';
 import { EmployeeLeavesTab } from './EmployeeLeavesTab';
 import { EmployeeDisciplineTab } from './EmployeeDisciplineTab';
 import { EmployeeReviewsTab } from './EmployeeReviewsTab';
+import { EmployeeDocumentsTab } from './EmployeeDocumentsTab';
+import { FileText } from 'lucide-react';
 
 export default function EmployeeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -134,6 +136,7 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
 
         <AppTabs tabs={[
           { value: 'profile', label: 'Profil', icon: <UserCircle className="h-4 w-4" />, content: profileTab },
+          { value: 'documents', label: 'Documents', icon: <FileText className="h-4 w-4" />, content: <EmployeeDocumentsTab employeeId={id} /> },
           { value: 'shifts', label: 'Planning', icon: <Clock className="h-4 w-4" />, content: <EmployeeShiftsTab employeeId={id} /> },
           { value: 'attendance', label: 'Pointage', icon: <ListChecks className="h-4 w-4" />, content: <EmployeeAttendanceTab employeeId={id} /> },
           { value: 'leaves', label: 'Conges', icon: <Plane className="h-4 w-4" />, content: <EmployeeLeavesTab employeeId={id} /> },
