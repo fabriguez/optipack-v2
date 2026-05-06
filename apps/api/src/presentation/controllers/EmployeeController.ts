@@ -18,6 +18,33 @@ import {
   DeleteEmployeeDocumentUseCase,
 } from '../../application/use-cases/employee/EmployeeDocumentUseCases';
 import { SetEmployeeManagerFlagUseCase } from '../../application/use-cases/employee/SetEmployeeManagerFlagUseCase';
+import {
+  SetEmployeeShiftsUseCase,
+  GetEmployeeShiftsUseCase,
+} from '../../application/use-cases/employee/EmployeeShiftUseCases';
+import {
+  MarkAttendanceUseCase,
+  ListEmployeeAttendanceUseCase,
+  ListAgencyAttendanceForDateUseCase,
+} from '../../application/use-cases/employee/AttendanceUseCases';
+import {
+  RequestEmployeeLeaveUseCase,
+  ValidateEmployeeLeaveUseCase,
+  ListEmployeeLeavesUseCase,
+  ListAgencyPendingLeavesUseCase,
+  CancelEmployeeLeaveUseCase,
+} from '../../application/use-cases/employee/EmployeeLeaveUseCases';
+import {
+  CreateEmployeeSanctionUseCase,
+  ListEmployeeSanctionsUseCase,
+  TerminateEmployeeContractUseCase,
+} from '../../application/use-cases/employee/EmployeeSanctionUseCases';
+import {
+  CreateEmployeeReviewUseCase,
+  ListEmployeeReviewsUseCase,
+  GetAgencyReviewConfigUseCase,
+  SetAgencyReviewConfigUseCase,
+} from '../../application/use-cases/employee/EmployeeReviewUseCases';
 import { EMPLOYEE_REPOSITORY } from '../../application/interfaces/IEmployeeRepository';
 import { NotFoundError } from '../../domain/errors/BusinessError';
 
@@ -226,6 +253,201 @@ export class EmployeeController {
       const useCase = container.resolve(SetEmployeeManagerFlagUseCase);
       const isManager = !!req.body?.isAgencyManager;
       const item = await useCase.execute(req.params.id, isManager);
+      res.json({ success: true, data: item });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  // ----- Planning hebdo (shifts) -----
+
+  static async getShifts(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(GetEmployeeShiftsUseCase);
+      const items = await useCase.execute(req.params.id);
+      res.json({ success: true, data: items });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async setShifts(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(SetEmployeeShiftsUseCase);
+      const items = await useCase.execute(req.params.id, Array.isArray(req.body?.shifts) ? req.body.shifts : []);
+      res.json({ success: true, data: items });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  // ----- Pointage (attendance) -----
+
+  static async markAttendance(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(MarkAttendanceUseCase);
+      const item = await useCase.execute(
+        { employeeId: req.params.id, ...req.body },
+        req.user!.userId,
+      );
+      res.status(201).json({ success: true, data: item });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async listAttendance(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(ListEmployeeAttendanceUseCase);
+      const from = req.query.from ? new Date(req.query.from as string) : undefined;
+      const to = req.query.to ? new Date(req.query.to as string) : undefined;
+      const items = await useCase.execute(req.params.id, from, to);
+      res.json({ success: true, data: items });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async listAgencyAttendance(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(ListAgencyAttendanceForDateUseCase);
+      const date = req.query.date ? new Date(req.query.date as string) : new Date();
+      const result = await useCase.execute(req.params.agencyId, date);
+      res.json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  // ----- Conges -----
+
+  static async requestLeave(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(RequestEmployeeLeaveUseCase);
+      const item = await useCase.execute({ employeeId: req.params.id, ...req.body }, req.user!.userId);
+      res.status(201).json({ success: true, data: item });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async listEmployeeLeaves(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(ListEmployeeLeavesUseCase);
+      const items = await useCase.execute(req.params.id);
+      res.json({ success: true, data: items });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async listAgencyPendingLeaves(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(ListAgencyPendingLeavesUseCase);
+      const items = await useCase.execute(req.params.agencyId);
+      res.json({ success: true, data: items });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async validateLeave(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(ValidateEmployeeLeaveUseCase);
+      const item = await useCase.execute(
+        req.params.leaveId,
+        req.body?.decision === 'REJECTED' ? 'REJECTED' : 'APPROVED',
+        req.user!.userId,
+        req.body?.comment,
+      );
+      res.json({ success: true, data: item });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async cancelLeave(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(CancelEmployeeLeaveUseCase);
+      const item = await useCase.execute(req.params.leaveId);
+      res.json({ success: true, data: item });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  // ----- Sanctions -----
+
+  static async createSanction(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(CreateEmployeeSanctionUseCase);
+      const item = await useCase.execute({ employeeId: req.params.id, ...req.body }, req.user!.userId);
+      res.status(201).json({ success: true, data: item });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async listSanctions(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(ListEmployeeSanctionsUseCase);
+      const items = await useCase.execute(req.params.id);
+      res.json({ success: true, data: items });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async terminateContract(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(TerminateEmployeeContractUseCase);
+      const item = await useCase.execute({ employeeId: req.params.id, ...req.body }, req.user!.userId);
+      res.json({ success: true, data: item });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  // ----- Evaluations -----
+
+  static async createReview(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(CreateEmployeeReviewUseCase);
+      const item = await useCase.execute({ employeeId: req.params.id, ...req.body }, req.user!.userId);
+      res.status(201).json({ success: true, data: item });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async listReviews(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(ListEmployeeReviewsUseCase);
+      const items = await useCase.execute(req.params.id);
+      res.json({ success: true, data: items });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async getAgencyReviewConfig(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(GetAgencyReviewConfigUseCase);
+      const item = await useCase.execute(req.params.agencyId);
+      res.json({ success: true, data: item });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async setAgencyReviewConfig(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(SetAgencyReviewConfigUseCase);
+      const item = await useCase.execute(
+        req.params.agencyId,
+        Array.isArray(req.body?.criteria) ? req.body.criteria : [],
+        req.body?.cadence ?? 'QUARTERLY',
+      );
       res.json({ success: true, data: item });
     } catch (err) {
       next(err);

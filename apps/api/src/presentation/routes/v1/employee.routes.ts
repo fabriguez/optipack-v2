@@ -37,6 +37,33 @@ router.delete('/documents/:documentId', EmployeeController.deleteDocument);
 // Promotion / retrogradation chef d'agence
 router.post('/:id/set-manager-flag', EmployeeController.setManagerFlag);
 
+// Planning hebdomadaire (shifts)
+router.get('/:id/shifts', EmployeeController.getShifts);
+router.put('/:id/shifts', EmployeeController.setShifts);
+
+// Pointage (attendance)
+router.get('/:id/attendance', EmployeeController.listAttendance);
+router.post('/:id/attendance', EmployeeController.markAttendance);
+router.get('/agency/:agencyId/attendance/today', EmployeeController.listAgencyAttendance);
+
+// Conges
+router.get('/:id/leaves', EmployeeController.listEmployeeLeaves);
+router.post('/:id/leaves', EmployeeController.requestLeave);
+router.post('/leaves/:leaveId/validate', EmployeeController.validateLeave);
+router.post('/leaves/:leaveId/cancel', EmployeeController.cancelLeave);
+router.get('/agency/:agencyId/leaves/pending', EmployeeController.listAgencyPendingLeaves);
+
+// Sanctions et rupture de contrat
+router.get('/:id/sanctions', EmployeeController.listSanctions);
+router.post('/:id/sanctions', EmployeeController.createSanction);
+router.post('/:id/terminate', EmployeeController.terminateContract);
+
+// Evaluations
+router.get('/:id/reviews', EmployeeController.listReviews);
+router.post('/:id/reviews', EmployeeController.createReview);
+router.get('/agency/:agencyId/review-config', EmployeeController.getAgencyReviewConfig);
+router.put('/agency/:agencyId/review-config', EmployeeController.setAgencyReviewConfig);
+
 // Photo upload / delete (auth requise). slot in {selfie, locationPlan, idDocument, idDocumentBack}.
 router.post('/:id/image/:slot', uploadImageMiddleware, EmployeeController.uploadImage);
 router.delete('/:id/image/:slot', EmployeeController.deleteImage);

@@ -96,6 +96,7 @@ model Agency {
   notifications         Notification[]
   charges               AgencyCharge[]
   dailyReports          AgencyDailyReport[]
+  reviewConfig          AgencyReviewConfig?   @relation("AgencyReviewConfig")
 
   @@index([organizationId])
   @@index([city])
@@ -334,20 +335,20 @@ enum WarehouseInventoryStatus {
 // expected = colis dans le stock theorique au moment du demarrage
 // scanned  = a-t-il ete vu pendant l'inventaire
 model WarehouseInventoryItem {
-  id          String    @id @default(uuid())
-  inventoryId String
-  parcelId    String
-  expected    Boolean   @default(true)
-  scanned     Boolean   @default(false)
-  scannedAt   DateTime?
-  scannedById String?
+  id             String    @id @default(uuid())
+  inventoryId    String
+  parcelId       String
+  expected       Boolean   @default(true)
+  scanned        Boolean   @default(false)
+  scannedAt      DateTime?
+  scannedById    String?
   // True si le colis a ete marque present manuellement (sans scan).
   // Utile pour distinguer le check physique camera-confirm vs cocher a la main.
-  markedManually Boolean @default(false)
+  markedManually Boolean   @default(false)
   // Observation libre laissee au moment du marquage (ex : "emballage abime",
   // "client present", "manque etiquette").
-  observation String?
-  comment     String?
+  observation    String?
+  comment        String?
 
   inventory WarehouseInventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
   parcel    Parcel             @relation(fields: [parcelId], references: [id])
@@ -410,6 +411,12 @@ model User {
   // Lien optionnel 1-1 avec un Employee (pour la connexion personnel/chef d'agence)
   employee                Employee?                     @relation("EmployeeUser")
   salaryDeductionsCreated SalaryDeduction[]             @relation("SalaryDeductionCreator")
+  attendancesMarked       Attendance[]                  @relation("AttendanceMarker")
+  leavesValidated         EmployeeLeave[]               @relation("LeaveValidator")
+  leavesRequested         EmployeeLeave[]               @relation("LeaveRequester")
+  sanctionsDecided        EmployeeSanction[]            @relation("SanctionDecider")
+  terminationsDecided     ContractTermination[]         @relation("TerminationDecider")
+  reviewsAuthored         EmployeeReview[]              @relation("ReviewAuthor")
 
   @@index([organizationId])
   @@index([email])
@@ -498,13 +505,19 @@ model Employee {
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @updatedAt
 
-  agency     Agency             @relation(fields: [agencyId], references: [id])
-  manager    Employee?          @relation("EmployeeManager", fields: [managerId], references: [id])
-  reports    Employee[]         @relation("EmployeeManager")
-  user       User?              @relation("EmployeeUser", fields: [userId], references: [id])
-  payslips   Payslip[]
-  documents  EmployeeDocument[]
-  deductions SalaryDeduction[]
+  agency      Agency               @relation(fields: [agencyId], references: [id])
+  manager     Employee?            @relation("EmployeeManager", fields: [managerId], references: [id])
+  reports     Employee[]           @relation("EmployeeManager")
+  user        User?                @relation("EmployeeUser", fields: [userId], references: [id])
+  payslips    Payslip[]
+  documents   EmployeeDocument[]
+  deductions  SalaryDeduction[]
+  shifts      EmployeeShift[]
+  attendances Attendance[]
+  leaves      EmployeeLeave[]
+  sanctions   EmployeeSanction[]
+  termination ContractTermination?
+  reviews     EmployeeReview[]
 
   @@index([agencyId])
   @@index([managerId])
@@ -583,6 +596,222 @@ enum SalaryDeductionStatus {
   PENDING
   APPLIED
   CANCELLED
+}
+
+// ============================================================
+// PLANNING / POINTAGE / RH
+// ============================================================
+
+// Planning hebdomadaire recurrent d'un employe.
+// dayOfWeek 0..6 (dimanche..samedi). Plusieurs creneaux possibles par jour.
+model EmployeeShift {
+  id         String   @id @default(uuid())
+  employeeId String
+  dayOfWeek  Int
+  // HH:mm 24h
+  startTime  String
+  endTime    String
+  // Si false : repos (pas de service ce jour). Surcharge le planning agence.
+  isWorking  Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@index([employeeId, dayOfWeek])
+  @@map("employee_shifts")
+}
+
+// Pointage : 1 ligne par employe et par jour.
+// Marque par un superviseur (chef d'agence, admin).
+model Attendance {
+  id             String           @id @default(uuid())
+  employeeId     String
+  date           DateTime         @db.Date
+  status         AttendanceStatus
+  // Heure d'arrivee (si LATE/PRESENT) en HH:mm
+  checkInTime    String?
+  // Heure de depart (optionnelle)
+  checkOutTime   String?
+  // Minutes de retard (calculable depuis startTime planifie - checkInTime)
+  lateMinutes    Int?
+  // Motif libre (raison absence/retard)
+  reason         String?
+  // Note libre additionnelle
+  note           String?
+  // Auto = marque par cron de fin de journee (si aucun pointage), Manual sinon
+  source         AttendanceSource @default(MANUAL)
+  markedByUserId String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  markedBy User?    @relation("AttendanceMarker", fields: [markedByUserId], references: [id])
+
+  @@unique([employeeId, date])
+  @@index([employeeId])
+  @@index([date])
+  @@index([status])
+  @@map("attendances")
+}
+
+enum AttendanceStatus {
+  PRESENT
+  LATE
+  ABSENT
+  ON_LEAVE
+  HOLIDAY
+}
+
+enum AttendanceSource {
+  MANUAL
+  AUTO
+}
+
+// Demande de conges : workflow pending -> approved/rejected par chef/admin.
+model EmployeeLeave {
+  id                String              @id @default(uuid())
+  employeeId        String
+  type              EmployeeLeaveType
+  fromDate          DateTime            @db.Date
+  toDate            DateTime            @db.Date
+  reason            String?
+  status            EmployeeLeaveStatus @default(PENDING)
+  validatedByUserId String?
+  validationComment String?
+  validatedAt       DateTime?
+  // Demandeur : peut etre l'employe lui-meme (via portail) ou un superviseur qui le declare
+  requestedByUserId String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  validatedBy User?    @relation("LeaveValidator", fields: [validatedByUserId], references: [id])
+  requestedBy User?    @relation("LeaveRequester", fields: [requestedByUserId], references: [id])
+
+  @@index([employeeId])
+  @@index([status])
+  @@index([fromDate, toDate])
+  @@map("employee_leaves")
+}
+
+enum EmployeeLeaveType {
+  PAID
+  UNPAID
+  SICK
+  MATERNITY
+  PATERNITY
+  EXCEPTIONAL
+}
+
+enum EmployeeLeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+// Sanctions disciplinaires : avertissement, mise a pied (avec duree), licenciement.
+model EmployeeSanction {
+  id              String               @id @default(uuid())
+  employeeId      String
+  type            EmployeeSanctionType
+  reason          String
+  // Date d'effet (debut)
+  effectiveFrom   DateTime
+  // Date de fin (mise a pied avec duree). Null pour avertissement / licenciement.
+  effectiveTo     DateTime?
+  // User qui a decide (chef d'agence, admin)
+  decidedByUserId String?
+  // Documents joints (PV, courrier, ...)
+  attachmentUrl   String?
+  attachmentKey   String?
+  createdAt       DateTime             @default(now())
+
+  employee  Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  decidedBy User?    @relation("SanctionDecider", fields: [decidedByUserId], references: [id])
+
+  @@index([employeeId])
+  @@index([type])
+  @@map("employee_sanctions")
+}
+
+enum EmployeeSanctionType {
+  WARNING
+  SUSPENSION
+  PAY_FREEZE
+  DEMOTION
+}
+
+// Rupture de contrat : demission, licenciement, fin CDD, ...
+// Quand crée, cela passe Employee.isActive a false et set Employee.endDate.
+model ContractTermination {
+  id              String                  @id @default(uuid())
+  employeeId      String                  @unique
+  type            ContractTerminationType
+  reason          String
+  effectiveDate   DateTime                @db.Date
+  decidedByUserId String?
+  // Documents joints (lettre de demission, lettre de licenciement, ...)
+  attachmentUrl   String?
+  attachmentKey   String?
+  createdAt       DateTime                @default(now())
+
+  employee  Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  decidedBy User?    @relation("TerminationDecider", fields: [decidedByUserId], references: [id])
+
+  @@index([employeeId])
+  @@map("contract_terminations")
+}
+
+enum ContractTerminationType {
+  RESIGNATION // demission
+  DISMISSAL // licenciement
+  END_OF_CONTRACT // fin CDD/stage
+  MUTUAL_AGREEMENT // rupture conventionnelle
+  RETIREMENT
+  OTHER
+}
+
+// Evaluation periodique : configurable par agence (criteres) ; on garde un payload JSON
+// flexible pour eviter d'imposer un format rigide.
+model EmployeeReview {
+  id             String   @id @default(uuid())
+  employeeId     String
+  // Periode evaluee : libellé libre (ex : "Q1-2026", "2026-04", "Annuel 2025")
+  period         String
+  // Note globale optionnelle (ex : 0..20 ou 0..100)
+  score          Decimal? @db.Decimal(5, 2)
+  // Synthese textuelle libre
+  summary        String?
+  // Criteres notes : Json { critereName: { score, comment } }
+  criteria       Json?
+  reviewerUserId String?
+  createdAt      DateTime @default(now())
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  reviewer User?    @relation("ReviewAuthor", fields: [reviewerUserId], references: [id])
+
+  @@index([employeeId])
+  @@index([period])
+  @@map("employee_reviews")
+}
+
+// Configuration de la grille d'evaluation par agence (criteres)
+model AgencyReviewConfig {
+  id        String   @id @default(uuid())
+  agencyId  String   @unique
+  // Liste de criteres. Json [{ key, label, max }]
+  criteria  Json
+  // "MONTHLY" / "QUARTERLY" / "YEARLY"
+  cadence   String   @default("QUARTERLY")
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  agency Agency @relation("AgencyReviewConfig", fields: [agencyId], references: [id], onDelete: Cascade)
+
+  @@map("agency_review_configs")
 }
 
 model Payslip {

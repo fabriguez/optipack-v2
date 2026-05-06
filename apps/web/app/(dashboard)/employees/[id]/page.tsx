@@ -3,20 +3,30 @@
 import { use, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, UserCircle, Building2, Phone, CreditCard, Calendar, Briefcase, Hash, Edit } from 'lucide-react';
+import {
+  ArrowLeft, UserCircle, Building2, Phone, CreditCard, Calendar, Briefcase, Hash, Edit,
+  Clock, ListChecks, Plane, Gavel, Star,
+} from 'lucide-react';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppBadge } from '@/components/ui/AppBadge';
 import { AppButton } from '@/components/ui/AppButton';
+import { AppTabs } from '@/components/ui/AppTabs';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
 import { EmployeeFormDialog } from '../EmployeeFormDialog';
+import { EmployeeShiftsTab } from './EmployeeShiftsTab';
+import { EmployeeAttendanceTab } from './EmployeeAttendanceTab';
+import { EmployeeLeavesTab } from './EmployeeLeavesTab';
+import { EmployeeDisciplineTab } from './EmployeeDisciplineTab';
+import { EmployeeReviewsTab } from './EmployeeReviewsTab';
 
 export default function EmployeeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const [showEdit, setShowEdit] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['employees', id],
@@ -24,16 +34,78 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
     enabled: !!id,
   });
 
-  const [showEdit, setShowEdit] = useState(false);
-
   const employee = data?.data;
   if (isLoading) return <DashboardSkeleton />;
   if (!employee) return <p className="p-6 text-gray-500">Employe introuvable</p>;
 
+  const profileTab = (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <AppCard>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50">
+              <Briefcase className="h-5 w-5 text-primary-600" />
+            </div>
+            <div>
+              <p className="text-xs text-gray-400">Poste</p>
+              <p className="text-sm font-medium text-gray-900">{employee.position}</p>
+              {employee.contractType && <p className="text-xs text-gray-500">{employee.contractType}</p>}
+            </div>
+          </div>
+        </AppCard>
+
+        <AppCard>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50">
+              <CreditCard className="h-5 w-5 text-primary-600" />
+            </div>
+            <div>
+              <p className="text-xs text-gray-400">Salaire de base</p>
+              <p className="text-lg font-bold text-gray-900">{formatAmount(Number(employee.baseSalary))}</p>
+            </div>
+          </div>
+        </AppCard>
+
+        <AppCard>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50">
+              <Building2 className="h-5 w-5 text-primary-600" />
+            </div>
+            <div>
+              <p className="text-xs text-gray-400">Agence</p>
+              {employee.agency ? (
+                <Link href={`/agencies/${employee.agency.id}`} className="text-sm font-medium text-primary-700 hover:underline">
+                  {employee.agency.name}
+                </Link>
+              ) : (
+                <p className="text-sm font-medium text-gray-900">{employee.agencyId}</p>
+              )}
+            </div>
+          </div>
+        </AppCard>
+      </div>
+
+      <AppCard>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Informations detaillees</h3>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <InfoRow icon={UserCircle} label="Nom complet" value={employee.fullName} />
+          <InfoRow icon={Phone} label="Telephone" value={employee.phone || '-'} />
+          <InfoRow icon={Hash} label="Numero d'identite" value={employee.idNumber || '-'} />
+          <InfoRow icon={Calendar} label="Date de debut" value={formatDate(employee.startDate)} />
+          {employee.endDate && (
+            <InfoRow icon={Calendar} label="Date de fin" value={formatDate(employee.endDate)} />
+          )}
+          <InfoRow icon={Briefcase} label="Niveau d'etudes" value={employee.educationLevel || '-'} />
+          <InfoRow icon={Briefcase} label="Specialite" value={employee.specialty || '-'} />
+          <InfoRow icon={UserCircle} label="Superieur direct" value={employee.manager?.fullName || '-'} />
+        </div>
+      </AppCard>
+    </div>
+  );
+
   return (
     <PageTransition>
       <div className="space-y-6">
-        {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button onClick={() => router.back()} className="rounded-xl p-2 hover:bg-gray-100 transition-colors">
@@ -43,6 +115,11 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
               <div className="flex items-center gap-3">
                 <h1 className="text-2xl font-bold text-gray-900">{employee.fullName}</h1>
                 <AppBadge variant={employee.isActive ? 'success' : 'error'}>{employee.isActive ? 'Actif' : 'Inactif'}</AppBadge>
+                {employee.isAgencyManager && (
+                  <span className="text-[10px] font-semibold px-2 py-1 rounded bg-primary-50 text-primary-700">
+                    Chef d&apos;agence
+                  </span>
+                )}
               </div>
               <p className="text-sm text-gray-500 mt-0.5">{employee.position}</p>
             </div>
@@ -55,66 +132,14 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
 
         <EmployeeFormDialog open={showEdit} onClose={() => setShowEdit(false)} employee={employee} />
 
-        {/* Info cards */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <AppCard>
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50">
-                <Briefcase className="h-5 w-5 text-primary-600" />
-              </div>
-              <div>
-                <p className="text-xs text-gray-400">Poste</p>
-                <p className="text-sm font-medium text-gray-900">{employee.position}</p>
-                {employee.level && <p className="text-xs text-gray-500">Niveau: {employee.level}</p>}
-              </div>
-            </div>
-          </AppCard>
-
-          <AppCard>
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50">
-                <CreditCard className="h-5 w-5 text-primary-600" />
-              </div>
-              <div>
-                <p className="text-xs text-gray-400">Salaire de base</p>
-                <p className="text-lg font-bold text-gray-900">{formatAmount(Number(employee.baseSalary))}</p>
-              </div>
-            </div>
-          </AppCard>
-
-          <AppCard>
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50">
-                <Building2 className="h-5 w-5 text-primary-600" />
-              </div>
-              <div>
-                <p className="text-xs text-gray-400">Agence</p>
-                {employee.agency ? (
-                  <Link href={`/agencies/${employee.agency.id}`} className="text-sm font-medium text-primary-700 hover:underline">
-                    {employee.agency.name}
-                  </Link>
-                ) : (
-                  <p className="text-sm font-medium text-gray-900">{employee.agencyId}</p>
-                )}
-              </div>
-            </div>
-          </AppCard>
-        </div>
-
-        {/* Details */}
-        <AppCard>
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Informations detaillees</h3>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <InfoRow icon={UserCircle} label="Nom complet" value={employee.fullName} />
-            <InfoRow icon={Phone} label="Telephone" value={employee.phone || '-'} />
-            <InfoRow icon={Hash} label="Numero d'identite" value={employee.idNumber || '-'} />
-            <InfoRow icon={Calendar} label="Date de debut" value={formatDate(employee.startDate)} />
-            {employee.endDate && (
-              <InfoRow icon={Calendar} label="Date de fin" value={formatDate(employee.endDate)} />
-            )}
-            <InfoRow icon={CreditCard} label="Salaire de base" value={formatAmount(Number(employee.baseSalary))} />
-          </div>
-        </AppCard>
+        <AppTabs tabs={[
+          { value: 'profile', label: 'Profil', icon: <UserCircle className="h-4 w-4" />, content: profileTab },
+          { value: 'shifts', label: 'Planning', icon: <Clock className="h-4 w-4" />, content: <EmployeeShiftsTab employeeId={id} /> },
+          { value: 'attendance', label: 'Pointage', icon: <ListChecks className="h-4 w-4" />, content: <EmployeeAttendanceTab employeeId={id} /> },
+          { value: 'leaves', label: 'Conges', icon: <Plane className="h-4 w-4" />, content: <EmployeeLeavesTab employeeId={id} /> },
+          { value: 'discipline', label: 'Discipline', icon: <Gavel className="h-4 w-4" />, content: <EmployeeDisciplineTab employeeId={id} employee={employee} /> },
+          { value: 'reviews', label: 'Evaluation', icon: <Star className="h-4 w-4" />, content: <EmployeeReviewsTab employeeId={id} /> },
+        ]} />
       </div>
     </PageTransition>
   );

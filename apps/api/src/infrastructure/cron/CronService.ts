@@ -4,6 +4,7 @@ import { CalculatePenaltiesUseCase } from '../../application/use-cases/penalty/C
 import { CoherenceService } from '../../application/services/CoherenceService';
 import { AutoCloseCashRegistersUseCase } from '../../application/use-cases/cash-register/AutoCloseCashRegistersUseCase';
 import { CheckChargeAlertsUseCase } from '../../application/use-cases/agency/CheckChargeAlertsUseCase';
+import { AutoMarkAbsentUseCase } from '../../application/use-cases/employee/AutoMarkAbsentUseCase';
 import { prisma } from '../../config/database';
 import { eventBus, DomainEvents } from '../events/EventBus';
 import { createChildLogger } from '../../config/logger';
@@ -67,6 +68,18 @@ export function startCronJobs(): void {
       }
     } catch (err) {
       logger.error({ err }, 'Auto cash register closing failed');
+    }
+  });
+
+  // Auto-mark absent : 23:30 chaque jour, marque absent les employes
+  // avec un shift planifie sans pointage.
+  cron.schedule('30 23 * * *', async () => {
+    try {
+      const useCase = container.resolve(AutoMarkAbsentUseCase);
+      const result = await useCase.execute();
+      if (result.marked > 0) logger.info(result, 'Employees auto-marked absent');
+    } catch (err) {
+      logger.error({ err }, 'Auto-absent failed');
     }
   });
 
