@@ -145,7 +145,7 @@ function NavSection({
 
 export function Sidebar() {
   const logoutMutation = useLogout();
-  const { collapsed, setCollapsed } = useSidebar();
+  const { collapsed, setCollapsed, mobileOpen } = useSidebar();
   const { isModuleEnabled, meta } = useTenantMeta();
 
   // Phase 0.4 : filtre les items selon les modules actives du tenant
@@ -159,8 +159,14 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        'sticky top-0 z-40 flex h-screen shrink-0 flex-col bg-sidebar-bg transition-all duration-200',
-        collapsed ? 'w-[68px]' : 'w-[260px]',
+        // Desktop : sticky cote, toujours visible. Mobile : drawer fixed gauche.
+        'top-0 z-40 flex h-screen shrink-0 flex-col bg-sidebar-bg transition-all duration-200',
+        // md+ : behavior original
+        'md:sticky md:translate-x-0',
+        collapsed ? 'md:w-[68px]' : 'md:w-[260px]',
+        // Mobile : fixed off-canvas
+        'fixed left-0',
+        mobileOpen ? 'translate-x-0 w-[260px]' : '-translate-x-full w-[260px]',
       )}
     >
       {/* Logo + nom dynamique du tenant */}

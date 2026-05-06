@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Settings, Globe, Trash2, Plus, Save } from 'lucide-react';
+import { Settings, Globe, Trash2, Plus, Save, Award, Palette } from 'lucide-react';
+import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { PageTransition } from '@/components/shared/PageTransition';
@@ -28,6 +29,35 @@ export default function SettingsPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Parametres</h1>
           <p className="text-sm text-gray-500 mt-1">Configuration du systeme.</p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Link href="/settings/loyalty" className="block">
+            <AppCard className="hover:border-primary-300 transition">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50">
+                  <Award className="h-5 w-5 text-primary-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Programme de fidelite</p>
+                  <p className="text-xs text-gray-500">Paliers + reductions + avantages</p>
+                </div>
+              </div>
+            </AppCard>
+          </Link>
+          <Link href="/settings/branding" className="block">
+            <AppCard className="hover:border-primary-300 transition">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50">
+                  <Palette className="h-5 w-5 text-primary-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Branding</p>
+                  <p className="text-xs text-gray-500">Logo, couleurs, identite</p>
+                </div>
+              </div>
+            </AppCard>
+          </Link>
         </div>
 
         <AppTabs

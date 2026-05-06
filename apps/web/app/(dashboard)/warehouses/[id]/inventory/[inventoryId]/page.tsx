@@ -3,7 +3,7 @@
 import { use, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, ScanLine, CheckCircle2, AlertTriangle, Package, Camera, MessageSquarePlus, Hand } from 'lucide-react';
+import { ArrowLeft, ScanLine, CheckCircle2, AlertTriangle, Package, Camera, MessageSquarePlus, Hand, Check, X } from 'lucide-react';
 import { AppDialog } from '@/components/ui/AppDialog';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { PageTransition } from '@/components/shared/PageTransition';
@@ -84,6 +84,37 @@ export default function InventoryDetailPage({
       toast.error(e?.response?.data?.message || 'Colis introuvable');
     }
     setScanBusy(false);
+  };
+
+  // Marquage rapide (1 clic) sans observation : present.
+  const quickMarkPresent = async (p: any) => {
+    try {
+      await apiClient.post(`/warehouses/inventories/${inventoryId}/mark`, {
+        parcelId: p.id,
+        present: true,
+      });
+      qc.invalidateQueries({ queryKey: ['inventory', inventoryId] });
+      qc.invalidateQueries({ queryKey: ['inventory', inventoryId, 'uninventoried'] });
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Erreur');
+    }
+  };
+
+  // Marquage rapide absent : on ne cree pas d'item (le defaut "non inventorie"
+  // donnera deja "manquant" en fin d'inventaire). On cree quand meme un item
+  // explicite avec scanned=false pour materialiser le choix de l'operateur.
+  const quickMarkAbsent = async (p: any) => {
+    try {
+      await apiClient.post(`/warehouses/inventories/${inventoryId}/mark`, {
+        parcelId: p.id,
+        present: false,
+        observation: 'Marque absent par l\'operateur',
+      });
+      qc.invalidateQueries({ queryKey: ['inventory', inventoryId] });
+      qc.invalidateQueries({ queryKey: ['inventory', inventoryId, 'uninventoried'] });
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Erreur');
+    }
   };
 
   const handleManualMark = async () => {
@@ -209,33 +240,36 @@ export default function InventoryDetailPage({
           </AppCard>
         )}
 
-        {/* Liste des colis non inventories : marquage rapide manuel */}
+        {/* Colis presents dans le magasin : pointage rapide quand le QR/code-barres
+            est defectueux. Si on ne marque rien, le colis sera considere comme absent
+            en fin d'inventaire. */}
         {isOpen && (
           <AppCard>
-            <div className="mb-3 flex items-center justify-between">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <h3 className="flex items-center gap-2 text-base font-semibold text-gray-900">
-                <Package className="h-4 w-4 text-amber-600" />
-                Colis non inventories ({uninventoried.length})
+                <Package className="h-4 w-4 text-primary-600" />
+                Colis presents dans le magasin ({uninventoried.length})
               </h3>
-              <p className="text-xs text-gray-500">
-                Cliquez sur un colis pour le marquer present manuellement (sans scan).
+              <p className="text-xs text-gray-500 max-w-md">
+                Si le QR code ou code-barres est defectueux, marquez ici directement Present
+                ou Absent. Sans action, le colis sera considere absent en fin d&apos;inventaire.
               </p>
             </div>
             {uninventoried.length === 0 ? (
               <p className="py-6 text-center text-sm text-gray-400">
-                Tous les colis du magasin ont ete inventories.
+                Aucun colis non inventorie.
               </p>
             ) : (
-              <div className="max-h-80 overflow-y-auto">
+              <div className="max-h-96 overflow-auto">
                 <table className="w-full text-sm">
                   <thead className="sticky top-0 bg-gray-50 text-left text-xs text-gray-500">
                     <tr>
                       <th className="p-2">Tracking</th>
                       <th className="p-2">Designation</th>
-                      <th className="p-2">Categorie</th>
-                      <th className="p-2">Statut</th>
-                      <th className="p-2">Client</th>
-                      <th className="p-2 text-right"></th>
+                      <th className="p-2 hidden md:table-cell">Categorie</th>
+                      <th className="p-2 hidden md:table-cell">Statut</th>
+                      <th className="p-2 hidden lg:table-cell">Client</th>
+                      <th className="p-2 text-right">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
@@ -243,8 +277,8 @@ export default function InventoryDetailPage({
                       <tr key={p.id} className="hover:bg-gray-50">
                         <td className="p-2 font-mono text-xs font-bold text-primary-700">{p.trackingNumber}</td>
                         <td className="p-2">{p.designation}</td>
-                        <td className="p-2 text-gray-500">{p.category}</td>
-                        <td className="p-2">
+                        <td className="p-2 text-gray-500 hidden md:table-cell">{p.category}</td>
+                        <td className="p-2 hidden md:table-cell">
                           <div className="flex flex-col gap-0.5">
                             <span className="text-xs">
                               {p.status}
@@ -257,12 +291,37 @@ export default function InventoryDetailPage({
                             )}
                           </div>
                         </td>
-                        <td className="p-2 text-gray-500">{p.client?.fullName ?? '-'}</td>
-                        <td className="p-2 text-right">
-                          <AppButton size="sm" variant="outline" onClick={() => { setManualTarget(p); setManualObservation(''); }}>
-                            <Hand className="h-3.5 w-3.5" />
-                            Marquer present
-                          </AppButton>
+                        <td className="p-2 text-gray-500 hidden lg:table-cell">{p.client?.fullName ?? '-'}</td>
+                        <td className="p-2">
+                          <div className="flex flex-wrap items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => quickMarkPresent(p)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-green-200 bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700 hover:bg-green-100"
+                              title="Marquer present"
+                            >
+                              <Check className="h-3.5 w-3.5" />
+                              Present
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { setManualTarget(p); setManualObservation(''); }}
+                              className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                              title="Marquer present + observation"
+                            >
+                              <MessageSquarePlus className="h-3.5 w-3.5" />
+                              <span className="hidden sm:inline">+ Note</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => quickMarkAbsent(p)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100"
+                              title="Marquer absent"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                              Absent
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}

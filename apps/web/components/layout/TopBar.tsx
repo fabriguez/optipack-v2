@@ -4,7 +4,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Search, Bell, ChevronDown, Package, Users, Container, FileText, User, Settings, LogOut, X } from 'lucide-react';
+import { Search, Bell, ChevronDown, Package, Users, Container, FileText, User, Settings, LogOut, X, Menu } from 'lucide-react';
+import { useSidebar } from './DashboardLayout';
 import { AppAvatar } from '@/components/ui/AppAvatar';
 import { AppDropdownMenu } from '@/components/ui/AppDropdownMenu';
 import { AppBadge } from '@/components/ui/AppBadge';
@@ -18,12 +19,21 @@ export function TopBar() {
   const { data: session } = useSession();
   const router = useRouter();
   const logoutMutation = useLogout();
+  const { mobileOpen, setMobileOpen } = useSidebar();
 
   const userName = session?.user?.name || 'Utilisateur';
   const userEmail = session?.user?.email || '';
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-gray-200 bg-white px-6">
+    <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-2 border-b border-gray-200 bg-white px-3 sm:px-6">
+      <button
+        type="button"
+        onClick={() => setMobileOpen(!mobileOpen)}
+        className="md:hidden rounded-lg p-2 text-gray-500 hover:bg-gray-100"
+        aria-label="Menu"
+      >
+        <Menu className="h-5 w-5" />
+      </button>
       <GlobalSearch />
 
       <div className="flex items-center gap-2">

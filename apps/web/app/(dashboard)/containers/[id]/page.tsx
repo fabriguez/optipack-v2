@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowLeft, Package, Play, PackageCheck, Plus, Eye, PackageMinus,
-  FileText, FileCheck, FileDiff, Printer, History, AlertCircle, Truck, Camera,
+  FileText, FileCheck, FileDiff, Printer, History, AlertCircle, Truck, Camera, QrCode,
 } from 'lucide-react';
+import { ParcelQRDialog } from '@/components/shared/ParcelQRDialog';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard, AppCardHeader } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
@@ -108,6 +109,7 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
   const [removeTarget, setRemoveTarget] = useState<{ id: string; designation: string } | null>(null);
   const [removeReason, setRemoveReason] = useState('');
   const [removing, setRemoving] = useState(false);
+  const [qrParcel, setQrParcel] = useState<any | null>(null);
 
   const PARCEL_PAGE_SIZE = 20;
   const containerType = data?.data?.type as 'AIR' | 'SEA' | 'LAND' | undefined;
@@ -291,6 +293,7 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
         <RowActions
           actions={[
             { label: 'Voir', icon: <Eye className="h-4 w-4" />, onClick: () => router.push(`/parcels/${row.id}`) },
+            { label: 'QR / Etiquette', icon: <QrCode className="h-4 w-4" />, onClick: () => setQrParcel(row) },
             ...(container.status === 'LOADING'
               ? [{
                   label: 'Retirer (chargement par erreur)',
@@ -794,6 +797,8 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
           }}
           title="Scanner pour charger un colis"
         />
+
+        <ParcelQRDialog open={!!qrParcel} onClose={() => setQrParcel(null)} parcel={qrParcel} />
       </div>
     </PageTransition>
   );

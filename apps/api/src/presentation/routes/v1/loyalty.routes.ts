@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { LoyaltyController } from '../../controllers/LoyaltyController';
-import { authenticate } from '../../middleware/authMiddleware';
+import { authenticate, authorize } from '../../middleware/authMiddleware';
 import { validate } from '../../middleware/validate';
 import { paginationSchema } from '@transitsoftservices/shared';
 
@@ -10,5 +10,10 @@ router.use(authenticate);
 
 router.get('/client/:clientId', validate(paginationSchema, 'query'), LoyaltyController.getByClient);
 router.get('/client/:clientId/points', LoyaltyController.getPoints);
+
+// Configuration des tiers (admin) : seuils de points + reductions + avantages
+router.get('/tiers', LoyaltyController.listTiers);
+router.put('/tiers', authorize('SUPER_ADMIN', 'ADMIN'), LoyaltyController.upsertTiers);
+router.delete('/tiers/:id', authorize('SUPER_ADMIN', 'ADMIN'), LoyaltyController.deleteTier);
 
 export default router;

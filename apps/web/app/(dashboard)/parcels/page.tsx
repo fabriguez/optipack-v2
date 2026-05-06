@@ -3,7 +3,8 @@
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Upload, Package, Eye, RefreshCw } from 'lucide-react';
+import { Plus, Upload, Package, Eye, RefreshCw, QrCode } from 'lucide-react';
+import { ParcelQRDialog } from '@/components/shared/ParcelQRDialog';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
@@ -27,6 +28,7 @@ function ParcelsContent() {
   const { page, search, setPage, setSearch, queryParams } = useServerPagination();
   const [showCreate, setShowCreate] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [qrParcel, setQrParcel] = useState<any | null>(null);
 
   const statusFilter = searchParams.get('status') || '';
   const clientIdFilter = searchParams.get('clientId') || '';
@@ -151,6 +153,7 @@ function ParcelsContent() {
       render: (row: any) => (
         <RowActions actions={[
           { label: 'Voir details', icon: <Eye className="h-4 w-4" />, onClick: () => router.push(`/parcels/${row.id}`) },
+          { label: 'QR / Etiquette', icon: <QrCode className="h-4 w-4" />, onClick: () => setQrParcel(row) },
           { label: 'Changer statut', icon: <RefreshCw className="h-4 w-4" />, onClick: () => router.push(`/parcels/${row.id}`) },
         ]} />
       ),
@@ -203,6 +206,7 @@ function ParcelsContent() {
         </AppCard>
 
         <ParcelFormDialog open={showCreate} onClose={() => setShowCreate(false)} />
+        <ParcelQRDialog open={!!qrParcel} onClose={() => setQrParcel(null)} parcel={qrParcel} />
         <CsvImportDialog
           open={showImport}
           onClose={() => setShowImport(false)}

@@ -3,7 +3,8 @@
 import { use, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Package, Plus, Eye, Edit, Trash2, ArrowRightLeft, ClipboardCheck, PlayCircle } from 'lucide-react';
+import { ArrowLeft, Package, Plus, Eye, Edit, Trash2, ArrowRightLeft, ClipboardCheck, PlayCircle, QrCode } from 'lucide-react';
+import { ParcelQRDialog } from '@/components/shared/ParcelQRDialog';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
@@ -34,6 +35,7 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
   const [transferParcel, setTransferParcel] = useState<any>(null);
   const [removeParcel, setRemoveParcel] = useState<any>(null);
   const [targetWarehouseId, setTargetWarehouseId] = useState('');
+  const [qrParcel, setQrParcel] = useState<any | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['warehouses', id],
@@ -182,6 +184,7 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
         <RowActions
           actions={[
             { label: 'Voir', icon: <Eye className="h-4 w-4" />, onClick: () => router.push(`/parcels/${row.id}`) },
+            { label: 'QR / Etiquette', icon: <QrCode className="h-4 w-4" />, onClick: () => setQrParcel(row) },
             ...(canModifyParcel(row) ? [
               { label: 'Modifier', icon: <Edit className="h-4 w-4" />, onClick: () => router.push(`/parcels/${row.id}`) },
               { label: 'Transferer', icon: <ArrowRightLeft className="h-4 w-4" />, onClick: () => setTransferParcel(row) },
@@ -402,6 +405,8 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
           />
         </AppCard>
       </div>
+
+      <ParcelQRDialog open={!!qrParcel} onClose={() => setQrParcel(null)} parcel={qrParcel} />
 
       <ParcelFormDialog
         open={showCreateParcel}
