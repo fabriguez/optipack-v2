@@ -35,6 +35,7 @@ import { AgencyDailyReportsTab } from './AgencyDailyReportsTab';
 import { AgencyAttendanceTab } from './AgencyAttendanceTab';
 import { AgencyLeavesTab } from './AgencyLeavesTab';
 import { AgencyReviewConfigTab } from './AgencyReviewConfigTab';
+import { AgencyHRStatsTab } from './AgencyHRStatsTab';
 import { AgencyAvatar } from '@/components/shared/AgencyAvatar';
 import { ImageDropzone } from '@/components/shared/ImageDropzone';
 import { AgencyOpeningHoursEditor } from '@/components/shared/AgencyOpeningHoursEditor';
@@ -355,6 +356,7 @@ export default function AgencyDetailPage({ params }: { params: Promise<{ id: str
           { value: 'attendance', label: 'Pointage', icon: <ListChecks className="h-4 w-4" />, content: <AgencyAttendanceTab agencyId={id} /> },
           { value: 'leaves', label: 'Conges', icon: <Plane className="h-4 w-4" />, content: <AgencyLeavesTab agencyId={id} /> },
           { value: 'review-config', label: 'Grille eval.', icon: <Star className="h-4 w-4" />, content: <AgencyReviewConfigTab agencyId={id} /> },
+          { value: 'hr-stats', label: 'Stats RH', icon: <BarChart3 className="h-4 w-4" />, content: <AgencyHRStatsTab agencyId={id} /> },
           { value: 'reports', label: 'Observations', icon: <FileText className="h-4 w-4" />, content: <AgencyDailyReportsTab agencyId={id} /> },
           { value: 'hours', label: 'Horaires', icon: <Clock className="h-4 w-4" />, content: <AgencyOpeningHoursEditor agencyId={id} /> },
         ]} />
