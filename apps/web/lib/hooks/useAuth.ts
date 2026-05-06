@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation } from '@tanstack/react-query';
-import { signIn, signOut } from 'next-auth/react';
+import { signIn, signOut, getSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
@@ -27,9 +27,16 @@ export function useLogin() {
 
       return result;
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       toast.success('Connexion reussie');
-      router.push('/');
+      // Personnel et chef d'agence -> portail self-service. Autres -> dashboard.
+      const session = await getSession();
+      const role = (session as any)?.role;
+      if (role === 'PERSONNEL' || role === 'CHEF_AGENCE') {
+        router.push('/me');
+      } else {
+        router.push('/');
+      }
     },
     onError: (err: Error) => {
       if (err.message === '2FA_REQUIRED') {

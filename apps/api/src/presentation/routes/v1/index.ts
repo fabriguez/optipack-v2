@@ -33,6 +33,7 @@ import tenantMetaRoutes from './tenant-meta.routes';
 import systemRoutes from './system.routes';
 import uploadRoutes from './upload.routes';
 import exportRoutes from './export.routes';
+import meRoutes from './me.routes';
 
 const router = Router();
 
@@ -85,5 +86,8 @@ router.use('/uploads', uploadRoutes);
 // Exports / imports XLSX (avec images embarquees)
 router.use('/exports', exportRoutes);
 router.use('/imports', exportRoutes);
+
+// Self-service employe (PERSONNEL / CHEF_AGENCE)
+router.use('/me', meRoutes);
 
 export default router;
