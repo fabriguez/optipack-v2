@@ -417,6 +417,7 @@ model User {
   sanctionsDecided        EmployeeSanction[]            @relation("SanctionDecider")
   terminationsDecided     ContractTermination[]         @relation("TerminationDecider")
   reviewsAuthored         EmployeeReview[]              @relation("ReviewAuthor")
+  passwordResetTokens     PasswordResetToken[]
 
   @@index([organizationId])
   @@index([email])
@@ -460,6 +461,23 @@ model RefreshToken {
   @@index([userId])
   @@index([token])
   @@map("refresh_tokens")
+}
+
+// Token de reinitialisation de mot de passe (envoye par email).
+// Token aleatoire opaque, valable 1h, usage unique (consommé apres utilisation).
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@map("password_reset_tokens")
 }
 
 // ============================================================

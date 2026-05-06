@@ -233,6 +233,7 @@ export default function InventoryDetailPage({
                       <th className="p-2">Tracking</th>
                       <th className="p-2">Designation</th>
                       <th className="p-2">Categorie</th>
+                      <th className="p-2">Statut</th>
                       <th className="p-2">Client</th>
                       <th className="p-2 text-right"></th>
                     </tr>
@@ -243,6 +244,19 @@ export default function InventoryDetailPage({
                         <td className="p-2 font-mono text-xs font-bold text-primary-700">{p.trackingNumber}</td>
                         <td className="p-2">{p.designation}</td>
                         <td className="p-2 text-gray-500">{p.category}</td>
+                        <td className="p-2">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-xs">
+                              {p.status}
+                              {p.isPresent === false && (
+                                <span className="ml-1 text-[10px] text-amber-700">(non present)</span>
+                              )}
+                            </span>
+                            {p.warehouseId == null && p.originalWarehouseId === id && (
+                              <span className="text-[10px] text-gray-400">cree ici, en mouvement</span>
+                            )}
+                          </div>
+                        </td>
                         <td className="p-2 text-gray-500">{p.client?.fullName ?? '-'}</td>
                         <td className="p-2 text-right">
                           <AppButton size="sm" variant="outline" onClick={() => { setManualTarget(p); setManualObservation(''); }}>

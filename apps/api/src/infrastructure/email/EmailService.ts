@@ -199,6 +199,55 @@ class EmailService {
     return this.send(to, `Rappel de dette - ${clientName}`, content);
   }
 
+  /**
+   * Envoie les identifiants initiaux de connexion au portail employe.
+   * Le mot de passe est en clair dans le mail (one-shot) et l'employe doit
+   * idealement le changer apres premiere connexion.
+   */
+  async sendEmployeePortalCredentials(
+    to: string,
+    employeeName: string,
+    email: string,
+    password: string,
+  ) {
+    const content = [
+      heading('Votre compte portail TransitSoftServices'),
+      paragraph(
+        `Bonjour <strong>${employeeName}</strong>, votre compte personnel a ete cree. ` +
+        'Vous pouvez desormais vous connecter au portail pour consulter votre profil, ' +
+        'demander des conges et voir vos bulletins.',
+      ),
+      highlightBlock('Identifiants', `${email}<br/><strong>Mot de passe : ${password}</strong>`),
+      divider(),
+      paragraph(
+        'Pour des raisons de securite, changez votre mot de passe apres votre premiere ' +
+        'connexion via la rubrique "Mon compte".',
+      ),
+      actionButton('Se connecter', `${config.webUrl}/login`),
+    ].join('');
+    return this.send(to, 'Vos identifiants TransitSoftServices', content);
+  }
+
+  /**
+   * Envoie un lien de reinitialisation de mot de passe.
+   */
+  async sendPasswordResetLink(to: string, name: string, resetUrl: string) {
+    const content = [
+      heading('Reinitialisation de votre mot de passe'),
+      paragraph(
+        `Bonjour <strong>${name}</strong>, vous avez demande la reinitialisation ` +
+        'de votre mot de passe. Cliquez sur le bouton ci-dessous pour en definir un nouveau. ' +
+        'Le lien est valide 1 heure.',
+      ),
+      actionButton('Reinitialiser', resetUrl),
+      divider(),
+      paragraph(
+        'Si vous n\'etes pas a l\'origine de cette demande, ignorez ce mail.',
+      ),
+    ].join('');
+    return this.send(to, 'Reinitialisation mot de passe', content);
+  }
+
   async sendWelcome(to: string, clientName: string) {
     const content = [
       heading('Bienvenue chez TransitSoftServices'),

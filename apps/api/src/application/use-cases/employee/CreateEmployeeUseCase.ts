@@ -5,6 +5,7 @@ import { EMPLOYEE_REPOSITORY, type IEmployeeRepository } from '../../interfaces/
 import { PayrollChargeService } from '../../services/PayrollChargeService';
 import { prisma } from '../../../config/database';
 import { BusinessError } from '../../../domain/errors/BusinessError';
+import { emailService } from '../../../infrastructure/email/EmailService';
 
 interface CreateEmployeeInput {
   agencyId: string;
@@ -100,6 +101,11 @@ export class CreateEmployeeUseCase {
         await prisma.userAgency.create({
           data: { userId: user.id, agencyId: input.agencyId },
         });
+        // Envoi email best-effort des identifiants (le mot de passe reste aussi
+        // affiche a l'admin via initialPassword pour fallback).
+        emailService
+          .sendEmployeePortalCredentials(input.email, input.fullName, input.email, initialPassword)
+          .catch(() => {});
       }
     }
 

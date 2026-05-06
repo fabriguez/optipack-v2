@@ -4,10 +4,18 @@ import { NotFoundError } from '../../../domain/errors/BusinessError';
 
 /**
  * Retourne la liste des colis du magasin qui ne sont pas encore inventories
- * (= aucun item correspondant dans `warehouseInventoryItem` pour cet inventaire).
+ * dans cet inventaire (= aucun item correspondant dans `warehouseInventoryItem`).
  *
- * Permet a l'operateur de voir d'un coup d'oeil ce qui reste a contoler, et de
- * marquer manuellement les colis sans devoir les scanner.
+ * Critere "rattaches au magasin" :
+ *   - warehouseId == inventory.warehouseId (actuellement la)
+ *   OU
+ *   - originalWarehouseId == inventory.warehouseId ET warehouseId IS NULL
+ *     (cree ici mais pas place / charge dans un conteneur en transit)
+ *
+ * On NE filtre PAS sur isPresent ni status : l'operateur d'inventaire doit
+ * pouvoir voir tous les colis encore lies au magasin et decider s'il les marque
+ * presents (eventuellement avec observation) ou non. Le statut LOADING/IN_TRANSIT
+ * apparaitra dans la liste avec son badge pour informer l'operateur.
  */
 @injectable()
 export class ListUninventoriedParcelsUseCase {
@@ -24,15 +32,13 @@ export class ListUninventoriedParcelsUseCase {
     });
     const inventoriedIds = new Set(inventoriedItems.map((i) => i.parcelId));
 
-    // Tous les colis physiquement presents au moment de la consultation.
-    // On filtre les colis avec warehouseId == inventory.warehouseId, isPresent=true,
-    // status IN_STOCK ou RECEIVED (= physiquement la), et non isDeleted.
     const allParcels = await prisma.parcel.findMany({
       where: {
-        warehouseId: inventory.warehouseId,
         isDeleted: false,
-        isPresent: true,
-        status: { in: ['IN_STOCK', 'RECEIVED'] },
+        OR: [
+          { warehouseId: inventory.warehouseId },
+          { originalWarehouseId: inventory.warehouseId, warehouseId: null },
+        ],
       },
       select: {
         id: true,
@@ -40,6 +46,10 @@ export class ListUninventoriedParcelsUseCase {
         designation: true,
         weight: true,
         category: true,
+        status: true,
+        isPresent: true,
+        warehouseId: true,
+        originalWarehouseId: true,
         client: { select: { fullName: true } },
         transitRoute: { select: { name: true, type: true } },
         createdAt: true,

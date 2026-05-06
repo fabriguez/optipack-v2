@@ -79,6 +79,9 @@ export default function LoginPage() {
               {errors.password && (
                 <p className="text-xs text-red-500">{errors.password.message}</p>
               )}
+              <a href="/forgot-password" className="text-xs text-primary-700 hover:underline">
+                Mot de passe oublie ?
+              </a>
             </div>
 
             <AppButton

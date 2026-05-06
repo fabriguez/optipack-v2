@@ -11,7 +11,7 @@ import { AppInput } from '@/components/ui/AppInput';
 import { AppSelect } from '@/components/ui/AppSelect';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
-import { UserCircle, Plane, ListChecks, CreditCard, Clock, FileText } from 'lucide-react';
+import { UserCircle, Plane, ListChecks, CreditCard, Clock, FileText, KeyRound } from 'lucide-react';
 import { toast } from 'sonner';
 
 const STATUS_LABEL: Record<string, string> = {
@@ -93,6 +93,7 @@ export default function MePage() {
           { value: 'leaves', label: 'Conges', icon: <Plane className="h-4 w-4" />, content: <LeavesTab /> },
           { value: 'payslips', label: 'Salaires', icon: <CreditCard className="h-4 w-4" />, content: <PayslipsTab /> },
           { value: 'documents', label: 'Documents', icon: <FileText className="h-4 w-4" />, content: <DocumentsTab /> },
+          { value: 'account', label: 'Mon compte', icon: <KeyRound className="h-4 w-4" />, content: <AccountTab /> },
         ]}
       />
     </div>
@@ -361,6 +362,72 @@ function PayslipsTab() {
           </tbody>
         </table>
       )}
+    </AppCard>
+  );
+}
+
+function AccountTab() {
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [confirmPwd, setConfirmPwd] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    if (next !== confirmPwd) {
+      toast.error('Les mots de passe ne correspondent pas');
+      return;
+    }
+    if (next.length < 6) {
+      toast.error('Au moins 6 caracteres');
+      return;
+    }
+    setBusy(true);
+    try {
+      await apiClient.post('/auth/change-password', { currentPassword: current, newPassword: next });
+      toast.success('Mot de passe change. Reconnectez-vous sur vos autres appareils.');
+      setCurrent('');
+      setNext('');
+      setConfirmPwd('');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Erreur');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <AppCard>
+      <h3 className="mb-3 text-base font-semibold">Changer mon mot de passe</h3>
+      <div className="grid max-w-md gap-3">
+        <AppInput
+          label="Mot de passe actuel"
+          type="password"
+          value={current}
+          onChange={(e) => setCurrent(e.target.value)}
+        />
+        <AppInput
+          label="Nouveau mot de passe"
+          type="password"
+          value={next}
+          onChange={(e) => setNext(e.target.value)}
+          minLength={6}
+        />
+        <AppInput
+          label="Confirmer"
+          type="password"
+          value={confirmPwd}
+          onChange={(e) => setConfirmPwd(e.target.value)}
+        />
+        <div className="flex justify-end">
+          <AppButton onClick={submit} loading={busy} disabled={!current || !next || !confirmPwd}>
+            <KeyRound className="h-4 w-4" />
+            Mettre a jour
+          </AppButton>
+        </div>
+      </div>
+      <p className="mt-3 text-xs text-gray-500">
+        Apres changement, vous serez deconnecte sur les autres appareils. Connectez-vous a nouveau avec le nouveau mot de passe.
+      </p>
     </AppCard>
   );
 }

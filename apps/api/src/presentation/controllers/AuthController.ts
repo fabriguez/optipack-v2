@@ -4,6 +4,11 @@ import { RegisterUseCase } from '../../application/use-cases/auth/RegisterUseCas
 import { LoginUseCase } from '../../application/use-cases/auth/LoginUseCase';
 import { RefreshTokenUseCase } from '../../application/use-cases/auth/RefreshTokenUseCase';
 import { GetMeUseCase } from '../../application/use-cases/auth/GetMeUseCase';
+import {
+  ChangePasswordUseCase,
+  RequestPasswordResetUseCase,
+  ResetPasswordUseCase,
+} from '../../application/use-cases/auth/PasswordUseCases';
 import { AuthenticationError } from '../../domain/errors/BusinessError';
 
 // Phase 0.2 : multi-tenant. Le seed initial du tenant cree son premier admin avec
@@ -95,5 +100,39 @@ export class AuthController {
   static async logout(req: Request, res: Response, _next: NextFunction) {
     res.clearCookie('refreshToken', { path: '/' });
     res.json({ success: true, message: 'Deconnexion reussie' });
+  }
+
+  static async changePassword(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(ChangePasswordUseCase);
+      const result = await useCase.execute(
+        req.user!.userId,
+        req.body?.currentPassword ?? '',
+        req.body?.newPassword ?? '',
+      );
+      res.json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async forgotPassword(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(RequestPasswordResetUseCase);
+      const result = await useCase.execute(req.body?.email ?? '');
+      res.json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async resetPassword(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(ResetPasswordUseCase);
+      const result = await useCase.execute(req.body?.token ?? '', req.body?.newPassword ?? '');
+      res.json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
   }
 }
