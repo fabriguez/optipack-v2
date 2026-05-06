@@ -75,11 +75,13 @@ export function EmployeeFormDialog({ open, onClose, defaultAgency, employee }: P
       qc.invalidateQueries({ queryKey: ['employees'] });
       qc.invalidateQueries({ queryKey: ['agencies'] }); // pour la masse salariale auto
       toast.success(isEdit ? 'Employe mis a jour' : 'Employe cree');
-      // En mode creation, on garde le dialog ouvert pour permettre l'upload des photos.
       if (!isEdit) {
         const created = (res as any)?.data;
         if (created?.id) setEditableId(created.id);
-        else onClose();
+        if (created?.initialPassword) {
+          setInitialPassword(created.initialPassword);
+        }
+        if (!created?.id) onClose();
       } else {
         onClose();
       }
@@ -87,7 +89,7 @@ export function EmployeeFormDialog({ open, onClose, defaultAgency, employee }: P
     onError: () => toast.error('Erreur'),
   });
 
-  const { register, handleSubmit, reset, control, setValue, formState } = useForm<any>({
+  const { register, handleSubmit, reset, control, setValue } = useForm<any>({
     // defaultValues garantit que `agencyId` est defini des le premier render
     // (sinon Controller render avec field.value=undefined puis reset n'est pas
     // toujours respectee par les sous-composants disabled -> formulaire bloque).
@@ -104,6 +106,7 @@ export function EmployeeFormDialog({ open, onClose, defaultAgency, employee }: P
   // editableId : ID utilisable pour uploader les photos (employe.id en edition,
   // ou ID retourne par la creation).
   const [editableId, setEditableId] = useState<string | null>(null);
+  const [initialPassword, setInitialPassword] = useState<string | null>(null);
   const [photoUrls, setPhotoUrls] = useState<Record<Slot, string | null>>({
     selfie: null,
     locationPlan: null,
@@ -141,6 +144,7 @@ export function EmployeeFormDialog({ open, onClose, defaultAgency, employee }: P
       // disabled (le AppSearchSelect ne peut pas declencher onChange tout seul).
       if (defaultAgency?.id) setValue('agencyId', defaultAgency.id, { shouldValidate: true });
       setEditableId(null);
+      setInitialPassword(null);
       setPhotoUrls({ selfie: null, locationPlan: null, idDocument: null, idDocumentBack: null });
     }
   }, [open, defaultAgency, employee, reset, setValue]);
@@ -243,6 +247,7 @@ export function EmployeeFormDialog({ open, onClose, defaultAgency, employee }: P
             )}
           />
           <AppInput label="N. identite" {...register('idNumber')} />
+          <AppInput label="Email (pour compte portail)" type="email" {...register('email')} />
           <AppInput label="Salaire de base" type="number" {...register('baseSalary')} />
           <AppInput label="Niveau d'etudes" placeholder="Licence, Master, BAC+3..." {...register('educationLevel')} />
           <AppInput label="Specialite" placeholder="Logistique, Comptabilite..." {...register('specialty')} />
@@ -286,7 +291,52 @@ export function EmployeeFormDialog({ open, onClose, defaultAgency, employee }: P
             </span>
           </span>
         </label>
+
+        {!isEdit && (
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-gray-300"
+              {...register('createUser')}
+            />
+            <span>
+              Creer un <strong>compte portail</strong> pour cet employe (necessite un email)
+              <span className="block text-[11px] text-gray-500">
+                L&apos;employe pourra se connecter sur /login et acceder a son espace personnel
+                (profil, conges, salaires). Un mot de passe initial sera genere et affiche apres creation.
+              </span>
+            </span>
+          </label>
+        )}
       </form>
+
+      {initialPassword && (
+        <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+          <p className="text-sm font-semibold text-amber-900">Compte portail cree</p>
+          <p className="mt-1 text-xs text-amber-800">
+            Communiquez ces identifiants a l&apos;employe. Le mot de passe ne sera plus affiche apres
+            fermeture de cette fenetre.
+          </p>
+          <div className="mt-2 flex items-center gap-3 rounded-lg bg-white px-3 py-2">
+            <div className="flex-1">
+              <p className="text-[10px] uppercase tracking-wider text-gray-400">Mot de passe initial</p>
+              <p className="font-mono text-base font-bold">{initialPassword}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard?.writeText(initialPassword).then(
+                  () => toast.success('Copie'),
+                  () => toast.error('Copie impossible'),
+                );
+              }}
+              className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs hover:bg-gray-50"
+            >
+              Copier
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="mt-6 border-t border-gray-100 pt-4">
         <p className="mb-2 text-sm font-medium text-gray-900">Photos</p>

@@ -45,6 +45,8 @@ import {
   GetAgencyReviewConfigUseCase,
   SetAgencyReviewConfigUseCase,
 } from '../../application/use-cases/employee/EmployeeReviewUseCases';
+import { AgencyHRStatsUseCase } from '../../application/use-cases/employee/AgencyHRStatsUseCase';
+import { AgencyHRReportXlsxUseCase } from '../../application/use-cases/employee/AgencyHRReportXlsxUseCase';
 import { EMPLOYEE_REPOSITORY } from '../../application/interfaces/IEmployeeRepository';
 import { NotFoundError } from '../../domain/errors/BusinessError';
 
@@ -52,7 +54,7 @@ export class EmployeeController {
   static async create(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(CreateEmployeeUseCase);
-      const result = await useCase.execute(req.body);
+      const result = await useCase.execute(req.body, req.user?.organizationId);
       res.status(201).json({ success: true, data: result });
     } catch (err) {
       next(err);
@@ -435,6 +437,39 @@ export class EmployeeController {
       const useCase = container.resolve(GetAgencyReviewConfigUseCase);
       const item = await useCase.execute(req.params.agencyId);
       res.json({ success: true, data: item });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  // ----- Stats RH + Rapport mensuel -----
+
+  static async agencyHRStats(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(AgencyHRStatsUseCase);
+      const stats = await useCase.execute({
+        agencyId: req.params.agencyId,
+        month: req.query.month as string | undefined,
+      });
+      res.json({ success: true, data: stats });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async agencyHRReportXlsx(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(AgencyHRReportXlsxUseCase);
+      const { buffer, fileName } = await useCase.execute({
+        agencyId: req.params.agencyId,
+        month: req.query.month as string | undefined,
+      });
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+      res.send(buffer);
     } catch (err) {
       next(err);
     }

@@ -64,6 +64,10 @@ router.post('/:id/reviews', EmployeeController.createReview);
 router.get('/agency/:agencyId/review-config', EmployeeController.getAgencyReviewConfig);
 router.put('/agency/:agencyId/review-config', EmployeeController.setAgencyReviewConfig);
 
+// Stats RH + Rapport mensuel XLSX
+router.get('/agency/:agencyId/hr-stats', EmployeeController.agencyHRStats);
+router.get('/agency/:agencyId/hr-report.xlsx', EmployeeController.agencyHRReportXlsx);
+
 // Photo upload / delete (auth requise). slot in {selfie, locationPlan, idDocument, idDocumentBack}.
 router.post('/:id/image/:slot', uploadImageMiddleware, EmployeeController.uploadImage);
 router.delete('/:id/image/:slot', EmployeeController.deleteImage);
