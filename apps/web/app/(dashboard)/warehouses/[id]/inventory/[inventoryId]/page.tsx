@@ -332,68 +332,34 @@ export default function InventoryDetailPage({
           </AppCard>
         )}
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <AppCard>
-            <h3 className="flex items-center gap-2 text-base font-semibold text-gray-900 mb-3">
-              <CheckCircle2 className="h-4 w-4 text-primary-600" />
-              Conformes ({matched.length})
-            </h3>
-            <ul className="divide-y divide-gray-50">
-              {matched.length === 0 && <li className="py-2 text-sm text-gray-400">Aucun colis</li>}
-              {matched.map((it) => (
-                <li key={it.id} className="py-2 text-sm">
-                  <div className="flex items-center gap-2">
-                    <p className="font-mono text-xs text-primary-700 font-bold">{it.parcel?.trackingNumber}</p>
-                    {it.markedManually && (
-                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700">
-                        Manuel (sans scan)
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-gray-600">{it.parcel?.designation}</p>
-                  {it.observation && (
-                    <p className="mt-0.5 text-xs italic text-gray-500">
-                      <MessageSquarePlus className="inline h-3 w-3 mr-1" />
-                      {it.observation}
-                    </p>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </AppCard>
-
-          <AppCard>
-            <h3 className="flex items-center gap-2 text-base font-semibold text-gray-900 mb-3">
-              <Package className="h-4 w-4 text-red-600" />
-              Manquants ({missing.length})
-            </h3>
-            <ul className="divide-y divide-gray-50">
-              {missing.length === 0 && <li className="py-2 text-sm text-gray-400">Aucun colis</li>}
-              {missing.map((it) => (
-                <li key={it.id} className="py-2 text-sm">
-                  <p className="font-mono text-xs text-red-700 font-bold">{it.parcel?.trackingNumber}</p>
-                  <p className="text-gray-600">{it.parcel?.designation}</p>
-                </li>
-              ))}
-            </ul>
-          </AppCard>
-
-          <AppCard>
-            <h3 className="flex items-center gap-2 text-base font-semibold text-gray-900 mb-3">
-              <AlertTriangle className="h-4 w-4 text-amber-600" />
-              En plus ({extra.length})
-            </h3>
-            <ul className="divide-y divide-gray-50">
-              {extra.length === 0 && <li className="py-2 text-sm text-gray-400">Aucun colis</li>}
-              {extra.map((it) => (
-                <li key={it.id} className="py-2 text-sm">
-                  <p className="font-mono text-xs text-amber-700 font-bold">{it.parcel?.trackingNumber}</p>
-                  <p className="text-gray-600">{it.parcel?.designation}</p>
-                  {it.comment && <p className="text-xs text-gray-400 italic">{it.comment}</p>}
-                </li>
-              ))}
-            </ul>
-          </AppCard>
+        <div className="space-y-4">
+          <InventorySection
+            title="Colis inventories"
+            icon={<CheckCircle2 className="h-4 w-4 text-primary-600" />}
+            count={matched.length}
+            tone="success"
+            items={matched}
+            columns={['tracking', 'designation', 'client', 'mark', 'observation']}
+            emptyText="Aucun colis encore inventorie."
+          />
+          <InventorySection
+            title="Colis absents"
+            icon={<Package className="h-4 w-4 text-red-600" />}
+            count={missing.length}
+            tone="danger"
+            items={missing}
+            columns={['tracking', 'designation', 'client', 'observation']}
+            emptyText="Aucun colis manquant. Tous les colis attendus ont ete pointes."
+          />
+          <InventorySection
+            title="Colis en plus"
+            icon={<AlertTriangle className="h-4 w-4 text-amber-600" />}
+            count={extra.length}
+            tone="warning"
+            items={extra}
+            columns={['tracking', 'designation', 'client', 'comment', 'observation']}
+            emptyText="Aucun colis inattendu trouve."
+          />
         </div>
       </div>
 
@@ -456,5 +422,111 @@ export default function InventoryDetailPage({
         </div>
       </AppDialog>
     </PageTransition>
+  );
+}
+
+type SectionTone = 'success' | 'danger' | 'warning';
+type SectionColumn = 'tracking' | 'designation' | 'client' | 'mark' | 'observation' | 'comment';
+
+const TONE_STYLES: Record<SectionTone, { tracking: string; row: string }> = {
+  success: { tracking: 'text-primary-700', row: 'hover:bg-primary-50/40' },
+  danger: { tracking: 'text-red-700', row: 'hover:bg-red-50/40' },
+  warning: { tracking: 'text-amber-700', row: 'hover:bg-amber-50/40' },
+};
+
+function InventorySection({
+  title,
+  icon,
+  count,
+  tone,
+  items,
+  columns,
+  emptyText,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  count: number;
+  tone: SectionTone;
+  items: any[];
+  columns: SectionColumn[];
+  emptyText: string;
+}) {
+  const styles = TONE_STYLES[tone];
+  return (
+    <AppCard>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h3 className="flex items-center gap-2 text-base font-semibold text-gray-900">
+          {icon}
+          {title} ({count})
+        </h3>
+      </div>
+      {items.length === 0 ? (
+        <p className="py-6 text-center text-sm text-gray-400">{emptyText}</p>
+      ) : (
+        <div className="max-h-96 overflow-auto">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 bg-gray-50 text-left text-xs text-gray-500">
+              <tr>
+                {columns.includes('tracking') && <th className="p-2">Tracking</th>}
+                {columns.includes('designation') && <th className="p-2">Designation</th>}
+                {columns.includes('client') && <th className="p-2 hidden md:table-cell">Client</th>}
+                {columns.includes('mark') && <th className="p-2 hidden lg:table-cell">Source</th>}
+                {columns.includes('comment') && <th className="p-2 hidden md:table-cell">Note systeme</th>}
+                {columns.includes('observation') && <th className="p-2">Observation</th>}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {items.map((it) => (
+                <tr key={it.id} className={styles.row}>
+                  {columns.includes('tracking') && (
+                    <td className="p-2 font-mono text-xs font-bold align-top">
+                      <span className={styles.tracking}>{it.parcel?.trackingNumber}</span>
+                    </td>
+                  )}
+                  {columns.includes('designation') && (
+                    <td className="p-2 align-top text-gray-700">{it.parcel?.designation ?? '-'}</td>
+                  )}
+                  {columns.includes('client') && (
+                    <td className="p-2 align-top text-gray-500 hidden md:table-cell">
+                      {it.parcel?.client?.fullName ?? '-'}
+                    </td>
+                  )}
+                  {columns.includes('mark') && (
+                    <td className="p-2 align-top hidden lg:table-cell">
+                      {it.markedManually ? (
+                        <span className="inline-flex items-center rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
+                          Manuel
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center rounded bg-primary-50 px-1.5 py-0.5 text-[10px] font-semibold text-primary-700">
+                          Scan
+                        </span>
+                      )}
+                    </td>
+                  )}
+                  {columns.includes('comment') && (
+                    <td className="p-2 align-top text-xs text-gray-400 italic hidden md:table-cell">
+                      {it.comment ?? '-'}
+                    </td>
+                  )}
+                  {columns.includes('observation') && (
+                    <td className="p-2 align-top text-xs italic text-gray-500">
+                      {it.observation ? (
+                        <span>
+                          <MessageSquarePlus className="inline h-3 w-3 mr-1" />
+                          {it.observation}
+                        </span>
+                      ) : (
+                        <span className="text-gray-300">-</span>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </AppCard>
   );
 }
