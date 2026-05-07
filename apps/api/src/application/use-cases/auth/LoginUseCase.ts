@@ -84,6 +84,18 @@ export class LoginUseCase {
       { expiresIn: config.jwt.accessExpiry } as jwt.SignOptions,
     );
 
+    // Trace de la validite du token : utile en debug session pour comprendre
+    // pourquoi un user est deconnecte avant l'echeance attendue.
+    const decoded = jwt.decode(accessToken) as { exp?: number; iat?: number } | null;
+    if (decoded?.exp) {
+      const ttlSec = decoded.exp - Math.floor(Date.now() / 1000);
+      const expiresAtIso = new Date(decoded.exp * 1000).toISOString();
+      // eslint-disable-next-line no-console
+      console.log(
+        `[Login] user=${user.email} accessExpiry=${config.jwt.accessExpiry} ttl=${ttlSec}s expiresAt=${expiresAtIso}`,
+      );
+    }
+
     const refreshTokenValue = randomUUID();
     const refreshExpiry = new Date();
     refreshExpiry.setDate(refreshExpiry.getDate() + 7);

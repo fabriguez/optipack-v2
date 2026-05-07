@@ -54,10 +54,13 @@ apiClient.interceptors.response.use(
 
     if (status === 401 && original && !original._retry && typeof window !== 'undefined') {
       original._retry = true;
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[apiClient] 401 sur ${original.method?.toUpperCase()} ${original.url} -- tentative de refresh`,
+      );
       try {
         // Force le callback jwt() cote NextAuth a invalider accessTokenExpiresAt
-        // et a rejouer /auth/refresh, sinon il croit le token encore valide
-        // (cas : server restart, secret rotate, exp local pas synchro avec API).
+        // et a rejouer /auth/refresh.
         try {
           const { getSession: _gs } = await import('next-auth/react');
           await fetch('/api/auth/session?update', {
@@ -74,14 +77,23 @@ apiClient.interceptors.response.use(
         const sessionError = (session as any)?.error;
 
         if (newToken && !sessionError && newToken !== oldToken) {
+          // eslint-disable-next-line no-console
+          console.log('[apiClient] refresh ok, retry de la requete');
           original.headers = {
             ...(original.headers || {}),
             Authorization: `Bearer ${newToken}`,
           };
           return apiClient.request(original);
         }
-      } catch {
-        // ignore - on tombe sur la redirection ci-dessous
+
+        // Diagnostique : on note pourquoi on ne retry pas.
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[apiClient] refresh impossible : sessionError=${sessionError ?? 'none'}, sameToken=${newToken === oldToken}, hasToken=${!!newToken}`,
+        );
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn('[apiClient] erreur pendant le refresh:', err);
       }
       redirectToLogin();
     }

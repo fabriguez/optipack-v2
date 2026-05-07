@@ -32,6 +32,28 @@ export function useLogin() {
       // Personnel et chef d'agence -> portail self-service. Autres -> dashboard.
       const session = await getSession();
       const role = (session as any)?.role;
+      const accessToken = (session as any)?.accessToken as string | undefined;
+
+      // Decode JWT exp pour visibilite console : ttl reel + date.
+      try {
+        if (accessToken) {
+          const payload = accessToken.split('.')[1];
+          const json = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
+          const obj = JSON.parse(json) as { exp?: number; iat?: number; userId?: string };
+          if (obj.exp) {
+            const ttl = obj.exp - Math.floor(Date.now() / 1000);
+            const ttlH = (ttl / 3600).toFixed(2);
+            // eslint-disable-next-line no-console
+            console.log(
+              `%c[Auth] login OK · token TTL=${ttl}s (${ttlH}h) · expire=${new Date(obj.exp * 1000).toLocaleString()}`,
+              'color: #1B5E20; font-weight: bold;',
+            );
+          }
+        }
+      } catch {
+        // ignore
+      }
+
       if (role === 'PERSONNEL' || role === 'CHEF_AGENCE') {
         router.push('/me');
       } else {

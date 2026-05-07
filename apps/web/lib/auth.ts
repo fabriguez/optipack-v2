@@ -3,6 +3,26 @@ import Credentials from 'next-auth/providers/credentials';
 
 const API_URL = process.env.INTERNAL_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
 
+/**
+ * Decode le `exp` (epoch seconds) d'un JWT sans le verifier. Utilise pour
+ * connaitre la VRAIE expiration plutot que de presumer une valeur (12h/24h)
+ * qui peut diverger de la config API et provoquer des deconnexions surprises.
+ */
+function jwtExpMs(token: string): number | null {
+  try {
+    const payload = token.split('.')[1];
+    if (!payload) return null;
+    // Compatible Node + Edge runtime
+    const json = typeof Buffer !== 'undefined'
+      ? Buffer.from(payload.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8')
+      : atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
+    const obj = JSON.parse(json) as { exp?: number };
+    return obj.exp ? obj.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
 export const { handlers, signIn, signOut, auth }: any = NextAuth({
   secret: process.env.AUTH_SECRET,
   providers: [
@@ -33,6 +53,20 @@ export const { handlers, signIn, signOut, auth }: any = NextAuth({
             throw new Error('2FA_REQUIRED');
           }
 
+          // On lit la VRAIE date d'expiration depuis le JWT (claim exp)
+          // plutot que de la deviner. Evite la divergence si la config API
+          // est modifiee.
+          const realExp = jwtExpMs(data.data.accessToken);
+          if (realExp) {
+            const ttlSec = Math.floor((realExp - Date.now()) / 1000);
+            // eslint-disable-next-line no-console
+            console.log(
+              `[Auth.login] token exp=${new Date(realExp).toISOString()} ttl=${ttlSec}s`,
+            );
+          } else {
+            // eslint-disable-next-line no-console
+            console.warn('[Auth.login] impossible de decoder exp du JWT');
+          }
           return {
             id: data.data.user.id,
             email: data.data.user.email,
@@ -41,8 +75,8 @@ export const { handlers, signIn, signOut, auth }: any = NextAuth({
             agencyIds: data.data.user.agencyIds,
             accessToken: data.data.accessToken,
             refreshToken: data.data.refreshToken,
-            // Pas d'exp explicite renvoye par /auth/login : on suppose 12h (config.jwt.accessExpiry).
-            accessTokenExpiresAt: Date.now() + 12 * 60 * 60 * 1000,
+            // exp reelle depuis le JWT (fallback : 12h si decodage rate)
+            accessTokenExpiresAt: realExp ?? Date.now() + 12 * 60 * 60 * 1000,
           };
         } catch (err: any) {
           if (err.message === '2FA_REQUIRED') throw err;
@@ -94,13 +128,22 @@ export const { handlers, signIn, signOut, auth }: any = NextAuth({
         if (res.ok && data?.success) {
           (token as any).accessToken = data.data.accessToken;
           (token as any).refreshToken = data.data.refreshToken;
-          (token as any).accessTokenExpiresAt = Date.now() + 12 * 60 * 60 * 1000;
+          const realExp = jwtExpMs(data.data.accessToken);
+          (token as any).accessTokenExpiresAt = realExp ?? Date.now() + 12 * 60 * 60 * 1000;
           (token as any).error = undefined;
+          // eslint-disable-next-line no-console
+          console.log(
+            `[Auth.refresh] token refreshed, new exp=${realExp ? new Date(realExp).toISOString() : 'unknown'}`,
+          );
         } else {
           (token as any).error = 'RefreshFailed';
+          // eslint-disable-next-line no-console
+          console.warn('[Auth.refresh] failed:', data?.message ?? res.status);
         }
-      } catch {
+      } catch (err) {
         (token as any).error = 'RefreshFailed';
+        // eslint-disable-next-line no-console
+        console.warn('[Auth.refresh] error:', err);
       }
       return token;
     },

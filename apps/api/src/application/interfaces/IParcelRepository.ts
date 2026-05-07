@@ -20,6 +20,7 @@ export interface IParcelRepository {
       lastContainerId?: string;
       spaceId?: string;
       origin?: string;
+      parcelGroupId?: string;
       clientId?: string;
       status?: string;
       transitType?: string;

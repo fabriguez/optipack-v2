@@ -3,9 +3,11 @@
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Upload, Package, Eye, RefreshCw, QrCode, HandCoins } from 'lucide-react';
+import { Plus, Upload, Package, Eye, RefreshCw, QrCode, HandCoins, Boxes, ChevronDown } from 'lucide-react';
 import { ParcelQRDialog } from '@/components/shared/ParcelQRDialog';
 import { ParcelHandoverDialog } from '@/components/shared/ParcelHandoverDialog';
+import { ParcelGroupFormDialog } from './ParcelGroupFormDialog';
+import { AppDropdownMenu } from '@/components/ui/AppDropdownMenu';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
@@ -31,6 +33,7 @@ function ParcelsContent() {
   const [showImport, setShowImport] = useState(false);
   const [qrParcel, setQrParcel] = useState<any | null>(null);
   const [handoverParcel, setHandoverParcel] = useState<any | null>(null);
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
 
   const statusFilter = searchParams.get('status') || '';
   const clientIdFilter = searchParams.get('clientId') || '';
@@ -178,10 +181,19 @@ function ParcelsContent() {
               <Upload className="h-4 w-4" />
               Importer
             </AppButton>
-            <AppButton onClick={() => setShowCreate(true)}>
-              <Plus className="h-4 w-4" />
-              Nouveau colis
-            </AppButton>
+            <AppDropdownMenu
+              trigger={
+                <AppButton>
+                  <Plus className="h-4 w-4" />
+                  Nouveau
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </AppButton>
+              }
+              items={[
+                { label: 'Un seul colis', icon: <Package className="h-4 w-4" />, onClick: () => setShowCreate(true) },
+                { label: 'Un groupe de colis', icon: <Boxes className="h-4 w-4" />, onClick: () => setShowCreateGroup(true) },
+              ]}
+            />
           </div>
         </div>
 
@@ -211,6 +223,7 @@ function ParcelsContent() {
         </AppCard>
 
         <ParcelFormDialog open={showCreate} onClose={() => setShowCreate(false)} />
+        <ParcelGroupFormDialog open={showCreateGroup} onClose={() => setShowCreateGroup(false)} />
         <ParcelQRDialog open={!!qrParcel} onClose={() => setQrParcel(null)} parcel={qrParcel} />
         <ParcelHandoverDialog
           open={!!handoverParcel}

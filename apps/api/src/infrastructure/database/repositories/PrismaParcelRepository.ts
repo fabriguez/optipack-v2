@@ -44,6 +44,8 @@ export class PrismaParcelRepository implements IParcelRepository {
       spaceId?: string;
       // Filtre par origine (text libre)
       origin?: string;
+      // Filtre par groupe de colis (envoi groupe)
+      parcelGroupId?: string;
       clientId?: string;
       status?: string;
       transitType?: string;
@@ -66,6 +68,7 @@ export class PrismaParcelRepository implements IParcelRepository {
       ...(filters.lastContainerId && { lastContainerId: filters.lastContainerId }),
       ...(filters.spaceId && { spaceId: filters.spaceId }),
       ...(filters.origin && { origin: { contains: filters.origin, mode: 'insensitive' } }),
+      ...(filters.parcelGroupId && { parcelGroupId: filters.parcelGroupId }),
       ...(filters.clientId && { clientId: filters.clientId }),
       ...(filters.status && { status: filters.status as any }),
       ...(filters.transitType && { transitRoute: { type: filters.transitType as any } }),

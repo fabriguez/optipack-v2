@@ -97,6 +97,7 @@ model Agency {
   charges               AgencyCharge[]
   dailyReports          AgencyDailyReport[]
   reviewConfig          AgencyReviewConfig?   @relation("AgencyReviewConfig")
+  parcelGroups          ParcelGroup[]
 
   @@index([organizationId])
   @@index([city])
@@ -286,17 +287,17 @@ enum ChargeType {
 // ============================================================
 
 model Warehouse {
-  id        String   @id @default(uuid())
-  agencyId  String
-  name      String
-  location  String
+  id               String   @id @default(uuid())
+  agencyId         String
+  name             String
+  location         String
   // Frais de magasinage : appliques uniquement aux colis issus d'un conteneur
   // qui restent au-dela de `storageFreeDays`. Tarif journalier en devise de base.
-  storageFreeDays  Int     @default(7)
-  storageDailyRate Decimal @default(0) @db.Decimal(15, 2)
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  storageFreeDays  Int      @default(7)
+  storageDailyRate Decimal  @default(0) @db.Decimal(15, 2)
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   agency          Agency               @relation(fields: [agencyId], references: [id])
   parcels         Parcel[]             @relation("CurrentWarehouse")
@@ -893,30 +894,30 @@ model Payslip {
 // ============================================================
 
 model Client {
-  id             String      @id @default(uuid())
-  organizationId String
-  agencyId       String
-  fullName       String
-  phone          String      @unique
-  email          String?
-  idNumber       String?
-  imageUrl       String?
-  imageKey       String?
+  id                String      @id @default(uuid())
+  organizationId    String
+  agencyId          String
+  fullName          String
+  phone             String      @unique
+  email             String?
+  idNumber          String?
+  imageUrl          String?
+  imageKey          String?
   // Photos document d'identification recto + verso. Servent au moment du
   // retrait d'un colis pour que l'agent confronte la personne en face avec
   // la photo et valide la remise.
-  idDocumentUrl       String?
-  idDocumentKey       String?
-  idDocumentBackUrl   String?
-  idDocumentBackKey   String?
-  address        String?
-  clientType     ClientType  @default(INDIVIDUAL)
-  loyaltyTier    LoyaltyTier @default(STANDARD)
-  loyaltyPoints  Int         @default(0)
-  totalSpent     Decimal     @default(0) @db.Decimal(15, 2)
-  isActive       Boolean     @default(true)
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  idDocumentUrl     String?
+  idDocumentKey     String?
+  idDocumentBackUrl String?
+  idDocumentBackKey String?
+  address           String?
+  clientType        ClientType  @default(INDIVIDUAL)
+  loyaltyTier       LoyaltyTier @default(STANDARD)
+  loyaltyPoints     Int         @default(0)
+  totalSpent        Decimal     @default(0) @db.Decimal(15, 2)
+  isActive          Boolean     @default(true)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
 
   // Auth fields for client portal
   passwordHash   String?
@@ -933,6 +934,7 @@ model Client {
   chatConversations   ChatConversation[]
   notifications       Notification[]       @relation("ClientNotifications")
   partnerPricings     PartnerPricing[]
+  parcelGroups        ParcelGroup[]        @relation("ClientParcelGroups")
 
   @@index([organizationId])
   @@index([agencyId])
@@ -1120,6 +1122,8 @@ model Parcel {
   originalWarehouseId String?
   // Espace de rangement physique dans le magasin courant (recherche rapide)
   spaceId             String?
+  // Lien optionnel vers un ParcelGroup (envoi groupe par un client)
+  parcelGroupId       String?
   containerId         String?
   lastContainerId     String?
   transitRouteId      String?
@@ -1136,16 +1140,17 @@ model Parcel {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  client            Client        @relation("ParcelClient", fields: [clientId], references: [id])
-  recipient         Client?       @relation("ParcelRecipient", fields: [recipientId], references: [id])
-  warehouse         Warehouse?    @relation("CurrentWarehouse", fields: [warehouseId], references: [id])
-  originalWarehouse Warehouse?    @relation("OriginalWarehouse", fields: [originalWarehouseId], references: [id])
+  client            Client          @relation("ParcelClient", fields: [clientId], references: [id])
+  recipient         Client?         @relation("ParcelRecipient", fields: [recipientId], references: [id])
+  warehouse         Warehouse?      @relation("CurrentWarehouse", fields: [warehouseId], references: [id])
+  originalWarehouse Warehouse?      @relation("OriginalWarehouse", fields: [originalWarehouseId], references: [id])
   space             WarehouseSpace? @relation("ParcelSpace", fields: [spaceId], references: [id])
-  destinationAgency Agency?       @relation("ParcelDestinationAgency", fields: [destinationAgencyId], references: [id])
-  container         Container?    @relation("CurrentContainer", fields: [containerId], references: [id])
-  lastContainer     Container?    @relation("LastContainer", fields: [lastContainerId], references: [id])
-  transitRoute      TransitRoute? @relation(fields: [transitRouteId], references: [id])
-  invoice           Invoice?      @relation(fields: [invoiceId], references: [id])
+  parcelGroup       ParcelGroup?    @relation(fields: [parcelGroupId], references: [id])
+  destinationAgency Agency?         @relation("ParcelDestinationAgency", fields: [destinationAgencyId], references: [id])
+  container         Container?      @relation("CurrentContainer", fields: [containerId], references: [id])
+  lastContainer     Container?      @relation("LastContainer", fields: [lastContainerId], references: [id])
+  transitRoute      TransitRoute?   @relation(fields: [transitRouteId], references: [id])
+  invoice           Invoice?        @relation(fields: [invoiceId], references: [id])
 
   histories      ParcelHistory[]
   manifestLines  ManifestLine[]
@@ -1159,6 +1164,7 @@ model Parcel {
   @@index([clientId])
   @@index([warehouseId])
   @@index([spaceId])
+  @@index([parcelGroupId])
   @@index([containerId])
   @@index([lastContainerId])
   @@index([destinationAgencyId])
@@ -1259,17 +1265,54 @@ model Invoice {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
-  client   Client    @relation(fields: [clientId], references: [id])
-  agency   Agency    @relation(fields: [agencyId], references: [id])
+  // Lien optionnel vers un ParcelGroup : la facture est globale pour le groupe.
+  parcelGroupId String? @unique
+
+  client      Client       @relation(fields: [clientId], references: [id])
+  agency      Agency       @relation(fields: [agencyId], references: [id])
   // 1 facture peut couvrir N colis (audit fix #5)
-  parcels  Parcel[]
-  payments Payment[]
-  debts    Debt[]
+  parcels     Parcel[]
+  payments    Payment[]
+  debts       Debt[]
+  parcelGroup ParcelGroup? @relation(fields: [parcelGroupId], references: [id])
 
   @@index([clientId])
   @@index([agencyId])
   @@index([status])
   @@map("invoices")
+}
+
+// Groupe de colis envoye en lot par un client. Permet d'avoir une seule
+// facture globale pour N colis. Chaque colis garde son propre tracking.
+model ParcelGroup {
+  id             String            @id @default(uuid())
+  organizationId String
+  clientId       String
+  agencyId       String
+  reference      String            @unique
+  label          String?
+  notes          String?
+  status         ParcelGroupStatus @default(DRAFT)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  client  Client   @relation("ClientParcelGroups", fields: [clientId], references: [id])
+  agency  Agency   @relation(fields: [agencyId], references: [id])
+  parcels Parcel[]
+  invoice Invoice?
+
+  @@index([clientId])
+  @@index([agencyId])
+  @@index([status])
+  @@map("parcel_groups")
+}
+
+enum ParcelGroupStatus {
+  DRAFT // en cours de saisie, colis ajoutables
+  FINALIZED // facture globale generee, plus de modifications
+  SENT // facture envoyee au client
+  PAID // facture totalement payee
+  CANCELLED
 }
 
 enum InvoiceStatus {

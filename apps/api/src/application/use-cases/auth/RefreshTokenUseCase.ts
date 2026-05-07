@@ -39,11 +39,30 @@ export class RefreshTokenUseCase {
 
     const agencyIds = user.userAgencies.map((ua) => ua.agencyId);
 
+    // Bug fix : on doit inclure organizationId dans le JWT (sinon multi-tenant
+    // casse apres refresh -- les requetes auth-only sans tenant guard fonctionnent
+    // mais les controllers qui lisent req.user.organizationId echouent).
     const accessToken = jwt.sign(
-      { userId: user.id, email: user.email, role: user.role, agencyIds },
+      {
+        userId: user.id,
+        email: user.email,
+        role: user.role,
+        agencyIds,
+        organizationId: user.organizationId,
+      },
       config.jwt.secret as jwt.Secret,
       { expiresIn: config.jwt.accessExpiry } as jwt.SignOptions,
     );
+
+    const decoded = jwt.decode(accessToken) as { exp?: number } | null;
+    if (decoded?.exp) {
+      const ttlSec = decoded.exp - Math.floor(Date.now() / 1000);
+      const expiresAtIso = new Date(decoded.exp * 1000).toISOString();
+      // eslint-disable-next-line no-console
+      console.log(
+        `[Refresh] user=${user.email} accessExpiry=${config.jwt.accessExpiry} ttl=${ttlSec}s expiresAt=${expiresAtIso}`,
+      );
+    }
 
     const newRefreshToken = randomUUID();
     const refreshExpiry = new Date();

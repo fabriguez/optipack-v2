@@ -34,6 +34,7 @@ import systemRoutes from './system.routes';
 import uploadRoutes from './upload.routes';
 import exportRoutes from './export.routes';
 import meRoutes from './me.routes';
+import parcelGroupRoutes from './parcel-group.routes';
 
 const router = Router();
 
@@ -52,6 +53,7 @@ router.use('/clients', clientRoutes);
 router.use('/recipients', recipientRoutes);
 router.use('/transit-routes', transitRouteRoutes);
 router.use('/parcels', parcelRoutes);
+router.use('/parcel-groups', parcelGroupRoutes);
 router.use('/containers', containerRoutes);
 router.use('/manifests', manifestRoutes);
 router.use('/routings', routingRoutes);
