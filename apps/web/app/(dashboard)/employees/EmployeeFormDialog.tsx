@@ -13,6 +13,7 @@ import { searchers, toSearchOption } from '@/lib/api/searchers';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { toast } from 'sonner';
+import { usePositions } from '@/lib/hooks/useHR';
 
 interface Props {
   open: boolean;
@@ -24,6 +25,7 @@ interface Props {
     id: string;
     fullName: string;
     position: string;
+    positionId?: string | null;
     agencyId: string;
     phone?: string | null;
     idNumber?: string | null;
@@ -95,6 +97,16 @@ export function EmployeeFormDialog({ open, onClose, defaultAgency, employee }: P
     // toujours respectee par les sous-composants disabled -> formulaire bloque).
     defaultValues: { agencyId: defaultAgency?.id ?? '' },
   });
+
+  // Catalogue des postes (Phase 1 ABAC) : remplace la saisie libre.
+  const { data: positionsResp, isLoading: positionsLoading } = usePositions();
+  const positionOptions = useMemo(
+    () =>
+      ((positionsResp as any)?.data ?? [])
+        .filter((p: any) => p.isActive !== false)
+        .map((p: any) => ({ value: p.id, label: p.name })),
+    [positionsResp],
+  );
   const onSubmit = (data: any) => {
     if (!data.agencyId) {
       toast.error('Agence manquante');
@@ -122,6 +134,7 @@ export function EmployeeFormDialog({ open, onClose, defaultAgency, employee }: P
         fullName: employee.fullName,
         agencyId: employee.agencyId,
         position: employee.position,
+        positionId: employee.positionId ?? '',
         phone: employee.phone ?? '',
         idNumber: employee.idNumber ?? '',
         baseSalary: employee.baseSalary != null ? Number(employee.baseSalary) : undefined,
@@ -238,7 +251,29 @@ export function EmployeeFormDialog({ open, onClose, defaultAgency, employee }: P
               />
             )}
           />
-          <AppInput label="Poste" {...register('position', { required: true })} />
+          <Controller
+            name="positionId"
+            control={control}
+            rules={{ required: 'Poste obligatoire' }}
+            render={({ field, fieldState }) => (
+              <AppSelect
+                label="Poste"
+                placeholder={positionsLoading ? 'Chargement...' : 'Selectionner un poste'}
+                options={positionOptions}
+                value={field.value || ''}
+                onValueChange={(v) => {
+                  field.onChange(v);
+                  // Synchronise le libelle "position" (legacy) avec le poste choisi
+                  // pour que les usages existants (recherche, affichage liste) restent fonctionnels.
+                  const opt = positionOptions.find((o: { value: string; label: string }) => o.value === v);
+                  if (opt) setValue('position', opt.label, { shouldValidate: true });
+                }}
+                error={fieldState.error?.message}
+              />
+            )}
+          />
+          {/* Champ cache : libelle du poste, synchronise avec positionId (compat ascendante). */}
+          <input type="hidden" {...register('position', { required: true })} />
           <Controller
             name="phone"
             control={control}

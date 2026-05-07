@@ -28,6 +28,7 @@ import {
   BarChart3,
   Settings,
   Shield,
+  ShieldCheck,
   ChevronLeft,
   ChevronDown,
   LogOut,
@@ -35,6 +36,7 @@ import {
 import { cn } from '@/lib/utils/cn';
 import { useTenantMeta } from '@/lib/providers/TenantProvider';
 import { AuthedImage } from '@/components/shared/AuthedImage';
+import { usePermission } from '@/lib/hooks/usePermission';
 
 interface NavItem {
   label: string;
@@ -42,6 +44,8 @@ interface NavItem {
   icon: React.ElementType;
   /** Module flag pour filtrage par tenant (Phase 0.4) */
   module?: string;
+  /** Permission(s) ABAC requise(s) pour afficher l'entree (any). Phase 1 RH. */
+  permissions?: string[];
 }
 
 const mainNav: NavItem[] = [
@@ -63,6 +67,15 @@ const financeNav: NavItem[] = [
   { label: 'Comptabilite', href: '/accounting', icon: BookOpen, module: 'accounting' },
   { label: 'Depenses', href: '/expenses', icon: HandCoins, module: 'expenses' },
   { label: 'Dettes', href: '/debts', icon: AlertTriangle, module: 'debts' },
+];
+
+const adminNav: NavItem[] = [
+  {
+    label: 'Administration RH',
+    href: '/admin/personnel/postes',
+    icon: ShieldCheck,
+    permissions: ['position.manage', 'permission.manage', 'schedule.manage', 'holiday.manage'],
+  },
 ];
 
 const systemNav: NavItem[] = [
@@ -89,10 +102,21 @@ function NavSection({
   defaultOpen?: boolean;
 }) {
   const pathname = usePathname();
-  const hasActiveItem = items.some(
+  // Permissions effectives de la session : utilisees pour filtrer les items
+  // dont l'attribut `permissions` n'est pas satisfait par l'utilisateur.
+  const allPerms = items.flatMap((it) => it.permissions ?? []);
+  const hasAnyPerm = usePermission(allPerms.length > 0 ? allPerms : ['*'], 'any');
+  const visibleItems = items.filter((it) => {
+    if (!it.permissions || it.permissions.length === 0) return true;
+    return hasAnyPerm; // grossier mais suffisant tant qu'il n'y a qu'un item avec perms par section
+  });
+
+  const hasActiveItem = visibleItems.some(
     (item) => pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href)),
   );
   const [open, setOpen] = useState(defaultOpen || hasActiveItem);
+
+  if (visibleItems.length === 0) return null;
 
   return (
     <div className="mb-1">
@@ -117,7 +141,7 @@ function NavSection({
         )}
       >
         <nav className="flex flex-col gap-0.5 px-2 pb-2">
-          {items.map((item) => {
+          {visibleItems.map((item) => {
             const isActive =
               pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
             return (
@@ -155,6 +179,7 @@ export function Sidebar() {
   const filteredMain = filterByModule(mainNav);
   const filteredFinance = filterByModule(financeNav);
   const filteredSystem = filterByModule(systemNav);
+  const filteredAdmin = filterByModule(adminNav);
 
   return (
     <aside
@@ -196,6 +221,7 @@ export function Sidebar() {
         {filteredMain.length > 0 && <NavSection title="Menu" items={filteredMain} collapsed={collapsed} defaultOpen={true} />}
         {filteredFinance.length > 0 && <NavSection title="Finance" items={filteredFinance} collapsed={collapsed} defaultOpen={true} />}
         {filteredSystem.length > 0 && <NavSection title="Systeme" items={filteredSystem} collapsed={collapsed} defaultOpen={false} />}
+        {filteredAdmin.length > 0 && <NavSection title="Administration" items={filteredAdmin} collapsed={collapsed} defaultOpen={false} />}
       </div>
 
       {/* Footer */}
