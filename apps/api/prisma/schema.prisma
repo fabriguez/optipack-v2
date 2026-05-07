@@ -877,6 +877,14 @@ model Client {
   email          String?
   idNumber       String?
   imageUrl       String?
+  imageKey       String?
+  // Photos document d'identification recto + verso. Servent au moment du
+  // retrait d'un colis pour que l'agent confronte la personne en face avec
+  // la photo et valide la remise.
+  idDocumentUrl       String?
+  idDocumentKey       String?
+  idDocumentBackUrl   String?
+  idDocumentBackKey   String?
   address        String?
   clientType     ClientType  @default(INDIVIDUAL)
   loyaltyTier    LoyaltyTier @default(STANDARD)

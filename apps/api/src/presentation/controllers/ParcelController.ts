@@ -8,6 +8,10 @@ import { UpdateParcelUseCase } from '../../application/use-cases/parcel/UpdatePa
 import { UpdateParcelStatusUseCase } from '../../application/use-cases/parcel/UpdateParcelStatusUseCase';
 import { prisma } from '../../config/database';
 import { HistoryService } from '../../application/services/HistoryService';
+import {
+  HandoverParcelUseCase,
+  HandoverUntrackedParcelUseCase,
+} from '../../application/use-cases/parcel/HandoverParcelUseCase';
 
 export class ParcelController {
   static async create(req: Request, res: Response, next: NextFunction) {
@@ -186,6 +190,28 @@ export class ParcelController {
       });
 
       res.json({ success: true });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  // ----- Remise au client (handover) -----
+
+  static async handover(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(HandoverParcelUseCase);
+      const result = await useCase.execute(req.params.id, req.body, req.user!.userId);
+      res.json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async handoverUntracked(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(HandoverUntrackedParcelUseCase);
+      const result = await useCase.execute(req.body, req.user!.userId);
+      res.status(201).json({ success: true, data: result });
     } catch (err) {
       next(err);
     }

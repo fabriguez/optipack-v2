@@ -5,6 +5,12 @@ import { ListClientsUseCase } from '../../application/use-cases/client/ListClien
 import { GetClientUseCase } from '../../application/use-cases/client/GetClientUseCase';
 import { UpdateClientUseCase } from '../../application/use-cases/client/UpdateClientUseCase';
 import { DeleteClientUseCase } from '../../application/use-cases/client/DeleteClientUseCase';
+import {
+  UploadClientImageUseCase,
+  DeleteClientImageUseCase,
+  GetClientImageUseCase,
+} from '../../application/use-cases/client/ClientImageUseCases';
+import { NotFoundError } from '../../domain/errors/BusinessError';
 import { getOrgId } from '../middleware/tenantGuard';
 
 export class ClientController {
@@ -57,6 +63,57 @@ export class ClientController {
       const useCase = container.resolve(DeleteClientUseCase);
       await useCase.execute(req.params.id);
       res.json({ success: true, message: 'Client desactive' });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  // ----- Photos client (profile / idDocument / idDocumentBack) -----
+
+  static async uploadImage(req: Request, res: Response, next: NextFunction) {
+    try {
+      const slot = req.params.slot as 'profile' | 'idDocument' | 'idDocumentBack';
+      if (!['profile', 'idDocument', 'idDocumentBack'].includes(slot)) {
+        throw new NotFoundError('Slot photo client', slot);
+      }
+      const file = (req as any).file as Express.Multer.File | undefined;
+      if (!file) return res.status(400).json({ success: false, message: 'Aucun fichier fourni' });
+      const useCase = container.resolve(UploadClientImageUseCase);
+      const result = await useCase.execute(req.params.id, slot, file);
+      res.json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async deleteImage(req: Request, res: Response, next: NextFunction) {
+    try {
+      const slot = req.params.slot as 'profile' | 'idDocument' | 'idDocumentBack';
+      if (!['profile', 'idDocument', 'idDocumentBack'].includes(slot)) {
+        throw new NotFoundError('Slot photo client', slot);
+      }
+      const useCase = container.resolve(DeleteClientImageUseCase);
+      const result = await useCase.execute(req.params.id, slot);
+      res.json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async getImage(req: Request, res: Response, next: NextFunction) {
+    try {
+      const slot = req.params.slot as 'profile' | 'idDocument' | 'idDocumentBack';
+      if (!['profile', 'idDocument', 'idDocumentBack'].includes(slot)) {
+        throw new NotFoundError('Slot photo client', slot);
+      }
+      const useCase = container.resolve(GetClientImageUseCase);
+      const obj = await useCase.execute(req.params.id, slot);
+      if (!obj) return res.status(404).end();
+      res.setHeader('Content-Type', obj.contentType);
+      res.setHeader('Content-Length', String(obj.size));
+      res.setHeader('Cache-Control', 'private, max-age=86400');
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      obj.stream.pipe(res);
     } catch (err) {
       next(err);
     }
