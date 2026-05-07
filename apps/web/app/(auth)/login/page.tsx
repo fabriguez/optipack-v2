@@ -1,17 +1,33 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useSearchParams } from 'next/navigation';
 import { loginSchema, type LoginInput } from '@transitsoftservices/shared';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppInput } from '@/components/ui/AppInput';
-import { Eye, EyeOff, LogIn } from 'lucide-react';
+import { Eye, EyeOff, LogIn, AlertCircle } from 'lucide-react';
 import { useLogin } from '@/lib/hooks/useAuth';
+import { readAuthLog, clearAuthLog, type AuthDebugEntry } from '@/lib/api/authDebug';
+
+const REASON_LABELS: Record<string, string> = {
+  'refresh-failed': "Votre session a expire (refresh token invalide).",
+  'refresh-exception': 'Erreur reseau pendant le rafraichissement de la session.',
+  'repeated-401-after-refresh': 'Le serveur a refuse plusieurs requetes successives.',
+};
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
+  const [showLog, setShowLog] = useState(false);
+  const [authLog, setAuthLog] = useState<AuthDebugEntry[]>([]);
+  const search = useSearchParams();
+  const reason = search.get('reason');
   const loginMutation = useLogin();
+
+  useEffect(() => {
+    if (reason) setAuthLog(readAuthLog());
+  }, [reason]);
 
   const {
     register,
@@ -39,6 +55,54 @@ export default function LoginPage() {
 
         {/* Form */}
         <div className="rounded-2xl bg-white p-8 shadow-card border border-gray-100">
+          {/* Bandeau diagnostique : explique pourquoi l'utilisateur a ete deconnecte
+              et expose les logs persistants pour investigation. */}
+          {reason && (
+            <div className="mb-4 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 mt-0.5 text-amber-700 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-amber-800 font-medium">
+                    Vous avez ete deconnecte
+                  </p>
+                  <p className="text-xs text-amber-700 mt-0.5">
+                    {REASON_LABELS[reason] ?? `Raison: ${reason}`}
+                  </p>
+                  {authLog.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowLog((s) => !s)}
+                      className="mt-1 text-xs text-amber-800 underline hover:text-amber-900"
+                    >
+                      {showLog ? 'Masquer' : 'Afficher'} le journal ({authLog.length} evenement{authLog.length > 1 ? 's' : ''})
+                    </button>
+                  )}
+                  {showLog && (
+                    <div className="mt-2 max-h-48 overflow-auto rounded bg-white border border-amber-200 p-2 font-mono text-[10px] text-gray-700">
+                      {authLog.slice().reverse().map((e, i) => (
+                        <div key={i} className="border-b border-gray-100 py-0.5 last:border-0">
+                          <span className="text-gray-400">{e.ts.slice(11, 19)}</span>{' '}
+                          <span className="font-semibold">{e.kind}</span>{' '}
+                          {e.detail && <span className="text-gray-500">{JSON.stringify(e.detail)}</span>}
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          clearAuthLog();
+                          setAuthLog([]);
+                        }}
+                        className="mt-1 text-amber-700 hover:underline"
+                      >
+                        Effacer le journal
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Erreur globale */}
           {loginMutation.isError && (
             <div className="mb-4 rounded-xl bg-red-50 border border-red-200 px-4 py-3">

@@ -1,27 +1,29 @@
 'use client';
 
+import { useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 
 /**
  * Hook ABAC (Phase 1 RH) : verifie si l'utilisateur courant possede une ou
  * plusieurs permissions. SUPER_ADMIN bypass (permissions=['*']).
  *
+ * Les permissions sont decodees depuis le claim `permissions` du JWT
+ * `accessToken` (signe par l'API). Cela evite de stocker une copie redondante
+ * dans le cookie NextAuth -- crucial pour un admin avec 60+ permissions
+ * (sinon le cookie peut depasser la limite navigateur de 4 kB et provoquer
+ * des deconnexions surprise).
+ *
  * Usage :
  *   const canMark = usePermission('attendance.mark');
  *   const canMarkOrJustify = usePermission(['attendance.mark', 'attendance.justify']);
- *
- * Pour proteger un bouton :
- *   {canMark && <Button onClick={...}>Pointer</Button>}
- *
- * Pour proteger un bloc avec UI fallback : voir <Can> ci-dessous.
  */
 export function usePermission(keys: string | string[], mode: 'any' | 'all' = 'any'): boolean {
+  const perms = usePermissions();
   const { data: session } = useSession();
-  const perms = (session as any)?.permissions as string[] | undefined;
   const role = (session as any)?.role as string | undefined;
 
-  if (!perms) return false;
   if (role === 'SUPER_ADMIN' || perms.includes('*')) return true;
+  if (perms.length === 0) return false;
 
   const required = Array.isArray(keys) ? keys : [keys];
   if (required.length === 0) return true;
@@ -30,8 +32,25 @@ export function usePermission(keys: string | string[], mode: 'any' | 'all' = 'an
     : required.some((k) => perms.includes(k));
 }
 
-/** Retourne la liste brute des permissions de la session (vide si non connecte). */
+/** Retourne la liste brute des permissions extraites du JWT API. */
 export function usePermissions(): string[] {
   const { data: session } = useSession();
-  return ((session as any)?.permissions as string[] | undefined) ?? [];
+  const accessToken = (session as any)?.accessToken as string | undefined;
+  return useMemo(() => decodePermissionsFromJwt(accessToken), [accessToken]);
+}
+
+function decodePermissionsFromJwt(token: string | undefined): string[] {
+  if (!token) return [];
+  try {
+    const payload = token.split('.')[1];
+    if (!payload) return [];
+    const json =
+      typeof Buffer !== 'undefined'
+        ? Buffer.from(payload.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8')
+        : atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
+    const obj = JSON.parse(json) as { permissions?: string[] };
+    return obj.permissions ?? [];
+  } catch {
+    return [];
+  }
 }

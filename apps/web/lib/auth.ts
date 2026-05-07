@@ -71,15 +71,16 @@ export const { handlers, signIn, signOut, auth }: any = NextAuth({
             // eslint-disable-next-line no-console
             console.warn('[Auth.login] impossible de decoder exp du JWT');
           }
-          // Extrait les permissions ABAC depuis le JWT (Phase 1 RH).
-          const claims = decodeJwt(data.data.accessToken);
+          // Permissions ABAC : NE SONT PAS stockees ici. Elles vivent dans le claim
+          // `permissions` du JWT API (data.data.accessToken) et sont decodees a la
+          // demande par usePermission() cote client. Stocker une copie dans la
+          // session NextAuth gonflerait inutilement le cookie (limite ~4 kB).
           return {
             id: data.data.user.id,
             email: data.data.user.email,
             name: `${data.data.user.firstName} ${data.data.user.lastName}`,
             role: data.data.user.role,
             agencyIds: data.data.user.agencyIds,
-            permissions: claims?.permissions ?? [],
             accessToken: data.data.accessToken,
             refreshToken: data.data.refreshToken,
             // exp reelle depuis le JWT (fallback : 12h si decodage rate)
@@ -102,7 +103,6 @@ export const { handlers, signIn, signOut, auth }: any = NextAuth({
         token.id = user.id;
         token.role = (user as any).role;
         token.agencyIds = (user as any).agencyIds;
-        (token as any).permissions = (user as any).permissions ?? [];
         token.accessToken = (user as any).accessToken;
         token.refreshToken = (user as any).refreshToken;
         token.accessTokenExpiresAt = (user as any).accessTokenExpiresAt;
@@ -138,9 +138,8 @@ export const { handlers, signIn, signOut, auth }: any = NextAuth({
           (token as any).refreshToken = data.data.refreshToken;
           const realExp = jwtExpMs(data.data.accessToken);
           (token as any).accessTokenExpiresAt = realExp ?? Date.now() + 12 * 60 * 60 * 1000;
-          // Permissions raffraichies depuis le nouveau JWT.
-          const claims = decodeJwt(data.data.accessToken);
-          (token as any).permissions = claims?.permissions ?? (token as any).permissions ?? [];
+          // Permissions : pas stockees dans le token NextAuth (cf. authorize ci-dessus).
+          // Elles seront re-extraites du nouveau accessToken par usePermission().
           (token as any).error = undefined;
           // eslint-disable-next-line no-console
           console.log(
@@ -162,7 +161,6 @@ export const { handlers, signIn, signOut, auth }: any = NextAuth({
       session.user.id = token.id as string;
       (session as any).role = token.role;
       (session as any).agencyIds = token.agencyIds;
-      (session as any).permissions = (token as any).permissions ?? [];
       (session as any).accessToken = (token as any).accessToken;
       (session as any).error = (token as any).error;
       return session;
