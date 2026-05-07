@@ -44,6 +44,27 @@ export function authorize(...roles: string[]) {
   };
 }
 
+/**
+ * Phase 1 ABAC : verifie que l'utilisateur dispose d'au moins une des permissions
+ * demandees. SUPER_ADMIN bypass. Les permissions sont posees dans le JWT au login.
+ *
+ * Co-existe avec authorize() (legacy role-based) le temps de la migration des
+ * routes vers ABAC.
+ */
+export function requirePermission(...keys: string[]) {
+  return (req: Request, _res: Response, next: NextFunction): void => {
+    if (!req.user) return next(new AuthenticationError());
+    if (req.user.role === 'SUPER_ADMIN') return next();
+
+    const perms = req.user.permissions ?? [];
+    if (perms.includes('*')) return next();
+    if (keys.length === 0) return next();
+    if (keys.some((k) => perms.includes(k))) return next();
+
+    return next(new AuthorizationError('Permission insuffisante pour cette action'));
+  };
+}
+
 export function requireAgency(req: Request, _res: Response, next: NextFunction): void {
   if (!req.user) {
     return next(new AuthenticationError());

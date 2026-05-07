@@ -65,6 +65,10 @@ export interface JwtPayload {
   agencyIds: string[];
   // Phase 0.2 : isolation multi-tenant. Toutes les requetes filtrent par cet ID.
   organizationId: string;
+  // Phase 1 RH/ABAC : permissions effectives (poste + overrides). Vide pour
+  // SUPER_ADMIN (qui contourne le check). Les middlewares utilisent
+  // requirePermission() pour valider.
+  permissions?: string[];
   iat?: number;
   exp?: number;
 }

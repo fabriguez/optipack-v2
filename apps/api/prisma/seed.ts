@@ -11,7 +11,7 @@ const ORG_ID = '00000000-0000-4000-a000-000000000001';
 const ADMIN_ID = '00000000-0000-4000-a000-000000000010';
 
 // Bump this version when seed content changes to force a re-run
-const SEED_VERSION = process.env.SEED_VERSION || '1';
+const SEED_VERSION = process.env.SEED_VERSION || '2';
 const SEED_MARKER_KEY = 'seed_version';
 
 async function main() {
@@ -147,6 +147,11 @@ async function main() {
   }
   console.log('System config created');
 
+  // ============================================================
+  // PHASE 1 RH : Permissions, Postes, Matrice de droits
+  // ============================================================
+  await seedPermissionsAndPositions(org.id);
+
   // Write/refresh the seed marker so subsequent runs are skipped
   await prisma.systemConfig.upsert({
     where: { organizationId_key: { organizationId: org.id, key: SEED_MARKER_KEY } },
@@ -160,6 +165,264 @@ async function main() {
   });
 
   console.log(`Seed completed! (version ${SEED_VERSION})`);
+}
+
+// ============================================================
+// PERMISSIONS & POSITIONS (Phase 1 RH/ABAC)
+// ============================================================
+
+// Cle stable referencee dans le code (middleware requirePermission, hooks UI).
+// Modifier la cle = breaking change. Le libelle/categorie peut evoluer librement.
+const PERMISSION_CATALOG: Array<{ key: string; label: string; category: string; description?: string }> = [
+  // personnel
+  { key: 'personnel.read', label: 'Voir le personnel', category: 'personnel' },
+  { key: 'personnel.create', label: 'Creer un membre du personnel', category: 'personnel' },
+  { key: 'personnel.update', label: 'Modifier un membre du personnel', category: 'personnel' },
+  { key: 'personnel.delete', label: 'Supprimer un membre du personnel', category: 'personnel' },
+  { key: 'attendance.read', label: 'Consulter les pointages', category: 'personnel' },
+  { key: 'attendance.mark', label: 'Pointer le personnel', category: 'personnel' },
+  { key: 'attendance.justify', label: 'Justifier une absence/retard', category: 'personnel' },
+  { key: 'attendance.justify.review', label: 'Valider/rejeter une justification', category: 'personnel' },
+  { key: 'leave.read', label: 'Voir les conges', category: 'personnel' },
+  { key: 'leave.request', label: 'Demander un conge', category: 'personnel' },
+  { key: 'leave.validate', label: 'Valider un conge', category: 'personnel' },
+  { key: 'leave.end_early', label: 'Mettre fin a un conge', category: 'personnel' },
+  { key: 'sanction.read', label: 'Voir les sanctions', category: 'personnel' },
+  { key: 'sanction.manage', label: 'Gerer les sanctions', category: 'personnel' },
+  { key: 'schedule.manage', label: 'Gerer les plannings RH', category: 'personnel' },
+  { key: 'holiday.manage', label: 'Gerer les jours non ouvres', category: 'personnel' },
+  { key: 'review.read', label: 'Voir les evaluations', category: 'personnel' },
+  { key: 'review.manage', label: 'Gerer les evaluations', category: 'personnel' },
+  { key: 'payslip.read', label: 'Voir les fiches de paie', category: 'personnel' },
+  { key: 'payslip.generate', label: 'Generer une fiche de paie', category: 'personnel' },
+  { key: 'payroll.pay', label: 'Payer un salaire', category: 'personnel' },
+
+  // clients
+  { key: 'client.read', label: 'Voir les clients', category: 'clients' },
+  { key: 'client.create', label: 'Creer un client', category: 'clients' },
+  { key: 'client.update', label: 'Modifier un client', category: 'clients' },
+
+  // colis
+  { key: 'parcel.read', label: 'Voir les colis', category: 'colis' },
+  { key: 'parcel.create', label: 'Creer un colis', category: 'colis' },
+  { key: 'parcel.update', label: 'Modifier un colis', category: 'colis' },
+  { key: 'parcel.deliver', label: 'Remettre un colis', category: 'colis' },
+  { key: 'parcelgroup.manage', label: 'Gerer les groupes de colis', category: 'colis' },
+  { key: 'container.manage', label: 'Gerer les conteneurs', category: 'colis' },
+  { key: 'manifest.manage', label: 'Gerer les manifestes', category: 'colis' },
+  { key: 'warehouse.read', label: 'Voir l\'entrepot', category: 'colis' },
+  { key: 'warehouse.manage', label: 'Gerer l\'entrepot', category: 'colis' },
+
+  // finance
+  { key: 'cashregister.read', label: 'Voir la caisse', category: 'finance' },
+  { key: 'cashregister.close', label: 'Cloturer la caisse', category: 'finance' },
+  { key: 'cashregister.disburse', label: 'Decaisser depuis la caisse', category: 'finance' },
+  { key: 'expense.read', label: 'Voir les depenses', category: 'finance' },
+  { key: 'expense.create', label: 'Saisir une depense', category: 'finance' },
+  { key: 'expense.approve', label: 'Approuver une depense', category: 'finance' },
+  { key: 'invoice.read', label: 'Voir les factures', category: 'finance' },
+  { key: 'invoice.manage', label: 'Gerer les factures', category: 'finance' },
+  { key: 'transfer.initiate', label: 'Initier un transfert de fonds', category: 'finance' },
+  { key: 'transfer.confirm', label: 'Confirmer un transfert', category: 'finance' },
+  { key: 'accounting.read', label: 'Consulter la comptabilite', category: 'finance' },
+  { key: 'accounting.manage', label: 'Gerer la comptabilite', category: 'finance' },
+
+  // agence
+  { key: 'agency.read', label: 'Voir l\'agence', category: 'agence' },
+  { key: 'agency.manage', label: 'Gerer les parametres d\'agence', category: 'agence' },
+  { key: 'charge.manage', label: 'Gerer les charges recurrentes', category: 'agence' },
+  { key: 'dailyreport.read', label: 'Voir les rapports journaliers', category: 'agence' },
+  { key: 'dailyreport.manage', label: 'Gerer les rapports journaliers', category: 'agence' },
+
+  // admin
+  { key: 'position.manage', label: 'Gerer les postes', category: 'admin' },
+  { key: 'permission.manage', label: 'Gerer la matrice des permissions', category: 'admin' },
+  { key: 'user.manage', label: 'Gerer les utilisateurs', category: 'admin' },
+  { key: 'system.config', label: 'Configurer le systeme', category: 'admin' },
+];
+
+// Mapping poste -> permissions par defaut. L'admin pourra ensuite ajuster.
+// "*" = toutes les permissions du catalogue.
+const POSITION_CATALOG: Array<{
+  name: string;
+  description: string;
+  hierarchyLevel: number;
+  permissions: string[] | '*';
+}> = [
+  {
+    name: 'Chef d\'agence',
+    description: 'Responsable d\'une agence : encadrement personnel, validations, supervision finance.',
+    hierarchyLevel: 10,
+    permissions: [
+      'personnel.read', 'personnel.create', 'personnel.update',
+      'attendance.read', 'attendance.mark', 'attendance.justify.review',
+      'leave.read', 'leave.validate', 'leave.end_early',
+      'sanction.read', 'sanction.manage',
+      'schedule.manage', 'holiday.manage',
+      'review.read', 'review.manage',
+      'payslip.read', 'payslip.generate', 'payroll.pay',
+      'client.read', 'client.create', 'client.update',
+      'parcel.read', 'parcel.create', 'parcel.update', 'parcel.deliver',
+      'parcelgroup.manage', 'container.manage', 'manifest.manage',
+      'warehouse.read', 'warehouse.manage',
+      'cashregister.read', 'cashregister.close', 'cashregister.disburse',
+      'expense.read', 'expense.create', 'expense.approve',
+      'invoice.read', 'invoice.manage',
+      'transfer.initiate', 'transfer.confirm',
+      'accounting.read',
+      'agency.read', 'agency.manage', 'charge.manage',
+      'dailyreport.read', 'dailyreport.manage',
+    ],
+  },
+  {
+    name: 'Superviseur',
+    description: 'Supervision operationnelle d\'une equipe au sein de l\'agence.',
+    hierarchyLevel: 20,
+    permissions: [
+      'personnel.read',
+      'attendance.read', 'attendance.mark', 'attendance.justify.review',
+      'leave.read', 'leave.validate',
+      'sanction.read',
+      'review.read',
+      'parcel.read', 'parcel.create', 'parcel.update',
+      'client.read', 'client.create',
+      'cashregister.read', 'cashregister.close',
+      'dailyreport.read',
+      'agency.read',
+    ],
+  },
+  {
+    name: 'Comptable',
+    description: 'Gestion comptable et financiere.',
+    hierarchyLevel: 30,
+    permissions: [
+      'personnel.read',
+      'payslip.read', 'payslip.generate',
+      'cashregister.read',
+      'expense.read', 'expense.create', 'expense.approve',
+      'invoice.read', 'invoice.manage',
+      'transfer.initiate',
+      'accounting.read', 'accounting.manage',
+      'charge.manage',
+      'dailyreport.read',
+      'agency.read',
+      'attendance.read', 'leave.read',
+    ],
+  },
+  {
+    name: 'Magasinier',
+    description: 'Gestion de l\'entrepot et des stocks.',
+    hierarchyLevel: 40,
+    permissions: [
+      'parcel.read', 'parcel.update',
+      'container.manage', 'manifest.manage',
+      'warehouse.read', 'warehouse.manage',
+      'agency.read',
+      'attendance.mark', 'leave.request', 'attendance.justify',
+    ],
+  },
+  {
+    name: 'Logisticien',
+    description: 'Coordination logistique et transit inter-agences.',
+    hierarchyLevel: 40,
+    permissions: [
+      'parcel.read', 'parcel.create', 'parcel.update',
+      'parcelgroup.manage', 'container.manage', 'manifest.manage',
+      'warehouse.read',
+      'agency.read',
+      'attendance.mark', 'leave.request', 'attendance.justify',
+    ],
+  },
+  {
+    name: 'Agent',
+    description: 'Agent de comptoir : enregistrement colis, encaissement, relation client.',
+    hierarchyLevel: 50,
+    permissions: [
+      'parcel.read', 'parcel.create', 'parcel.update', 'parcel.deliver',
+      'client.read', 'client.create', 'client.update',
+      'parcelgroup.manage',
+      'cashregister.read',
+      'invoice.read',
+      'agency.read',
+      'attendance.mark', 'leave.request', 'attendance.justify',
+    ],
+  },
+  {
+    name: 'Commercial',
+    description: 'Prospection, gestion partenaires et tarifs partenaires.',
+    hierarchyLevel: 50,
+    permissions: [
+      'client.read', 'client.create', 'client.update',
+      'parcel.read',
+      'agency.read',
+      'attendance.mark', 'leave.request', 'attendance.justify',
+    ],
+  },
+  {
+    name: 'Stagiaire',
+    description: 'Acces minimal en lecture (apprentissage).',
+    hierarchyLevel: 80,
+    permissions: [
+      'parcel.read', 'client.read', 'agency.read',
+      'attendance.mark', 'leave.request', 'attendance.justify',
+    ],
+  },
+];
+
+async function seedPermissionsAndPositions(organizationId: string) {
+  // 1) Catalogue de permissions (idempotent par key)
+  const permByKey = new Map<string, string>();
+  for (const p of PERMISSION_CATALOG) {
+    const row = await prisma.permission.upsert({
+      where: { key: p.key },
+      update: { label: p.label, category: p.category, description: p.description ?? null },
+      create: {
+        key: p.key,
+        label: p.label,
+        category: p.category,
+        description: p.description ?? null,
+        isSystem: true,
+      },
+    });
+    permByKey.set(p.key, row.id);
+  }
+  console.log(`Permissions seedees: ${permByKey.size}`);
+
+  // 2) Postes globaux (agencyId=null) idempotents par (organizationId, agencyId, name)
+  for (const pos of POSITION_CATALOG) {
+    const existing = await prisma.position.findFirst({
+      where: { organizationId, agencyId: null, name: pos.name },
+    });
+    const position = existing
+      ? await prisma.position.update({
+          where: { id: existing.id },
+          data: { description: pos.description, hierarchyLevel: pos.hierarchyLevel, isSystem: true },
+        })
+      : await prisma.position.create({
+          data: {
+            organizationId,
+            agencyId: null,
+            name: pos.name,
+            description: pos.description,
+            hierarchyLevel: pos.hierarchyLevel,
+            isSystem: true,
+          },
+        });
+
+    // 3) Matrice de droits (reset puis re-set pour les postes systeme : la verite est le seed)
+    const targetKeys = pos.permissions === '*'
+      ? Array.from(permByKey.keys())
+      : pos.permissions;
+    await prisma.positionPermission.deleteMany({ where: { positionId: position.id } });
+    await prisma.positionPermission.createMany({
+      data: targetKeys
+        .map((k) => permByKey.get(k))
+        .filter((id): id is string => !!id)
+        .map((permissionId) => ({ positionId: position.id, permissionId })),
+      skipDuplicates: true,
+    });
+  }
+  console.log(`Postes seedes: ${POSITION_CATALOG.length}`);
 }
 
 main()

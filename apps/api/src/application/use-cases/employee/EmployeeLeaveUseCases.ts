@@ -136,3 +136,74 @@ export class CancelEmployeeLeaveUseCase {
     });
   }
 }
+
+/**
+ * Cloture anticipee d'un conge approuve : passe le statut a ENDED_EARLY,
+ * memorise endedEarlyAt + endedByUserId. Les Attendance ON_LEAVE strictement
+ * posterieures a la date de fin anticipee sont supprimees pour permettre le
+ * pointage normal a partir de cette date+1.
+ */
+@injectable()
+export class EndEmployeeLeaveEarlyUseCase {
+  async execute(leaveId: string, endDate: Date, userId: string, reason?: string) {
+    const leave = await prisma.employeeLeave.findUnique({ where: { id: leaveId } });
+    if (!leave) throw new NotFoundError('Conge', leaveId);
+    if (leave.status !== 'APPROVED') {
+      throw new BusinessError('Seuls les conges APPROVED peuvent etre cloturees anticipement');
+    }
+    const end = new Date(endDate);
+    end.setUTCHours(0, 0, 0, 0);
+    const from = new Date(leave.fromDate); from.setUTCHours(0, 0, 0, 0);
+    const to = new Date(leave.toDate); to.setUTCHours(0, 0, 0, 0);
+    if (end < from || end >= to) {
+      throw new BusinessError('Date de fin anticipee hors plage du conge');
+    }
+
+    const updated = await prisma.employeeLeave.update({
+      where: { id: leaveId },
+      data: {
+        status: 'ENDED_EARLY',
+        endedEarlyAt: end,
+        endedByUserId: userId,
+        endReason: reason ?? null,
+      },
+    });
+
+    // Supprime les Attendance ON_LEAVE creees automatiquement au-dela de la
+    // date de cloture pour liberer ces jours au pointage normal.
+    const dayAfter = new Date(end);
+    dayAfter.setUTCDate(dayAfter.getUTCDate() + 1);
+    await prisma.attendance.deleteMany({
+      where: {
+        employeeId: leave.employeeId,
+        date: { gte: dayAfter, lte: to },
+        status: 'ON_LEAVE',
+        source: 'AUTO',
+      },
+    });
+
+    return updated;
+  }
+}
+
+/**
+ * Cron quotidien : cloture automatiquement les conges dont toDate est passee.
+ * Utilise pour eviter qu'un conge "APPROVED" reste en l'etat indefiniment et
+ * pour declencher d'eventuelles notifications post-conge.
+ */
+@injectable()
+export class AutoCloseExpiredLeavesUseCase {
+  async execute(now: Date = new Date()) {
+    const today = new Date(now);
+    today.setUTCHours(0, 0, 0, 0);
+    // Conges APPROVED dont toDate est strictement avant aujourd'hui : ils sont
+    // termines normalement -- on ne change PAS le status (reste APPROVED, leur
+    // fin etant deja portee par toDate). Cette methode existe pour les hooks
+    // de notification ulterieurs ; on retourne juste la liste.
+    const expired = await prisma.employeeLeave.findMany({
+      where: { status: 'APPROVED', toDate: { lt: today } },
+      select: { id: true, employeeId: true, toDate: true },
+    });
+    return { count: expired.length, leaves: expired };
+  }
+}

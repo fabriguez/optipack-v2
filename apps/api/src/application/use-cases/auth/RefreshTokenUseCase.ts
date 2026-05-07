@@ -8,6 +8,7 @@ import {
 } from '../../interfaces/IRefreshTokenRepository';
 import { AuthenticationError } from '../../../domain/errors/BusinessError';
 import { config } from '../../../config';
+import { PermissionService } from '../../services/PermissionService';
 
 interface RefreshResult {
   accessToken: string;
@@ -19,6 +20,7 @@ export class RefreshTokenUseCase {
   constructor(
     @inject(USER_REPOSITORY) private userRepo: IUserRepository,
     @inject(REFRESH_TOKEN_REPOSITORY) private refreshTokenRepo: IRefreshTokenRepository,
+    private permissionService: PermissionService,
   ) {}
 
   async execute(currentRefreshToken: string): Promise<RefreshResult> {
@@ -38,6 +40,9 @@ export class RefreshTokenUseCase {
     }
 
     const agencyIds = user.userAgencies.map((ua) => ua.agencyId);
+    // Phase 1 RH/ABAC : recharge les permissions effectives a chaque refresh,
+    // ce qui permet aux changements de matrice/poste de s'appliquer sans logout.
+    const permissions = await this.permissionService.getEffectivePermissionsForUser(user.id);
 
     // Bug fix : on doit inclure organizationId dans le JWT (sinon multi-tenant
     // casse apres refresh -- les requetes auth-only sans tenant guard fonctionnent
@@ -49,6 +54,7 @@ export class RefreshTokenUseCase {
         role: user.role,
         agencyIds,
         organizationId: user.organizationId,
+        permissions,
       },
       config.jwt.secret as jwt.Secret,
       { expiresIn: config.jwt.accessExpiry } as jwt.SignOptions,

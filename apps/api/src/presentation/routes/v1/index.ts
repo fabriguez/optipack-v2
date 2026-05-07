@@ -35,6 +35,10 @@ import uploadRoutes from './upload.routes';
 import exportRoutes from './export.routes';
 import meRoutes from './me.routes';
 import parcelGroupRoutes from './parcel-group.routes';
+import positionRoutes from './position.routes';
+import permissionRoutes from './permission.routes';
+import holidayRoutes from './holiday.routes';
+import workScheduleRoutes from './work-schedule.routes';
 
 const router = Router();
 
@@ -72,6 +76,10 @@ router.use('/debts', debtRoutes);
 router.use('/loyalty', loyaltyRoutes);
 router.use('/penalties', penaltyRoutes);
 router.use('/employees', employeeRoutes);
+router.use('/positions', positionRoutes);
+router.use('/permissions', permissionRoutes);
+router.use('/holidays', holidayRoutes);
+router.use('/work-schedules', workScheduleRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/audit', auditRoutes);
 router.use('/search', searchRoutes);

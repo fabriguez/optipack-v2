@@ -71,9 +71,18 @@ model Agency {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  organization    Organization         @relation(fields: [organizationId], references: [id])
-  responsibleUser User?                @relation("AgencyResponsible", fields: [responsibleUserId], references: [id])
-  openingHours    AgencyOpeningHours[]
+  // Planning RH par defaut de l'agence (heures et jours de service du personnel).
+  // Distinct des heures d'ouverture commerciale (openingHours). Le personnel sans
+  // override (Employee.scheduleId IS NULL) suit ce planning.
+  workScheduleId String?
+
+  organization        Organization               @relation(fields: [organizationId], references: [id])
+  responsibleUser     User?                      @relation("AgencyResponsible", fields: [responsibleUserId], references: [id])
+  openingHours        AgencyOpeningHours[]
+  workSchedule        WorkSchedule?              @relation("AgencyWorkSchedule", fields: [workScheduleId], references: [id])
+  positions           Position[]
+  holidays            Holiday[]                  @relation("AgencyHoliday")
+  employeeAssignments EmployeeAgencyAssignment[]
 
   warehouses            Warehouse[]
   userAgencies          UserAgency[]
@@ -443,6 +452,10 @@ model User {
   terminationsDecided     ContractTermination[]         @relation("TerminationDecider")
   reviewsAuthored         EmployeeReview[]              @relation("ReviewAuthor")
   passwordResetTokens     PasswordResetToken[]
+  permissionOverrides     UserPermissionOverride[]
+  justificationsSubmitted AttendanceJustification[]     @relation("JustificationSubmitter")
+  justificationsReviewed  AttendanceJustification[]     @relation("JustificationReviewer")
+  leavesEnded             EmployeeLeave[]               @relation("LeaveEndedBy")
 
   @@index([organizationId])
   @@index([email])
@@ -515,7 +528,20 @@ model Employee {
   fullName          String
   idNumber          String?
   phone             String?
+  // Libelle libre du poste (legacy : conserve pour compat). La verite metier
+  // passe progressivement par positionId (FK vers Position) ; ce champ reste
+  // synchro pour l'affichage rapide et la retro-compatibilite.
   position          String
+  // FK vers la table Position (ABAC). Nullable le temps de la migration des
+  // donnees existantes ; les nouveaux Employee doivent renseigner positionId.
+  positionId        String?
+  // Lien 1-1 vers le profil Client correspondant (un personnel est aussi un
+  // potentiel client). Rempli automatiquement par CreateEmployeeUseCase.
+  clientId          String?              @unique
+  // Override du planning RH pour cet employe. NULL = herite du planning agence
+  // (Agency.workScheduleId). Permet d'eviter les doublons quand le personnel
+  // suit l'horaire standard.
+  scheduleId        String?
   level             String?
   // Niveau d'etudes (ex : Licence, Master, BAC+3, ...) et specialite (ex : Logistique, Comptabilite)
   educationLevel    String?
@@ -548,22 +574,29 @@ model Employee {
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @updatedAt
 
-  agency      Agency               @relation(fields: [agencyId], references: [id])
-  manager     Employee?            @relation("EmployeeManager", fields: [managerId], references: [id])
-  reports     Employee[]           @relation("EmployeeManager")
-  user        User?                @relation("EmployeeUser", fields: [userId], references: [id])
-  payslips    Payslip[]
-  documents   EmployeeDocument[]
-  deductions  SalaryDeduction[]
-  shifts      EmployeeShift[]
-  attendances Attendance[]
-  leaves      EmployeeLeave[]
-  sanctions   EmployeeSanction[]
-  termination ContractTermination?
-  reviews     EmployeeReview[]
+  agency            Agency                     @relation(fields: [agencyId], references: [id])
+  manager           Employee?                  @relation("EmployeeManager", fields: [managerId], references: [id])
+  reports           Employee[]                 @relation("EmployeeManager")
+  user              User?                      @relation("EmployeeUser", fields: [userId], references: [id])
+  positionRef       Position?                  @relation(fields: [positionId], references: [id])
+  client            Client?                    @relation("EmployeeClient", fields: [clientId], references: [id])
+  schedule          WorkSchedule?              @relation("EmployeeSchedule", fields: [scheduleId], references: [id])
+  agencyAssignments EmployeeAgencyAssignment[]
+  holidays          Holiday[]                  @relation("EmployeeHoliday")
+  payslips          Payslip[]
+  documents         EmployeeDocument[]
+  deductions        SalaryDeduction[]
+  shifts            EmployeeShift[]
+  attendances       Attendance[]
+  leaves            EmployeeLeave[]
+  sanctions         EmployeeSanction[]
+  termination       ContractTermination?
+  reviews           EmployeeReview[]
 
   @@index([agencyId])
   @@index([managerId])
+  @@index([positionId])
+  @@index([clientId])
   @@map("employees")
 }
 
@@ -669,34 +702,98 @@ model EmployeeShift {
 // Pointage : 1 ligne par employe et par jour.
 // Marque par un superviseur (chef d'agence, admin).
 model Attendance {
-  id             String           @id @default(uuid())
-  employeeId     String
-  date           DateTime         @db.Date
-  status         AttendanceStatus
+  id                    String           @id @default(uuid())
+  employeeId            String
+  date                  DateTime         @db.Date
+  status                AttendanceStatus
   // Heure d'arrivee (si LATE/PRESENT) en HH:mm
-  checkInTime    String?
+  checkInTime           String?
   // Heure de depart (optionnelle)
-  checkOutTime   String?
-  // Minutes de retard (calculable depuis startTime planifie - checkInTime)
-  lateMinutes    Int?
+  checkOutTime          String?
+  // Heures attendues du jour (snapshot du planning au moment du pointage), HH:mm.
+  // Permet de comparer meme si le planning evolue ulterieurement.
+  expectedStart         String?
+  expectedEnd           String?
+  // Minutes de retard (max(0, checkIn - expectedStart))
+  lateMinutes           Int?
+  // Minutes de depart anticipe (max(0, expectedEnd - checkOut))
+  earlyDepartureMinutes Int?
+  // Heures supplementaires (max(0, checkOut - expectedEnd) + max(0, expectedStart - checkIn) si arrivee anticipee compte)
+  overtimeMinutes       Int?
+  // Heures manquantes (lateMinutes + earlyDepartureMinutes), denormalise pour les stats.
+  undertimeMinutes      Int?
+  // Pauses du jour en minutes (deduites des heures payables).
+  breakMinutes          Int?             @default(0)
   // Motif libre (raison absence/retard)
-  reason         String?
+  reason                String?
   // Note libre additionnelle
-  note           String?
+  note                  String?
   // Auto = marque par cron de fin de journee (si aucun pointage), Manual sinon
-  source         AttendanceSource @default(MANUAL)
-  markedByUserId String?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  source                AttendanceSource @default(MANUAL)
+  markedByUserId        String?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
 
-  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  markedBy User?    @relation("AttendanceMarker", fields: [markedByUserId], references: [id])
+  employee       Employee                  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  markedBy       User?                     @relation("AttendanceMarker", fields: [markedByUserId], references: [id])
+  justifications AttendanceJustification[]
 
   @@unique([employeeId, date])
   @@index([employeeId])
   @@index([date])
   @@index([status])
   @@map("attendances")
+}
+
+// Justification d'une absence ou d'un retard. Une Attendance peut avoir
+// plusieurs tentatives de justification (ex: rejetee puis re-soumise).
+// La justification "active" est la plus recente avec status APPROVED ou PENDING.
+model AttendanceJustification {
+  id                String                        @id @default(uuid())
+  attendanceId      String
+  // Auteur de la soumission : employe lui-meme (via portail) ou superviseur.
+  submittedByUserId String?
+  text              String
+  status            AttendanceJustificationStatus @default(PENDING)
+  reviewedByUserId  String?
+  reviewComment     String?
+  reviewedAt        DateTime?
+  createdAt         DateTime                      @default(now())
+  updatedAt         DateTime                      @updatedAt
+
+  attendance  Attendance                          @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+  submittedBy User?                               @relation("JustificationSubmitter", fields: [submittedByUserId], references: [id])
+  reviewedBy  User?                               @relation("JustificationReviewer", fields: [reviewedByUserId], references: [id])
+  attachments AttendanceJustificationAttachment[]
+
+  @@index([attendanceId])
+  @@index([status])
+  @@map("attendance_justifications")
+}
+
+enum AttendanceJustificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// Pieces jointes d'une justification : image (selfie, photo certificat) ou
+// document (PDF certificat medical, convocation, ...).
+model AttendanceJustificationAttachment {
+  id              String   @id @default(uuid())
+  justificationId String
+  url             String
+  storageKey      String?
+  fileName        String?
+  contentType     String?
+  size            Int?
+  caption         String?
+  createdAt       DateTime @default(now())
+
+  justification AttendanceJustification @relation(fields: [justificationId], references: [id], onDelete: Cascade)
+
+  @@index([justificationId])
+  @@map("attendance_justification_attachments")
 }
 
 enum AttendanceStatus {
@@ -726,12 +823,19 @@ model EmployeeLeave {
   validatedAt       DateTime?
   // Demandeur : peut etre l'employe lui-meme (via portail) ou un superviseur qui le declare
   requestedByUserId String?
+  // Cloture anticipee : si renseigne, le conge prend fin a cette date (incluse)
+  // au lieu de toDate. Permet a l'employe ou au superviseur de mettre fin avant
+  // le terme. status passe a ENDED_EARLY.
+  endedEarlyAt      DateTime?           @db.Date
+  endedByUserId     String?
+  endReason         String?
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
 
   employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   validatedBy User?    @relation("LeaveValidator", fields: [validatedByUserId], references: [id])
   requestedBy User?    @relation("LeaveRequester", fields: [requestedByUserId], references: [id])
+  endedBy     User?    @relation("LeaveEndedBy", fields: [endedByUserId], references: [id])
 
   @@index([employeeId])
   @@index([status])
@@ -753,6 +857,8 @@ enum EmployeeLeaveStatus {
   APPROVED
   REJECTED
   CANCELLED
+  // Cloture avant la toDate prevue (par l'employe ou un superviseur).
+  ENDED_EARLY
 }
 
 // Sanctions disciplinaires : avertissement, mise a pied (avec duree), licenciement.
@@ -935,6 +1041,8 @@ model Client {
   notifications       Notification[]       @relation("ClientNotifications")
   partnerPricings     PartnerPricing[]
   parcelGroups        ParcelGroup[]        @relation("ClientParcelGroups")
+  // Lien retour 1-1 si ce client correspond a un membre du personnel.
+  employee            Employee?            @relation("EmployeeClient")
 
   @@index([organizationId])
   @@index([agencyId])
@@ -2013,4 +2121,190 @@ model SystemConfig {
 
   @@unique([organizationId, key])
   @@map("system_configs")
+}
+
+// ============================================================
+// RH PHASE 1 : POSTES, PERMISSIONS, PLANNINGS, JOURS NON OUVRES
+// ============================================================
+
+// Catalogue des postes au sein d'une agence ou de l'organisation.
+// Chaque Employee est rattache a un Position ; les permissions ABAC sont
+// portees par PositionPermission. SUPER_ADMIN n'est PAS un poste : il reste
+// porte par User.role et n'a pas d'Employee.
+model Position {
+  id             String   @id @default(uuid())
+  organizationId String
+  // Si renseigne : poste specifique a une agence (ex : "Chef d'agence Douala").
+  // Si NULL : poste global a l'organisation (catalogue standard).
+  agencyId       String?
+  name           String
+  description    String?
+  // Niveau hierarchique (1 = direction, plus eleve = plus haut). Utilise pour
+  // les statistiques et la chaine de validation.
+  hierarchyLevel Int      @default(50)
+  // Postes systeme seedes (non supprimables via UI). Permet de reseter sans casser.
+  isSystem       Boolean  @default(false)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  agency      Agency?              @relation(fields: [agencyId], references: [id])
+  employees   Employee[]
+  permissions PositionPermission[]
+
+  @@unique([organizationId, agencyId, name])
+  @@index([organizationId])
+  @@index([agencyId])
+  @@map("positions")
+}
+
+// Catalogue des permissions ABAC. Cle stable (ex: "attendance.mark") pour
+// referencement cote code ; libelle/description pour l'UI admin.
+model Permission {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  label       String
+  description String?
+  // Categorie d'affichage (ex: "personnel", "finance", "colis", "agence").
+  category    String
+  isSystem    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  positions PositionPermission[]
+  overrides UserPermissionOverride[]
+
+  @@index([category])
+  @@map("permissions")
+}
+
+// Matrice poste -> permission. La table de jointure portee par l'admin.
+model PositionPermission {
+  positionId   String
+  permissionId String
+  createdAt    DateTime @default(now())
+
+  position   Position   @relation(fields: [positionId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([positionId, permissionId])
+  @@index([permissionId])
+  @@map("position_permissions")
+}
+
+// Override individuel : ajout (granted=true) ou retrait (granted=false) d'une
+// permission par rapport au poste. Permet d'octroyer ou de retirer ponctuellement
+// un droit a un User sans modifier la matrice du poste.
+model UserPermissionOverride {
+  id           String   @id @default(uuid())
+  userId       String
+  permissionId String
+  granted      Boolean
+  reason       String?
+  createdAt    DateTime @default(now())
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, permissionId])
+  @@index([userId])
+  @@map("user_permission_overrides")
+}
+
+// Planning RH : conteneur d'horaires applique soit a une agence (planning par
+// defaut) soit a un employe (override). Distinct des heures d'ouverture
+// commerciale (AgencyOpeningHours).
+model WorkSchedule {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  // Fuseau horaire IANA pour l'interpretation des heures (heritage agence si NULL).
+  timezone    String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  days      WorkScheduleDay[]
+  agencies  Agency[]          @relation("AgencyWorkSchedule")
+  employees Employee[]        @relation("EmployeeSchedule")
+
+  @@map("work_schedules")
+}
+
+// Jour-par-jour d'un planning. dayOfWeek 0 (dim) .. 6 (sam).
+// isWorking=false : jour de repos ; les champs heure sont alors ignores.
+model WorkScheduleDay {
+  id           String  @id @default(uuid())
+  scheduleId   String
+  dayOfWeek    Int
+  startTime    String?
+  endTime      String?
+  // Pause non remuneree au milieu de la journee (en minutes). Optionnel.
+  breakMinutes Int     @default(0)
+  isWorking    Boolean @default(true)
+
+  schedule WorkSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  @@unique([scheduleId, dayOfWeek])
+  @@index([scheduleId])
+  @@map("work_schedule_days")
+}
+
+// Jours non ouvres : ferie national, fermeture exceptionnelle d'agence, repos
+// individuel d'un employe. Un seul modele couvre les 3 portees via le champ
+// scope + agencyId/employeeId.
+//   - GLOBAL : agencyId=null, employeeId=null  (organisation entiere)
+//   - AGENCY : agencyId=set,  employeeId=null
+//   - EMPLOYEE : agencyId=null, employeeId=set
+// Pour un groupe d'employes, creer N entrees EMPLOYEE.
+model Holiday {
+  id             String       @id @default(uuid())
+  organizationId String
+  scope          HolidayScope
+  agencyId       String?
+  employeeId     String?
+  name           String
+  // Plage de dates inclusives. fromDate=toDate pour un seul jour.
+  fromDate       DateTime     @db.Date
+  toDate         DateTime     @db.Date
+  // Recurrent annuel (ex: 1er janvier). Si true, l'annee est ignoree au matching.
+  isRecurring    Boolean      @default(false)
+  reason         String?
+  createdAt      DateTime     @default(now())
+
+  agency   Agency?   @relation("AgencyHoliday", fields: [agencyId], references: [id], onDelete: Cascade)
+  employee Employee? @relation("EmployeeHoliday", fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([agencyId])
+  @@index([employeeId])
+  @@index([fromDate, toDate])
+  @@map("holidays")
+}
+
+enum HolidayScope {
+  GLOBAL
+  AGENCY
+  EMPLOYEE
+}
+
+// Affectation historicisee d'un employe a une agence. Permet le suivi
+// multi-agences et les transferts. L'agence "courante" reste portee par
+// Employee.agencyId pour les requetes simples ; cette table porte l'historique.
+model EmployeeAgencyAssignment {
+  id         String    @id @default(uuid())
+  employeeId String
+  agencyId   String
+  isPrimary  Boolean   @default(false)
+  fromDate   DateTime  @db.Date
+  toDate     DateTime? @db.Date
+  reason     String?
+  createdAt  DateTime  @default(now())
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  agency   Agency   @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@index([agencyId])
+  @@index([fromDate, toDate])
+  @@map("employee_agency_assignments")
 }

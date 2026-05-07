@@ -10,6 +10,7 @@ import {
 } from '../../interfaces/IRefreshTokenRepository';
 import { AuthenticationError } from '../../../domain/errors/BusinessError';
 import { config } from '../../../config';
+import { PermissionService } from '../../services/PermissionService';
 
 interface LoginResult {
   accessToken: string;
@@ -31,6 +32,7 @@ export class LoginUseCase {
   constructor(
     @inject(USER_REPOSITORY) private userRepo: IUserRepository,
     @inject(REFRESH_TOKEN_REPOSITORY) private refreshTokenRepo: IRefreshTokenRepository,
+    private permissionService: PermissionService,
   ) {}
 
   async execute(input: LoginInput): Promise<LoginResult> {
@@ -70,6 +72,8 @@ export class LoginUseCase {
     }
 
     const agencyIds = user.userAgencies.map((ua) => ua.agencyId);
+    // Phase 1 RH/ABAC : embarque les permissions effectives dans le JWT.
+    const permissions = await this.permissionService.getEffectivePermissionsForUser(user.id);
 
     // Phase 0.2 : organizationId injecte dans le JWT pour data isolation multi-tenant
     const accessToken = jwt.sign(
@@ -79,6 +83,7 @@ export class LoginUseCase {
         role: user.role,
         agencyIds,
         organizationId: user.organizationId,
+        permissions,
       },
       config.jwt.secret as jwt.Secret,
       { expiresIn: config.jwt.accessExpiry } as jwt.SignOptions,

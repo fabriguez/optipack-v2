@@ -9,6 +9,11 @@ const API_URL = process.env.INTERNAL_API_URL || process.env.NEXT_PUBLIC_API_URL 
  * qui peut diverger de la config API et provoquer des deconnexions surprises.
  */
 function jwtExpMs(token: string): number | null {
+  const obj = decodeJwt(token);
+  return obj?.exp ? obj.exp * 1000 : null;
+}
+
+function decodeJwt(token: string): { exp?: number; permissions?: string[] } | null {
   try {
     const payload = token.split('.')[1];
     if (!payload) return null;
@@ -16,8 +21,7 @@ function jwtExpMs(token: string): number | null {
     const json = typeof Buffer !== 'undefined'
       ? Buffer.from(payload.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8')
       : atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
-    const obj = JSON.parse(json) as { exp?: number };
-    return obj.exp ? obj.exp * 1000 : null;
+    return JSON.parse(json);
   } catch {
     return null;
   }
@@ -67,12 +71,15 @@ export const { handlers, signIn, signOut, auth }: any = NextAuth({
             // eslint-disable-next-line no-console
             console.warn('[Auth.login] impossible de decoder exp du JWT');
           }
+          // Extrait les permissions ABAC depuis le JWT (Phase 1 RH).
+          const claims = decodeJwt(data.data.accessToken);
           return {
             id: data.data.user.id,
             email: data.data.user.email,
             name: `${data.data.user.firstName} ${data.data.user.lastName}`,
             role: data.data.user.role,
             agencyIds: data.data.user.agencyIds,
+            permissions: claims?.permissions ?? [],
             accessToken: data.data.accessToken,
             refreshToken: data.data.refreshToken,
             // exp reelle depuis le JWT (fallback : 12h si decodage rate)
@@ -95,6 +102,7 @@ export const { handlers, signIn, signOut, auth }: any = NextAuth({
         token.id = user.id;
         token.role = (user as any).role;
         token.agencyIds = (user as any).agencyIds;
+        (token as any).permissions = (user as any).permissions ?? [];
         token.accessToken = (user as any).accessToken;
         token.refreshToken = (user as any).refreshToken;
         token.accessTokenExpiresAt = (user as any).accessTokenExpiresAt;
@@ -130,6 +138,9 @@ export const { handlers, signIn, signOut, auth }: any = NextAuth({
           (token as any).refreshToken = data.data.refreshToken;
           const realExp = jwtExpMs(data.data.accessToken);
           (token as any).accessTokenExpiresAt = realExp ?? Date.now() + 12 * 60 * 60 * 1000;
+          // Permissions raffraichies depuis le nouveau JWT.
+          const claims = decodeJwt(data.data.accessToken);
+          (token as any).permissions = claims?.permissions ?? (token as any).permissions ?? [];
           (token as any).error = undefined;
           // eslint-disable-next-line no-console
           console.log(
@@ -151,6 +162,7 @@ export const { handlers, signIn, signOut, auth }: any = NextAuth({
       session.user.id = token.id as string;
       (session as any).role = token.role;
       (session as any).agencyIds = token.agencyIds;
+      (session as any).permissions = (token as any).permissions ?? [];
       (session as any).accessToken = (token as any).accessToken;
       (session as any).error = (token as any).error;
       return session;

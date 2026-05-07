@@ -24,15 +24,23 @@ import {
 } from '../../application/use-cases/employee/EmployeeShiftUseCases';
 import {
   MarkAttendanceUseCase,
+  CheckOutAttendanceUseCase,
   ListEmployeeAttendanceUseCase,
   ListAgencyAttendanceForDateUseCase,
+  EmployeeAttendanceStatsUseCase,
 } from '../../application/use-cases/employee/AttendanceUseCases';
+import {
+  SubmitAttendanceJustificationUseCase,
+  ReviewAttendanceJustificationUseCase,
+  ListAttendanceJustificationsUseCase,
+} from '../../application/use-cases/employee/AttendanceJustificationUseCases';
 import {
   RequestEmployeeLeaveUseCase,
   ValidateEmployeeLeaveUseCase,
   ListEmployeeLeavesUseCase,
   ListAgencyPendingLeavesUseCase,
   CancelEmployeeLeaveUseCase,
+  EndEmployeeLeaveEarlyUseCase,
 } from '../../application/use-cases/employee/EmployeeLeaveUseCases';
 import {
   CreateEmployeeSanctionUseCase,
@@ -49,6 +57,13 @@ import { AgencyHRStatsUseCase } from '../../application/use-cases/employee/Agenc
 import { AgencyHRReportXlsxUseCase } from '../../application/use-cases/employee/AgencyHRReportXlsxUseCase';
 import { EMPLOYEE_REPOSITORY } from '../../application/interfaces/IEmployeeRepository';
 import { NotFoundError } from '../../domain/errors/BusinessError';
+
+function monthStart(): Date {
+  const d = new Date();
+  d.setUTCDate(1);
+  d.setUTCHours(0, 0, 0, 0);
+  return d;
+}
 
 export class EmployeeController {
   static async create(req: Request, res: Response, next: NextFunction) {
@@ -373,6 +388,88 @@ export class EmployeeController {
       const useCase = container.resolve(CancelEmployeeLeaveUseCase);
       const item = await useCase.execute(req.params.leaveId);
       res.json({ success: true, data: item });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async endLeaveEarly(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(EndEmployeeLeaveEarlyUseCase);
+      const item = await useCase.execute(
+        req.params.leaveId,
+        new Date(req.body.endDate),
+        req.user!.userId,
+        req.body?.reason,
+      );
+      res.json({ success: true, data: item });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  // ----- Pointage avance (check-out, justifications, stats) -----
+
+  static async checkOut(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(CheckOutAttendanceUseCase);
+      const item = await useCase.execute(
+        req.params.id,
+        new Date(req.body.date),
+        req.body.checkOutTime,
+        req.user!.userId,
+      );
+      res.json({ success: true, data: item });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async submitJustification(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(SubmitAttendanceJustificationUseCase);
+      const item = await useCase.execute(
+        { attendanceId: req.params.attendanceId, ...req.body },
+        req.user!.userId,
+      );
+      res.status(201).json({ success: true, data: item });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async reviewJustification(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(ReviewAttendanceJustificationUseCase);
+      const item = await useCase.execute(
+        req.params.justificationId,
+        req.body.decision,
+        req.user!.userId,
+        req.body?.comment,
+      );
+      res.json({ success: true, data: item });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async listAgencyJustifications(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(ListAttendanceJustificationsUseCase);
+      const items = await useCase.execute(req.params.agencyId, req.query.status as any);
+      res.json({ success: true, data: items });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async attendanceStats(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(EmployeeAttendanceStatsUseCase);
+      const from = req.query.from ? new Date(req.query.from as string) : monthStart();
+      const to = req.query.to ? new Date(req.query.to as string) : new Date();
+      const stats = await useCase.execute(req.params.id, from, to);
+      res.json({ success: true, data: stats });
     } catch (err) {
       next(err);
     }

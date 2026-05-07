@@ -13,7 +13,10 @@ interface CreateEmployeeInput {
   idNumber?: string;
   phone?: string;
   email?: string;
+  /** Libelle du poste (legacy). Conserve pour compat. */
   position: string;
+  /** FK vers Position (Phase 1 RH/ABAC). Recommande pour tous les nouveaux Employee. */
+  positionId?: string;
   level?: string;
   baseSalary?: number;
   educationLevel?: string;
@@ -23,6 +26,8 @@ interface CreateEmployeeInput {
   isAgencyManager?: boolean;
   /** Si true, on cree un User lie pour permettre la connexion portail. */
   createUser?: boolean;
+  /** Si true (defaut), cree ou lie un profil Client (un personnel = potentiel client). */
+  syncClient?: boolean;
 }
 
 function generateInitialPassword(): string {
@@ -55,6 +60,7 @@ export class CreateEmployeeUseCase {
       contractType: (input.contractType as any) ?? 'CDI',
       isAgencyManager: !!input.isAgencyManager,
       ...(input.managerId && { manager: { connect: { id: input.managerId } } }),
+      ...(input.positionId && { positionRef: { connect: { id: input.positionId } } }),
       agency: { connect: { id: input.agencyId } },
     } as any);
 
@@ -109,7 +115,45 @@ export class CreateEmployeeUseCase {
       }
     }
 
-    // 3) Sync masse salariale (auto-managee)
+    // 3) Sync Personnel <-> Client (Phase 1 RH).
+    // Un personnel est un potentiel client : on lui cree (ou lie) un profil
+    // Client pour l'inclure dans la base commerciale et eviter les doublons.
+    // Desactivable via syncClient=false (cas tests / imports historiques).
+    const shouldSyncClient = input.syncClient !== false;
+    if (shouldSyncClient && organizationId && input.phone) {
+      try {
+        // Cherche par telephone (Client.phone est unique)
+        const existingClient = await prisma.client.findUnique({
+          where: { phone: input.phone },
+        });
+        const client = existingClient
+          ? existingClient
+          : await prisma.client.create({
+              data: {
+                organizationId,
+                agencyId: input.agencyId,
+                fullName: input.fullName,
+                phone: input.phone,
+                email: input.email ?? null,
+                idNumber: input.idNumber ?? null,
+                clientType: 'INDIVIDUAL',
+                isActive: true,
+                organization: { connect: { id: organizationId } },
+              } as any,
+            });
+        await prisma.employee.update({
+          where: { id: employee.id },
+          data: { clientId: client.id },
+        });
+      } catch (err) {
+        // On n'echoue pas la creation Employee si la sync Client echoue
+        // (ex: contrainte unique sur le telephone). On log seulement.
+        // eslint-disable-next-line no-console
+        console.warn('[CreateEmployee] Sync Client echouee:', (err as Error).message);
+      }
+    }
+
+    // 4) Sync masse salariale (auto-managee)
     await this.payrollCharge.syncForAgency(input.agencyId);
 
     return { ...employee, initialPassword };
