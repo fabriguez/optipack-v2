@@ -50,6 +50,9 @@ router.get('/:id/images', ParcelController.listImages);
 router.post('/:id/images', ParcelController.addImage);
 router.delete('/:id/images/:imageId', ParcelController.deleteImage);
 
+// Frais de magasinage (calcul a la volee)
+router.get('/:id/storage-fee', ParcelController.storageFee);
+
 // Remise du colis au client (handover) avec confirmation d'identite par photo
 router.post('/:id/handover', ParcelController.handover);
 // Remise d'un colis trouve physiquement, non enregistre dans le systeme

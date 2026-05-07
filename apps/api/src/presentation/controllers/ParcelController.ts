@@ -12,6 +12,7 @@ import {
   HandoverParcelUseCase,
   HandoverUntrackedParcelUseCase,
 } from '../../application/use-cases/parcel/HandoverParcelUseCase';
+import { ComputeStorageFeeUseCase } from '../../application/use-cases/parcel/ComputeStorageFeeUseCase';
 
 export class ParcelController {
   static async create(req: Request, res: Response, next: NextFunction) {
@@ -38,12 +39,25 @@ export class ParcelController {
   static async list(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(ListParcelsUseCase);
-      const { warehouseId, containerId, clientId, status, transitType, onlyPresent } = req.query;
+      const {
+        warehouseId,
+        containerId,
+        lastContainerId,
+        spaceId,
+        origin,
+        clientId,
+        status,
+        transitType,
+        onlyPresent,
+      } = req.query;
       const scope = req.user!.role === 'SUPER_ADMIN' ? null : req.user!.agencyIds;
       const result = await useCase.execute(
         {
           warehouseId: warehouseId as string,
           containerId: containerId as string,
+          lastContainerId: lastContainerId as string,
+          spaceId: spaceId as string,
+          origin: origin as string,
           clientId: clientId as string,
           status: status as string,
           transitType: transitType as string,
@@ -212,6 +226,18 @@ export class ParcelController {
       const useCase = container.resolve(HandoverUntrackedParcelUseCase);
       const result = await useCase.execute(req.body, req.user!.userId);
       res.status(201).json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  // Frais de magasinage : calcul a la demande (preview) ou au moment de la
+  // remise/facturation. Renvoie le breakdown complet (jours, taux, total).
+  static async storageFee(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(ComputeStorageFeeUseCase);
+      const data = await useCase.execute(req.params.id);
+      res.json({ success: true, data });
     } catch (err) {
       next(err);
     }

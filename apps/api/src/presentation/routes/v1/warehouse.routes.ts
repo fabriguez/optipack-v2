@@ -46,4 +46,30 @@ router.post(
   WarehouseController.closeInventory,
 );
 
+// Spaces de rangement
+router.get('/:id/spaces', WarehouseController.listSpaces);
+router.put(
+  '/:id/spaces',
+  authorize('SUPER_ADMIN', 'ADMIN', 'AGENT', 'MAGASINIER'),
+  WarehouseController.upsertSpaces,
+);
+// Deplacer un colis d'un space a un autre
+router.post(
+  '/parcels/:parcelId/space',
+  authorize('SUPER_ADMIN', 'ADMIN', 'AGENT', 'MAGASINIER'),
+  WarehouseController.moveParcelToSpace,
+);
+// Enregistrer un colis trouve physiquement lors d'un inventaire en stock
+router.post(
+  '/inventories/:inventoryId/register-extra',
+  authorize('SUPER_ADMIN', 'ADMIN', 'AGENT', 'MAGASINIER'),
+  WarehouseController.registerExtraInventoryParcel,
+);
+// Remettre en stock un colis precedemment marque absent / perdu
+router.post(
+  '/parcels/:parcelId/restock',
+  authorize('SUPER_ADMIN', 'ADMIN', 'AGENT', 'MAGASINIER'),
+  WarehouseController.restockParcel,
+);
+
 export default router;

@@ -4,6 +4,7 @@ import { PARCEL_REPOSITORY, type IParcelRepository } from '../../interfaces/IPar
 import { WAREHOUSE_REPOSITORY, type IWarehouseRepository } from '../../interfaces/IWarehouseRepository';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
 import { HistoryService } from '../../services/HistoryService';
+import { prisma } from '../../../config/database';
 
 interface UnloadResult {
   parcelId: string;
@@ -32,7 +33,7 @@ export class UnloadParcelUseCase {
     action: 'received' | 'not_found' | 'modified',
     warehouseId: string,
     userId: string,
-    options?: { newWeight?: number; comment?: string },
+    options?: { newWeight?: number; comment?: string; spaceId?: string | null },
   ): Promise<UnloadResult> {
     const container = await this.containerRepo.findById(containerId);
     if (!container) throw new NotFoundError('Conteneur', containerId);
@@ -53,8 +54,35 @@ export class UnloadParcelUseCase {
     const warehouse = await this.warehouseRepo.findById(warehouseId);
     if (!warehouse) throw new NotFoundError('Magasin', warehouseId);
 
+    // Resolution du space cible (action != not_found uniquement) :
+    // - si options.spaceId fourni : on l'utilise (apres verification)
+    // - sinon : auto-pick du premier space actif du magasin (par nom)
+    let targetSpaceId: string | null = null;
+    if (action !== 'not_found') {
+      if (options?.spaceId) {
+        const sp = await prisma.warehouseSpace.findUnique({
+          where: { id: options.spaceId },
+        });
+        if (!sp) throw new NotFoundError('Space', options.spaceId);
+        if (sp.warehouseId !== warehouseId) {
+          throw new BusinessError('Le space appartient a un autre magasin.');
+        }
+        targetSpaceId = sp.id;
+      } else {
+        const firstSpace = await prisma.warehouseSpace.findFirst({
+          where: { warehouseId, isActive: true },
+          orderBy: { name: 'asc' },
+        });
+        targetSpaceId = firstSpace?.id ?? null;
+      }
+    }
+
     // Le conteneur reste en RECEIVED tant qu'il y a des colis dedans.
     // Pas d'etat intermediaire UNLOADING (audit fix #3).
+
+    const spaceConnect = targetSpaceId
+      ? { space: { connect: { id: targetSpaceId } } }
+      : { space: { disconnect: true } };
 
     switch (action) {
       case 'received':
@@ -62,7 +90,12 @@ export class UnloadParcelUseCase {
           status: 'RECEIVED',
           warehouse: { connect: { id: warehouseId } },
           container: { disconnect: true },
+          // Trace l'origine : on memorise le conteneur dont est issu le colis
+          // pour pouvoir filtrer "par conteneur d'ou ils ont ete decharges".
+          lastContainer: { connect: { id: containerId } },
+          warehouseEnteredAt: new Date(),
           isPresent: true,
+          ...spaceConnect,
         });
         break;
 
@@ -71,6 +104,7 @@ export class UnloadParcelUseCase {
           status: 'LOST',
           isPresent: false,
           container: { disconnect: true },
+          space: { disconnect: true },
         });
         break;
 
@@ -79,7 +113,10 @@ export class UnloadParcelUseCase {
           status: 'RECEIVED',
           warehouse: { connect: { id: warehouseId } },
           container: { disconnect: true },
+          lastContainer: { connect: { id: containerId } },
+          warehouseEnteredAt: new Date(),
           isPresent: true,
+          ...spaceConnect,
           ...(options?.newWeight && { weight: options.newWeight }),
           ...(options?.comment && { observation: options.comment }),
         });

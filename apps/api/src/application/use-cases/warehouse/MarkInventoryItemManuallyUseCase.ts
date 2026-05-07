@@ -33,7 +33,7 @@ export class MarkInventoryItemManuallyUseCase {
 
     const parcel = await prisma.parcel.findUnique({
       where: { id: input.parcelId },
-      select: { id: true, trackingNumber: true, warehouseId: true },
+      select: { id: true, trackingNumber: true, warehouseId: true, isPresent: true },
     });
     if (!parcel) throw new NotFoundError('Colis', input.parcelId);
 
@@ -52,6 +52,21 @@ export class MarkInventoryItemManuallyUseCase {
           observation: input.observation?.trim() || existing.observation,
         },
       });
+      // Marquage absent -> sortie auto du stock (isPresent=false). Si retrouve
+      // plus tard, l'utilisateur peut le remettre en stock manuellement via
+      // PATCH /parcels/:id/status (ou un endpoint dedie).
+      if (!input.present) {
+        await prisma.parcel.update({
+          where: { id: parcel.id },
+          data: { isPresent: false },
+        });
+      } else if (parcel.isPresent === false) {
+        // Marquage present alors que sorti -> on remet en stock
+        await prisma.parcel.update({
+          where: { id: parcel.id },
+          data: { isPresent: true },
+        });
+      }
       return { status: existing.scanned ? 'updated' : 'marked', item: updated };
     }
 
@@ -74,6 +89,12 @@ export class MarkInventoryItemManuallyUseCase {
             : null,
       },
     });
+    if (!input.present) {
+      await prisma.parcel.update({
+        where: { id: parcel.id },
+        data: { isPresent: false },
+      });
+    }
     return { status: 'created_manual', item: created };
   }
 }

@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Camera, CameraOff, RefreshCw, RotateCw } from 'lucide-react';
+import { Camera, CameraOff, RefreshCw, RotateCw, Keyboard } from 'lucide-react';
 import { AppDialog } from '@/components/ui/AppDialog';
 import { AppButton } from '@/components/ui/AppButton';
+import { AppInput } from '@/components/ui/AppInput';
 
 interface QRScannerDialogProps {
   open: boolean;
@@ -44,6 +45,7 @@ export function QRScannerDialog({
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [usingFallback, setUsingFallback] = useState(false);
+  const [manualValue, setManualValue] = useState('');
   const detectedOnceRef = useRef(false);
 
   const stopAll = () => {
@@ -142,7 +144,15 @@ export function QRScannerDialog({
       } catch {
         // ignore
       }
-      const detector = new BarcodeDetector({ formats });
+      let detector: any;
+      try {
+        detector = new BarcodeDetector({ formats });
+      } catch {
+        // BarcodeDetector existe mais l'instanciation echoue (Safari Mac sans support reel)
+        // -> bascule sur le fallback html5-qrcode.
+        await runFallback();
+        return;
+      }
 
       const tick = async () => {
         if (cancelled || !videoRef.current) return;
@@ -309,6 +319,35 @@ export function QRScannerDialog({
         {!error && !running && (
           <p className="text-xs text-gray-400">Demarrage de la camera...</p>
         )}
+
+        {/* Saisie manuelle : toujours disponible en derniere ressource si la
+            camera echoue ou si l'utilisateur prefere taper / coller le code. */}
+        <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+          <label className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-600">
+            <Keyboard className="h-3.5 w-3.5" />
+            Saisie manuelle (si la camera ne fonctionne pas)
+          </label>
+          <div className="flex gap-2">
+            <AppInput
+              placeholder="Coller / taper le tracking ou code..."
+              value={manualValue}
+              onChange={(e) => setManualValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && manualValue.trim()) {
+                  e.preventDefault();
+                  handleDetected(manualValue.trim());
+                }
+              }}
+            />
+            <AppButton
+              size="sm"
+              onClick={() => manualValue.trim() && handleDetected(manualValue.trim())}
+              disabled={!manualValue.trim()}
+            >
+              Valider
+            </AppButton>
+          </div>
+        </div>
       </div>
     </AppDialog>
   );

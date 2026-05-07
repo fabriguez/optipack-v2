@@ -38,12 +38,16 @@ export class PrismaParcelRepository implements IParcelRepository {
     filters: {
       warehouseId?: string;
       containerId?: string;
+      // Filtre "issu de ce conteneur" : utilise lastContainerId (apres dechargement).
+      lastContainerId?: string;
+      // Espace de rangement
+      spaceId?: string;
+      // Filtre par origine (text libre)
+      origin?: string;
       clientId?: string;
       status?: string;
       transitType?: string;
       agencyIds?: string[] | null;
-      // Si true et warehouseId est fourni, restreint aux colis physiquement
-      // presents dans le magasin (isPresent=true, status IN_STOCK ou RECEIVED).
       onlyPresent?: boolean;
     },
     pagination: PaginationInput,
@@ -59,6 +63,9 @@ export class PrismaParcelRepository implements IParcelRepository {
       isDeleted: false,
       ...(filters.warehouseId && { warehouseId: filters.warehouseId }),
       ...(filters.containerId && { containerId: filters.containerId }),
+      ...(filters.lastContainerId && { lastContainerId: filters.lastContainerId }),
+      ...(filters.spaceId && { spaceId: filters.spaceId }),
+      ...(filters.origin && { origin: { contains: filters.origin, mode: 'insensitive' } }),
       ...(filters.clientId && { clientId: filters.clientId }),
       ...(filters.status && { status: filters.status as any }),
       ...(filters.transitType && { transitRoute: { type: filters.transitType as any } }),

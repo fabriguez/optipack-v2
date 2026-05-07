@@ -17,25 +17,38 @@ interface AppTabsProps {
   className?: string;
 }
 
+/**
+ * Tabs responsives :
+ *  - Mobile (< sm) : grille 2 colonnes empilees, dans une seule div unicolore.
+ *  - >= sm : flex horizontal scrollable (overflow-x-auto + whitespace-nowrap).
+ *
+ * Conserve l'apparence "pilule" sur l'onglet actif (bg-white + shadow-sm).
+ */
 export function AppTabs({ tabs, defaultValue, className }: AppTabsProps) {
   return (
     <Tabs defaultValue={defaultValue || tabs[0]?.value} className={className}>
-      <TabsList className={cn('flex gap-1 rounded-xl bg-gray-100 p-1')}>
-        {tabs.map((tab) => (
-          <TabsTrigger
-            key={tab.value}
-            value={tab.value}
-            className={cn(
-              'flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all',
-              'text-gray-500 hover:text-gray-700',
-              'data-active:bg-white data-active:text-gray-900 data-active:shadow-sm',
-            )}
-          >
-            {tab.icon}
-            {tab.label}
-          </TabsTrigger>
-        ))}
-      </TabsList>
+      <div className="rounded-xl bg-gray-100 p-1">
+        <TabsList
+          className={cn(
+            'grid grid-cols-2 gap-1 sm:flex sm:flex-nowrap sm:overflow-x-auto sm:[scrollbar-width:thin]',
+          )}
+        >
+          {tabs.map((tab) => (
+            <TabsTrigger
+              key={tab.value}
+              value={tab.value}
+              className={cn(
+                'flex shrink-0 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all whitespace-nowrap',
+                'text-gray-500 hover:text-gray-700',
+                'data-active:bg-white data-active:text-gray-900 data-active:shadow-sm',
+              )}
+            >
+              {tab.icon}
+              {tab.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </div>
       {tabs.map((tab) => (
         <TabsContent key={tab.value} value={tab.value} className="mt-4">
           {tab.content}

@@ -3,8 +3,9 @@
 import { use, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Package, Plus, Eye, Edit, Trash2, ArrowRightLeft, ClipboardCheck, PlayCircle, QrCode } from 'lucide-react';
+import { ArrowLeft, Package, Plus, Eye, Edit, Trash2, ArrowRightLeft, ClipboardCheck, PlayCircle, QrCode, HandCoins } from 'lucide-react';
 import { ParcelQRDialog } from '@/components/shared/ParcelQRDialog';
+import { ParcelHandoverDialog } from '@/components/shared/ParcelHandoverDialog';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
@@ -36,6 +37,8 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
   const [removeParcel, setRemoveParcel] = useState<any>(null);
   const [targetWarehouseId, setTargetWarehouseId] = useState('');
   const [qrParcel, setQrParcel] = useState<any | null>(null);
+  const [handoverParcel, setHandoverParcel] = useState<any | null>(null);
+  const [showUntrackedHandover, setShowUntrackedHandover] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['warehouses', id],
@@ -185,6 +188,9 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
           actions={[
             { label: 'Voir', icon: <Eye className="h-4 w-4" />, onClick: () => router.push(`/parcels/${row.id}`) },
             { label: 'QR / Etiquette', icon: <QrCode className="h-4 w-4" />, onClick: () => setQrParcel(row) },
+            ...(row.status !== 'DELIVERED'
+              ? [{ label: 'Remettre au client', icon: <HandCoins className="h-4 w-4" />, onClick: () => setHandoverParcel(row) }]
+              : []),
             ...(canModifyParcel(row) ? [
               { label: 'Modifier', icon: <Edit className="h-4 w-4" />, onClick: () => router.push(`/parcels/${row.id}`) },
               { label: 'Transferer', icon: <ArrowRightLeft className="h-4 w-4" />, onClick: () => setTransferParcel(row) },
@@ -382,10 +388,14 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
         <AppCard>
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-base font-semibold text-gray-900">Colis dans ce magasin ({parcelsData?.meta?.total ?? 0})</h3>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Link href={`/parcels?warehouseId=${id}`}>
                 <AppButton variant="ghost" size="sm">Voir tout</AppButton>
               </Link>
+              <AppButton variant="outline" size="sm" onClick={() => setShowUntrackedHandover(true)}>
+                <HandCoins className="h-3.5 w-3.5" />
+                Remettre un colis non enregistre
+              </AppButton>
               <AppButton size="sm" onClick={() => setShowCreateParcel(true)}>
                 <Plus className="h-3.5 w-3.5" />
                 Ajouter colis
@@ -407,6 +417,20 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
       </div>
 
       <ParcelQRDialog open={!!qrParcel} onClose={() => setQrParcel(null)} parcel={qrParcel} />
+      <ParcelHandoverDialog
+        open={!!handoverParcel}
+        onClose={() => setHandoverParcel(null)}
+        parcel={handoverParcel}
+      />
+      <ParcelHandoverDialog
+        open={showUntrackedHandover}
+        onClose={() => setShowUntrackedHandover(false)}
+        untracked={
+          warehouse?.agency
+            ? { agencyId: warehouse.agency.id, warehouseId: id }
+            : null
+        }
+      />
 
       <ParcelFormDialog
         open={showCreateParcel}

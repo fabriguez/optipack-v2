@@ -290,6 +290,10 @@ model Warehouse {
   agencyId  String
   name      String
   location  String
+  // Frais de magasinage : appliques uniquement aux colis issus d'un conteneur
+  // qui restent au-dela de `storageFreeDays`. Tarif journalier en devise de base.
+  storageFreeDays  Int     @default(7)
+  storageDailyRate Decimal @default(0) @db.Decimal(15, 2)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -298,9 +302,29 @@ model Warehouse {
   parcels         Parcel[]             @relation("CurrentWarehouse")
   originalParcels Parcel[]             @relation("OriginalWarehouse")
   inventories     WarehouseInventory[]
+  spaces          WarehouseSpace[]
 
   @@index([agencyId])
   @@map("warehouses")
+}
+
+// Espace de rangement physique dans un magasin (ex : "Allee A", "Etagere 3").
+// Permet une recherche physique rapide d'un colis dans un grand magasin.
+model WarehouseSpace {
+  id          String   @id @default(uuid())
+  warehouseId String
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  parcels   Parcel[]  @relation("ParcelSpace")
+
+  @@unique([warehouseId, name])
+  @@index([warehouseId])
+  @@map("warehouse_spaces")
 }
 
 // Inventaire d'un magasin : declenche par un operateur, on scanne les colis
@@ -1094,6 +1118,8 @@ model Parcel {
   recipientId         String?
   warehouseId         String?
   originalWarehouseId String?
+  // Espace de rangement physique dans le magasin courant (recherche rapide)
+  spaceId             String?
   containerId         String?
   lastContainerId     String?
   transitRouteId      String?
@@ -1114,6 +1140,7 @@ model Parcel {
   recipient         Client?       @relation("ParcelRecipient", fields: [recipientId], references: [id])
   warehouse         Warehouse?    @relation("CurrentWarehouse", fields: [warehouseId], references: [id])
   originalWarehouse Warehouse?    @relation("OriginalWarehouse", fields: [originalWarehouseId], references: [id])
+  space             WarehouseSpace? @relation("ParcelSpace", fields: [spaceId], references: [id])
   destinationAgency Agency?       @relation("ParcelDestinationAgency", fields: [destinationAgencyId], references: [id])
   container         Container?    @relation("CurrentContainer", fields: [containerId], references: [id])
   lastContainer     Container?    @relation("LastContainer", fields: [lastContainerId], references: [id])
@@ -1131,7 +1158,9 @@ model Parcel {
   @@index([organizationId])
   @@index([clientId])
   @@index([warehouseId])
+  @@index([spaceId])
   @@index([containerId])
+  @@index([lastContainerId])
   @@index([destinationAgencyId])
   @@index([invoiceId])
   @@index([status])

@@ -11,6 +11,13 @@ import { CloseInventoryUseCase } from '../../application/use-cases/warehouse/Clo
 import { GetInventoryUseCase } from '../../application/use-cases/warehouse/GetInventoryUseCase';
 import { MarkInventoryItemManuallyUseCase } from '../../application/use-cases/warehouse/MarkInventoryItemManuallyUseCase';
 import { ListUninventoriedParcelsUseCase } from '../../application/use-cases/warehouse/ListUninventoriedParcelsUseCase';
+import {
+  ListWarehouseSpacesUseCase,
+  UpsertWarehouseSpacesUseCase,
+  MoveParcelToSpaceUseCase,
+} from '../../application/use-cases/warehouse/WarehouseSpaceUseCases';
+import { RegisterExtraInventoryParcelUseCase } from '../../application/use-cases/warehouse/RegisterExtraInventoryParcelUseCase';
+import { RestockParcelUseCase } from '../../application/use-cases/warehouse/RestockParcelUseCase';
 import { WAREHOUSE_REPOSITORY } from '../../application/interfaces/IWarehouseRepository';
 import { NotFoundError } from '../../domain/errors/BusinessError';
 
@@ -176,6 +183,69 @@ export class WarehouseController {
     try {
       const useCase = container.resolve(CloseInventoryUseCase);
       const data = await useCase.execute(req.params.inventoryId, req.user!.userId);
+      res.json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  // ----- Spaces de rangement -----
+
+  static async listSpaces(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(ListWarehouseSpacesUseCase);
+      const data = await useCase.execute(req.params.id);
+      res.json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async upsertSpaces(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(UpsertWarehouseSpacesUseCase);
+      const data = await useCase.execute(
+        req.params.id,
+        Array.isArray(req.body?.spaces) ? req.body.spaces : [],
+      );
+      res.json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async moveParcelToSpace(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(MoveParcelToSpaceUseCase);
+      const data = await useCase.execute(
+        req.params.parcelId,
+        (req.body?.spaceId as string | null | undefined) ?? null,
+        req.user!.userId,
+        req.body?.comment,
+      );
+      res.json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  // Enregistre en stock un colis trouve physiquement lors de l'inventaire
+  // (extra non present dans le systeme).
+  static async registerExtraInventoryParcel(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(RegisterExtraInventoryParcelUseCase);
+      const data = await useCase.execute(req.params.inventoryId, req.body, req.user!.userId);
+      res.status(201).json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  // Remet en stock un colis precedemment marque absent / perdu.
+  static async restockParcel(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(RestockParcelUseCase);
+      const data = await useCase.execute(req.params.parcelId, req.body, req.user!.userId);
       res.json({ success: true, data });
     } catch (err) {
       next(err);

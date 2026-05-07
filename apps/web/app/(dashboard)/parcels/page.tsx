@@ -3,8 +3,9 @@
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Upload, Package, Eye, RefreshCw, QrCode } from 'lucide-react';
+import { Plus, Upload, Package, Eye, RefreshCw, QrCode, HandCoins } from 'lucide-react';
 import { ParcelQRDialog } from '@/components/shared/ParcelQRDialog';
+import { ParcelHandoverDialog } from '@/components/shared/ParcelHandoverDialog';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
@@ -29,6 +30,7 @@ function ParcelsContent() {
   const [showCreate, setShowCreate] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [qrParcel, setQrParcel] = useState<any | null>(null);
+  const [handoverParcel, setHandoverParcel] = useState<any | null>(null);
 
   const statusFilter = searchParams.get('status') || '';
   const clientIdFilter = searchParams.get('clientId') || '';
@@ -154,6 +156,9 @@ function ParcelsContent() {
         <RowActions actions={[
           { label: 'Voir details', icon: <Eye className="h-4 w-4" />, onClick: () => router.push(`/parcels/${row.id}`) },
           { label: 'QR / Etiquette', icon: <QrCode className="h-4 w-4" />, onClick: () => setQrParcel(row) },
+          ...(row.status !== 'DELIVERED'
+            ? [{ label: 'Remettre au client', icon: <HandCoins className="h-4 w-4" />, onClick: () => setHandoverParcel(row) }]
+            : []),
           { label: 'Changer statut', icon: <RefreshCw className="h-4 w-4" />, onClick: () => router.push(`/parcels/${row.id}`) },
         ]} />
       ),
@@ -207,6 +212,11 @@ function ParcelsContent() {
 
         <ParcelFormDialog open={showCreate} onClose={() => setShowCreate(false)} />
         <ParcelQRDialog open={!!qrParcel} onClose={() => setQrParcel(null)} parcel={qrParcel} />
+        <ParcelHandoverDialog
+          open={!!handoverParcel}
+          onClose={() => setHandoverParcel(null)}
+          parcel={handoverParcel}
+        />
         <CsvImportDialog
           open={showImport}
           onClose={() => setShowImport(false)}

@@ -17,6 +17,9 @@ export interface IParcelRepository {
     filters: {
       warehouseId?: string;
       containerId?: string;
+      lastContainerId?: string;
+      spaceId?: string;
+      origin?: string;
       clientId?: string;
       status?: string;
       transitType?: string;
