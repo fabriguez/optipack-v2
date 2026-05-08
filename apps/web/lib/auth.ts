@@ -97,7 +97,15 @@ export const { handlers, signIn, signOut, auth }: any = NextAuth({
     signIn: '/login',
   },
   callbacks: {
-    async jwt({ token, user, trigger, session: updateInput }) {
+    async jwt({ token, user, trigger: _trigger, session: _updateInput }) {
+      // Note : la branche trigger==='update' a ete retiree. Elle dependait d'un
+      // POST cote client vers /api/auth/session?update qui ne pouvait pas
+      // inclure le CSRF token requis par NextAuth v5 (cause de l'erreur
+      // MissingCSRF dans les logs). Le refresh se fait desormais via la
+      // verification naturelle d'expiration ci-dessous (etape 3).
+      void _trigger;
+      void _updateInput;
+
       // 1) Initial login : on copie tout depuis l'utilisateur
       if (user) {
         token.id = user.id;
@@ -107,12 +115,6 @@ export const { handlers, signIn, signOut, auth }: any = NextAuth({
         token.refreshToken = (user as any).refreshToken;
         token.accessTokenExpiresAt = (user as any).accessTokenExpiresAt;
         return token;
-      }
-
-      // Update force par le client (axios interceptor sur 401) : on invalide
-      // accessTokenExpiresAt pour forcer le refresh ci-dessous.
-      if (trigger === 'update' && (updateInput as any)?.forceRefresh) {
-        (token as any).accessTokenExpiresAt = 0;
       }
 
       // 2) Token encore valide (avec marge de 60s) -> on garde

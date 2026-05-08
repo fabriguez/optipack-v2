@@ -5,6 +5,12 @@ import { Camera, CameraOff, RefreshCw, RotateCw, Keyboard } from 'lucide-react';
 import { AppDialog } from '@/components/ui/AppDialog';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppInput } from '@/components/ui/AppInput';
+import { scanLog } from '@/lib/api/scanDebug';
+
+// Longueur minimale d'une lecture valide. Filtre les faux positifs frequents
+// du BarcodeDetector qui retourne parfois des chaines tres courtes (1-3 chars)
+// glanees sur des elements graphiques.
+const MIN_VALID_LENGTH = 4;
 
 interface QRScannerDialogProps {
   open: boolean;
@@ -106,9 +112,38 @@ export function QRScannerDialog({
   };
 
   const handleDetected = (text: string) => {
-    if (!text || detectedOnceRef.current || !aliveRef.current) return;
+    if (!aliveRef.current) {
+      scanLog('detect.ignored.not-alive', { text });
+      return;
+    }
+    if (detectedOnceRef.current) {
+      scanLog('detect.ignored.already-detected', { text });
+      return;
+    }
+    if (!text) {
+      scanLog('detect.ignored.empty');
+      return;
+    }
+    // Filtre les faux positifs : codes trop courts ou contenant des caracteres
+    // de controle non imprimables. On a vu BarcodeDetector retourner des
+    // bribes de 1-2 caracteres sur des logos / pixels parasites, ce qui fermait
+    // le dialog instantanement (closeOnDetect=true) et donnait l'impression
+    // que la camera se coupait apres 1s.
+    const cleaned = text.trim();
+    if (cleaned.length < MIN_VALID_LENGTH) {
+      scanLog('detect.ignored.too-short', { text: cleaned, len: cleaned.length });
+      return;
+    }
+    // Refuse les codes contenant uniquement des caracteres ASCII de controle
+    // ou non imprimables (probable bruit du detecteur).
+    // eslint-disable-next-line no-control-regex
+    if (/^[\x00-\x1f\x7f]+$/.test(cleaned)) {
+      scanLog('detect.ignored.control-chars', { sample: cleaned.slice(0, 20) });
+      return;
+    }
+    scanLog('detect.accepted', { text: cleaned, mode: usingFallback ? 'fallback' : 'native' });
     detectedOnceRef.current = true;
-    onDetected(text);
+    onDetected(cleaned);
     if (closeOnDetect) {
       // On laisse le useEffect cleanup faire stopAll proprement.
       onClose();
@@ -128,13 +163,16 @@ export function QRScannerDialog({
     safe.setError(null);
     safe.setRunning(false);
     safe.setUsingFallback(false);
+    scanLog('open', { facing, hasBarcodeDetector: typeof (window as any).BarcodeDetector === 'function' });
 
     const start = async () => {
       try {
+        scanLog('getUserMedia.request', { facing });
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: { ideal: facing } },
           audio: false,
         });
+        scanLog('getUserMedia.ok');
         if (!aliveRef.current) {
           stream.getTracks().forEach((t) => t.stop());
           return;
@@ -155,12 +193,17 @@ export function QRScannerDialog({
 
         const BarcodeDetector = (window as any).BarcodeDetector;
         if (BarcodeDetector && typeof BarcodeDetector === 'function') {
+          scanLog('mode.native');
           await runNative();
         } else {
+          scanLog('mode.fallback');
           await runFallback();
         }
       } catch (e: any) {
-        if (!aliveRef.current) return;
+        if (!aliveRef.current) {
+          scanLog('start.error.but-not-alive', { name: e?.name, msg: e?.message });
+          return;
+        }
         const msg =
           e?.name === 'NotAllowedError'
             ? 'Acces camera refuse. Autorisez la camera dans les parametres.'
@@ -169,6 +212,7 @@ export function QRScannerDialog({
               : e?.name === 'NotReadableError'
                 ? 'Camera deja utilisee par une autre application.'
                 : e?.message || 'Impossible de demarrer la camera.';
+        scanLog('start.error', { name: e?.name, msg });
         safe.setError(msg);
         safe.setRunning(false);
       }
@@ -297,6 +341,7 @@ export function QRScannerDialog({
     void start();
 
     return () => {
+      scanLog('cleanup', { reason: 'effect-cleanup' });
       aliveRef.current = false;
       // On lance stopAll mais on ne retarde pas le cleanup React (Promise ignoree).
       // L'idempotence + stoppingRef garantit que les appels concurrents sont fusionnes.

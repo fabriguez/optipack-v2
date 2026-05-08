@@ -7,9 +7,21 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { SocketProvider } from '@/lib/providers/SocketProvider';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 
+// Tag de build expose en console pour verifier que le bundle deploye est bien
+// celui attendu (et non un cache navigateur ou un docker image stale).
+// A bumper a chaque correctif important d'auth/scanner.
+const BUILD_TAG = 'web@2026-05-08-csrf-qr-fix';
+
 export default function DashboardRootLayout({ children }: { children: React.ReactNode }) {
   const { status } = useSession();
   const router = useRouter();
+
+  useEffect(() => {
+    // Affiche le tag de build une seule fois pour faciliter le diagnostic des
+    // bugs persistants apres deploiement (cache navigateur / docker stale).
+    // eslint-disable-next-line no-console
+    console.log(`%c[build] ${BUILD_TAG}`, 'color: #1B5E20; font-weight: bold;');
+  }, []);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
