@@ -3,16 +3,26 @@ import { prisma } from '../../../config/database';
 import { NotFoundError } from '../../../domain/errors/BusinessError';
 
 /**
- * Retourne uniquement les colis PHYSIQUEMENT PRESENTS dans le magasin et qui
- * n'ont pas encore ete inventories dans cet inventaire :
- *   - warehouseId == inventory.warehouseId
- *   - isPresent === true
- *   - status in [IN_STOCK, RECEIVED]
- *   - non supprime
- *   - aucun WarehouseInventoryItem deja existant pour ce parcel/inventaire
+ * Retourne les colis du magasin qui N'ONT PAS ENCORE ETE POINTES dans cet
+ * inventaire. Sert a la saisie rapide quand le QR/code-barres est defectueux.
  *
- * Sert a la saisie rapide pendant l'inventaire quand le QR/code-barres est
- * defectueux : on peut marquer Present, Absent ou ajouter une note.
+ * Un colis est "pas encore pointe" si :
+ *   - il est physiquement present dans le magasin (warehouseId + isPresent
+ *     + status IN_STOCK/RECEIVED + !isDeleted)
+ *   - ET (
+ *       il n'a aucun WarehouseInventoryItem dans cet inventaire (cas d'un
+ *       colis arrive APRES le demarrage de l'inventaire)
+ *       OU
+ *       il a un item mais il n'a ete ni scanne (scanned=false) ni marque
+ *       manuellement (markedManually=false) -- c'est le cas de la majorite
+ *       au demarrage : StartInventoryUseCase snapshote tous les colis presents
+ *       avec scanned=false, markedManually=false. Ils sont en attente de
+ *       pointage.
+ *     )
+ *
+ * Des qu'un colis est scanne, marque present manuellement, ou marque absent,
+ * il sort de cette liste (l'item est mis a jour avec scanned=true OU
+ * markedManually=true).
  */
 @injectable()
 export class ListUninventoriedParcelsUseCase {
@@ -23,11 +33,15 @@ export class ListUninventoriedParcelsUseCase {
     });
     if (!inventory) throw new NotFoundError('Inventaire', inventoryId);
 
-    const inventoriedItems = await prisma.warehouseInventoryItem.findMany({
-      where: { inventoryId },
+    // Items deja traites (scanne OU marque manuellement) : on les exclut.
+    const processedItems = await prisma.warehouseInventoryItem.findMany({
+      where: {
+        inventoryId,
+        OR: [{ scanned: true }, { markedManually: true }],
+      },
       select: { parcelId: true },
     });
-    const inventoriedIds = new Set(inventoriedItems.map((i) => i.parcelId));
+    const processedIds = new Set(processedItems.map((i) => i.parcelId));
 
     const allParcels = await prisma.parcel.findMany({
       where: {
@@ -53,6 +67,6 @@ export class ListUninventoriedParcelsUseCase {
       orderBy: { createdAt: 'desc' },
     });
 
-    return allParcels.filter((p) => !inventoriedIds.has(p.id));
+    return allParcels.filter((p) => !processedIds.has(p.id));
   }
 }
