@@ -38,20 +38,16 @@ const FAILURE_THRESHOLD = 3;
 
 async function performRefresh(): Promise<string | null> {
   authLog('refresh.start');
-  // Force le callback jwt() cote NextAuth a invalider accessTokenExpiresAt
-  // et a rejouer /auth/refresh. Cf. auth.ts -> trigger 'update'.
-  try {
-    await fetch('/api/auth/session?update', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ forceRefresh: true }),
-    });
-  } catch (e) {
-    authLog('refresh.session-update-fetch-failed', { err: String(e) });
-  }
-
-  // getSession() force NextAuth a re-evaluer le token (jwt callback s'execute,
-  // detecte trigger=update + accessTokenExpiresAt=0 -> fait l'appel /auth/refresh).
+  // getSession() declenche le callback jwt() de NextAuth qui, voyant
+  // accessTokenExpiresAt depasse, appelle automatiquement /auth/refresh.
+  // Pas besoin de POST vers /api/auth/session?update : ce endpoint requiert
+  // un token CSRF (NextAuth v5) et lever cette protection compliquerait
+  // l'authentification sans benefice -- la verification d'expiration native
+  // suffit pour les cas reels (token expire localement = refresh auto).
+  //
+  // Edge case : token reput� valide localement mais rejete serveur (revocation,
+  // clock skew). Dans ce cas getSession() retourne le meme token, on
+  // incremente postRefreshFailures et on signOut apres FAILURE_THRESHOLD echecs.
   const session = await getSession();
   const newToken = (session as any)?.accessToken as string | undefined;
   const sessionError = (session as any)?.error as string | undefined;
