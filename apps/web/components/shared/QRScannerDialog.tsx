@@ -1,11 +1,11 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Camera, CameraOff, RefreshCw, RotateCw, Keyboard } from 'lucide-react';
+import { Camera, CameraOff, RefreshCw, RotateCw, Keyboard, Bug, Trash2 } from 'lucide-react';
 import { AppDialog } from '@/components/ui/AppDialog';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppInput } from '@/components/ui/AppInput';
-import { scanLog } from '@/lib/api/scanDebug';
+import { scanLog, readScanLog, clearScanLog, type ScanDebugEntry } from '@/lib/api/scanDebug';
 
 // Longueur minimale d'une lecture valide. Filtre les faux positifs frequents
 // du BarcodeDetector qui retourne parfois des chaines tres courtes (1-3 chars)
@@ -59,6 +59,9 @@ export function QRScannerDialog({
   const [running, setRunning] = useState(false);
   const [usingFallback, setUsingFallback] = useState(false);
   const [manualValue, setManualValue] = useState('');
+  // Panneau diagnostic embarque (utile sur mobile sans DevTools).
+  const [showLog, setShowLog] = useState(false);
+  const [logEntries, setLogEntries] = useState<ScanDebugEntry[]>([]);
 
   // Helpers setState safes (ignorent si dialog ferme entre-temps).
   const safe = {
@@ -454,6 +457,69 @@ export function QRScannerDialog({
               Valider
             </AppButton>
           </div>
+        </div>
+
+        {/* Diagnostic embarque : ouvre le journal du scanner pour les bugs
+            device-specific (utile sur mobile sans DevTools). */}
+        <div className="border-t border-gray-100 pt-2">
+          <button
+            type="button"
+            onClick={() => {
+              setShowLog((s) => !s);
+              if (!showLog) setLogEntries(readScanLog());
+            }}
+            className="inline-flex items-center gap-1 text-[11px] text-gray-500 hover:text-gray-700"
+          >
+            <Bug className="h-3 w-3" />
+            {showLog ? 'Masquer le diagnostic' : 'Voir le diagnostic'}
+          </button>
+          {showLog && (
+            <div className="mt-2 rounded-lg border border-gray-200 bg-white p-2 font-mono text-[10px]">
+              <div className="mb-1 grid grid-cols-1 gap-0.5 text-gray-600 sm:grid-cols-2">
+                <div>UA: <span className="text-gray-900">{typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 70) : '-'}</span></div>
+                <div>HTTPS: <span className={typeof window !== 'undefined' && window.isSecureContext ? 'text-primary-700' : 'text-red-600 font-bold'}>{String(typeof window !== 'undefined' && window.isSecureContext)}</span></div>
+                <div>BarcodeDetector: <span className="text-gray-900">{typeof window !== 'undefined' && typeof (window as any).BarcodeDetector === 'function' ? 'oui' : 'non'}</span></div>
+                <div>getUserMedia: <span className="text-gray-900">{typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia ? 'oui' : 'non'}</span></div>
+                <div>Mode: <span className="text-gray-900">{usingFallback ? 'fallback' : 'natif'}</span></div>
+                <div>Running: <span className="text-gray-900">{String(running)}</span></div>
+              </div>
+              <div className="my-1 flex items-center justify-between border-y border-gray-100 py-1">
+                <span className="text-gray-600">Journal ({logEntries.length})</span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setLogEntries(readScanLog())}
+                    className="text-primary-700 hover:underline"
+                  >
+                    Refresh
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      clearScanLog();
+                      setLogEntries([]);
+                    }}
+                    className="inline-flex items-center gap-0.5 text-red-600 hover:underline"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    Vider
+                  </button>
+                </div>
+              </div>
+              <div className="max-h-48 overflow-auto">
+                {logEntries.length === 0 && (
+                  <div className="py-2 text-center text-gray-400">Journal vide.</div>
+                )}
+                {logEntries.slice().reverse().map((e, i) => (
+                  <div key={i} className="border-b border-gray-50 py-0.5 last:border-0">
+                    <span className="text-gray-400">{e.ts.slice(11, 19)}</span>{' '}
+                    <span className="font-semibold">{e.kind}</span>{' '}
+                    {e.detail && <span className="text-gray-500">{JSON.stringify(e.detail)}</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </AppDialog>
