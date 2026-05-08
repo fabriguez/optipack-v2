@@ -15,18 +15,19 @@ interface QRScannerDialogProps {
 }
 
 /**
- * Scanner polyvalent QR + codes-barres.
+ * Scanner QR + codes-barres avec lifecycle robuste.
  *
  * Strategie a 2 niveaux :
- *  1. BarcodeDetector natif (Chrome / Edge / Android Webview) : tres fluide,
- *     pas de dependance externe. Detecte QR + EAN + UPC + Code128/39/93 + ITF
- *     + Aztec + Data Matrix + PDF417.
- *  2. Fallback html5-qrcode pour Safari / Firefox / navigateurs sans
- *     BarcodeDetector. Memes formats supportes.
+ *  1. BarcodeDetector natif (Chrome / Edge / Android) : fluide, sans dependance.
+ *  2. Fallback html5-qrcode (Safari, Firefox, vieux navigateurs).
  *
- * Dans les 2 cas on utilise un <video> avec getUserMedia (memes primitives que
- * ImageInput.CameraCaptureDialog), donc si la camera marche dans l'ImageInput,
- * elle marche ici. C'est l'instanciation du wrapper qui posait probleme avant.
+ * Lifecycle critique :
+ *  - aliveRef garde toute mutation d'etat dans la session courante du dialog.
+ *    Si l'utilisateur ferme avant que getUserMedia / inst.start aient repondu,
+ *    on ignore le resultat tardif au lieu de setState sur un dialog ferme
+ *    (cause majeure des "crashes au close").
+ *  - stopAll() est idempotent et awaitable, ce qui evite les races
+ *    html5-qrcode (inst.start en vol vs cleanup synchrone).
  */
 export function QRScannerDialog({
   open,
@@ -40,41 +41,78 @@ export function QRScannerDialog({
   const fallbackHostRef = useRef<HTMLDivElement | null>(null);
   const html5QrRef = useRef<any>(null);
   const rafRef = useRef<number | null>(null);
+  // Marqueur "session courante du dialog". Bascule a false sur cleanup ;
+  // on consulte aliveRef.current avant tout setState async.
+  const aliveRef = useRef(false);
+  // Empeche un double cleanup concurrent.
+  const stoppingRef = useRef<Promise<void> | null>(null);
+  const detectedOnceRef = useRef(false);
 
   const [facing, setFacing] = useState<'environment' | 'user'>('environment');
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [usingFallback, setUsingFallback] = useState(false);
   const [manualValue, setManualValue] = useState('');
-  const detectedOnceRef = useRef(false);
 
-  const stopAll = () => {
-    if (rafRef.current != null) {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-    }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-    }
-    const inst = html5QrRef.current;
-    if (inst) {
-      inst.stop().catch(() => {}).finally(() => {
-        try { inst.clear(); } catch {}
-      });
+  // Helpers setState safes (ignorent si dialog ferme entre-temps).
+  const safe = {
+    setError: (v: string | null) => aliveRef.current && setError(v),
+    setRunning: (v: boolean) => aliveRef.current && setRunning(v),
+    setUsingFallback: (v: boolean) => aliveRef.current && setUsingFallback(v),
+  };
+
+  /** Arret idempotent et attendu de toutes les ressources camera. */
+  const stopAll = (): Promise<void> => {
+    if (stoppingRef.current) return stoppingRef.current;
+    stoppingRef.current = (async () => {
+      if (rafRef.current != null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      // Stop stream getUserMedia.
+      if (streamRef.current) {
+        try {
+          streamRef.current.getTracks().forEach((t) => t.stop());
+        } catch {
+          // ignore
+        }
+        streamRef.current = null;
+      }
+      // Detache <video>.
+      if (videoRef.current) {
+        try {
+          videoRef.current.srcObject = null;
+        } catch {
+          // ignore
+        }
+      }
+      // Stop html5-qrcode (await pour eviter les races).
+      const inst = html5QrRef.current;
       html5QrRef.current = null;
-    }
+      if (inst) {
+        try {
+          await inst.stop();
+        } catch {
+          // ignore : peut throw si jamais demarre / deja stoppe
+        }
+        try {
+          inst.clear();
+        } catch {
+          // ignore
+        }
+      }
+    })();
+    return stoppingRef.current;
   };
 
   const handleDetected = (text: string) => {
-    if (!text || detectedOnceRef.current) return;
+    if (!text || detectedOnceRef.current || !aliveRef.current) return;
     detectedOnceRef.current = true;
     onDetected(text);
     if (closeOnDetect) {
-      stopAll();
+      // On laisse le useEffect cleanup faire stopAll proprement.
       onClose();
     } else {
-      // Permet une nouvelle detection apres un court delai (scan continu)
       setTimeout(() => {
         detectedOnceRef.current = false;
       }, 1500);
@@ -83,44 +121,46 @@ export function QRScannerDialog({
 
   useEffect(() => {
     if (!open) return;
+
+    aliveRef.current = true;
+    stoppingRef.current = null;
     detectedOnceRef.current = false;
-    setError(null);
-    setRunning(false);
-    let cancelled = false;
+    safe.setError(null);
+    safe.setRunning(false);
+    safe.setUsingFallback(false);
 
     const start = async () => {
       try {
-        // 1) Demande getUserMedia avec la facing camera demandee.
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: { ideal: facing } },
           audio: false,
         });
-        if (cancelled) {
+        if (!aliveRef.current) {
           stream.getTracks().forEach((t) => t.stop());
           return;
         }
         streamRef.current = stream;
 
-        // 2) Branche le stream sur le <video>.
         if (!videoRef.current) {
-          // Safari : il arrive que le portal n'ait pas encore mis le <video>
-          // dans le DOM. On attend un tick puis on retente.
+          // Safari : le portal peut ne pas avoir mis le <video> dans le DOM.
           await new Promise((r) => setTimeout(r, 50));
         }
+        if (!aliveRef.current) return;
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           await videoRef.current.play().catch(() => {});
-          setRunning(true);
+          if (!aliveRef.current) return;
+          safe.setRunning(true);
         }
 
-        // 3) Detection : BarcodeDetector natif si dispo, sinon html5-qrcode.
         const BarcodeDetector = (window as any).BarcodeDetector;
         if (BarcodeDetector && typeof BarcodeDetector === 'function') {
-          await runNative(stream);
+          await runNative();
         } else {
           await runFallback();
         }
       } catch (e: any) {
+        if (!aliveRef.current) return;
         const msg =
           e?.name === 'NotAllowedError'
             ? 'Acces camera refuse. Autorisez la camera dans les parametres.'
@@ -129,18 +169,17 @@ export function QRScannerDialog({
               : e?.name === 'NotReadableError'
                 ? 'Camera deja utilisee par une autre application.'
                 : e?.message || 'Impossible de demarrer la camera.';
-        setError(msg);
-        setRunning(false);
+        safe.setError(msg);
+        safe.setRunning(false);
       }
     };
 
-    const runNative = async (_stream: MediaStream) => {
+    const runNative = async () => {
       const BarcodeDetector = (window as any).BarcodeDetector;
-      // Liste des formats : on prend le maximum supporte par le navigateur.
       let formats: string[] = ['qr_code'];
       try {
         const supported: string[] = await BarcodeDetector.getSupportedFormats();
-        formats = supported && supported.length ? supported : formats;
+        if (supported && supported.length) formats = supported;
       } catch {
         // ignore
       }
@@ -148,14 +187,14 @@ export function QRScannerDialog({
       try {
         detector = new BarcodeDetector({ formats });
       } catch {
-        // BarcodeDetector existe mais l'instanciation echoue (Safari Mac sans support reel)
-        // -> bascule sur le fallback html5-qrcode.
+        // BarcodeDetector existe mais l'instanciation echoue (Safari Mac sans
+        // support reel) -> bascule sur le fallback html5-qrcode.
         await runFallback();
         return;
       }
 
       const tick = async () => {
-        if (cancelled || !videoRef.current) return;
+        if (!aliveRef.current || !videoRef.current) return;
         try {
           const codes = await detector.detect(videoRef.current);
           if (codes && codes.length) {
@@ -165,20 +204,19 @@ export function QRScannerDialog({
         } catch {
           // ignore frame error
         }
-        if (!cancelled) rafRef.current = requestAnimationFrame(tick);
+        if (aliveRef.current) {
+          rafRef.current = requestAnimationFrame(tick);
+        }
       };
       rafRef.current = requestAnimationFrame(tick);
     };
 
     const runFallback = async () => {
-      // On utilise html5-qrcode mais en mode "image-from-video" : on lui passe
-      // explicitement un canvas qui capture le <video> existant. Plus robuste
-      // que de laisser html5-qrcode gerer son propre <video>.
-      setUsingFallback(true);
+      safe.setUsingFallback(true);
       try {
         const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import('html5-qrcode');
-        if (!fallbackHostRef.current) return;
-        // Donne un id unique au host pour Html5Qrcode
+        if (!aliveRef.current || !fallbackHostRef.current) return;
+
         const hostId = `qr-fallback-host-${Math.random().toString(36).slice(2, 8)}`;
         fallbackHostRef.current.id = hostId;
 
@@ -202,6 +240,16 @@ export function QRScannerDialog({
           verbose: false,
           formatsToSupport: formats,
         });
+        // Si fermeture pendant l'instanciation, on n'enregistre pas inst et on
+        // disposera ce qu'on peut juste apres.
+        if (!aliveRef.current) {
+          try {
+            inst.clear();
+          } catch {
+            // ignore
+          }
+          return;
+        }
         html5QrRef.current = inst;
 
         // Coupe notre stream getUserMedia : html5-qrcode va prendre la main.
@@ -223,20 +271,36 @@ export function QRScannerDialog({
           (decodedText: string) => handleDetected(decodedText),
           () => {},
         );
-        setRunning(true);
+        // Si fermeture s'est produite pendant inst.start, on stoppe immediatement.
+        if (!aliveRef.current) {
+          try {
+            await inst.stop();
+          } catch {
+            // ignore
+          }
+          try {
+            inst.clear();
+          } catch {
+            // ignore
+          }
+          html5QrRef.current = null;
+          return;
+        }
+        safe.setRunning(true);
       } catch (e: any) {
-        setError(e?.message || 'Impossible de demarrer le scanner.');
-        setRunning(false);
+        if (!aliveRef.current) return;
+        safe.setError(e?.message || 'Impossible de demarrer le scanner.');
+        safe.setRunning(false);
       }
     };
 
-    start();
+    void start();
 
     return () => {
-      cancelled = true;
-      stopAll();
-      setRunning(false);
-      setUsingFallback(false);
+      aliveRef.current = false;
+      // On lance stopAll mais on ne retarde pas le cleanup React (Promise ignoree).
+      // L'idempotence + stoppingRef garantit que les appels concurrents sont fusionnes.
+      void stopAll();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, facing]);
@@ -296,7 +360,6 @@ export function QRScannerDialog({
             className={usingFallback ? 'block w-full' : 'hidden'}
             style={{ minHeight: 280 }}
           />
-          {/* Cadre de visee */}
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <div className="rounded-lg border-2 border-primary-400/80" style={{ width: '70%', height: '40%' }} />
           </div>
@@ -320,8 +383,7 @@ export function QRScannerDialog({
           <p className="text-xs text-gray-400">Demarrage de la camera...</p>
         )}
 
-        {/* Saisie manuelle : toujours disponible en derniere ressource si la
-            camera echoue ou si l'utilisateur prefere taper / coller le code. */}
+        {/* Saisie manuelle : derniere ressource si la camera echoue. */}
         <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
           <label className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-600">
             <Keyboard className="h-3.5 w-3.5" />
