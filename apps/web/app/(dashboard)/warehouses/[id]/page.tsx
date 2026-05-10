@@ -3,7 +3,7 @@
 import { use, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Package, Plus, Eye, Edit, Trash2, ArrowRightLeft, ClipboardCheck, PlayCircle, QrCode, HandCoins } from 'lucide-react';
+import { ArrowLeft, Package, Plus, Eye, Edit, Trash2, ArrowRightLeft, ClipboardCheck, PlayCircle, QrCode, HandCoins, MapPin } from 'lucide-react';
 import { ParcelQRDialog } from '@/components/shared/ParcelQRDialog';
 import { ParcelHandoverDialog } from '@/components/shared/ParcelHandoverDialog';
 import { PageTransition } from '@/components/shared/PageTransition';
@@ -24,6 +24,8 @@ import { formatAmount, formatDate, formatDurationSince } from '@transitsoftservi
 import { toast } from 'sonner';
 import { ParcelFormDialog } from '../../parcels/ParcelFormDialog';
 import { AgencyAvatar } from '@/components/shared/AgencyAvatar';
+import { SpacesSection } from './SpacesSection';
+import { MoveToSpaceDialog } from './MoveToSpaceDialog';
 
 export default function WarehouseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -39,6 +41,7 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
   const [qrParcel, setQrParcel] = useState<any | null>(null);
   const [handoverParcel, setHandoverParcel] = useState<any | null>(null);
   const [showUntrackedHandover, setShowUntrackedHandover] = useState(false);
+  const [moveSpaceParcel, setMoveSpaceParcel] = useState<any | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['warehouses', id],
@@ -172,6 +175,19 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
     { key: 'price', label: 'Prix', render: (row: any) => formatAmount(Number(row.price)) },
     { key: 'status', label: 'Statut', render: (row: any) => <StatusBadge status={row.status} type="parcel" /> },
     {
+      key: 'space',
+      label: 'Zone',
+      render: (row: any) =>
+        row.space?.name ? (
+          <span className="inline-flex items-center gap-1 rounded-md bg-primary-50 px-1.5 py-0.5 text-[11px] font-medium text-primary-700">
+            <MapPin className="h-3 w-3" />
+            {row.space.name}
+          </span>
+        ) : (
+          <span className="text-xs text-gray-400">-</span>
+        ),
+    },
+    {
       key: 'warehouseEnteredAt',
       label: 'Temps en stock',
       render: (row: any) => (
@@ -193,6 +209,7 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
               : []),
             ...(canModifyParcel(row) ? [
               { label: 'Modifier', icon: <Edit className="h-4 w-4" />, onClick: () => router.push(`/parcels/${row.id}`) },
+              { label: 'Deplacer vers une zone', icon: <MapPin className="h-4 w-4" />, onClick: () => setMoveSpaceParcel(row) },
               { label: 'Transferer', icon: <ArrowRightLeft className="h-4 w-4" />, onClick: () => setTransferParcel(row) },
               { label: 'Retirer du magasin', icon: <Package className="h-4 w-4" />, onClick: () => setRemoveParcel(row) },
               { label: 'Supprimer', icon: <Trash2 className="h-4 w-4" />, onClick: () => setDeleteParcel(row), variant: 'destructive' as const },
@@ -325,6 +342,8 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
                   )}
                 </AppCard>
               </div>
+
+              <SpacesSection warehouseId={id} />
 
               <AppCard>
                 <div className="flex items-center justify-between mb-3">
@@ -477,6 +496,14 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
         title="Retirer le colis du magasin"
         message={`Le colis ${removeParcel?.trackingNumber} (${removeParcel?.designation}) sera retire de ce magasin. Il ne sera plus associe a aucun magasin.`}
         confirmLabel="Retirer"
+      />
+
+      {/* Move to space */}
+      <MoveToSpaceDialog
+        open={!!moveSpaceParcel}
+        onClose={() => setMoveSpaceParcel(null)}
+        warehouseId={id}
+        parcel={moveSpaceParcel}
       />
 
       {/* Delete confirm */}

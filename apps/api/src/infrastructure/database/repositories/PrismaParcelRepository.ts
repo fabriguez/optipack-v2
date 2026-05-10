@@ -13,6 +13,9 @@ const PARCEL_INCLUDE = {
       agency: { select: { id: true, name: true } },
     },
   },
+  // Zone de rangement (WarehouseSpace) du colis. Necessaire pour afficher
+  // l'emplacement dans les listes magasin / inventaire.
+  space: { select: { id: true, name: true } },
   container: { select: { id: true, designation: true } },
   transitRoute: { select: { id: true, name: true, type: true } },
   invoice: { select: { id: true, reference: true, status: true } },

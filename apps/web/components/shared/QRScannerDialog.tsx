@@ -170,6 +170,19 @@ export function QRScannerDialog({
 
     const start = async () => {
       try {
+        const BarcodeDetector = (window as any).BarcodeDetector;
+        const hasNative = BarcodeDetector && typeof BarcodeDetector === 'function';
+
+        // Si on sait deja qu'on n'a pas BarcodeDetector (Safari iOS), on saute
+        // notre getUserMedia et on laisse html5-qrcode appeler le sien
+        // directement. iOS rejette le 2e appel rapide de getUserMedia (NotReadableError
+        // ou throw silencieux), ce qui faisait echouer inst.start.
+        if (!hasNative) {
+          scanLog('mode.fallback');
+          await runFallback();
+          return;
+        }
+
         scanLog('getUserMedia.request', { facing });
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: { ideal: facing } },
@@ -194,14 +207,8 @@ export function QRScannerDialog({
           safe.setRunning(true);
         }
 
-        const BarcodeDetector = (window as any).BarcodeDetector;
-        if (BarcodeDetector && typeof BarcodeDetector === 'function') {
-          scanLog('mode.native');
-          await runNative();
-        } else {
-          scanLog('mode.fallback');
-          await runFallback();
-        }
+        scanLog('mode.native');
+        await runNative();
       } catch (e: any) {
         if (!aliveRef.current) {
           scanLog('start.error.but-not-alive', { name: e?.name, msg: e?.message });
@@ -343,9 +350,39 @@ export function QRScannerDialog({
         }
         safe.setRunning(true);
       } catch (e: any) {
-        scanLog('html5qr.start.error', { name: e?.name, msg: e?.message });
+        // iOS Safari peut throw des objets non-Error (string, plain object) ;
+        // on capture tout ce qu'on peut pour le diagnostic.
+        let serialized: any = {};
+        try {
+          serialized = {
+            type: typeof e,
+            ctor: e?.constructor?.name,
+            name: e?.name,
+            msg: e?.message,
+            str: typeof e === 'string' ? e : undefined,
+            asString: (() => {
+              try {
+                return String(e);
+              } catch {
+                return '<no-string>';
+              }
+            })(),
+            keys: e && typeof e === 'object' ? Object.keys(e).slice(0, 10) : [],
+            json: (() => {
+              try {
+                return JSON.stringify(e);
+              } catch {
+                return '<no-json>';
+              }
+            })(),
+          };
+        } catch {
+          // ignore
+        }
+        scanLog('html5qr.start.error', serialized);
         if (!aliveRef.current) return;
-        safe.setError(e?.message || 'Impossible de demarrer le scanner.');
+        const userMsg = e?.message || (typeof e === 'string' ? e : null) || 'Impossible de demarrer le scanner.';
+        safe.setError(userMsg);
         safe.setRunning(false);
       }
     };
