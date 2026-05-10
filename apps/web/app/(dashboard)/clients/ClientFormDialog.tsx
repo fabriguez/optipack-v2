@@ -30,7 +30,7 @@ interface ClientFormDialogProps {
     email?: string | null;
     address?: string | null;
     idNumber?: string | null;
-    agencyId: string;
+    agencyId: string | null;
     clientType?: string | null;
     loyaltyTier?: string | null;
     imageUrl?: string | null;
@@ -69,6 +69,14 @@ export function ClientFormDialog({ open, onClose, defaultAgency, client }: Clien
 
   const [editableId, setEditableId] = useState<string | null>(null);
   const [photoUrls, setPhotoUrls] = useState<Record<Slot, string | null>>({
+    profile: null,
+    idDocument: null,
+    idDocumentBack: null,
+  });
+  // Files en attente d'upload : utilise quand l'utilisateur ajoute des images
+  // AVANT d'avoir enregistre le client (pas encore d'editableId). On uploade
+  // tout en lot apres la creation.
+  const [pendingFiles, setPendingFiles] = useState<Record<Slot, File | null>>({
     profile: null,
     idDocument: null,
     idDocumentBack: null,
@@ -120,9 +128,44 @@ export function ClientFormDialog({ open, onClose, defaultAgency, client }: Clien
       });
       if (defaultAgency?.id) setValue('agencyId', defaultAgency.id, { shouldValidate: true });
       setEditableId(null);
+      // Revoke les blob URL locales (CNI en attente) pour eviter les fuites.
+      Object.values(photoUrls).forEach((u) => {
+        if (u && u.startsWith('blob:')) URL.revokeObjectURL(u);
+      });
       setPhotoUrls({ profile: null, idDocument: null, idDocumentBack: null });
+      setPendingFiles({ profile: null, idDocument: null, idDocumentBack: null });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, client, defaultAgency, reset, setValue]);
+
+  // Uploads les fichiers mis en attente (creation initiale sans id puis save).
+  const flushPendingFiles = async (id: string) => {
+    const slots: Slot[] = ['profile', 'idDocument', 'idDocumentBack'];
+    for (const slot of slots) {
+      const file = pendingFiles[slot];
+      if (!file) continue;
+      setBusy(slot);
+      try {
+        const formData = new FormData();
+        formData.append('image', file);
+        const res = await apiClient.post(`/clients/${id}/image/${slot}`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        const fields: Record<Slot, string> = {
+          profile: 'imageUrl',
+          idDocument: 'idDocumentUrl',
+          idDocumentBack: 'idDocumentBackUrl',
+        };
+        const url = res.data?.data?.[fields[slot]];
+        if (url) setPhotoUrls((s) => ({ ...s, [slot]: url }));
+      } catch (e: any) {
+        toast.error(`${SLOT_LABELS[slot]} : ${e?.response?.data?.message || 'echec upload'}`);
+      } finally {
+        setBusy(null);
+      }
+    }
+    setPendingFiles({ profile: null, idDocument: null, idDocumentBack: null });
+  };
 
   const onSubmit = async (data: CreateClientInput) => {
     if (isEdit) {
@@ -131,14 +174,34 @@ export function ClientFormDialog({ open, onClose, defaultAgency, client }: Clien
     } else {
       const created = await createMutation.mutateAsync(data);
       const id = (created as any)?.data?.id;
-      if (id) setEditableId(id);
-      else onClose();
+      if (id) {
+        setEditableId(id);
+        // Uploade les CNI/profile mis en attente avant la creation.
+        await flushPendingFiles(id);
+        qc.invalidateQueries({ queryKey: ['clients'] });
+      } else {
+        onClose();
+      }
     }
   };
 
   const uploadPhoto = async (slot: Slot, file: File) => {
     if (!editableId) {
-      toast.info('Enregistrez d\'abord le client.');
+      // Creation : on ne peut pas encore uploader (pas d'id). On stocke le
+      // fichier localement, on cree un preview blob URL et on uploadera apres
+      // la creation reussie via flushPendingFiles().
+      const previousBlob = pendingFiles[slot];
+      if (previousBlob) {
+        // Revoke l'ancien object URL pour eviter une fuite memoire.
+        const oldPreview = photoUrls[slot];
+        if (oldPreview && oldPreview.startsWith('blob:')) {
+          URL.revokeObjectURL(oldPreview);
+        }
+      }
+      const previewUrl = URL.createObjectURL(file);
+      setPendingFiles((s) => ({ ...s, [slot]: file }));
+      setPhotoUrls((s) => ({ ...s, [slot]: previewUrl }));
+      toast.info('Image en attente. Sera uploadee a l\'enregistrement.');
       return;
     }
     setBusy(slot);
@@ -165,7 +228,15 @@ export function ClientFormDialog({ open, onClose, defaultAgency, client }: Clien
   };
 
   const deletePhoto = async (slot: Slot) => {
-    if (!editableId) return;
+    // Si l'image est juste en attente locale (creation pas encore enregistree),
+    // on la retire de la queue + revoke le blob URL, sans appeler l'API.
+    if (!editableId) {
+      const preview = photoUrls[slot];
+      if (preview && preview.startsWith('blob:')) URL.revokeObjectURL(preview);
+      setPendingFiles((s) => ({ ...s, [slot]: null }));
+      setPhotoUrls((s) => ({ ...s, [slot]: null }));
+      return;
+    }
     setBusy(slot);
     try {
       await apiClient.delete(`/clients/${editableId}/image/${slot}`);
@@ -260,15 +331,15 @@ export function ClientFormDialog({ open, onClose, defaultAgency, client }: Clien
             control={control}
             render={({ field }) => (
               <AppSearchSelect
-                label="Agence"
+                label="Agence d'enregistrement (optionnel)"
                 value={field.value}
-                onChange={(v) => field.onChange(v ?? '')}
+                onChange={(v) => field.onChange(v ?? null)}
                 search={searchers.agencies}
                 selectedOption={defaultAgency ? toSearchOption.agency(defaultAgency) : undefined}
                 error={errors.agencyId?.message}
-                required
                 disabled={!!defaultAgency || !!editableId}
-                placeholder="Selectionner une agence"
+                placeholder="Aucune agence (client global a l'organisation)"
+                clearable
                 className="sm:col-span-2"
               />
             )}

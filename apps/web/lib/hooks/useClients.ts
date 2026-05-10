@@ -41,3 +41,16 @@ export function useUpdateClient() {
     onError: () => toast.error('Erreur lors de la mise a jour'),
   });
 }
+
+export function useDeleteClient() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => clientsApi.delete(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['clients'] });
+      toast.success('Client supprime');
+    },
+    onError: (e: any) =>
+      toast.error(e?.response?.data?.message ?? 'Echec de la suppression'),
+  });
+}

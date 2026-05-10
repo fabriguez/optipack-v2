@@ -7,11 +7,17 @@ import { prisma } from '../../../config/database';
 @injectable()
 export class PrismaClientRepository implements IClientRepository {
   async findById(id: string): Promise<Client | null> {
-    return prisma.client.findUnique({ where: { id } });
+    // Les clients supprimes (soft delete) sont invisibles pour l'application,
+    // sauf pour l'audit qui peut les retrouver via le client Prisma directement.
+    const c = await prisma.client.findUnique({ where: { id } });
+    if (!c || c.isDeleted) return null;
+    return c;
   }
 
   async findByPhone(phone: string): Promise<Client | null> {
-    return prisma.client.findUnique({ where: { phone } });
+    const c = await prisma.client.findUnique({ where: { phone } });
+    if (!c || c.isDeleted) return null;
+    return c;
   }
 
   async findAll(
@@ -23,6 +29,7 @@ export class PrismaClientRepository implements IClientRepository {
 
     const where: Prisma.ClientWhereInput = {
       isActive: true,
+      isDeleted: false,
       ...(filters.organizationId && { organizationId: filters.organizationId }),
       ...(filters.agencyId && { agencyId: filters.agencyId }),
       ...(search && {
@@ -63,6 +70,11 @@ export class PrismaClientRepository implements IClientRepository {
   }
 
   async delete(id: string): Promise<void> {
-    await prisma.client.update({ where: { id }, data: { isActive: false } });
+    // Soft delete : conserve la ligne pour l'audit (colis lies, factures, ...)
+    // mais la masque de toutes les requetes applicatives via isDeleted=true.
+    await prisma.client.update({
+      where: { id },
+      data: { isDeleted: true, deletedAt: new Date(), isActive: false },
+    });
   }
 }

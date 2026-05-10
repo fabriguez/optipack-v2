@@ -3,7 +3,7 @@
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Upload, Users, Eye, Package, CreditCard } from 'lucide-react';
+import { Plus, Upload, Users, Eye, Package, CreditCard, Edit, Trash2 } from 'lucide-react';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
@@ -15,7 +15,8 @@ import { XlsxExportButton } from '@/components/shared/XlsxExportButton';
 import { CsvImportDialog } from '@/components/shared/CsvImportDialog';
 import { RowActions } from '@/components/shared/RowActions';
 import { useServerPagination } from '@/lib/hooks/useServerPagination';
-import { useClients } from '@/lib/hooks/useClients';
+import { useClients, useDeleteClient } from '@/lib/hooks/useClients';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { searchers } from '@/lib/api/searchers';
 import { ClientFormDialog } from './ClientFormDialog';
 import { apiClient } from '@/lib/api/client';
@@ -32,6 +33,9 @@ function ClientsContent() {
   const { page, search, setPage, setSearch, queryParams } = useServerPagination();
   const [showCreate, setShowCreate] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [editClient, setEditClient] = useState<any | null>(null);
+  const [confirmDeleteClient, setConfirmDeleteClient] = useState<any | null>(null);
+  const deleteMut = useDeleteClient();
 
 
   const agencyFilter = searchParams.get('agencyId') || '';
@@ -128,6 +132,8 @@ function ClientsContent() {
           { label: 'Voir le profil', icon: <Eye className="h-4 w-4" />, onClick: () => router.push(`/clients/${row.id}`) },
           { label: 'Voir les colis', icon: <Package className="h-4 w-4" />, onClick: () => router.push(`/parcels?clientId=${row.id}`) },
           { label: 'Voir les factures', icon: <CreditCard className="h-4 w-4" />, onClick: () => router.push(`/invoices?clientId=${row.id}`) },
+          { label: 'Modifier', icon: <Edit className="h-4 w-4" />, onClick: () => setEditClient(row) },
+          { label: 'Supprimer', icon: <Trash2 className="h-4 w-4" />, onClick: () => setConfirmDeleteClient(row), variant: 'destructive' as const },
         ]} />
       ),
     },
@@ -179,6 +185,32 @@ function ClientsContent() {
         </AppCard>
 
         <ClientFormDialog open={showCreate} onClose={() => setShowCreate(false)} />
+        <ClientFormDialog
+          open={!!editClient}
+          onClose={() => setEditClient(null)}
+          client={editClient}
+        />
+        <ConfirmDialog
+          open={!!confirmDeleteClient}
+          onClose={() => setConfirmDeleteClient(null)}
+          title="Supprimer ce client ?"
+          message={
+            confirmDeleteClient
+              ? `Le client "${confirmDeleteClient.fullName}" sera supprime (soft-delete). ` +
+                `Ses colis, factures et historique restent intacts pour audit, ` +
+                `mais il ne sera plus visible dans les listings.`
+              : ''
+          }
+          confirmLabel="Supprimer"
+          variant="destructive"
+          loading={deleteMut.isPending}
+          onConfirm={() => {
+            if (!confirmDeleteClient) return;
+            deleteMut.mutate(confirmDeleteClient.id, {
+              onSuccess: () => setConfirmDeleteClient(null),
+            });
+          }}
+        />
         <CsvImportDialog
           open={showImport}
           onClose={() => setShowImport(false)}

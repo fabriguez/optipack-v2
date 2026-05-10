@@ -23,7 +23,11 @@ export class UpdateClientUseCase {
       ...(input.clientType !== undefined && { clientType: input.clientType }),
       ...(input.loyaltyTier !== undefined && { loyaltyTier: input.loyaltyTier }),
       ...(input.isActive !== undefined && { isActive: input.isActive }),
-      ...(input.agencyId !== undefined && { agency: { connect: { id: input.agencyId } } }),
+      // Agence d'enregistrement optionnelle : agencyId=null deconnecte le lien.
+      ...(input.agencyId !== undefined &&
+        (input.agencyId
+          ? { agency: { connect: { id: input.agencyId } } }
+          : { agency: { disconnect: true } })),
     });
   }
 }

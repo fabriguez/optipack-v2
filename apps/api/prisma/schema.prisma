@@ -1026,6 +1026,11 @@ model Client {
   loyaltyPoints     Int         @default(0)
   totalSpent        Decimal     @default(0) @db.Decimal(15, 2)
   isActive          Boolean     @default(true)
+  // Soft delete : la suppression conserve la ligne (audit, references) mais
+  // la masque de tous les listings et recherches.
+  isDeleted         Boolean     @default(false)
+  deletedAt         DateTime?
+  deletedByUserId   String?
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
 
@@ -1052,6 +1057,7 @@ model Client {
   @@index([agencyId])
   @@index([phone])
   @@index([clientType])
+  @@index([isDeleted])
   @@map("clients")
 }
 

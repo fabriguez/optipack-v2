@@ -122,19 +122,27 @@ export class HandoverUntrackedParcelUseCase {
 
     const receiver = await prisma.client.findUnique({
       where: { id: input.receivedByClientId },
-      include: { agency: { select: { id: true, organizationId: true } } },
     });
     if (!receiver) throw new NotFoundError('Client recepteur', input.receivedByClientId);
+
+    // Le client n'a plus forcement d'agence (Client.agencyId nullable). On
+    // utilise l'agence du magasin de retrait comme reference d'organisation
+    // et de destination -- c'est la ou le colis a ete trouve physiquement.
+    const warehouse = await prisma.warehouse.findUnique({
+      where: { id: input.warehouseId },
+      include: { agency: { select: { id: true, organizationId: true } } },
+    });
+    if (!warehouse) throw new NotFoundError('Magasin', input.warehouseId);
 
     const trackingNumber = `UNTRK-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 
     const parcel = await prisma.parcel.create({
       data: {
-        organizationId: receiver.agency.organizationId,
+        organizationId: warehouse.agency.organizationId,
         trackingNumber,
         designation: input.designation.trim(),
         weight: input.weight ?? null,
-        destination: receiver.agency.id,
+        destination: warehouse.agency.id,
         observation:
           (input.observation ?? '') +
           ' [Colis trouve physiquement, non enregistre dans le systeme]',

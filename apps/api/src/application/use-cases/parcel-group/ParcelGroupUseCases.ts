@@ -7,9 +7,12 @@ import { config } from '../../../config';
 
 interface ParcelInGroupInput {
   designation: string;
+  trackingFournisseur?: string;
   weight?: number;
   volume?: number;
-  destination: string;
+  // destination (string ville) est derivee cote backend depuis l'agence,
+  // mais l'appelant peut la passer en override.
+  destination?: string;
   destinationAddress?: string;
   destinationAgencyId?: string;
   recipientId?: string;
@@ -47,6 +50,19 @@ export class CreateParcelGroupUseCase {
     const agency = await prisma.agency.findUnique({ where: { id: input.agencyId } });
     if (!agency) throw new NotFoundError('Agence', input.agencyId);
 
+    // Pre-charge les villes des agences referencees pour deriver le champ
+    // `destination` (compat ascendante PDF/manifest) sans appel DB par colis.
+    const agencyIds = Array.from(
+      new Set(input.parcels.map((p) => p.destinationAgencyId).filter((x): x is string => !!x)),
+    );
+    const agencies = agencyIds.length
+      ? await prisma.agency.findMany({
+          where: { id: { in: agencyIds } },
+          select: { id: true, city: true },
+        })
+      : [];
+    const cityByAgency = new Map(agencies.map((a) => [a.id, a.city]));
+
     return prisma.$transaction(async (tx) => {
       const count = await tx.parcelGroup.count({ where: { agencyId: input.agencyId } });
       const reference = generateReference('GRP', count + 1);
@@ -65,14 +81,17 @@ export class CreateParcelGroupUseCase {
 
       const createdParcels = [];
       for (const p of input.parcels) {
+        const derivedDestination =
+          p.destination ?? (p.destinationAgencyId ? cityByAgency.get(p.destinationAgencyId) : null) ?? '';
         const parcel = await tx.parcel.create({
           data: {
             organizationId: input.organizationId,
             trackingNumber: genTracking(),
+            trackingFournisseur: p.trackingFournisseur || null,
             designation: p.designation,
             weight: p.weight ?? null,
             volume: p.volume ?? null,
-            destination: p.destination,
+            destination: derivedDestination,
             destinationAddress: p.destinationAddress ?? null,
             destinationAgencyId: p.destinationAgencyId ?? null,
             recipientId: p.recipientId ?? null,
@@ -99,7 +118,13 @@ export class CreateParcelGroupUseCase {
 
       return tx.parcelGroup.findUnique({
         where: { id: group.id },
-        include: { parcels: true, client: true, agency: true },
+        include: {
+          // Ordre stable des colis : le frontend match les uploads photos par
+          // index, donc on doit garantir l'ordre de creation.
+          parcels: { orderBy: { createdAt: 'asc' } },
+          client: true,
+          agency: true,
+        },
       });
     });
   }
@@ -120,7 +145,7 @@ export class AddParcelToGroupUseCase {
         designation: parcel.designation,
         weight: parcel.weight ?? null,
         volume: parcel.volume ?? null,
-        destination: parcel.destination,
+        destination: parcel.destination ?? '',
         category: (parcel.category as any) ?? 'STANDARD',
         status: 'IN_STOCK',
         isPresent: true,

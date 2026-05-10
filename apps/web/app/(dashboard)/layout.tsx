@@ -11,7 +11,7 @@ import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 // Tag de build expose en console pour verifier que le bundle deploye est bien
 // celui attendu (et non un cache navigateur ou un docker image stale).
 // A bumper a chaque correctif important d'auth/scanner.
-const BUILD_TAG = 'web@2026-05-08-parcel-status-context-label-xn-calc-note';
+const BUILD_TAG = 'web@2026-05-08-client-soft-delete-cni-on-create';
 
 export default function DashboardRootLayout({ children }: { children: React.ReactNode }) {
   const { status } = useSession();
