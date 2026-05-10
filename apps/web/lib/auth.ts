@@ -97,15 +97,7 @@ export const { handlers, signIn, signOut, auth }: any = NextAuth({
     signIn: '/login',
   },
   callbacks: {
-    async jwt({ token, user, trigger: _trigger, session: _updateInput }) {
-      // Note : la branche trigger==='update' a ete retiree. Elle dependait d'un
-      // POST cote client vers /api/auth/session?update qui ne pouvait pas
-      // inclure le CSRF token requis par NextAuth v5 (cause de l'erreur
-      // MissingCSRF dans les logs). Le refresh se fait desormais via la
-      // verification naturelle d'expiration ci-dessous (etape 3).
-      void _trigger;
-      void _updateInput;
-
+    async jwt({ token, user, trigger, session: updateInput }) {
       // 1) Initial login : on copie tout depuis l'utilisateur
       if (user) {
         token.id = user.id;
@@ -117,14 +109,22 @@ export const { handlers, signIn, signOut, auth }: any = NextAuth({
         return token;
       }
 
-      // 2) Token encore valide (avec marge de 60s) -> on garde
+      // 2) Force-refresh declenche par le client via useSession().update({ forceRefresh: true })
+      // (CSRF gere nativement par NextAuth, pas comme un raw fetch). Ce chemin est
+      // utilise par l'apiClient quand l'API rejette le token avant son exp local
+      // (revocation serveur, clock skew, redemarrage API avec nouveau secret...).
+      if (trigger === 'update' && (updateInput as any)?.forceRefresh) {
+        (token as any).accessTokenExpiresAt = 0;
+      }
+
+      // 3) Token encore valide (avec marge de 60s) -> on garde
       const now = Date.now();
       const exp = (token as any).accessTokenExpiresAt as number | undefined;
       if (exp && now < exp - 60_000) {
         return token;
       }
 
-      // 3) Token expire ou bientot : tenter refresh via l'API
+      // 4) Token expire (naturellement OU force par l'etape 2) : appel /auth/refresh.
       const refresh = (token as any).refreshToken as string | undefined;
       if (!refresh) return token;
 

@@ -38,16 +38,30 @@ const FAILURE_THRESHOLD = 3;
 
 async function performRefresh(): Promise<string | null> {
   authLog('refresh.start');
-  // getSession() declenche le callback jwt() de NextAuth qui, voyant
-  // accessTokenExpiresAt depasse, appelle automatiquement /auth/refresh.
-  // Pas besoin de POST vers /api/auth/session?update : ce endpoint requiert
-  // un token CSRF (NextAuth v5) et lever cette protection compliquerait
-  // l'authentification sans benefice -- la verification d'expiration native
-  // suffit pour les cas reels (token expire localement = refresh auto).
+  // Strategie en 2 temps :
   //
-  // Edge case : token reput� valide localement mais rejete serveur (revocation,
-  // clock skew). Dans ce cas getSession() retourne le meme token, on
-  // incremente postRefreshFailures et on signOut apres FAILURE_THRESHOLD echecs.
+  // 1) Si window.__forceSessionRefresh est dispo (le SessionRefreshBridge est
+  //    monte dans le dashboard layout), on declenche un VRAI refresh via
+  //    useSession().update({ forceRefresh: true }). Ca pose
+  //    accessTokenExpiresAt=0 dans le jwt callback (auth.ts), ce qui force
+  //    l'appel a /auth/refresh meme si le token semble encore valide
+  //    localement. C'est le cas critique quand l'API rejette le token avant
+  //    son exp local (revocation serveur, clock skew, redemarrage API).
+  //    Le CSRF est gere nativement par NextAuth ici (pas de raw fetch).
+  //
+  // 2) Sinon (ex: route hors dashboard), fallback sur getSession() qui ne
+  //    refresh que si exp local depasse.
+  if (typeof window !== 'undefined' && window.__forceSessionRefresh) {
+    try {
+      await window.__forceSessionRefresh();
+      authLog('refresh.forced-via-bridge');
+    } catch (e) {
+      authLog('refresh.force-bridge-failed', { err: String(e) });
+    }
+  } else {
+    authLog('refresh.bridge-unavailable');
+  }
+
   const session = await getSession();
   const newToken = (session as any)?.accessToken as string | undefined;
   const sessionError = (session as any)?.error as string | undefined;

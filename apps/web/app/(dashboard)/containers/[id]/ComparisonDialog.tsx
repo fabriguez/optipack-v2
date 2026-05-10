@@ -9,6 +9,7 @@ import { AppInput } from '@/components/ui/AppInput';
 import { AppCard, AppCardHeader } from '@/components/ui/AppCard';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { manifestsApi } from '@/lib/api/containers';
+import { fetchPdfAuthed } from '@/lib/api/pdfDownload';
 import { toast } from 'sonner';
 import { formatDateTime } from '@transitsoftservices/shared';
 
@@ -98,7 +99,9 @@ export function ComparisonDialog({ open, onClose, containerId, containerDesignat
   };
 
   const handlePrint = () => {
-    window.open(`${API_BASE}/manifests/comparison/${containerId}/pdf`, '_blank');
+    fetchPdfAuthed(`/manifests/comparison/${containerId}/pdf`, {
+      fileName: `comparaison-${containerId}.pdf`,
+    });
   };
 
   if (!open) return null;

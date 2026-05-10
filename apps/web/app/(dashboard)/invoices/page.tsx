@@ -16,6 +16,7 @@ import { useServerPagination } from '@/lib/hooks/useServerPagination';
 import { searchers } from '@/lib/api/searchers';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
+import { fetchPdfAuthed } from '@/lib/api/pdfDownload';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
 
 function InvoicesContent() {
@@ -42,7 +43,7 @@ function InvoicesContent() {
   });
 
   const handlePrint = (id: string) => {
-    window.open(`/api/invoices/${id}/pdf`, '_blank');
+    fetchPdfAuthed(`/invoices/${id}/pdf`, { fileName: `facture-${id}.pdf` });
   };
 
   const exportColumns = [

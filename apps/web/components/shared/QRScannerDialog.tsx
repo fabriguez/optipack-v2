@@ -321,7 +321,11 @@ export function QRScannerDialog({
 
         scanLog('html5qr.start.before', { hostId, facing });
         await inst.start(
-          { facingMode: { ideal: facing } } as MediaTrackConstraints,
+          // html5-qrcode n'accepte que { exact } ou une string pour facingMode,
+          // pas { ideal }. On utilise la string : si la camera demandee n'existe
+          // pas, html5-qrcode bascule sur la camera disponible (vs { exact } qui
+          // throw OverconstrainedError).
+          { facingMode: facing } as MediaTrackConstraints,
           {
             fps: 15,
             qrbox: (vw: number, vh: number) => {

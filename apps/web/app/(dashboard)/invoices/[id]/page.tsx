@@ -44,8 +44,8 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch {
-      // Fallback: open in new tab
-      window.open(`${API_BASE}/invoices/${id}/pdf`, '_blank');
+      // Fallback inutile : l'URL nue ne contient pas le header Authorization,
+      // l'API repondra 401 dans le nouvel onglet. On laisse le toast d'erreur.
     }
     setPdfLoading(false);
   };

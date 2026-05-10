@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { SocketProvider } from '@/lib/providers/SocketProvider';
+import { SessionRefreshBridge } from '@/lib/providers/SessionRefreshBridge';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 
 // Tag de build expose en console pour verifier que le bundle deploye est bien
@@ -45,6 +46,7 @@ export default function DashboardRootLayout({ children }: { children: React.Reac
 
   return (
     <SocketProvider>
+      <SessionRefreshBridge />
       <DashboardLayout>{children}</DashboardLayout>
     </SocketProvider>
   );

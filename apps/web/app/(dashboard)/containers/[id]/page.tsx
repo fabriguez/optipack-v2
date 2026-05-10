@@ -22,6 +22,7 @@ import { StatusBadge } from '@/components/shared/StatusBadge';
 import { RowActions } from '@/components/shared/RowActions';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
+import { fetchPdfAuthed } from '@/lib/api/pdfDownload';
 import {
   useContainer, useContainerParcels, useDepartContainer,
   useArriveContainer, useLoadParcels,
@@ -243,7 +244,7 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
       const res = await manifestsApi.createDispatch(id);
       const m = res?.data;
       if (m?.id) {
-        window.open(`${API_BASE}/manifests/${m.id}/pdf`, '_blank');
+        await fetchPdfAuthed(`/manifests/${m.id}/pdf`, { fileName: `bordereau-${m.number}.pdf` });
         toast.success(`Bordereau ${m.number} genere`);
       }
       qc.invalidateQueries({ queryKey: ['containers', id, 'history'] });
@@ -259,7 +260,7 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
       const res = await manifestsApi.createReception(id);
       const m = res?.data;
       if (m?.id) {
-        window.open(`${API_BASE}/manifests/${m.id}/pdf`, '_blank');
+        await fetchPdfAuthed(`/manifests/${m.id}/pdf`, { fileName: `bordereau-${m.number}.pdf` });
         toast.success(`Bordereau ${m.number} genere`);
       }
       qc.invalidateQueries({ queryKey: ['containers', id, 'history'] });
@@ -346,14 +347,30 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
         <AppCardHeader title="Bordereaux" description="Generation des bordereaux PDF" />
         <div className="flex flex-wrap gap-3">
           {(container.status === 'LOADING' || container.status === 'IN_TRANSIT' || container.status === 'ARRIVED' || container.status === 'UNLOADING' || container.status === 'UNLOADED') && (
-            <AppButton variant="outline" size="sm" onClick={handleGenerateDispatch} loading={busyManifest === 'dispatch'}>
+            <AppButton
+              variant="outline"
+              size="sm"
+              onClick={handleGenerateDispatch}
+              loading={busyManifest === 'dispatch'}
+              // Le backend refuse de generer un bordereau pour 0 colis ;
+              // on previent l'erreur cote UI et on explique pourquoi via title.
+              disabled={parcels.length === 0}
+              title={parcels.length === 0 ? 'Aucun colis dans ce conteneur' : undefined}
+            >
               <FileText className="h-4 w-4" />
               Bordereau d&apos;envoi
             </AppButton>
           )}
           {(container.status === 'ARRIVED' || container.status === 'UNLOADING' || container.status === 'UNLOADED') && (
             <>
-              <AppButton variant="outline" size="sm" onClick={handleGenerateReception} loading={busyManifest === 'reception'}>
+              <AppButton
+                variant="outline"
+                size="sm"
+                onClick={handleGenerateReception}
+                loading={busyManifest === 'reception'}
+                disabled={parcels.length === 0}
+                title={parcels.length === 0 ? 'Aucun colis dans ce conteneur' : undefined}
+              >
                 <FileCheck className="h-4 w-4" />
                 Bordereau de reception
               </AppButton>
@@ -362,6 +379,11 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
                 Bordereau de comparaison
               </AppButton>
             </>
+          )}
+          {parcels.length === 0 && (
+            <p className="w-full text-xs text-amber-700">
+              Aucun colis charge dans ce conteneur : les bordereaux d&apos;envoi et de reception sont indisponibles.
+            </p>
           )}
         </div>
       </AppCard>
