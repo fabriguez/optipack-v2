@@ -89,7 +89,7 @@ export function ParcelQRDialog({ open, onClose, parcel }: Props) {
           )}
         </div>
 
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <AppButton variant="outline" onClick={downloadQr} loading={downloading === 'qr'}>
             <Download className="h-3.5 w-3.5" />
             Telecharger QR (PNG)
@@ -98,7 +98,7 @@ export function ParcelQRDialog({ open, onClose, parcel }: Props) {
             <Download className="h-3.5 w-3.5" />
             Etiquette (PDF)
           </AppButton>
-          <AppButton onClick={printLabel}>
+          <AppButton onClick={printLabel} className='col-span-2'>
             <Printer className="h-3.5 w-3.5" />
             Imprimer
           </AppButton>
