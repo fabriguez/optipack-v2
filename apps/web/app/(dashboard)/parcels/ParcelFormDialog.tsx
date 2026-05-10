@@ -16,6 +16,7 @@ import { searchers, toSearchOption } from '@/lib/api/searchers';
 import { ParcelCategoryValues } from '@transitsoftservices/shared';
 import { RecipientQuickCreateDialog } from './RecipientQuickCreateDialog';
 import { QRScannerDialog } from '@/components/shared/QRScannerDialog';
+import { scanSound } from '@/lib/utils/scanSound';
 import { Camera } from 'lucide-react';
 import { ParcelImagesField, persistParcelImages, type PendingImage } from './ParcelImagesField';
 import { uploadImage } from '@/lib/api/uploads';
@@ -496,6 +497,9 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
         open={scanFournisseurOpen}
         onClose={() => setScanFournisseurOpen(false)}
         onDetected={(decoded) => {
+          // Tracking fournisseur : pas de validation cote systeme (le code vient
+          // d'un partenaire externe), donc tout scan est un succes franc.
+          scanSound.success();
           setValue('trackingFournisseur', decoded, { shouldDirty: true, shouldValidate: true });
           setScanFournisseurOpen(false);
         }}

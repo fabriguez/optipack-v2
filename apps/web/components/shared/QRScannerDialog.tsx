@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Camera, CameraOff, RefreshCw, RotateCw, Keyboard, Bug, Trash2 } from 'lucide-react';
+import { Camera, CameraOff, RefreshCw, RotateCw, Keyboard, Bug, Trash2, Volume2, VolumeX } from 'lucide-react';
 import { AppDialog } from '@/components/ui/AppDialog';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppInput } from '@/components/ui/AppInput';
 import { scanLog, readScanLog, clearScanLog, type ScanDebugEntry } from '@/lib/api/scanDebug';
+import { scanSound } from '@/lib/utils/scanSound';
 
 // Longueur minimale d'une lecture valide. Filtre les faux positifs frequents
 // du BarcodeDetector qui retourne parfois des chaines tres courtes (1-3 chars)
@@ -25,15 +26,15 @@ interface QRScannerDialogProps {
  *
  * Strategie a 2 niveaux :
  *  1. BarcodeDetector natif (Chrome / Edge / Android) : fluide, sans dependance.
- *  2. Fallback html5-qrcode (Safari, Firefox, vieux navigateurs).
+ *  2. Fallback @zxing/browser (Safari iOS, Firefox, etc.) : decodeur le plus
+ *     robuste sur iOS, supporte tous les formats 1D/2D, attache au meme
+ *     <video> que la branche native (pas de double getUserMedia).
  *
  * Lifecycle critique :
  *  - aliveRef garde toute mutation d'etat dans la session courante du dialog.
- *    Si l'utilisateur ferme avant que getUserMedia / inst.start aient repondu,
- *    on ignore le resultat tardif au lieu de setState sur un dialog ferme
- *    (cause majeure des "crashes au close").
- *  - stopAll() est idempotent et awaitable, ce qui evite les races
- *    html5-qrcode (inst.start en vol vs cleanup synchrone).
+ *    Si l'utilisateur ferme avant que getUserMedia / decoder.start aient repondu,
+ *    on ignore le resultat tardif au lieu de setState sur un dialog ferme.
+ *  - stopAll() est idempotent et awaitable.
  */
 export function QRScannerDialog({
   open,
@@ -44,13 +45,11 @@ export function QRScannerDialog({
 }: QRScannerDialogProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const fallbackHostRef = useRef<HTMLDivElement | null>(null);
-  const html5QrRef = useRef<any>(null);
+  // Controles ZXing (objet {stop()}) ou null. Quand on est en fallback ZXing,
+  // ZXing gere lui-meme l'appel a getUserMedia donc streamRef peut etre null.
+  const zxingControlsRef = useRef<{ stop: () => void } | null>(null);
   const rafRef = useRef<number | null>(null);
-  // Marqueur "session courante du dialog". Bascule a false sur cleanup ;
-  // on consulte aliveRef.current avant tout setState async.
   const aliveRef = useRef(false);
-  // Empeche un double cleanup concurrent.
   const stoppingRef = useRef<Promise<void> | null>(null);
   const detectedOnceRef = useRef(false);
 
@@ -59,11 +58,10 @@ export function QRScannerDialog({
   const [running, setRunning] = useState(false);
   const [usingFallback, setUsingFallback] = useState(false);
   const [manualValue, setManualValue] = useState('');
-  // Panneau diagnostic embarque (utile sur mobile sans DevTools).
   const [showLog, setShowLog] = useState(false);
   const [logEntries, setLogEntries] = useState<ScanDebugEntry[]>([]);
+  const [muted, setMuted] = useState(scanSound.isMuted());
 
-  // Helpers setState safes (ignorent si dialog ferme entre-temps).
   const safe = {
     setError: (v: string | null) => aliveRef.current && setError(v),
     setRunning: (v: boolean) => aliveRef.current && setRunning(v),
@@ -78,7 +76,16 @@ export function QRScannerDialog({
         cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
       }
-      // Stop stream getUserMedia.
+      // Stop ZXing en premier : il referme aussi le stream qu'il a ouvert.
+      if (zxingControlsRef.current) {
+        try {
+          zxingControlsRef.current.stop();
+        } catch {
+          // ignore
+        }
+        zxingControlsRef.current = null;
+      }
+      // Stop notre stream getUserMedia (branche native uniquement).
       if (streamRef.current) {
         try {
           streamRef.current.getTracks().forEach((t) => t.stop());
@@ -87,25 +94,9 @@ export function QRScannerDialog({
         }
         streamRef.current = null;
       }
-      // Detache <video>.
       if (videoRef.current) {
         try {
           videoRef.current.srcObject = null;
-        } catch {
-          // ignore
-        }
-      }
-      // Stop html5-qrcode (await pour eviter les races).
-      const inst = html5QrRef.current;
-      html5QrRef.current = null;
-      if (inst) {
-        try {
-          await inst.stop();
-        } catch {
-          // ignore : peut throw si jamais demarre / deja stoppe
-        }
-        try {
-          inst.clear();
         } catch {
           // ignore
         }
@@ -127,28 +118,23 @@ export function QRScannerDialog({
       scanLog('detect.ignored.empty');
       return;
     }
-    // Filtre les faux positifs : codes trop courts ou contenant des caracteres
-    // de controle non imprimables. On a vu BarcodeDetector retourner des
-    // bribes de 1-2 caracteres sur des logos / pixels parasites, ce qui fermait
-    // le dialog instantanement (closeOnDetect=true) et donnait l'impression
-    // que la camera se coupait apres 1s.
     const cleaned = text.trim();
     if (cleaned.length < MIN_VALID_LENGTH) {
       scanLog('detect.ignored.too-short', { text: cleaned, len: cleaned.length });
       return;
     }
-    // Refuse les codes contenant uniquement des caracteres ASCII de controle
-    // ou non imprimables (probable bruit du detecteur).
     // eslint-disable-next-line no-control-regex
     if (/^[\x00-\x1f\x7f]+$/.test(cleaned)) {
       scanLog('detect.ignored.control-chars', { sample: cleaned.slice(0, 20) });
       return;
     }
     scanLog('detect.accepted', { text: cleaned, mode: usingFallback ? 'fallback' : 'native' });
+    // Bip neutre confirmant une lecture brute. Le verdict metier (existe / deja
+    // scanne / inconnu) est joue par l'appelant via scanSound.success/error.
+    scanSound.info();
     detectedOnceRef.current = true;
     onDetected(cleaned);
     if (closeOnDetect) {
-      // On laisse le useEffect cleanup faire stopAll proprement.
       onClose();
     } else {
       setTimeout(() => {
@@ -173,13 +159,9 @@ export function QRScannerDialog({
         const BarcodeDetector = (window as any).BarcodeDetector;
         const hasNative = BarcodeDetector && typeof BarcodeDetector === 'function';
 
-        // Si on sait deja qu'on n'a pas BarcodeDetector (Safari iOS), on saute
-        // notre getUserMedia et on laisse html5-qrcode appeler le sien
-        // directement. iOS rejette le 2e appel rapide de getUserMedia (NotReadableError
-        // ou throw silencieux), ce qui faisait echouer inst.start.
         if (!hasNative) {
-          scanLog('mode.fallback');
-          await runFallback();
+          scanLog('mode.zxing');
+          await runZxing();
           return;
         }
 
@@ -196,7 +178,6 @@ export function QRScannerDialog({
         streamRef.current = stream;
 
         if (!videoRef.current) {
-          // Safari : le portal peut ne pas avoir mis le <video> dans le DOM.
           await new Promise((r) => setTimeout(r, 50));
         }
         if (!aliveRef.current) return;
@@ -225,6 +206,7 @@ export function QRScannerDialog({
         scanLog('start.error', { name: e?.name, msg });
         safe.setError(msg);
         safe.setRunning(false);
+        scanSound.error();
       }
     };
 
@@ -241,9 +223,8 @@ export function QRScannerDialog({
       try {
         detector = new BarcodeDetector({ formats });
       } catch {
-        // BarcodeDetector existe mais l'instanciation echoue (Safari Mac sans
-        // support reel) -> bascule sur le fallback html5-qrcode.
-        await runFallback();
+        // BarcodeDetector existe mais l'instanciation echoue (Safari Mac).
+        await runZxing();
         return;
       }
 
@@ -265,129 +246,97 @@ export function QRScannerDialog({
       rafRef.current = requestAnimationFrame(tick);
     };
 
-    const runFallback = async () => {
+    /**
+     * Fallback ZXing : decodeur le plus robuste sur iOS Safari pour les codes
+     * barres 1D et 2D. Il prend en main le <video> directement (pas de double
+     * getUserMedia comme avec html5-qrcode).
+     */
+    const runZxing = async () => {
       safe.setUsingFallback(true);
       try {
-        const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import('html5-qrcode');
-        if (!aliveRef.current || !fallbackHostRef.current) return;
-        // iOS Safari : html5-qrcode attache un <video> au host. Si le host est
-        // encore display:none (avant commit React), inst.start() peut ne jamais
-        // resoudre. On attend deux rAF pour garantir que le DOM est layoute.
+        const { BrowserMultiFormatReader } = await import('@zxing/browser');
+        const { DecodeHintType, BarcodeFormat } = await import('@zxing/library');
+        if (!aliveRef.current || !videoRef.current) return;
+        // Laisse React poser le <video> visible avant de demarrer.
         await new Promise<void>((r) => requestAnimationFrame(() => r()));
-        await new Promise<void>((r) => requestAnimationFrame(() => r()));
-        if (!aliveRef.current || !fallbackHostRef.current) return;
+        if (!aliveRef.current || !videoRef.current) return;
 
-        const hostId = `qr-fallback-host-${Math.random().toString(36).slice(2, 8)}`;
-        fallbackHostRef.current.id = hostId;
+        const hints = new Map();
+        // On ouvre largement les formats : QR + tous les codes barres lineaires
+        // courants sur les colis (CODE_128, CODE_39, EAN, UPC, ITF, CODABAR,
+        // DATA_MATRIX, AZTEC, PDF_417).
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+          BarcodeFormat.QR_CODE,
+          BarcodeFormat.AZTEC,
+          BarcodeFormat.DATA_MATRIX,
+          BarcodeFormat.PDF_417,
+          BarcodeFormat.CODE_128,
+          BarcodeFormat.CODE_39,
+          BarcodeFormat.CODE_93,
+          BarcodeFormat.CODABAR,
+          BarcodeFormat.EAN_13,
+          BarcodeFormat.EAN_8,
+          BarcodeFormat.UPC_A,
+          BarcodeFormat.UPC_E,
+          BarcodeFormat.ITF,
+        ]);
+        // TRY_HARDER : autorise une recherche plus lente mais bien plus fiable
+        // sur les codes mal eclaires / inclines (tres frequent sur colis).
+        hints.set(DecodeHintType.TRY_HARDER, true);
 
-        const formats = [
-          Html5QrcodeSupportedFormats.QR_CODE,
-          Html5QrcodeSupportedFormats.AZTEC,
-          Html5QrcodeSupportedFormats.DATA_MATRIX,
-          Html5QrcodeSupportedFormats.PDF_417,
-          Html5QrcodeSupportedFormats.CODE_128,
-          Html5QrcodeSupportedFormats.CODE_39,
-          Html5QrcodeSupportedFormats.CODE_93,
-          Html5QrcodeSupportedFormats.CODABAR,
-          Html5QrcodeSupportedFormats.EAN_13,
-          Html5QrcodeSupportedFormats.EAN_8,
-          Html5QrcodeSupportedFormats.UPC_A,
-          Html5QrcodeSupportedFormats.UPC_E,
-          Html5QrcodeSupportedFormats.ITF,
-        ];
+        const reader = new BrowserMultiFormatReader(hints);
 
-        const inst = new Html5Qrcode(hostId, {
-          verbose: false,
-          formatsToSupport: formats,
-        });
-        // Si fermeture pendant l'instanciation, on n'enregistre pas inst et on
-        // disposera ce qu'on peut juste apres.
-        if (!aliveRef.current) {
-          try {
-            inst.clear();
-          } catch {
-            // ignore
-          }
-          return;
-        }
-        html5QrRef.current = inst;
-
-        // Coupe notre stream getUserMedia : html5-qrcode va prendre la main.
-        if (streamRef.current) {
-          streamRef.current.getTracks().forEach((t) => t.stop());
-          streamRef.current = null;
-        }
-        if (videoRef.current) videoRef.current.srcObject = null;
-
-        scanLog('html5qr.start.before', { hostId, facing });
-        await inst.start(
-          // html5-qrcode n'accepte que { exact } ou une string pour facingMode,
-          // pas { ideal }. On utilise la string : si la camera demandee n'existe
-          // pas, html5-qrcode bascule sur la camera disponible (vs { exact } qui
-          // throw OverconstrainedError).
-          { facingMode: facing } as MediaTrackConstraints,
+        scanLog('zxing.start.before', { facing });
+        // ZXing ouvre lui-meme getUserMedia avec la contrainte facingMode.
+        // L'API moderne renvoie un IScannerControls avec stop().
+        const controls = await reader.decodeFromConstraints(
           {
-            fps: 15,
-            qrbox: (vw: number, vh: number) => {
-              const min = Math.min(vw, vh);
-              return { width: Math.floor(min * 0.8), height: Math.floor(min * 0.5) };
-            },
+            video: { facingMode: { ideal: facing } },
+            audio: false,
           },
-          (decodedText: string) => handleDetected(decodedText),
-          () => {},
+          videoRef.current,
+          (result, _err) => {
+            if (!aliveRef.current) return;
+            if (result) {
+              handleDetected(result.getText());
+            }
+            // _err : NotFoundException sur chaque frame sans code -> on ignore.
+          },
         );
-        scanLog('html5qr.start.after');
-        // Si fermeture s'est produite pendant inst.start, on stoppe immediatement.
+        scanLog('zxing.start.after');
+
         if (!aliveRef.current) {
           try {
-            await inst.stop();
+            controls.stop();
           } catch {
             // ignore
           }
-          try {
-            inst.clear();
-          } catch {
-            // ignore
-          }
-          html5QrRef.current = null;
           return;
         }
+        zxingControlsRef.current = controls;
         safe.setRunning(true);
       } catch (e: any) {
-        // iOS Safari peut throw des objets non-Error (string, plain object) ;
-        // on capture tout ce qu'on peut pour le diagnostic.
-        let serialized: any = {};
-        try {
-          serialized = {
-            type: typeof e,
-            ctor: e?.constructor?.name,
-            name: e?.name,
-            msg: e?.message,
-            str: typeof e === 'string' ? e : undefined,
-            asString: (() => {
-              try {
-                return String(e);
-              } catch {
-                return '<no-string>';
-              }
-            })(),
-            keys: e && typeof e === 'object' ? Object.keys(e).slice(0, 10) : [],
-            json: (() => {
-              try {
-                return JSON.stringify(e);
-              } catch {
-                return '<no-json>';
-              }
-            })(),
-          };
-        } catch {
-          // ignore
-        }
-        scanLog('html5qr.start.error', serialized);
+        const serialized = {
+          name: e?.name,
+          msg: e?.message,
+          str: typeof e === 'string' ? e : undefined,
+          asString: (() => {
+            try {
+              return String(e);
+            } catch {
+              return '<no-string>';
+            }
+          })(),
+        };
+        scanLog('zxing.start.error', serialized);
         if (!aliveRef.current) return;
-        const userMsg = e?.message || (typeof e === 'string' ? e : null) || 'Impossible de demarrer le scanner.';
+        const userMsg =
+          e?.name === 'NotAllowedError'
+            ? 'Acces camera refuse. Autorisez la camera dans les parametres.'
+            : e?.message || (typeof e === 'string' ? e : null) || 'Impossible de demarrer le scanner.';
         safe.setError(userMsg);
         safe.setRunning(false);
+        scanSound.error();
       }
     };
 
@@ -396,8 +345,6 @@ export function QRScannerDialog({
     return () => {
       scanLog('cleanup', { reason: 'effect-cleanup' });
       aliveRef.current = false;
-      // On lance stopAll mais on ne retarde pas le cleanup React (Promise ignoree).
-      // L'idempotence + stoppingRef garantit que les appels concurrents sont fusionnes.
       void stopAll();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -439,7 +386,6 @@ export function QRScannerDialog({
           </p>
         )}
 
-        {/* Video natif (BarcodeDetector). Cache si fallback html5-qrcode actif. */}
         <div
           className="relative overflow-hidden rounded-xl bg-black/95"
           style={{ minHeight: 280 }}
@@ -450,28 +396,7 @@ export function QRScannerDialog({
             muted
             autoPlay
             className="h-auto w-full"
-            style={{
-              minHeight: 280,
-              // iOS Safari : on evite display:none (qui peut casser getUserMedia
-              // attache) en utilisant visibility/opacity. Le host fallback reste
-              // toujours dans le flux quand actif.
-              visibility: usingFallback ? 'hidden' : 'visible',
-              position: usingFallback ? 'absolute' : 'static',
-              inset: usingFallback ? 0 : undefined,
-              pointerEvents: usingFallback ? 'none' : undefined,
-            }}
-          />
-          {/* Host pour html5-qrcode (fallback). Toujours monte ; on ajuste juste
-              les dimensions visibles selon le mode pour eviter les races
-              display:none -> inst.start qui ne resout jamais sur iOS. */}
-          <div
-            ref={fallbackHostRef}
-            className="w-full"
-            style={{
-              minHeight: usingFallback ? 280 : 0,
-              height: usingFallback ? 'auto' : 0,
-              overflow: 'hidden',
-            }}
+            style={{ minHeight: 280 }}
           />
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <div className="rounded-lg border-2 border-primary-400/80" style={{ width: '70%', height: '40%' }} />
@@ -487,16 +412,31 @@ export function QRScannerDialog({
             <RotateCw className="h-3.5 w-3.5" />
             {facing === 'environment' ? 'Camera avant' : 'Camera arriere'}
           </button>
-          <span className="text-[11px] text-gray-400">
-            {usingFallback ? 'Mode compat (html5-qrcode)' : 'Mode natif (BarcodeDetector)'}
-          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                const next = !muted;
+                setMuted(next);
+                scanSound.setMuted(next);
+                if (!next) scanSound.info();
+              }}
+              className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 text-[11px] hover:bg-gray-50"
+              title={muted ? 'Activer le son' : 'Couper le son'}
+            >
+              {muted ? <VolumeX className="h-3 w-3" /> : <Volume2 className="h-3 w-3" />}
+              {muted ? 'Son OFF' : 'Son ON'}
+            </button>
+            <span className="text-[11px] text-gray-400">
+              {usingFallback ? 'Mode compat (ZXing)' : 'Mode natif (BarcodeDetector)'}
+            </span>
+          </div>
         </div>
 
         {!error && !running && (
           <p className="text-xs text-gray-400">Demarrage de la camera...</p>
         )}
 
-        {/* Saisie manuelle : derniere ressource si la camera echoue. */}
         <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
           <label className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-600">
             <Keyboard className="h-3.5 w-3.5" />
@@ -524,8 +464,6 @@ export function QRScannerDialog({
           </div>
         </div>
 
-        {/* Diagnostic embarque : ouvre le journal du scanner pour les bugs
-            device-specific (utile sur mobile sans DevTools). */}
         <div className="border-t border-gray-100 pt-2">
           <button
             type="button"
@@ -545,7 +483,7 @@ export function QRScannerDialog({
                 <div>HTTPS: <span className={typeof window !== 'undefined' && window.isSecureContext ? 'text-primary-700' : 'text-red-600 font-bold'}>{String(typeof window !== 'undefined' && window.isSecureContext)}</span></div>
                 <div>BarcodeDetector: <span className="text-gray-900">{typeof window !== 'undefined' && typeof (window as any).BarcodeDetector === 'function' ? 'oui' : 'non'}</span></div>
                 <div>getUserMedia: <span className="text-gray-900">{typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia ? 'oui' : 'non'}</span></div>
-                <div>Mode: <span className="text-gray-900">{usingFallback ? 'fallback' : 'natif'}</span></div>
+                <div>Mode: <span className="text-gray-900">{usingFallback ? 'zxing' : 'natif'}</span></div>
                 <div>Running: <span className="text-gray-900">{String(running)}</span></div>
               </div>
               <div className="my-1 flex items-center justify-between border-y border-gray-100 py-1">

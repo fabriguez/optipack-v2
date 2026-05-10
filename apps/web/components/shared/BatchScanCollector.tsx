@@ -5,6 +5,7 @@ import { Camera, Trash2, X, ScanLine } from 'lucide-react';
 import { AppInput } from '@/components/ui/AppInput';
 import { AppButton } from '@/components/ui/AppButton';
 import { QRScannerDialog } from './QRScannerDialog';
+import { scanSound } from '@/lib/utils/scanSound';
 import { toast } from 'sonner';
 
 export interface BatchScanCollectorProps {
@@ -48,6 +49,9 @@ export function BatchScanCollector({
     const v = raw.trim();
     if (!v) return;
     if (codes.includes(v)) {
+      // Doublon : son d'avertissement (deja scanne) plutot qu'un succes ou
+      // une erreur franche.
+      scanSound.warning();
       toast.info(`Deja dans la liste : ${v}`);
       return;
     }
@@ -56,6 +60,7 @@ export function BatchScanCollector({
         setBusy(true);
         await validate(v);
       } catch (e: any) {
+        scanSound.error();
         toast.error(e?.message || `Code invalide : ${v}`);
         setBusy(false);
         return;
@@ -63,6 +68,7 @@ export function BatchScanCollector({
         setBusy(false);
       }
     }
+    scanSound.success();
     onChange([...codes, v]);
     setInput('');
   };

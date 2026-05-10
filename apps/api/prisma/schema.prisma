@@ -1248,10 +1248,16 @@ model Parcel {
   penaltyStartDate   DateTime?
   warehouseEnteredAt DateTime?
 
-  isDeleted Boolean   @default(false)
-  deletedAt DateTime?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  isDeleted        Boolean   @default(false)
+  deletedAt        DateTime?
+  // Archivage : different de la suppression (qui est un soft-delete metier).
+  // Un colis archive est masque de tous les listings/recherches/exports par
+  // defaut, mais reste accessible via l'onglet "Archives" pour desarchivage.
+  isArchived       Boolean   @default(false)
+  archivedAt       DateTime?
+  archivedByUserId String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   client            Client          @relation("ParcelClient", fields: [clientId], references: [id])
   recipient         Client?         @relation("ParcelRecipient", fields: [recipientId], references: [id])
@@ -1286,6 +1292,9 @@ model Parcel {
   @@index([trackingNumber])
   @@index([category])
   @@index([trackingFournisseur])
+  // Index pour filtrer rapidement les colis archives (utilise dans tous les
+  // listings : par defaut on exclut les archives).
+  @@index([isArchived])
   @@map("parcels")
 }
 

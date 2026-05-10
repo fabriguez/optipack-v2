@@ -37,6 +37,7 @@ import { ComparisonDialog } from './ComparisonDialog';
 import { ParcelFormDialog } from '@/app/(dashboard)/parcels/ParcelFormDialog';
 import { QRScannerDialog } from '@/components/shared/QRScannerDialog';
 import { BatchScanCollector } from '@/components/shared/BatchScanCollector';
+import { scanSound } from '@/lib/utils/scanSound';
 import { AgencyAvatar } from '@/components/shared/AgencyAvatar';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
@@ -260,6 +261,10 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
         failed.push(`${code}: ${e?.response?.data?.message || 'introuvable'}`);
       }
     }
+    // Verdict sonore final : succes si tout est passe, erreur si au moins un
+    // echec, warning si tout est tombe en echec (cas pathologique).
+    if (ok > 0 && failed.length === 0) scanSound.success();
+    else if (failed.length > 0) scanSound.error();
     setBatchLoadBusy(false);
     setBatchLoadCodes(failed.length === 0 ? [] : codes.filter((c) => failed.some((f) => f.startsWith(`${c}:`))));
     if (ok > 0) toast.success(`${ok} colis charge${ok > 1 ? 's' : ''}`);
@@ -272,6 +277,7 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
   // Batch dechargement : tout les codes vers un magasin (action received).
   const handleBatchUnload = async (codes: string[]) => {
     if (!batchUnloadWarehouseId) {
+      scanSound.error();
       toast.error('Selectionnez un magasin de destination');
       return;
     }
@@ -299,6 +305,8 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
     }
     setBatchUnloadBusy(false);
     setBatchUnloadCodes(failed.length === 0 ? [] : codes.filter((c) => failed.some((f) => f.startsWith(`${c}:`))));
+    if (ok > 0 && failed.length === 0) scanSound.success();
+    else if (failed.length > 0) scanSound.error();
     if (ok > 0) toast.success(`${ok} colis decharge${ok > 1 ? 's' : ''}`);
     if (failed.length > 0) toast.error(`${failed.length} echec(s) : ${failed[0]}`);
     qc.invalidateQueries({ queryKey: ['containers', id] });

@@ -59,6 +59,9 @@ export class PrismaParcelRepository implements IParcelRepository {
       transitType?: string;
       agencyIds?: string[] | null;
       onlyPresent?: boolean;
+      // Archive : par defaut les archives sont exclues. archived='true' filtre
+      // pour ne retourner QUE les archives ; archived='all' inclut tout.
+      archived?: 'true' | 'all' | 'false';
     },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<ParcelWithRelations>> {
@@ -69,8 +72,17 @@ export class PrismaParcelRepository implements IParcelRepository {
       ? { isPresent: true, status: { in: ['IN_STOCK', 'RECEIVED'] as any } }
       : {};
 
+    // Filtre archive : exclu par defaut sauf opt-in explicite.
+    const archivedFilter =
+      filters.archived === 'true'
+        ? { isArchived: true }
+        : filters.archived === 'all'
+          ? {}
+          : { isArchived: false };
+
     const where: Prisma.ParcelWhereInput = {
       isDeleted: false,
+      ...archivedFilter,
       ...(filters.warehouseId && { warehouseId: filters.warehouseId }),
       ...(filters.containerId && { containerId: filters.containerId }),
       ...(filters.lastContainerId && { lastContainerId: filters.lastContainerId }),
@@ -131,7 +143,17 @@ export class PrismaParcelRepository implements IParcelRepository {
   }
 
   async countByWarehouse(warehouseId: string): Promise<number> {
-    return prisma.parcel.count({ where: { warehouseId, isDeleted: false } });
+    // Aligne avec le listing du detail magasin : colis physiquement presents,
+    // non archives, en stock / receptionne.
+    return prisma.parcel.count({
+      where: {
+        warehouseId,
+        isDeleted: false,
+        isArchived: false,
+        isPresent: true,
+        status: { in: ['IN_STOCK', 'RECEIVED'] },
+      },
+    });
   }
 
   async countByStatus(agencyIds: string[]): Promise<Record<string, number>> {

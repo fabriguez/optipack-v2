@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Package, Plus, Eye, Edit, Trash2, ArrowRightLeft, ClipboardCheck, PlayCircle, QrCode, HandCoins, MapPin, Camera, ScanLine } from 'lucide-react';
 import { BatchScanCollector } from '@/components/shared/BatchScanCollector';
+import { scanSound } from '@/lib/utils/scanSound';
 import { ParcelQRDialog } from '@/components/shared/ParcelQRDialog';
 import { ParcelHandoverDialog } from '@/components/shared/ParcelHandoverDialog';
 import { PageTransition } from '@/components/shared/PageTransition';
@@ -183,6 +184,8 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
     }
     setBatchAddBusy(false);
     setBatchAddCodes(failed.length === 0 ? [] : codes.filter((c) => failed.some((f) => f.startsWith(`${c}:`))));
+    if (ok > 0 && failed.length === 0) scanSound.success();
+    else if (failed.length > 0) scanSound.error();
     if (ok > 0) toast.success(`${ok} colis ajoute${ok > 1 ? 's' : ''} au magasin`);
     if (failed.length > 0) toast.error(`${failed.length} echec(s) : ${failed[0]}`);
     invalidateAll();
@@ -213,6 +216,8 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
     }
     setBatchRemoveBusy(false);
     setBatchRemoveCodes(failed.length === 0 ? [] : codes.filter((c) => failed.some((f) => f.startsWith(`${c}:`))));
+    if (ok > 0 && failed.length === 0) scanSound.success();
+    else if (failed.length > 0) scanSound.error();
     if (ok > 0) toast.success(`${ok} colis retire${ok > 1 ? 's' : ''} du magasin`);
     if (failed.length > 0) toast.error(`${failed.length} echec(s) : ${failed[0]}`);
     invalidateAll();

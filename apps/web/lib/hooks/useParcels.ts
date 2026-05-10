@@ -3,10 +3,54 @@ import { parcelsApi } from '@/lib/api/parcels';
 import type { CreateParcelInput, UpdateParcelInput, PaginationInput } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
 
-export function useParcels(params?: Partial<PaginationInput> & { status?: string; clientId?: string }) {
+export function useParcels(
+  params?: Partial<PaginationInput> & {
+    status?: string;
+    clientId?: string;
+    warehouseId?: string;
+    containerId?: string;
+    archived?: 'true' | 'all' | 'false';
+  },
+) {
   return useQuery({
     queryKey: ['parcels', params],
     queryFn: () => parcelsApi.list(params),
+  });
+}
+
+export function useArchiveParcels() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ ids, reason }: { ids: string[]; reason?: string }) =>
+      parcelsApi.archive(ids, reason),
+    onSuccess: (res: any) => {
+      qc.invalidateQueries({ queryKey: ['parcels'] });
+      const data = res?.data ?? res;
+      const archived = data?.archived ?? 0;
+      const skipped = data?.skipped ?? 0;
+      const errors = data?.errors?.length ?? 0;
+      toast.success(
+        `${archived} colis archive(s)` +
+          (skipped > 0 ? ` (${skipped} deja archive(s))` : '') +
+          (errors > 0 ? ` - ${errors} erreur(s)` : ''),
+      );
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? "Echec de l'archivage"),
+  });
+}
+
+export function useUnarchiveParcels() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ ids, reason }: { ids: string[]; reason?: string }) =>
+      parcelsApi.unarchive(ids, reason),
+    onSuccess: (res: any) => {
+      qc.invalidateQueries({ queryKey: ['parcels'] });
+      const data = res?.data ?? res;
+      const archived = data?.archived ?? 0;
+      toast.success(`${archived} colis desarchive(s)`);
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Echec du desarchivage'),
   });
 }
 

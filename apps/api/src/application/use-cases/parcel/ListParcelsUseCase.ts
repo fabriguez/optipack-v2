@@ -21,6 +21,7 @@ export class ListParcelsUseCase {
       transitType?: string;
       agencyIds?: string[] | null;
       onlyPresent?: boolean;
+      archived?: 'true' | 'all' | 'false';
     },
     pagination: PaginationInput,
   ) {

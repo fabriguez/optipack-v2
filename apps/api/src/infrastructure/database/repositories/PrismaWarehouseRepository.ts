@@ -41,7 +41,22 @@ export class PrismaWarehouseRepository implements IWarehouseRepository {
         orderBy: sortBy ? { [sortBy]: sortOrder } : { createdAt: 'desc' },
         include: {
           agency: { select: { id: true, name: true, code: true, imageUrl: true, city: true } },
-          _count: { select: { parcels: { where: { isDeleted: false } } } },
+          // Compteur aligne avec le listing detail (page magasin) :
+          // colis presents physiquement + non archives + non supprimes + en stock.
+          // Sans ces filtres, on compte des colis deja livres / lost / archives,
+          // ce qui faisait diverger la liste (2 colis) et le detail (0).
+          _count: {
+            select: {
+              parcels: {
+                where: {
+                  isDeleted: false,
+                  isArchived: false,
+                  isPresent: true,
+                  status: { in: ['IN_STOCK', 'RECEIVED'] },
+                },
+              },
+            },
+          },
         },
       }),
       prisma.warehouse.count({ where }),
@@ -87,7 +102,22 @@ export class PrismaWarehouseRepository implements IWarehouseRepository {
         orderBy: sortBy ? { [sortBy]: sortOrder } : { createdAt: 'desc' },
         include: {
           agency: { select: { id: true, name: true, code: true, imageUrl: true, city: true } },
-          _count: { select: { parcels: { where: { isDeleted: false } } } },
+          // Compteur aligne avec le listing detail (page magasin) :
+          // colis presents physiquement + non archives + non supprimes + en stock.
+          // Sans ces filtres, on compte des colis deja livres / lost / archives,
+          // ce qui faisait diverger la liste (2 colis) et le detail (0).
+          _count: {
+            select: {
+              parcels: {
+                where: {
+                  isDeleted: false,
+                  isArchived: false,
+                  isPresent: true,
+                  status: { in: ['IN_STOCK', 'RECEIVED'] },
+                },
+              },
+            },
+          },
         },
       }),
       prisma.warehouse.count({ where }),

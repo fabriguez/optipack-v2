@@ -3,7 +3,7 @@
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Upload, Package, Eye, RefreshCw, QrCode, HandCoins, Boxes, ChevronDown } from 'lucide-react';
+import { Plus, Upload, Package, Eye, RefreshCw, QrCode, HandCoins, Boxes, ChevronDown, Archive, ArchiveRestore } from 'lucide-react';
 import { ParcelQRDialog } from '@/components/shared/ParcelQRDialog';
 import { ParcelHandoverDialog } from '@/components/shared/ParcelHandoverDialog';
 import { ParcelGroupFormDialog } from './ParcelGroupFormDialog';
@@ -19,7 +19,10 @@ import { XlsxExportButton } from '@/components/shared/XlsxExportButton';
 import { CsvImportDialog } from '@/components/shared/CsvImportDialog';
 import { RowActions } from '@/components/shared/RowActions';
 import { useServerPagination } from '@/lib/hooks/useServerPagination';
-import { useParcels } from '@/lib/hooks/useParcels';
+import { useParcels, useArchiveParcels, useUnarchiveParcels } from '@/lib/hooks/useParcels';
+import { AppCheckbox } from '@/components/ui/AppCheckbox';
+import { AppBadge } from '@/components/ui/AppBadge';
+import { cn } from '@/lib/utils/cn';
 import { apiClient } from '@/lib/api/client';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
@@ -34,6 +37,10 @@ function ParcelsContent() {
   const [qrParcel, setQrParcel] = useState<any | null>(null);
   const [handoverParcel, setHandoverParcel] = useState<any | null>(null);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
+  // Onglet : actifs (par defaut) ou archives.
+  const [tab, setTab] = useState<'active' | 'archived'>('active');
+  // Selection multi-lignes : Set d'IDs (compatible header "tout cocher").
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const statusFilter = searchParams.get('status') || '';
   const clientIdFilter = searchParams.get('clientId') || '';
@@ -44,7 +51,58 @@ function ParcelsContent() {
     status: statusFilter || undefined,
     clientId: clientIdFilter || undefined,
     warehouseId: warehouseIdFilter || undefined,
+    archived: tab === 'archived' ? 'true' : undefined,
   } as any);
+
+  const archiveMut = useArchiveParcels();
+  const unarchiveMut = useUnarchiveParcels();
+  const visibleRows: any[] = data?.data || [];
+  const allChecked = visibleRows.length > 0 && visibleRows.every((r) => selectedIds.has(r.id));
+  const someChecked = visibleRows.some((r) => selectedIds.has(r.id));
+
+  const toggleAllVisible = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allChecked) {
+        for (const r of visibleRows) next.delete(r.id);
+      } else {
+        for (const r of visibleRows) next.add(r.id);
+      }
+      return next;
+    });
+  };
+  const toggleOne = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const handleArchiveSelected = () => {
+    if (selectedIds.size === 0) return;
+    archiveMut.mutate(
+      { ids: Array.from(selectedIds) },
+      { onSuccess: () => clearSelection() },
+    );
+  };
+  const handleUnarchiveSelected = () => {
+    if (selectedIds.size === 0) return;
+    unarchiveMut.mutate(
+      { ids: Array.from(selectedIds) },
+      { onSuccess: () => clearSelection() },
+    );
+  };
+
+  // Quand on change d'onglet, on vide la selection (les IDs cibles sont
+  // dans une autre liste). Effet via la fonction de change.
+  const switchTab = (next: 'active' | 'archived') => {
+    setTab(next);
+    clearSelection();
+    setPage(1);
+  };
 
   const handleImport = async (rows: Record<string, string>[]) => {
     let success = 0;
@@ -94,6 +152,29 @@ function ParcelsContent() {
   ];
 
   const columns = [
+    {
+      key: '__select',
+      // En-tete : un span avec onClick (le label de Column est string, donc on
+      // affiche le check via le render, et on declenche toggleAllVisible au
+      // clic du header via une astuce : un bouton dans le label HTML serait
+      // ideal mais Column.label est string. On laisse vide ici et on rend la
+      // checkbox de selection globale dans une row factice ? Plus simple :
+      // on intercepte le clic sur la cellule de la 1ere ligne. Approche ici :
+      // un bouton flottant dans la colonne via render).
+      label: '',
+      className: 'w-8',
+      render: (row: any) => (
+        <span
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleOne(row.id);
+          }}
+          className="inline-flex items-center"
+        >
+          <AppCheckbox checked={selectedIds.has(row.id)} onCheckedChange={() => toggleOne(row.id)} />
+        </span>
+      ),
+    },
     {
       key: 'trackingNumber',
       label: 'Tracking',
@@ -216,7 +297,9 @@ function ParcelsContent() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Colis</h1>
-            <p className="text-sm text-gray-500 mt-1">{data?.meta?.total ?? 0} colis au total</p>
+            <p className="text-sm text-gray-500 mt-1">
+              {data?.meta?.total ?? 0} colis {tab === 'archived' ? 'archives' : 'actifs'}
+            </p>
           </div>
           <div className="flex gap-2">
             <AppButton variant="outline" onClick={() => setShowImport(true)}>
@@ -239,7 +322,36 @@ function ParcelsContent() {
           </div>
         </div>
 
-        {/* Search --- Export | Filtres | Effacer */}
+        {/* Onglets : Actifs / Archives */}
+        <nav className="flex flex-wrap gap-1 border-b border-gray-200">
+          <button
+            type="button"
+            onClick={() => switchTab('active')}
+            className={cn(
+              'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
+              tab === 'active'
+                ? 'border-primary-600 text-primary-700'
+                : 'border-transparent text-gray-600 hover:text-gray-900',
+            )}
+          >
+            En cours
+          </button>
+          <button
+            type="button"
+            onClick={() => switchTab('archived')}
+            className={cn(
+              'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
+              tab === 'archived'
+                ? 'border-primary-600 text-primary-700'
+                : 'border-transparent text-gray-600 hover:text-gray-900',
+            )}
+          >
+            <Archive className="inline h-3.5 w-3.5 mr-1" />
+            Archives
+          </button>
+        </nav>
+
+        {/* Search --- Export | Filtres */}
         <div className="flex items-center justify-between gap-3">
           <div className="flex-1">
             <SearchBar value={search} onChange={setSearch} placeholder="Tracking, designation, client..." />
@@ -247,6 +359,46 @@ function ParcelsContent() {
           <div className="flex items-center gap-2">
             <XlsxExportButton endpoint="parcels" fileName="colis" />
             <FilterDialog fields={filterFields} />
+          </div>
+        </div>
+
+        {/* Barre d'actions bulk : selection + actions archive/desarchive sur visible. */}
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
+          <div className="flex items-center gap-3 text-xs text-gray-600">
+            <span
+              onClick={toggleAllVisible}
+              className="inline-flex items-center gap-1 cursor-pointer select-none"
+            >
+              <AppCheckbox checked={allChecked} onCheckedChange={toggleAllVisible} />
+              <span>Tout cocher (page)</span>
+            </span>
+            {selectedIds.size > 0 && (
+              <AppBadge variant="info">{selectedIds.size} selectionne(s)</AppBadge>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {selectedIds.size > 0 && (
+              <>
+                {tab === 'active' ? (
+                  <AppButton size="sm" variant="outline" onClick={handleArchiveSelected} loading={archiveMut.isPending}>
+                    <Archive className="h-3.5 w-3.5" />
+                    Archiver
+                  </AppButton>
+                ) : (
+                  <AppButton size="sm" onClick={handleUnarchiveSelected} loading={unarchiveMut.isPending}>
+                    <ArchiveRestore className="h-3.5 w-3.5" />
+                    Desarchiver
+                  </AppButton>
+                )}
+                <button
+                  type="button"
+                  onClick={clearSelection}
+                  className="text-xs text-gray-500 hover:text-gray-700 underline"
+                >
+                  Annuler la selection
+                </button>
+              </>
+            )}
           </div>
         </div>
 

@@ -45,6 +45,11 @@ router.post('/batch', validate(createBatchParcelsSchema), ParcelController.creat
 router.patch('/:id', ParcelController.update);
 router.patch('/:id/status', ParcelController.updateStatus);
 
+// Archivage en lot. Les colis archives disparaissent de tous les listings
+// par defaut. Le filtre ?archived=true / ?archived=all ouvre l'acces.
+router.post('/archive', ParcelController.archive);
+router.post('/unarchive', ParcelController.unarchive);
+
 // Galerie d'images
 router.get('/:id/images', ParcelController.listImages);
 router.post('/:id/images', ParcelController.addImage);

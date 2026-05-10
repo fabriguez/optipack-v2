@@ -12,8 +12,21 @@ export interface ParcelImage {
 }
 
 export const parcelsApi = {
-  list: (params?: Partial<PaginationInput> & { status?: string; clientId?: string; warehouseId?: string }) =>
+  list: (
+    params?: Partial<PaginationInput> & {
+      status?: string;
+      clientId?: string;
+      warehouseId?: string;
+      containerId?: string;
+      /** 'true' = archives uniquement, 'all' = tout, undefined/'false' = exclut archives. */
+      archived?: 'true' | 'all' | 'false';
+    },
+  ) =>
     apiClient.get('/parcels', { params }).then((r) => r.data),
+  archive: (ids: string[], reason?: string) =>
+    apiClient.post('/parcels/archive', { ids, reason }).then((r) => r.data),
+  unarchive: (ids: string[], reason?: string) =>
+    apiClient.post('/parcels/unarchive', { ids, reason }).then((r) => r.data),
   getById: (id: string) =>
     apiClient.get(`/parcels/${id}`).then((r) => r.data),
   getByTracking: (tracking: string) =>

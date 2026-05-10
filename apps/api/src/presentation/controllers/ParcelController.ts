@@ -13,6 +13,10 @@ import {
   HandoverUntrackedParcelUseCase,
 } from '../../application/use-cases/parcel/HandoverParcelUseCase';
 import { ComputeStorageFeeUseCase } from '../../application/use-cases/parcel/ComputeStorageFeeUseCase';
+import {
+  ArchiveParcelsUseCase,
+  UnarchiveParcelsUseCase,
+} from '../../application/use-cases/parcel/ArchiveParcelsUseCase';
 
 export class ParcelController {
   static async create(req: Request, res: Response, next: NextFunction) {
@@ -50,8 +54,12 @@ export class ParcelController {
         status,
         transitType,
         onlyPresent,
+        archived,
       } = req.query;
       const scope = req.user!.role === 'SUPER_ADMIN' ? null : req.user!.agencyIds;
+      // archived : 'true' = uniquement archives, 'all' = tout, defaut/null = exclus.
+      const archivedFilter: 'true' | 'all' | 'false' | undefined =
+        archived === 'true' ? 'true' : archived === 'all' ? 'all' : undefined;
       const result = await useCase.execute(
         {
           warehouseId: warehouseId as string,
@@ -65,6 +73,7 @@ export class ParcelController {
           transitType: transitType as string,
           agencyIds: scope,
           onlyPresent: onlyPresent === 'true' || onlyPresent === '1',
+          archived: archivedFilter,
         },
         req.query as any,
       );
@@ -99,6 +108,28 @@ export class ParcelController {
       const useCase = container.resolve(UpdateParcelUseCase);
       const parcel = await useCase.execute(req.params.id, req.body, req.user!.userId);
       res.json({ success: true, data: parcel });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async archive(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(ArchiveParcelsUseCase);
+      const ids: string[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
+      const result = await useCase.execute(ids, req.user!.userId, req.body?.reason);
+      res.json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async unarchive(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(UnarchiveParcelsUseCase);
+      const ids: string[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
+      const result = await useCase.execute(ids, req.user!.userId, req.body?.reason);
+      res.json({ success: true, data: result });
     } catch (err) {
       next(err);
     }
