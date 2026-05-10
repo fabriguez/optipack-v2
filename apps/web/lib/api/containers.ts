@@ -64,6 +64,15 @@ export const manifestsApi = {
     apiClient.get(`/manifests/comparison/${containerId}`).then((r) => r.data),
   getById: (id: string) => apiClient.get(`/manifests/${id}`).then((r) => r.data),
 
+  // Liste paginee. Utilise pour l'historique des bordereaux d'un conteneur.
+  list: (params: {
+    containerId?: string;
+    type?: 'DISPATCH' | 'RECEPTION';
+    status?: 'ACTIVE' | 'ARCHIVED' | 'CANCELLED';
+    page?: number;
+    limit?: number;
+  }) => apiClient.get(`/manifests`, { params }).then((r) => r.data),
+
   // Ecarts admin
   listDiscrepancies: (containerId: string): Promise<{ success: boolean; data: ManifestDiscrepancy[] }> =>
     apiClient.get(`/manifests/discrepancies/${containerId}`).then((r) => r.data),

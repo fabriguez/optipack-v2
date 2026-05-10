@@ -17,6 +17,11 @@ const PARCEL_INCLUDE = {
   // l'emplacement dans les listes magasin / inventaire.
   space: { select: { id: true, name: true } },
   container: { select: { id: true, designation: true } },
+  // Conteneur de livraison : le DERNIER conteneur d'ou le colis a ete decharge
+  // (set lors du dechargement). Persiste meme apres dechargement, contrairement
+  // a `container` (currentContainerId) qui est null pour les colis en stock.
+  // Utile pour afficher la provenance dans les listes magasin.
+  lastContainer: { select: { id: true, designation: true } },
   transitRoute: { select: { id: true, name: true, type: true } },
   invoice: { select: { id: true, reference: true, status: true } },
 };

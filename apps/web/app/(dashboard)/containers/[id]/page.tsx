@@ -96,6 +96,16 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
     enabled: !!id,
   });
 
+  // Historique des bordereaux : tous les bordereaux generes pour ce conteneur,
+  // toutes versions confondues. Chaque appel a createDispatch / createReception
+  // cree un nouvel enregistrement (suffixe #2, #3 ajoute si meme nom), ce qui
+  // forme naturellement un historique.
+  const { data: manifestsHistory } = useQuery({
+    queryKey: ['containers', id, 'manifests-history'],
+    queryFn: () => manifestsApi.list({ containerId: id, limit: 100 }),
+    enabled: !!id,
+  });
+
   const departMutation = useDepartContainer();
   const arriveMutation = useArriveContainer();
   const loadMutation = useLoadParcels();
@@ -468,6 +478,111 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
             </p>
           )}
         </div>
+
+        {/* Historique : chaque generation produit un nouveau bordereau. On les
+            liste du plus recent au plus ancien, avec les ecarts (status) et un
+            telechargement PDF par version. */}
+        {(() => {
+          const list = (manifestsHistory?.data || []) as any[];
+          if (list.length === 0) return null;
+
+          // Ordonne par date desc puis groupe par type pour numeroter les versions
+          // (v1 = plus ancien, vN = plus recent par type) cote affichage.
+          const sorted = [...list].sort(
+            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+          );
+          const byType = new Map<string, number>();
+          // Compte total par type pour calculer "v X / total"
+          const totalByType = sorted.reduce<Record<string, number>>((acc, m) => {
+            acc[m.type] = (acc[m.type] || 0) + 1;
+            return acc;
+          }, {});
+
+          const handleDownload = async (manifestId: string, manifestNumber: string) => {
+            try {
+              await fetchPdfAuthed(`/manifests/${manifestId}/pdf`, { fileName: `${manifestNumber}.pdf` });
+            } catch {
+              toast.error('Erreur lors du telechargement');
+            }
+          };
+
+          return (
+            <div className="mt-4 border-t border-gray-100 pt-4">
+              <h4 className="mb-2 text-sm font-semibold text-gray-700">
+                Historique ({sorted.length} version{sorted.length > 1 ? 's' : ''})
+              </h4>
+              <div className="overflow-hidden rounded-xl border border-gray-100">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-xs text-gray-500">
+                    <tr>
+                      <th className="p-2 text-left">Version</th>
+                      <th className="p-2 text-left">Type</th>
+                      <th className="p-2 text-left">Numero</th>
+                      <th className="p-2 text-left">Date</th>
+                      <th className="p-2 text-right">Lignes</th>
+                      <th className="p-2 text-left">Statut</th>
+                      <th className="p-2 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {sorted.map((m) => {
+                      // Position decroissante par type : la plus recente a le numero le plus haut.
+                      const seen = byType.get(m.type) || 0;
+                      byType.set(m.type, seen + 1);
+                      const versionNumber = (totalByType[m.type] || 1) - seen;
+                      const total = totalByType[m.type];
+                      const isLatest = versionNumber === total;
+                      return (
+                        <tr key={m.id} className="hover:bg-gray-50">
+                          <td className="p-2">
+                            <span className="inline-flex items-center gap-1.5">
+                              <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${isLatest ? 'bg-primary-100 text-primary-800' : 'bg-gray-100 text-gray-600'}`}>
+                                v{versionNumber}/{total}
+                              </span>
+                              {isLatest && <span className="text-[10px] text-primary-700">actuelle</span>}
+                            </span>
+                          </td>
+                          <td className="p-2">
+                            {m.type === 'DISPATCH' ? (
+                              <span className="inline-flex items-center gap-1 text-xs">
+                                <FileText className="h-3 w-3" />
+                                Envoi
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-xs">
+                                <FileCheck className="h-3 w-3" />
+                                Reception
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-2 font-mono text-xs text-gray-700">{m.number}</td>
+                          <td className="p-2 text-xs text-gray-600">{formatDateTime(m.createdAt)}</td>
+                          <td className="p-2 text-right text-xs">{m._count?.lines ?? m.lines?.length ?? '-'}</td>
+                          <td className="p-2">
+                            {m.status === 'ACTIVE' && <AppBadge variant="success">Active</AppBadge>}
+                            {m.status === 'ARCHIVED' && <AppBadge variant="default">Archivee</AppBadge>}
+                            {m.status === 'CANCELLED' && <AppBadge variant="error">Annulee</AppBadge>}
+                          </td>
+                          <td className="p-2 text-right">
+                            <AppButton
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleDownload(m.id, m.number)}
+                              title="Telecharger le PDF"
+                            >
+                              <Printer className="h-3.5 w-3.5" />
+                              PDF
+                            </AppButton>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })()}
       </AppCard>
 
       <AppCard>

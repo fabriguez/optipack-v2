@@ -132,6 +132,48 @@ function ParcelsContent() {
       render: (row: any) => <span className="text-sm font-medium">{Number(row.weight).toFixed(1)} kg</span>,
     },
     {
+      key: 'warehouse',
+      label: 'Magasin',
+      render: (row: any) =>
+        row.warehouse ? (
+          <Link
+            href={`/warehouses/${row.warehouse.id}`}
+            onClick={(e) => e.stopPropagation()}
+            className="text-xs text-primary-700 hover:underline"
+          >
+            {row.warehouse.name}
+            {row.warehouse.agency?.name && (
+              <span className="block text-[10px] text-gray-400">{row.warehouse.agency.name}</span>
+            )}
+          </Link>
+        ) : (
+          <span className="text-xs text-gray-300">-</span>
+        ),
+    },
+    {
+      key: 'container',
+      label: 'Conteneur',
+      // Affiche le conteneur courant si charge (status LOADING/IN_TRANSIT...),
+      // sinon le dernier conteneur de provenance pour comprendre d'ou vient
+      // le colis quand il est en stock apres dechargement.
+      render: (row: any) => {
+        const c = row.container || row.lastContainer;
+        if (!c) return <span className="text-xs text-gray-300">-</span>;
+        const isCurrent = !!row.container;
+        return (
+          <Link
+            href={`/containers/${c.id}`}
+            onClick={(e) => e.stopPropagation()}
+            className={`text-xs hover:underline ${isCurrent ? 'text-primary-700 font-medium' : 'text-gray-600'}`}
+            title={isCurrent ? 'Conteneur actuel' : 'Conteneur de provenance'}
+          >
+            {c.designation}
+            {!isCurrent && <span className="block text-[10px] text-gray-400">provenance</span>}
+          </Link>
+        );
+      },
+    },
+    {
       key: 'price',
       label: 'Prix',
       render: (row: any) => <span className="text-sm font-bold text-gray-900">{formatAmount(Number(row.price))}</span>,
