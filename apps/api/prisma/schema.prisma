@@ -1198,6 +1198,11 @@ model Parcel {
   // organizationId : isolation multi-tenant
   organizationId      String
   trackingNumber      String       @unique
+  // trackingFournisseur : code/numero de suivi communique par le fournisseur
+  // (ex: code Aliexpress, DHL externe). Optionnel, non unique cote DB pour
+  // tolerer les doublons saisis par erreur ; l'unicite metier est laissee
+  // a l'utilisateur.
+  trackingFournisseur String?
   designation         String
   weight              Decimal?     @db.Decimal(15, 3)
   originalWeight      Decimal?     @db.Decimal(15, 3)
@@ -1280,6 +1285,7 @@ model Parcel {
   @@index([status])
   @@index([trackingNumber])
   @@index([category])
+  @@index([trackingFournisseur])
   @@map("parcels")
 }
 

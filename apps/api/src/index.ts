@@ -87,6 +87,25 @@ async function start(): Promise<void> {
     httpServer.listen(config.port, () => {
       logger.info(`API server running on port ${config.port}`);
       logger.info(`Environment: ${config.env}`);
+
+      // Empreinte du JWT_SECRET au demarrage : permet de detecter quand
+      // plusieurs instances API derriere un load balancer ont des secrets
+      // divergents (l'une signe les tokens, l'autre les rejette en signature
+      // invalide). Le hash est tronque, le secret n'est jamais expose.
+      try {
+        const crypto = require('crypto');
+        const fp = crypto
+          .createHash('sha256')
+          .update(config.jwt.secret)
+          .digest('hex')
+          .slice(0, 12);
+        logger.info(
+          `JWT_SECRET fingerprint=${fp} accessExpiry=${config.jwt.accessExpiry} ` +
+            `(les instances clusterees doivent toutes avoir le meme fingerprint)`,
+        );
+      } catch {
+        // ignore, c'est juste du diagnostic
+      }
     });
   } catch (err) {
     logger.fatal({ err }, 'Failed to start server');

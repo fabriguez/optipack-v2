@@ -36,6 +36,7 @@ import { toast } from 'sonner';
 import { ComparisonDialog } from './ComparisonDialog';
 import { ParcelFormDialog } from '@/app/(dashboard)/parcels/ParcelFormDialog';
 import { QRScannerDialog } from '@/components/shared/QRScannerDialog';
+import { BatchScanCollector } from '@/components/shared/BatchScanCollector';
 import { AgencyAvatar } from '@/components/shared/AgencyAvatar';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
@@ -107,6 +108,14 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
   const [scanInput, setScanInput] = useState('');
   const [scanBusy, setScanBusy] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
+  // Batch scan : accumule des trackings a charger en une seule operation.
+  const [batchLoadCodes, setBatchLoadCodes] = useState<string[]>([]);
+  const [batchLoadBusy, setBatchLoadBusy] = useState(false);
+  // Batch scan dechargement : tout en "received" vers un magasin selectionne.
+  const [showBatchUnload, setShowBatchUnload] = useState(false);
+  const [batchUnloadCodes, setBatchUnloadCodes] = useState<string[]>([]);
+  const [batchUnloadWarehouseId, setBatchUnloadWarehouseId] = useState<string | null>(null);
+  const [batchUnloadBusy, setBatchUnloadBusy] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<{ id: string; designation: string } | null>(null);
   const [removeReason, setRemoveReason] = useState('');
   const [removing, setRemoving] = useState(false);
@@ -215,6 +224,69 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
   };
 
   const handleScan = () => submitScan(scanInput);
+
+  // Batch chargement : execute loadByQr en serie. On continue si un code echoue
+  // (les autres restent valides). Bilan affiche a la fin.
+  const handleBatchLoad = async (codes: string[]) => {
+    setBatchLoadBusy(true);
+    let ok = 0;
+    const failed: string[] = [];
+    for (const code of codes) {
+      try {
+        const res = await containersApi.loadByQr(id, code);
+        if (res?.data?.success) ok++;
+        else failed.push(`${code}: ${res?.data?.reason || 'echec'}`);
+      } catch (e: any) {
+        failed.push(`${code}: ${e?.response?.data?.message || 'introuvable'}`);
+      }
+    }
+    setBatchLoadBusy(false);
+    setBatchLoadCodes(failed.length === 0 ? [] : codes.filter((c) => failed.some((f) => f.startsWith(`${c}:`))));
+    if (ok > 0) toast.success(`${ok} colis charge${ok > 1 ? 's' : ''}`);
+    if (failed.length > 0) toast.error(`${failed.length} echec(s) : ${failed[0]}`);
+    qc.invalidateQueries({ queryKey: ['containers', id] });
+    qc.invalidateQueries({ queryKey: ['containers', id, 'parcels'] });
+    qc.invalidateQueries({ queryKey: ['containers', id, 'loadable'] });
+  };
+
+  // Batch dechargement : tout les codes vers un magasin (action received).
+  const handleBatchUnload = async (codes: string[]) => {
+    if (!batchUnloadWarehouseId) {
+      toast.error('Selectionnez un magasin de destination');
+      return;
+    }
+    setBatchUnloadBusy(true);
+    let ok = 0;
+    const failed: string[] = [];
+    // On doit d'abord resoudre tracking -> parcelId puisque l'API unload prend
+    // un parcelId. On utilise les colis charges actuellement dans le conteneur.
+    for (const code of codes) {
+      const match = parcels.find((p: any) => p.trackingNumber === code);
+      if (!match) {
+        failed.push(`${code}: non present dans ce conteneur`);
+        continue;
+      }
+      try {
+        await containersApi.unload(id, {
+          parcelId: match.id,
+          action: 'received',
+          warehouseId: batchUnloadWarehouseId,
+        });
+        ok++;
+      } catch (e: any) {
+        failed.push(`${code}: ${e?.response?.data?.message || 'echec'}`);
+      }
+    }
+    setBatchUnloadBusy(false);
+    setBatchUnloadCodes(failed.length === 0 ? [] : codes.filter((c) => failed.some((f) => f.startsWith(`${c}:`))));
+    if (ok > 0) toast.success(`${ok} colis decharge${ok > 1 ? 's' : ''}`);
+    if (failed.length > 0) toast.error(`${failed.length} echec(s) : ${failed[0]}`);
+    qc.invalidateQueries({ queryKey: ['containers', id] });
+    qc.invalidateQueries({ queryKey: ['containers', id, 'parcels'] });
+    qc.invalidateQueries({ queryKey: ['containers', id, 'history'] });
+    qc.invalidateQueries({ queryKey: ['parcels'] });
+    if (failed.length === 0) setShowBatchUnload(false);
+  };
 
   const handleRemoveConfirm = async () => {
     if (!removeTarget) return;
@@ -391,12 +463,20 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
       <AppCard>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-base font-semibold text-gray-900">Colis dans le conteneur ({parcels.length})</h3>
-          {canLoad && !isClosed && (
-            <AppButton size="sm" onClick={() => setShowLoadDialog(true)}>
-              <Plus className="h-3.5 w-3.5" />
-              Charger des colis
-            </AppButton>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            {canLoad && !isClosed && (
+              <AppButton size="sm" onClick={() => setShowLoadDialog(true)}>
+                <Plus className="h-3.5 w-3.5" />
+                Charger des colis
+              </AppButton>
+            )}
+            {canUnload && parcels.length > 0 && (
+              <AppButton size="sm" variant="outline" onClick={() => setShowBatchUnload(true)}>
+                <Camera className="h-3.5 w-3.5" />
+                Decharger par scan
+              </AppButton>
+            )}
+          </div>
           {(container.status === 'IN_TRANSIT' || container.status === 'UNLOADED') && (
             <span className="text-xs text-gray-500 flex items-center gap-1">
               <AlertCircle className="h-3.5 w-3.5" />
@@ -552,21 +632,17 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
                     : `Seuls les colis ${containerTypeLabel.toLowerCase()} sont affiches.`}
                   {' '}Les colis a destination de l&apos;agence de depart sont masques. Ordre : payes en priorite, puis les non-payes du plus ancien au plus recent.
                 </p>
-                <div className="flex gap-2 rounded-xl border border-primary-100 bg-primary-50/40 p-2">
-                  <AppInput
-                    placeholder="Scanner ou coller un QR / numero de tracking..."
-                    value={scanInput}
-                    onChange={(e) => setScanInput(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleScan(); } }}
+                <div className="rounded-xl border border-primary-100 bg-primary-50/40 p-3">
+                  <BatchScanCollector
+                    codes={batchLoadCodes}
+                    onChange={setBatchLoadCodes}
+                    submitLabel={`Charger ${batchLoadCodes.length || ''} colis par scan`}
+                    onSubmit={handleBatchLoad}
+                    submitting={batchLoadBusy}
+                    placeholder="Scanner ou coller un QR / tracking..."
+                    helperText="Scannez plusieurs colis en chaine puis confirmez le chargement."
+                    cameraTitle="Scanner pour charger"
                   />
-                  <AppButton variant="outline" onClick={() => setShowCamera(true)} type="button" title="Ouvrir la camera">
-                    <Camera className="h-4 w-4" />
-                    Camera
-                  </AppButton>
-                  <AppButton onClick={handleScan} loading={scanBusy} disabled={!scanInput.trim()}>
-                    <Package className="h-4 w-4" />
-                    Charger
-                  </AppButton>
                 </div>
                 <AppInput
                   placeholder="Rechercher par tracking, designation, client..."
@@ -740,6 +816,40 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
               label="Commentaire (optionnel)"
               value={unloadComment}
               onChange={(e) => setUnloadComment(e.target.value)}
+            />
+          </div>
+        </AppDialog>
+
+        {/* Dechargement batch par scan : tous les colis vers le meme magasin
+            avec action "received". Pour les cas modified / not_found, il faut
+            passer par le dechargement individuel (action ligne par ligne). */}
+        <AppDialog
+          open={showBatchUnload}
+          onClose={() => { setShowBatchUnload(false); setBatchUnloadCodes([]); setBatchUnloadWarehouseId(null); }}
+          title="Decharger par scan"
+          size="lg"
+        >
+          <div className="space-y-4">
+            <p className="text-xs text-gray-500">
+              Scannez plusieurs colis. Tous seront decharges comme &quot;bien recus&quot; vers le magasin selectionne.
+              Pour signaler un colis modifie ou introuvable, utilisez le dechargement individuel.
+            </p>
+            <AppSearchSelect
+              label="Magasin de destination"
+              value={batchUnloadWarehouseId}
+              onChange={setBatchUnloadWarehouseId}
+              search={searchers.warehouses}
+              placeholder="Selectionner un magasin"
+              required
+            />
+            <BatchScanCollector
+              codes={batchUnloadCodes}
+              onChange={setBatchUnloadCodes}
+              submitLabel={`Decharger ${batchUnloadCodes.length || ''} colis`}
+              onSubmit={handleBatchUnload}
+              submitting={batchUnloadBusy}
+              placeholder="Scanner ou coller un tracking..."
+              cameraTitle="Scanner pour decharger"
             />
           </div>
         </AppDialog>

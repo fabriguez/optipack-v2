@@ -31,15 +31,25 @@ export class CreateParcelUseCase {
       throw new BusinessError('Le colis doit avoir une masse ou un volume');
     }
 
-    const [client, warehouse, transitRoute] = await Promise.all([
+    const [client, warehouse, transitRoute, destinationAgency] = await Promise.all([
       this.clientRepo.findById(input.clientId),
       this.warehouseRepo.findById(input.warehouseId),
       this.transitRepo.findById(input.transitRouteId),
+      // L'agence de destination est obligatoire et porte le champ "destination"
+      // (ville) qui etait auparavant saisi a la main.
+      prisma.agency.findUnique({
+        where: { id: input.destinationAgencyId },
+        select: { id: true, name: true, city: true },
+      }),
     ]);
 
     if (!client) throw new NotFoundError('Client', input.clientId);
     if (!warehouse) throw new NotFoundError('Magasin', input.warehouseId);
     if (!transitRoute) throw new NotFoundError('Route de transit', input.transitRouteId);
+    if (!destinationAgency) throw new NotFoundError('Agence de destination', input.destinationAgencyId);
+    // destination = ville de l'agence d'arrivee (compat ascendante avec les
+    // anciens consommateurs : PDFs, manifests, routings).
+    const derivedDestination = destinationAgency.city;
 
     // Tarification : prix specifique partenaire si defini
     const partnerPricing = await prisma.partnerPricing.findFirst({
@@ -113,13 +123,13 @@ export class CreateParcelUseCase {
     const parcel = await this.parcelRepo.create({
       organizationId: client.organizationId,
       trackingNumber,
+      trackingFournisseur: input.trackingFournisseur || null,
       designation: input.designation,
       weight: hasWeight ? Number(input.weight) : null,
       originalWeight: hasWeight ? Number(input.weight) : null,
       volume: hasVolume ? Number(input.volume) : null,
-      destination: input.destination,
-      // Audit fix #1 : destination structuree
-      ...(input.destinationAgencyId && { destinationAgency: { connect: { id: input.destinationAgencyId } } }),
+      destination: derivedDestination,
+      destinationAgency: { connect: { id: destinationAgency.id } },
       destinationAddress: input.destinationAddress ?? null,
       // Audit fix #10 : categorie + flags
       category: (input.category as never) ?? 'STANDARD',

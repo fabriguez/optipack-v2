@@ -3,7 +3,8 @@
 import { use, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Package, Plus, Eye, Edit, Trash2, ArrowRightLeft, ClipboardCheck, PlayCircle, QrCode, HandCoins, MapPin } from 'lucide-react';
+import { ArrowLeft, Package, Plus, Eye, Edit, Trash2, ArrowRightLeft, ClipboardCheck, PlayCircle, QrCode, HandCoins, MapPin, Camera, ScanLine } from 'lucide-react';
+import { BatchScanCollector } from '@/components/shared/BatchScanCollector';
 import { ParcelQRDialog } from '@/components/shared/ParcelQRDialog';
 import { ParcelHandoverDialog } from '@/components/shared/ParcelHandoverDialog';
 import { PageTransition } from '@/components/shared/PageTransition';
@@ -42,6 +43,13 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
   const [handoverParcel, setHandoverParcel] = useState<any | null>(null);
   const [showUntrackedHandover, setShowUntrackedHandover] = useState(false);
   const [moveSpaceParcel, setMoveSpaceParcel] = useState<any | null>(null);
+  // Batch scan : ajout / retrait de colis existants par scan QR.
+  const [batchAddOpen, setBatchAddOpen] = useState(false);
+  const [batchAddCodes, setBatchAddCodes] = useState<string[]>([]);
+  const [batchAddBusy, setBatchAddBusy] = useState(false);
+  const [batchRemoveOpen, setBatchRemoveOpen] = useState(false);
+  const [batchRemoveCodes, setBatchRemoveCodes] = useState<string[]>([]);
+  const [batchRemoveBusy, setBatchRemoveBusy] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['warehouses', id],
@@ -142,6 +150,71 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
       toast.error('Erreur lors du retrait');
     }
     setRemoveParcel(null);
+  };
+
+  // Resout un tracking number en parcel id (en n'acceptant que les colis
+  // existants). On va chercher dans la base via l'endpoint de recherche
+  // generique. Echoue clairement si introuvable.
+  const findParcelByTracking = async (tracking: string) => {
+    const r = await apiClient.get('/parcels', { params: { search: tracking, limit: 5 } });
+    const list = (r.data?.data || []) as any[];
+    const match = list.find((p) => p.trackingNumber === tracking) || list[0];
+    if (!match) throw new Error(`Colis introuvable : ${tracking}`);
+    return match;
+  };
+
+  const handleBatchAdd = async (codes: string[]) => {
+    setBatchAddBusy(true);
+    let ok = 0;
+    const failed: string[] = [];
+    for (const code of codes) {
+      try {
+        const p = await findParcelByTracking(code);
+        await apiClient.patch(`/parcels/${p.id}/status`, {
+          status: 'IN_STOCK',
+          warehouseId: id,
+        });
+        ok++;
+      } catch (e: any) {
+        failed.push(`${code}: ${e?.response?.data?.message || e?.message || 'echec'}`);
+      }
+    }
+    setBatchAddBusy(false);
+    setBatchAddCodes(failed.length === 0 ? [] : codes.filter((c) => failed.some((f) => f.startsWith(`${c}:`))));
+    if (ok > 0) toast.success(`${ok} colis ajoute${ok > 1 ? 's' : ''} au magasin`);
+    if (failed.length > 0) toast.error(`${failed.length} echec(s) : ${failed[0]}`);
+    invalidateAll();
+    if (failed.length === 0) setBatchAddOpen(false);
+  };
+
+  const handleBatchRemove = async (codes: string[]) => {
+    setBatchRemoveBusy(true);
+    let ok = 0;
+    const failed: string[] = [];
+    for (const code of codes) {
+      try {
+        const p = await findParcelByTracking(code);
+        // Exige que le colis soit dans CE magasin pour eviter les retraits
+        // accidentels d'un colis d'un autre magasin scanne par erreur.
+        if (p.warehouseId !== id) {
+          failed.push(`${code}: pas dans ce magasin`);
+          continue;
+        }
+        await apiClient.patch(`/parcels/${p.id}/status`, {
+          status: 'IN_STOCK',
+          warehouseId: null,
+        });
+        ok++;
+      } catch (e: any) {
+        failed.push(`${code}: ${e?.response?.data?.message || e?.message || 'echec'}`);
+      }
+    }
+    setBatchRemoveBusy(false);
+    setBatchRemoveCodes(failed.length === 0 ? [] : codes.filter((c) => failed.some((f) => f.startsWith(`${c}:`))));
+    if (ok > 0) toast.success(`${ok} colis retire${ok > 1 ? 's' : ''} du magasin`);
+    if (failed.length > 0) toast.error(`${failed.length} echec(s) : ${failed[0]}`);
+    invalidateAll();
+    if (failed.length === 0) setBatchRemoveOpen(false);
   };
 
   const handleDeleteParcel = async () => {
@@ -415,6 +488,14 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
                 <HandCoins className="h-3.5 w-3.5" />
                 Remettre un colis non enregistre
               </AppButton>
+              <AppButton variant="outline" size="sm" onClick={() => setBatchAddOpen(true)}>
+                <Camera className="h-3.5 w-3.5" />
+                Ajouter par scan
+              </AppButton>
+              <AppButton variant="outline" size="sm" onClick={() => setBatchRemoveOpen(true)}>
+                <ScanLine className="h-3.5 w-3.5" />
+                Retirer par scan
+              </AppButton>
               <AppButton size="sm" onClick={() => setShowCreateParcel(true)}>
                 <Plus className="h-3.5 w-3.5" />
                 Ajouter colis
@@ -505,6 +586,54 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
         warehouseId={id}
         parcel={moveSpaceParcel}
       />
+
+      {/* Batch ajouter par scan : transfere les colis existants vers ce magasin. */}
+      <AppDialog
+        open={batchAddOpen}
+        onClose={() => { setBatchAddOpen(false); setBatchAddCodes([]); }}
+        title="Ajouter des colis par scan"
+        size="lg"
+      >
+        <div className="space-y-3">
+          <p className="text-xs text-gray-500">
+            Scannez les colis existants a transferer vers <span className="font-semibold">{warehouse.name}</span>.
+            Le colis doit deja exister dans le systeme.
+          </p>
+          <BatchScanCollector
+            codes={batchAddCodes}
+            onChange={setBatchAddCodes}
+            submitLabel={`Transferer ${batchAddCodes.length || ''} colis ici`}
+            onSubmit={handleBatchAdd}
+            submitting={batchAddBusy}
+            placeholder="Scanner ou coller un tracking existant..."
+            cameraTitle="Scanner pour ajouter"
+          />
+        </div>
+      </AppDialog>
+
+      {/* Batch retirer par scan : detache les colis de ce magasin. */}
+      <AppDialog
+        open={batchRemoveOpen}
+        onClose={() => { setBatchRemoveOpen(false); setBatchRemoveCodes([]); }}
+        title="Retirer des colis par scan"
+        size="lg"
+      >
+        <div className="space-y-3">
+          <p className="text-xs text-gray-500">
+            Scannez les colis a retirer de <span className="font-semibold">{warehouse.name}</span>.
+            Seuls les colis presents dans ce magasin sont acceptes.
+          </p>
+          <BatchScanCollector
+            codes={batchRemoveCodes}
+            onChange={setBatchRemoveCodes}
+            submitLabel={`Retirer ${batchRemoveCodes.length || ''} colis`}
+            onSubmit={handleBatchRemove}
+            submitting={batchRemoveBusy}
+            placeholder="Scanner ou coller un tracking..."
+            cameraTitle="Scanner pour retirer"
+          />
+        </div>
+      </AppDialog>
 
       {/* Delete confirm */}
       <ConfirmDialog

@@ -2,12 +2,18 @@ import { inject, injectable } from 'tsyringe';
 import { PARCEL_REPOSITORY, type IParcelRepository } from '../../interfaces/IParcelRepository';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
 import { HistoryService } from '../../services/HistoryService';
+import { prisma } from '../../../config/database';
 
 export interface UpdateParcelInput {
   designation?: string;
+  trackingFournisseur?: string | null;
   weight?: number | null;
   volume?: number | null;
-  destination?: string;
+  // destination est derive automatiquement depuis destinationAgencyId : on
+  // n'expose plus de champ libre. Pour modifier la ville d'arrivee, il faut
+  // changer l'agence de destination.
+  destinationAgencyId?: string;
+  destinationAddress?: string | null;
   observation?: string | null;
   imageUrl?: string | null;
   recipientId?: string | null;
@@ -58,9 +64,29 @@ export class UpdateParcelUseCase {
       data.volume = input.volume;
       changes.volume = { from: parcel.volume, to: input.volume };
     }
-    if (input.destination !== undefined && input.destination !== parcel.destination) {
-      data.destination = input.destination;
-      changes.destination = { from: parcel.destination, to: input.destination };
+    if (input.trackingFournisseur !== undefined) {
+      const next = input.trackingFournisseur || null;
+      if (next !== (parcel as any).trackingFournisseur) {
+        data.trackingFournisseur = next;
+        changes.trackingFournisseur = { from: (parcel as any).trackingFournisseur, to: next };
+      }
+    }
+    if (input.destinationAgencyId !== undefined && input.destinationAgencyId !== parcel.destinationAgencyId) {
+      const agency = await prisma.agency.findUnique({
+        where: { id: input.destinationAgencyId },
+        select: { id: true, city: true },
+      });
+      if (!agency) throw new NotFoundError('Agence de destination', input.destinationAgencyId);
+      data.destinationAgency = { connect: { id: agency.id } };
+      data.destination = agency.city;
+      changes.destinationAgencyId = { from: parcel.destinationAgencyId, to: agency.id };
+      if (agency.city !== parcel.destination) {
+        changes.destination = { from: parcel.destination, to: agency.city };
+      }
+    }
+    if (input.destinationAddress !== undefined && input.destinationAddress !== parcel.destinationAddress) {
+      data.destinationAddress = input.destinationAddress;
+      changes.destinationAddress = { from: parcel.destinationAddress, to: input.destinationAddress };
     }
     if (input.observation !== undefined) {
       data.observation = input.observation;

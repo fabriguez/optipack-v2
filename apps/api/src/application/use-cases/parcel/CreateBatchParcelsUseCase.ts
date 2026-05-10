@@ -43,6 +43,18 @@ export class CreateBatchParcelsUseCase {
     if (!warehouse) throw new NotFoundError('Magasin', input.warehouseId);
     if (!transitRoute) throw new NotFoundError('Route de transit', input.transitRouteId);
 
+    // Pre-charge toutes les agences referencees pour deriver "destination"
+    // (ville) en un seul aller-retour DB.
+    const agencyIds = Array.from(new Set(input.parcels.map((p) => p.destinationAgencyId)));
+    const agencies = await prisma.agency.findMany({
+      where: { id: { in: agencyIds } },
+      select: { id: true, city: true },
+    });
+    const agencyById = new Map(agencies.map((a) => [a.id, a]));
+    for (const id of agencyIds) {
+      if (!agencyById.has(id)) throw new NotFoundError('Agence de destination', id);
+    }
+
     // Tarification : prix specifique partenaire si defini
     const partnerPricing = await prisma.partnerPricing.findFirst({
       where: {
@@ -101,15 +113,17 @@ export class CreateBatchParcelsUseCase {
     const created = [];
     for (const p of computed) {
       const trackingNumber = generateTrackingNumber();
+      const agency = agencyById.get(p.destinationAgencyId)!;
       const parcel = await this.parcelRepo.create({
         organizationId: client.organizationId,
         trackingNumber,
+        trackingFournisseur: (p as any).trackingFournisseur || null,
         designation: p.designation,
         weight: p.hasWeight ? Number(p.weight) : null,
         originalWeight: p.hasWeight ? Number(p.weight) : null,
         volume: p.hasVolume ? Number(p.volume) : null,
-        destination: p.destination,
-        ...(p.destinationAgencyId && { destinationAgency: { connect: { id: p.destinationAgencyId } } }),
+        destination: agency.city,
+        destinationAgency: { connect: { id: agency.id } },
         destinationAddress: p.destinationAddress ?? null,
         category: (p.category as never) ?? 'STANDARD',
         isFragile: p.isFragile ?? false,

@@ -39,6 +39,7 @@ import positionRoutes from './position.routes';
 import permissionRoutes from './permission.routes';
 import holidayRoutes from './holiday.routes';
 import workScheduleRoutes from './work-schedule.routes';
+import publicTrackingRoutes from './public-tracking.routes';
 
 const router = Router();
 
@@ -49,6 +50,8 @@ router.use('/organization', tenantMetaRoutes);  // alias pour PATCH /organizatio
 router.use('/system', systemRoutes);  // Phase 4.5 : updates pilote par tenant
 router.use('/auth', authRoutes);
 router.use('/client-portal', clientPortalRoutes);
+// Suivi public (QR code scanne par le destinataire) — sans auth
+router.use('/public', publicTrackingRoutes);
 
 // Logistique
 router.use('/agencies', agencyRoutes);

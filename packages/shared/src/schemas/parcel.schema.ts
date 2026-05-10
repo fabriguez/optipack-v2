@@ -12,13 +12,17 @@ export type ParcelCategory = (typeof ParcelCategoryValues)[number];
 
 const baseParcelFields = {
   designation: z.string().min(2, 'La designation doit contenir au moins 2 caracteres'),
+  // Tracking interne fournisseur (code colis externe, ex: AliExpress, DHL).
+  // Optionnel, pas d'unicite stricte au niveau DB.
+  trackingFournisseur: z.string().min(1).optional().or(z.literal('')),
   weight: z.number().positive('La masse doit etre positive').optional(),
   volume: z.number().positive('Le volume doit etre positif').optional(),
-  // Destination structuree (audit fix #1)
-  destination: z.string().min(2, 'La destination est requise'),
-  destinationAgencyId: z.string().uuid().optional().nullable(),
+  // Destination structuree :
+  // - destinationAgencyId : agence d'arrivee (obligatoire). Le champ "destination"
+  //   (ville) est derive automatiquement cote backend depuis agency.city.
+  // - destinationAddress : complement d'adresse libre (rue, quartier).
+  destinationAgencyId: z.string().uuid("Selectionnez l'agence de destination"),
   destinationAddress: z.string().optional().or(z.literal('')),
-  // Categorie + flags (audit fix #10)
   category: z.enum(ParcelCategoryValues).optional().default('STANDARD'),
   isFragile: z.boolean().optional().default(false),
   isHazardous: z.boolean().optional().default(false),
@@ -47,10 +51,10 @@ export const createBatchParcelsSchema = z.object({
     .array(
       z.object({
         designation: z.string().min(2),
+        trackingFournisseur: z.string().min(1).optional(),
         weight: z.number().positive().optional(),
         volume: z.number().positive().optional(),
-        destination: z.string().min(2),
-        destinationAgencyId: z.string().uuid().optional().nullable(),
+        destinationAgencyId: z.string().uuid(),
         destinationAddress: z.string().optional(),
         category: z.enum(ParcelCategoryValues).optional().default('STANDARD'),
         isFragile: z.boolean().optional().default(false),
@@ -64,10 +68,10 @@ export const createBatchParcelsSchema = z.object({
 
 export const updateParcelSchema = z.object({
   designation: z.string().min(2).optional(),
+  trackingFournisseur: z.string().nullable().optional(),
   weight: z.number().positive().nullable().optional(),
   volume: z.number().positive().nullable().optional(),
-  destination: z.string().min(2).optional(),
-  destinationAgencyId: z.string().uuid().optional().nullable(),
+  destinationAgencyId: z.string().uuid().optional(),
   destinationAddress: z.string().optional().nullable(),
   category: z.enum(ParcelCategoryValues).optional(),
   isFragile: z.boolean().optional(),

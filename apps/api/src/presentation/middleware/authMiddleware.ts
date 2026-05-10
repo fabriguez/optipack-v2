@@ -25,7 +25,22 @@ export function authenticate(req: Request, _res: Response, next: NextFunction): 
     const payload = jwt.verify(token, config.jwt.secret) as JwtPayload;
     req.user = payload;
     next();
-  } catch {
+  } catch (err) {
+    // Log detaille pour diagnostiquer "Token invalide ou expire" cote serveur.
+    // Permet de distinguer signature invalide (mismatch JWT_SECRET entre instances),
+    // token expire (clock skew), ou token malforme.
+    const e = err as { name?: string; message?: string; expiredAt?: Date };
+    const decoded = jwt.decode(token) as { exp?: number; iat?: number; userId?: string } | null;
+    const now = Math.floor(Date.now() / 1000);
+    const tokenSuffix = token.slice(-12);
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[auth.verify-fail] err=${e?.name ?? 'Unknown'} msg=${e?.message ?? '-'} ` +
+        `tokenSuffix=${tokenSuffix} ` +
+        `decoded.exp=${decoded?.exp ?? '-'} decoded.iat=${decoded?.iat ?? '-'} ` +
+        `now=${now} skew=${decoded?.exp ? decoded.exp - now : '-'}s ` +
+        `user=${decoded?.userId ?? '-'} url=${req.method} ${req.originalUrl}`,
+    );
     next(new AuthenticationError('Token invalide ou expire'));
   }
 }

@@ -15,11 +15,21 @@ import { useCreateParcel, useUpdateParcel } from '@/lib/hooks/useParcels';
 import { searchers, toSearchOption } from '@/lib/api/searchers';
 import { ParcelCategoryValues } from '@transitsoftservices/shared';
 import { RecipientQuickCreateDialog } from './RecipientQuickCreateDialog';
+import { QRScannerDialog } from '@/components/shared/QRScannerDialog';
+import { Camera } from 'lucide-react';
+import { ParcelImagesField, persistParcelImages, type PendingImage } from './ParcelImagesField';
+import { uploadImage } from '@/lib/api/uploads';
+import { parcelsApi } from '@/lib/api/parcels';
+import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
 interface ParcelLike {
   id: string;
   designation: string;
-  destination: string;
+  trackingFournisseur?: string | null;
+  destinationAgencyId?: string | null;
+  destinationAddress?: string | null;
+  destinationAgency?: { id: string; name: string; city?: string | null } | null;
   weight?: number | string | null;
   volume?: number | string | null;
   observation?: string | null;
@@ -47,15 +57,24 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
   const isEdit = !!parcel;
   const createMutation = useCreateParcel();
   const updateMutation = useUpdateParcel();
+  const qc = useQueryClient();
 
   const [selectedClient, setSelectedClient] = useState<SearchOption | null>(null);
   const [selectedRecipient, setSelectedRecipient] = useState<SearchOption | null>(null);
   const [selectedWarehouse, setSelectedWarehouse] = useState<SearchOption | null>(null);
   const [selectedRoute, setSelectedRoute] = useState<SearchOption | null>(null);
+  const [selectedDestAgency, setSelectedDestAgency] = useState<SearchOption | null>(null);
+  // Scan QR pour pre-remplir le tracking fournisseur (numero de colis externe).
+  const [scanFournisseurOpen, setScanFournisseurOpen] = useState(false);
   const [mode, setMode] = useState<Mode>('weight');
   const [recipientCreateOpen, setRecipientCreateOpen] = useState(false);
   const [recipientCreateName, setRecipientCreateName] = useState('');
   const [recipientCreatePromise, setRecipientCreatePromise] = useState<((opt: SearchOption | null) => void) | null>(null);
+  // Images : pending = nouveaux fichiers a uploader apres save ; removed = images
+  // existantes a supprimer apres save.
+  const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
+  const [removedImageIds, setRemovedImageIds] = useState<string[]>([]);
+  const [uploadingImages, setUploadingImages] = useState(false);
 
   const {
     register,
@@ -74,10 +93,17 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
 
   useEffect(() => {
     if (!open) return;
+    // Reset etat images a chaque ouverture (et cleanup des previews precedentes).
+    pendingImages.forEach((p) => URL.revokeObjectURL(p.previewUrl));
+    setPendingImages([]);
+    setRemovedImageIds([]);
+
     if (parcel) {
       reset({
         designation: parcel.designation,
-        destination: parcel.destination,
+        trackingFournisseur: parcel.trackingFournisseur || '',
+        destinationAgencyId: parcel.destinationAgencyId ?? parcel.destinationAgency?.id ?? '',
+        destinationAddress: parcel.destinationAddress ?? '',
         weight: parcel.weight ? Number(parcel.weight) : undefined,
         volume: parcel.volume ? Number(parcel.volume) : undefined,
         observation: parcel.observation || '',
@@ -96,6 +122,15 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
           sublabel: parcel.transitRoute.type ?? null,
         });
       }
+      if (parcel.destinationAgency) {
+        setSelectedDestAgency({
+          value: parcel.destinationAgency.id,
+          label: parcel.destinationAgency.name,
+          sublabel: parcel.destinationAgency.city ?? null,
+        });
+      } else {
+        setSelectedDestAgency(null);
+      }
       const hasW = parcel.weight !== null && parcel.weight !== undefined && Number(parcel.weight) > 0;
       const hasV = parcel.volume !== null && parcel.volume !== undefined && Number(parcel.volume) > 0;
       setMode(hasW && hasV ? 'both' : hasV ? 'volume' : 'weight');
@@ -108,6 +143,7 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
       setSelectedRecipient(null);
       setSelectedWarehouse(defaultWarehouse ? toSearchOption.warehouse(defaultWarehouse) : null);
       setSelectedRoute(null);
+      setSelectedDestAgency(null);
       setMode('weight');
     }
   }, [open, parcel, reset, defaultWarehouse, defaultClient]);
@@ -116,12 +152,16 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
     if (mode === 'weight') data.volume = undefined;
     if (mode === 'volume') data.weight = undefined;
 
+    // 1ere requete : create / update du colis. On recupere son id (pour l'upload).
+    let parcelId: string | null = null;
     if (isEdit && parcel) {
       await updateMutation.mutateAsync({
         id: parcel.id,
         data: {
           designation: data.designation,
-          destination: data.destination,
+          trackingFournisseur: data.trackingFournisseur || null,
+          destinationAgencyId: data.destinationAgencyId,
+          destinationAddress: data.destinationAddress || null,
           weight: mode === 'volume' ? null : data.weight,
           volume: mode === 'weight' ? null : data.volume,
           observation: data.observation || null,
@@ -130,10 +170,39 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
           transitRouteId: data.transitRouteId,
         },
       });
+      parcelId = parcel.id;
     } else {
-      await createMutation.mutateAsync(data);
+      const created = await createMutation.mutateAsync(data);
+      parcelId = (created as any)?.data?.id ?? (created as any)?.id ?? null;
     }
+
+    // 2eme partie : upload des nouvelles images + suppression des images marquees.
+    // Erreurs isolees (n'annulent pas la creation/edition du colis).
+    if (parcelId && (pendingImages.length > 0 || removedImageIds.length > 0)) {
+      setUploadingImages(true);
+      try {
+        const result = await persistParcelImages(
+          parcelId,
+          pendingImages,
+          removedImageIds,
+          uploadImage,
+          (id, payload) => parcelsApi.addImage(id, payload),
+          (id, imgId) => parcelsApi.removeImage(id, imgId),
+        );
+        if (result.errors.length > 0) {
+          toast.error(`Images : ${result.errors.length} erreur(s). ${result.errors[0]}`);
+        }
+        if (result.added > 0 || result.removed > 0) {
+          qc.invalidateQueries({ queryKey: ['parcels', parcelId, 'images'] });
+        }
+      } finally {
+        setUploadingImages(false);
+      }
+    }
+
     reset();
+    setPendingImages([]);
+    setRemovedImageIds([]);
     onClose();
   };
 
@@ -151,9 +220,13 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
           <AppButton
             type="submit"
             form="parcel-form"
-            loading={createMutation.isPending || updateMutation.isPending}
+            loading={createMutation.isPending || updateMutation.isPending || uploadingImages}
           >
-            {isEdit ? 'Enregistrer les modifications' : 'Enregistrer le colis'}
+            {uploadingImages
+              ? 'Upload des images...'
+              : isEdit
+                ? 'Enregistrer les modifications'
+                : 'Enregistrer le colis'}
           </AppButton>
         </>
       }
@@ -161,7 +234,29 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
       <form id="parcel-form" onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <AppInput label="Designation" {...register('designation')} error={errors.designation?.message} />
-          <AppInput label="Destination" {...register('destination')} error={errors.destination?.message} />
+
+          {/* Tracking fournisseur : code de suivi communique par le fournisseur
+              externe (Aliexpress, DHL, etc). Bouton camera pour scanner directement
+              le QR / code-barres. */}
+          <div className="flex items-end gap-2">
+            <div className="flex-1">
+              <AppInput
+                label="Tracking fournisseur (optionnel)"
+                placeholder="Code de suivi du fournisseur"
+                {...register('trackingFournisseur')}
+                error={(errors as any).trackingFournisseur?.message}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setScanFournisseurOpen(true)}
+              className="mb-px flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-500 transition-colors hover:border-primary-300 hover:bg-primary-50 hover:text-primary-700"
+              title="Scanner le code"
+              aria-label="Scanner le code"
+            >
+              <Camera className="h-4 w-4" />
+            </button>
+          </div>
 
           <div className="sm:col-span-2">
             <div className="mb-2 inline-flex rounded-xl border border-gray-200 p-0.5 text-xs">
@@ -279,17 +374,24 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
             )}
           />
 
-          {/* Audit fix #1 : destination structuree */}
+          {/* Agence de destination : obligatoire. La ville d'arrivee (champ
+              "destination" historique) est derivee automatiquement cote backend. */}
           <Controller
             control={control}
             name="destinationAgencyId"
             render={({ field }) => (
               <AppSearchSelect
-                label="Agence destination (optionnel)"
+                label="Agence de destination"
                 value={field.value || null}
-                onChange={(v) => field.onChange(v ?? null)}
+                onChange={(v) => {
+                  field.onChange(v ?? '');
+                  if (!v) setSelectedDestAgency(null);
+                }}
                 search={searchers.agencies}
-                placeholder="Selectionner une agence de reception"
+                selectedOption={selectedDestAgency}
+                error={(errors as any).destinationAgencyId?.message}
+                required
+                placeholder="Selectionner l'agence d'arrivee"
               />
             )}
           />
@@ -356,6 +458,15 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
           />
         </div>
 
+        {/* Photos du colis : geree dans le formulaire, uploadee apres save. */}
+        <ParcelImagesField
+          parcelId={parcel?.id ?? null}
+          pending={pendingImages}
+          onPendingChange={setPendingImages}
+          removed={removedImageIds}
+          onRemovedChange={setRemovedImageIds}
+        />
+
         {!isEdit && (
           <div className="rounded-xl bg-primary-50 p-4 text-sm text-primary-800">
             Le prix sera calcule automatiquement selon la route, la tarification partenaire (si applicable) et le palier de fidelite.
@@ -379,6 +490,16 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
           setRecipientCreatePromise(null);
           setRecipientCreateOpen(false);
         }}
+      />
+
+      <QRScannerDialog
+        open={scanFournisseurOpen}
+        onClose={() => setScanFournisseurOpen(false)}
+        onDetected={(decoded) => {
+          setValue('trackingFournisseur', decoded, { shouldDirty: true, shouldValidate: true });
+          setScanFournisseurOpen(false);
+        }}
+        title="Scanner le code fournisseur"
       />
     </AppDialog>
   );
