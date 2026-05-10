@@ -109,12 +109,19 @@ export const { handlers, signIn, signOut, auth }: any = NextAuth({
         return token;
       }
 
-      // 2) Force-refresh declenche par le client via useSession().update({ forceRefresh: true })
-      // (CSRF gere nativement par NextAuth, pas comme un raw fetch). Ce chemin est
-      // utilise par l'apiClient quand l'API rejette le token avant son exp local
-      // (revocation serveur, clock skew, redemarrage API avec nouveau secret...).
-      if (trigger === 'update' && (updateInput as any)?.forceRefresh) {
+      // 2) Force-refresh declenche par le client via useSession().update(...).
+      // Toute mise a jour cote client passe par SessionRefreshBridge qui demande
+      // un refresh -- on force donc la rotation des que trigger === 'update',
+      // sans dependre du payload `forceRefresh`. Ce payload n'est pas propage
+      // de maniere fiable jusqu'au callback dans NextAuth v5 beta + Next 16,
+      // ce qui laissait `accessTokenExpiresAt` dans le futur et faisait que le
+      // callback retournait le token inchange (symptome : 401-after-refresh
+      // boucle avec le meme accessToken jusqu'a redirect vers /login).
+      if (trigger === 'update') {
         (token as any).accessTokenExpiresAt = 0;
+        // On purge aussi l'eventuel `error` precedent : un blip API ne doit pas
+        // empoisonner les refresh suivants si l'API est revenue.
+        (token as any).error = undefined;
       }
 
       // 3) Token encore valide (avec marge de 60s) -> on garde

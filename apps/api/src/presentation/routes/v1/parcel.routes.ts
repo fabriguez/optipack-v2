@@ -73,10 +73,27 @@ router.get('/:id/label', async (req, res, next) => {
         recipient: { select: { fullName: true, phone: true } },
         warehouse: { include: { agency: { select: { name: true, city: true } } } },
         transitRoute: { select: { name: true, type: true } },
+        parcelGroup: { select: { id: true, reference: true } },
       },
     });
     if (!parcel) {
       return res.status(404).json({ success: false, message: 'Colis introuvable' });
+    }
+
+    // Calcul X/N pour les colis appartenant a un groupe : on liste les colis
+    // du groupe ordonnes par createdAt et on cherche l'index (1-based) du
+    // colis courant. N = nombre total de colis du groupe (non supprimes).
+    let groupIndex: number | null = null;
+    let groupSize: number | null = null;
+    if (parcel.parcelGroupId) {
+      const siblings = await prisma.parcel.findMany({
+        where: { parcelGroupId: parcel.parcelGroupId, isDeleted: false },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true },
+      });
+      groupSize = siblings.length;
+      const idx = siblings.findIndex((s) => s.id === parcel.id);
+      if (idx >= 0) groupIndex = idx + 1;
     }
 
     const qrBuffer = await QRCodeService.generateParcelQR(parcel.trackingNumber, parcel.id);
@@ -101,6 +118,9 @@ router.get('/:id/label', async (req, res, next) => {
         price: parcel.price ? Number(parcel.price) : null,
         isFragile: parcel.isFragile,
         isHazardous: parcel.isHazardous,
+        groupIndex,
+        groupSize,
+        groupReference: parcel.parcelGroup?.reference ?? null,
       },
       qrBuffer,
     );

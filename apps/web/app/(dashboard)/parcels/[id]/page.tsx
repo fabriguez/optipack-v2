@@ -16,6 +16,7 @@ import { AppBadge } from '@/components/ui/AppBadge';
 import { AppTabs } from '@/components/ui/AppTabs';
 import { AppInput } from '@/components/ui/AppInput';
 import { StatusBadge } from '@/components/shared/StatusBadge';
+import { ParcelStatusContext } from '@/components/shared/ParcelStatusContext';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import {
@@ -248,6 +249,70 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
           </AppCard>
         )}
 
+        {/* Note explicative des calculs : explique en langage clair comment
+            chaque montant a ete obtenu (transparence pour l'utilisateur). */}
+        <AppCard>
+          <AppCardHeader
+            title="Comprendre le calcul"
+            description="Detail des montants affiches sur ce colis."
+          />
+          <ul className="space-y-2 text-sm text-gray-700">
+            <li className="flex gap-2">
+              <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-primary-500" />
+              <span>
+                <strong>Prix du transport</strong> : <strong>{formatAmount(Number(parcel.price ?? 0))}</strong>.
+                Calcule a partir de la {parcel.weight && Number(parcel.weight) > 0 ? <>masse ({Number(parcel.weight).toFixed(1)} kg)</> : parcel.volume && Number(parcel.volume) > 0 ? <>volume ({Number(parcel.volume).toFixed(2)} m3)</> : 'pesee'}{' '}
+                multipliee par le tarif unitaire de la route
+                {parcel.transitRoute?.name && <> &laquo; {parcel.transitRoute.name} &raquo;</>}, ajuste par
+                la tarification partenaire client (si applicable) et le palier de fidelite.
+              </span>
+            </li>
+            {fee?.applicable && (
+              <li className="flex gap-2">
+                <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
+                <span>
+                  <strong>Frais de magasinage</strong> : <strong>{formatAmount(fee.totalFee)}</strong>.
+                  Calcul = (jours en stock <em>{fee.daysInWarehouse}</em> &minus; jours gratuits <em>{fee.freeDays}</em>) &times; tarif journalier <em>{formatAmount(fee.dailyRate)}</em>{' '}
+                  = {fee.chargeableDays} jour(s) factures.
+                  {fee.dailyRate === 0 && ' Le tarif est a 0 : aucun frais reel applique.'}
+                </span>
+              </li>
+            )}
+            {parcel.declaredValue != null && Number(parcel.declaredValue) > 0 && (
+              <li className="flex gap-2">
+                <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
+                <span>
+                  <strong>Valeur declaree</strong> : {formatAmount(Number(parcel.declaredValue))}.
+                  Sert de reference pour l&apos;assurance ; n&apos;est pas ajoutee au montant facture.
+                </span>
+              </li>
+            )}
+            {(parcel.isFragile || parcel.isHazardous) && (
+              <li className="flex gap-2">
+                <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" />
+                <span>
+                  <strong>Marquages speciaux</strong> :{' '}
+                  {parcel.isHazardous && 'marchandise dangereuse'}
+                  {parcel.isHazardous && parcel.isFragile && ' + '}
+                  {parcel.isFragile && 'fragile'}
+                  . Affiches sur l&apos;etiquette imprimee.
+                </span>
+              </li>
+            )}
+            <li className="flex gap-2">
+              <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-gray-400" />
+              <span>
+                <strong>Total a payer</strong> :{' '}
+                <strong>
+                  {formatAmount(Number(parcel.price ?? 0) + (fee?.applicable ? fee.totalFee : 0))}
+                </strong>{' '}
+                (transport{fee?.applicable ? ' + magasinage' : ''}). Les penalites eventuelles, si applicables, sont calculees
+                separement et facturees a la livraison.
+              </span>
+            </li>
+          </ul>
+        </AppCard>
+
         <AppCard>
           <AppCardHeader title="QR Code / Etiquette" />
           <div className="flex flex-col items-center gap-4">
@@ -396,11 +461,16 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
               <ArrowLeft className="h-5 w-5 text-gray-500" />
             </button>
             <div>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <h1 className="text-2xl font-bold text-gray-900">{parcel.designation}</h1>
                 <StatusBadge status={parcel.status} type="parcel" />
               </div>
               <p className="font-mono text-sm text-primary-600 mt-0.5">{parcel.trackingNumber}</p>
+              {/* Texte contextuel selon le statut, avec liens vers magasin /
+                  conteneur / agence selon le cas. */}
+              <div className="mt-1.5">
+                <ParcelStatusContext parcel={parcel} />
+              </div>
             </div>
           </div>
           <AppButton variant="outline" onClick={() => setEditOpen(true)}>

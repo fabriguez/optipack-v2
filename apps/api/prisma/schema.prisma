@@ -1849,7 +1849,14 @@ model ManifestLine {
   trackingNumber  String?
   designation     String
   clientName      String?
+  // Snapshot contact client au moment de l'emission. Indispensable pour les
+  // bordereaux destines a un transporteur tiers, qui doit pouvoir contacter
+  // l'expediteur sans dependre du systeme.
+  clientPhone     String?
+  clientEmail     String?
   recipientName   String?
+  recipientPhone  String?
+  recipientEmail  String?
   destinationCity String?
   weight          Decimal? @db.Decimal(15, 3)
   volume          Decimal? @db.Decimal(15, 3)

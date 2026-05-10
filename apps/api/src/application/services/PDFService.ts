@@ -56,7 +56,11 @@ interface ManifestParcel {
   destinationCity?: string | null;
   price: number;
   clientName?: string | null;
+  clientPhone?: string | null;
+  clientEmail?: string | null;
   recipientName?: string | null;
+  recipientPhone?: string | null;
+  recipientEmail?: string | null;
   advanceAmount?: number;
   balanceAmount?: number;
   status?: string;
@@ -443,16 +447,19 @@ export class PDFService {
       );
       y += 30;
     } else {
+      // Colonnes Client / Destinataire elargies pour accueillir le nom ligne 1
+      // + telephone ligne 2 + email ligne 3 (si present). Hauteur de ligne
+      // augmentee en consequence.
       const cols = [
         { label: '#', width: 18 },
-        { label: 'Tracking', width: 70 },
-        { label: 'Designation', width: 78 },
-        { label: 'Client', width: 70 },
-        { label: 'Destinataire', width: 70 },
-        { label: 'Ville', width: 60 },
-        { label: 'P/V', width: 45 },
-        { label: 'A payer', width: 55 },
-        { label: 'Avance', width: 50 },
+        { label: 'Tracking', width: 65 },
+        { label: 'Designation', width: 70 },
+        { label: 'Client', width: 95 },
+        { label: 'Destinataire', width: 95 },
+        { label: 'Ville', width: 50 },
+        { label: 'P/V', width: 40 },
+        { label: 'A payer', width: 50 },
+        { label: 'Avance', width: 45 },
       ];
       const tableWidth = cols.reduce((s, c) => s + c.width, 0);
 
@@ -467,9 +474,13 @@ export class PDFService {
 
       doc.fillColor(COLORS.dark).fontSize(7);
       parcels.forEach((p, i) => {
-        if (y > 700) { doc.addPage(); y = 50; }
+        // Hauteur dynamique : 1 ligne nom, +1 si phone, +1 si email (max 3).
+        const clientLines = 1 + (p.clientPhone ? 1 : 0) + (p.clientEmail ? 1 : 0);
+        const recipientLines = 1 + (p.recipientPhone ? 1 : 0) + (p.recipientEmail ? 1 : 0);
+        const lines = Math.max(clientLines, recipientLines, 1);
+        const rowH = Math.max(22, 8 + lines * 9);
+        if (y + rowH > 720) { doc.addPage(); y = 50; }
         const bg = i % 2 === 0 ? COLORS.white : COLORS.lightGray;
-        const rowH = 22;
         doc.rect(50, y, tableWidth, rowH).fill(bg);
         doc.fillColor(COLORS.dark);
         xCol = 55;
@@ -480,19 +491,48 @@ export class PDFService {
             ? `${Number(p.volume)} m3`
             : '-';
 
-        const row: string[] = [
+        // Pour la cellule client/destinataire on rend les lignes manuellement
+        // pour controler le rendu (sinon PDFKit retourne a la ligne sur l'espace
+        // entre le nom et le numero).
+        const clientCellLines: string[] = [
+          p.clientName || '-',
+          ...(p.clientPhone ? [p.clientPhone] : []),
+          ...(p.clientEmail ? [p.clientEmail] : []),
+        ];
+        const recipientCellLines: string[] = [
+          p.recipientName || '-',
+          ...(p.recipientPhone ? [p.recipientPhone] : []),
+          ...(p.recipientEmail ? [p.recipientEmail] : []),
+        ];
+
+        const simpleRow: Array<string | string[]> = [
           String(i + 1),
           p.trackingNumber || '-',
           p.designation || '-',
-          p.clientName || '-',
-          p.recipientName || '-',
+          clientCellLines,
+          recipientCellLines,
           p.destinationCity || p.destination || '-',
           pv,
           formatCurrency(Number(p.price) || 0),
           formatCurrency(Number(p.advanceAmount) || 0),
         ];
         for (let c = 0; c < cols.length; c++) {
-          doc.text(row[c], xCol, y + 6, { width: cols[c].width - 2, lineBreak: false, ellipsis: true });
+          const cell = simpleRow[c];
+          const w = cols[c].width - 2;
+          if (Array.isArray(cell)) {
+            // Ligne 1 : nom (gras) ; lignes suivantes : phone/email en gris.
+            cell.forEach((line, idx) => {
+              if (idx === 0) {
+                doc.fillColor(COLORS.dark).font('Helvetica-Bold');
+              } else {
+                doc.fillColor(COLORS.gray).font('Helvetica');
+              }
+              doc.text(line, xCol, y + 5 + idx * 9, { width: w, lineBreak: false, ellipsis: true });
+            });
+            doc.font('Helvetica').fillColor(COLORS.dark);
+          } else {
+            doc.text(cell, xCol, y + 6, { width: w, lineBreak: false, ellipsis: true });
+          }
           xCol += cols[c].width;
         }
         y += rowH;
@@ -635,6 +675,11 @@ export class PDFService {
       // et signales par une bordure speciale autour du PDF.
       isFragile?: boolean;
       isHazardous?: boolean;
+      // Position dans le groupe : index (1-based) et taille totale du groupe.
+      // Si fournis, un badge "X/N" s'affiche dans l'en-tete (ex: "2/3").
+      groupIndex?: number | null;
+      groupSize?: number | null;
+      groupReference?: string | null;
     },
     qrBuffer: Buffer,
   ): Promise<Buffer> {
@@ -701,9 +746,33 @@ export class PDFService {
       18, topOffset + 7, { width: w - 6, align: 'center' },
     );
 
+    // Badge "X/N" pour un colis appartenant a un groupe : carre blanc en haut
+    // a droite du header pour rester visible meme si l'etiquette est partiellement
+    // collee (lisible de loin sur le quai d'expedition).
+    if (parcel.groupIndex && parcel.groupSize && parcel.groupSize > 1) {
+      const badgeW = 38;
+      const badgeH = 22;
+      const badgeX = 15 + w - badgeW - 4;
+      const badgeY = topOffset + 3;
+      doc.rect(badgeX, badgeY, badgeW, badgeH).fill(COLORS.white);
+      doc.rect(badgeX, badgeY, badgeW, badgeH).strokeColor(COLORS.primary).lineWidth(1).stroke();
+      doc.fontSize(11).fillColor(COLORS.primary).text(
+        `${parcel.groupIndex}/${parcel.groupSize}`,
+        badgeX, badgeY + 5, { width: badgeW, align: 'center' },
+      );
+    }
+
     // QR code (decale si bandeaux)
     const qrY = topOffset + 32;
     doc.image(qrBuffer, 92, qrY, { width: 100 });
+
+    // Reference du groupe (sous le QR, petit) si applicable.
+    if (parcel.groupReference && parcel.groupSize && parcel.groupSize > 1) {
+      doc.fontSize(7).fillColor(COLORS.gray).text(
+        `Groupe : ${parcel.groupReference}`,
+        15, topOffset + 132, { width: w, align: 'center' },
+      );
+    }
 
     // Tracking number
     const trackingY = topOffset + 138;

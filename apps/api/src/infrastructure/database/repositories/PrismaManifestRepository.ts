@@ -180,8 +180,8 @@ export class PrismaManifestRepository implements IManifestRepository {
       where: { ...where, isDeleted: false },
       orderBy: { trackingNumber: 'asc' },
       include: {
-        client: { select: { fullName: true } },
-        recipient: { select: { fullName: true } },
+        client: { select: { fullName: true, phone: true, email: true } },
+        recipient: { select: { fullName: true, phone: true, email: true } },
         destinationAgency: { select: { city: true } },
         invoice: {
           select: {
@@ -224,7 +224,11 @@ export class PrismaManifestRepository implements IManifestRepository {
         trackingNumber: parcel.trackingNumber,
         designation: parcel.designation,
         clientName: parcel.client?.fullName ?? null,
+        clientPhone: parcel.client?.phone ?? null,
+        clientEmail: parcel.client?.email ?? null,
         recipientName: parcel.recipient?.fullName ?? null,
+        recipientPhone: parcel.recipient?.phone ?? null,
+        recipientEmail: parcel.recipient?.email ?? null,
         destinationCity: parcel.destinationAgency?.city ?? parcel.destination ?? null,
         weight: parcel.weight ?? null,
         volume: parcel.volume ?? null,

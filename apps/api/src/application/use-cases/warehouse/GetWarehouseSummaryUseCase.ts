@@ -38,7 +38,11 @@ export class GetWarehouseSummaryUseCase {
       where: {
         warehouseId,
         isDeleted: false,
-        status: 'IN_STOCK',
+        // "Physiquement present dans ce magasin" = IN_STOCK (cree ici) OU
+        // RECEIVED (decharge ici depuis un conteneur). Doit rester aligne avec
+        // le filtre `onlyPresent` du repository (PrismaParcelRepository), sinon
+        // le compteur du summary diverge de la liste affichee sur la page.
+        status: { in: ['IN_STOCK', 'RECEIVED'] },
         isPresent: true,
       },
       select: {
