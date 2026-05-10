@@ -38,22 +38,16 @@ const FAILURE_THRESHOLD = 3;
 
 async function performRefresh(): Promise<string | null> {
   authLog('refresh.start');
-  // Strategie en 2 temps :
-  //
-  // 1) Si window.__forceSessionRefresh est dispo (le SessionRefreshBridge est
-  //    monte dans le dashboard layout), on declenche un VRAI refresh via
-  //    useSession().update({ forceRefresh: true }). Ca pose
-  //    accessTokenExpiresAt=0 dans le jwt callback (auth.ts), ce qui force
-  //    l'appel a /auth/refresh meme si le token semble encore valide
-  //    localement. C'est le cas critique quand l'API rejette le token avant
-  //    son exp local (revocation serveur, clock skew, redemarrage API).
-  //    Le CSRF est gere nativement par NextAuth ici (pas de raw fetch).
-  //
-  // 2) Sinon (ex: route hors dashboard), fallback sur getSession() qui ne
-  //    refresh que si exp local depasse.
+  // Strategie : on appelle update({forceRefresh: true}) via le bridge, et on
+  // utilise DIRECTEMENT la session retournee par update() au lieu de refaire
+  // un getSession() apres coup. Le getSession() post-update peut renvoyer
+  // une valeur cachee (race entre la mise a jour cookie et la lecture), ce
+  // qui produit le symptome "le tokenSuffix ne change pas apres refresh"
+  // observe en prod sur iOS.
+  let updatedSession: any = null;
   if (typeof window !== 'undefined' && window.__forceSessionRefresh) {
     try {
-      await window.__forceSessionRefresh();
+      updatedSession = await window.__forceSessionRefresh();
       authLog('refresh.forced-via-bridge');
     } catch (e) {
       authLog('refresh.force-bridge-failed', { err: String(e) });
@@ -62,7 +56,9 @@ async function performRefresh(): Promise<string | null> {
     authLog('refresh.bridge-unavailable');
   }
 
-  const session = await getSession();
+  // Si update() a renvoye une session, on l'utilise telle quelle. Sinon
+  // fallback sur getSession() (route hors dashboard, bridge indisponible).
+  const session = updatedSession ?? (await getSession());
   const newToken = (session as any)?.accessToken as string | undefined;
   const sessionError = (session as any)?.error as string | undefined;
 
@@ -74,7 +70,10 @@ async function performRefresh(): Promise<string | null> {
     authLog('refresh.no-token');
     return null;
   }
-  authLog('refresh.ok', { tokenSuffix: newToken.slice(-12) });
+  authLog('refresh.ok', {
+    tokenSuffix: newToken.slice(-12),
+    via: updatedSession ? 'update-return' : 'getSession-fallback',
+  });
   return newToken;
 }
 
@@ -150,12 +149,20 @@ apiClient.interceptors.response.use(
         // rejette quand meme. On compte les echecs avant de signOut pour eviter
         // une deco trop agressive sur un blip reseau.
         postRefreshFailures += 1;
-        authLog('401.same-token-after-refresh', { count: postRefreshFailures });
+        authLog('401.same-token-after-refresh', {
+          count: postRefreshFailures,
+          oldSuffix: oldToken?.slice(-12),
+          newSuffix: newToken.slice(-12),
+        });
         if (postRefreshFailures >= FAILURE_THRESHOLD) {
           redirectToLogin('repeated-401-after-refresh');
         }
         return Promise.reject(error);
       }
+      // Reset du compteur des qu'on a un VRAI nouveau token (sinon il s'accumule
+      // entre des echecs de refresh espaces, ce qui declenche un signOut
+      // surprise sur le 2e cycle).
+      postRefreshFailures = 0;
 
       authLog('401.retry-with-new-token', { url });
       original.headers = {

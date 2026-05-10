@@ -222,7 +222,7 @@ interface CameraCaptureDialogProps {
   initialFacing: 'user' | 'environment';
 }
 
-function CameraCaptureDialog({ open, onClose, onCapture, initialFacing }: CameraCaptureDialogProps) {
+export function CameraCaptureDialog({ open, onClose, onCapture, initialFacing }: CameraCaptureDialogProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [facing, setFacing] = useState<'user' | 'environment'>(initialFacing);

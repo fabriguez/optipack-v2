@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { ImagePlus, X, Camera, Loader2 } from 'lucide-react';
+import { ImagePlus, X, Camera } from 'lucide-react';
 import { toast } from 'sonner';
 import { AuthedImage } from '@/components/shared/AuthedImage';
-import { AppInput } from '@/components/ui/AppInput';
+import { CameraCaptureDialog } from '@/components/shared/ImageInput';
 import { useParcelImages } from '@/lib/hooks/useParcels';
 import type { ParcelImage } from '@/lib/api/parcels';
 
@@ -46,6 +46,7 @@ export function ParcelImagesField({
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
 
   // Cleanup des object URLs quand le composant se demonte ou quand on retire un fichier.
   useEffect(() => {
@@ -185,16 +186,37 @@ export function ParcelImagesField({
           </div>
         ))}
 
-        {/* Bouton ajouter */}
+        {/* Bouton fichier */}
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
           className="flex aspect-square flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-gray-300 text-xs text-gray-500 hover:border-primary-400 hover:bg-primary-50/30"
         >
           <ImagePlus className="h-6 w-6" />
-          Ajouter
+          Fichier
+        </button>
+
+        {/* Bouton camera */}
+        <button
+          type="button"
+          onClick={() => setCameraOpen(true)}
+          className="flex aspect-square flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-gray-300 text-xs text-gray-500 hover:border-primary-400 hover:bg-primary-50/30"
+        >
+          <Camera className="h-6 w-6" />
+          Camera
         </button>
       </div>
+
+      <CameraCaptureDialog
+        open={cameraOpen}
+        onClose={() => setCameraOpen(false)}
+        onCapture={(file) => {
+          // Reutilise la pipeline standard d'ajout (validation + preview + caption).
+          addFiles([file]);
+          setCameraOpen(false);
+        }}
+        initialFacing="environment"
+      />
 
       <input
         ref={inputRef}
