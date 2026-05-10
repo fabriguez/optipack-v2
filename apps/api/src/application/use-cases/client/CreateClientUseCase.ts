@@ -12,9 +12,13 @@ export class CreateClientUseCase {
   ) {}
 
   async execute(input: CreateClientInput, organizationId: string) {
-    const agency = await this.agencyRepo.findById(input.agencyId);
-    if (!agency) {
-      throw new NotFoundError('Agence', input.agencyId);
+    // Agence d'enregistrement optionnelle : un client appartient a
+    // l'organisation, pas a une agence. Si fournie, on valide qu'elle existe.
+    if (input.agencyId) {
+      const agency = await this.agencyRepo.findById(input.agencyId);
+      if (!agency) {
+        throw new NotFoundError('Agence', input.agencyId);
+      }
     }
 
     const existing = await this.clientRepo.findByPhone(input.phone);
@@ -28,7 +32,7 @@ export class CreateClientUseCase {
       email: input.email || null,
       address: input.address || null,
       organizationId,
-      agency: { connect: { id: input.agencyId } },
+      ...(input.agencyId && { agency: { connect: { id: input.agencyId } } }),
       ...(input.clientType && { clientType: input.clientType }),
       ...(input.loyaltyTier && { loyaltyTier: input.loyaltyTier }),
       ...(input.isActive !== undefined && { isActive: input.isActive }),

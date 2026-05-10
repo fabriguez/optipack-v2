@@ -1002,7 +1002,11 @@ model Payslip {
 model Client {
   id                String      @id @default(uuid())
   organizationId    String
-  agencyId          String
+  // Agence d'enregistrement (optionnel) : trace l'agence qui a cree le client.
+  // Un client appartient a l'organisation, pas a une agence : il peut etre
+  // expediteur/destinataire dans n'importe quelle agence du tenant. Ce champ
+  // sert d'audit + de pre-remplissage UX, pas de cloison metier.
+  agencyId          String?
   fullName          String
   phone             String      @unique
   email             String?
@@ -1030,7 +1034,7 @@ model Client {
   isPortalActive Boolean @default(false)
 
   organization        Organization[]
-  agency              Agency               @relation(fields: [agencyId], references: [id])
+  agency              Agency?              @relation(fields: [agencyId], references: [id])
   parcels             Parcel[]             @relation("ParcelClient")
   parcelsAsRecipient  Parcel[]             @relation("ParcelRecipient")
   invoices            Invoice[]

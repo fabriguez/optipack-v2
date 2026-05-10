@@ -13,7 +13,9 @@ export const createClientSchema = z.object({
   phone: z.string().min(8, 'Numero de telephone invalide'),
   email: z.string().email('Email invalide').optional().or(z.literal('')),
   address: z.string().optional().or(z.literal('')),
-  agencyId: z.string().uuid('ID agence invalide'),
+  // Agence d'enregistrement optionnelle. Un client appartient a l'organisation,
+  // pas a une agence : ce champ trace juste qui l'a cree.
+  agencyId: z.string().uuid('ID agence invalide').optional().nullable(),
   clientType: z
     .enum([ClientType.INDIVIDUAL, ClientType.COMPANY, ClientType.PARTNER])
     .optional()
