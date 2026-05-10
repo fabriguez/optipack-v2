@@ -137,14 +137,30 @@ export function ParcelStatusContext({ parcel }: { parcel: ParcelLike }) {
         </div>
       );
 
-    case 'DELIVERED':
+    case 'DELIVERED': {
+      // Le nom du destinataire (ou du client si pas de destinataire distinct)
+      // doit etre cliquable et pointer vers sa fiche client. Les destinataires
+      // sont des Client dans le schema, donc meme route /clients/:id.
+      const target = parcel.recipient ?? parcel.client ?? null;
+      const targetName = target?.fullName ?? '(destinataire)';
+      const targetId = target?.id ?? null;
       return (
         <div className="text-sm text-gray-600 flex flex-wrap items-center gap-1">
           <span className="text-gray-500">Livre a</span>
-          <span className="font-semibold text-gray-900">
-            <User className="inline h-3.5 w-3.5 mr-0.5" />
-            {parcel.recipient?.fullName ?? parcel.client?.fullName ?? '(destinataire)'}
-          </span>
+          {targetId ? (
+            <Link
+              href={`/clients/${targetId}`}
+              className="font-semibold text-primary-700 hover:underline"
+            >
+              <User className="inline h-3.5 w-3.5 mr-0.5" />
+              {targetName}
+            </Link>
+          ) : (
+            <span className="font-semibold text-gray-900">
+              <User className="inline h-3.5 w-3.5 mr-0.5" />
+              {targetName}
+            </span>
+          )}
           {parcel.recipient?.phone && (
             <span className="text-gray-500">({parcel.recipient.phone})</span>
           )}
@@ -155,6 +171,7 @@ export function ParcelStatusContext({ parcel }: { parcel: ParcelLike }) {
           )}
         </div>
       );
+    }
 
     case 'LOST':
       return <div className="text-sm text-red-700">Colis perdu / non retrouve</div>;
