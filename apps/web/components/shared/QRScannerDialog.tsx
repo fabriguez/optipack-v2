@@ -263,6 +263,12 @@ export function QRScannerDialog({
       try {
         const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import('html5-qrcode');
         if (!aliveRef.current || !fallbackHostRef.current) return;
+        // iOS Safari : html5-qrcode attache un <video> au host. Si le host est
+        // encore display:none (avant commit React), inst.start() peut ne jamais
+        // resoudre. On attend deux rAF pour garantir que le DOM est layoute.
+        await new Promise<void>((r) => requestAnimationFrame(() => r()));
+        await new Promise<void>((r) => requestAnimationFrame(() => r()));
+        if (!aliveRef.current || !fallbackHostRef.current) return;
 
         const hostId = `qr-fallback-host-${Math.random().toString(36).slice(2, 8)}`;
         fallbackHostRef.current.id = hostId;
@@ -306,6 +312,7 @@ export function QRScannerDialog({
         }
         if (videoRef.current) videoRef.current.srcObject = null;
 
+        scanLog('html5qr.start.before', { hostId, facing });
         await inst.start(
           { facingMode: { ideal: facing } } as MediaTrackConstraints,
           {
@@ -318,6 +325,7 @@ export function QRScannerDialog({
           (decodedText: string) => handleDetected(decodedText),
           () => {},
         );
+        scanLog('html5qr.start.after');
         // Si fermeture s'est produite pendant inst.start, on stoppe immediatement.
         if (!aliveRef.current) {
           try {
@@ -335,6 +343,7 @@ export function QRScannerDialog({
         }
         safe.setRunning(true);
       } catch (e: any) {
+        scanLog('html5qr.start.error', { name: e?.name, msg: e?.message });
         if (!aliveRef.current) return;
         safe.setError(e?.message || 'Impossible de demarrer le scanner.');
         safe.setRunning(false);
@@ -399,14 +408,29 @@ export function QRScannerDialog({
             playsInline
             muted
             autoPlay
-            className={`h-auto w-full ${usingFallback ? 'hidden' : ''}`}
-            style={{ minHeight: 280 }}
+            className="h-auto w-full"
+            style={{
+              minHeight: 280,
+              // iOS Safari : on evite display:none (qui peut casser getUserMedia
+              // attache) en utilisant visibility/opacity. Le host fallback reste
+              // toujours dans le flux quand actif.
+              visibility: usingFallback ? 'hidden' : 'visible',
+              position: usingFallback ? 'absolute' : 'static',
+              inset: usingFallback ? 0 : undefined,
+              pointerEvents: usingFallback ? 'none' : undefined,
+            }}
           />
-          {/* Host pour html5-qrcode (fallback) */}
+          {/* Host pour html5-qrcode (fallback). Toujours monte ; on ajuste juste
+              les dimensions visibles selon le mode pour eviter les races
+              display:none -> inst.start qui ne resout jamais sur iOS. */}
           <div
             ref={fallbackHostRef}
-            className={usingFallback ? 'block w-full' : 'hidden'}
-            style={{ minHeight: 280 }}
+            className="w-full"
+            style={{
+              minHeight: usingFallback ? 280 : 0,
+              height: usingFallback ? 'auto' : 0,
+              overflow: 'hidden',
+            }}
           />
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <div className="rounded-lg border-2 border-primary-400/80" style={{ width: '70%', height: '40%' }} />
