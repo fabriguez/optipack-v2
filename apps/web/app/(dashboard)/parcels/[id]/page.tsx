@@ -6,7 +6,9 @@ import Link from 'next/link';
 import {
   ArrowLeft, Package, MapPin, User, Truck, FileText, Clock,
   CreditCard, Edit, History, Warehouse, Route, Printer, ImageIcon, Plus, Trash2,
+  Banknote,
 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard, AppCardHeader } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
@@ -77,6 +79,29 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
   const parcel = data?.data;
   const history = historyData?.data || [];
   const images = imagesData?.data || [];
+
+  // Frais de magasinage : calcules cote backend (jours en stock - jours gratuits)
+  // x tarif journalier du magasin courant. Applicable seulement si le colis
+  // est issu d'un dechargement de conteneur.
+  const { data: storageFeeData } = useQuery({
+    queryKey: ['parcels', id, 'storage-fee'],
+    queryFn: () => apiClient.get(`/parcels/${id}/storage-fee`).then((r) => r.data?.data),
+    enabled: !!parcel,
+    staleTime: 60_000,
+  });
+  const fee = storageFeeData as
+    | {
+        applicable: boolean;
+        reason?: string;
+        daysInWarehouse: number;
+        freeDays: number;
+        chargeableDays: number;
+        dailyRate: number;
+        totalFee: number;
+        enteredAt: string | null;
+        warehouseName: string | null;
+      }
+    | undefined;
 
   const handlePrintLabel = async () => {
     try {
@@ -183,6 +208,43 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
                 </Link>
               </div>
             </div>
+          </AppCard>
+        )}
+
+        {/* Frais de magasinage : visible uniquement quand le calcul est applicable
+            (colis issu d'un conteneur). On affiche aussi le breakdown pour comprendre
+            pourquoi le total est ce qu'il est. */}
+        {fee && (
+          <AppCard>
+            <AppCardHeader
+              title="Frais de magasinage"
+              description={fee.applicable ? fee.warehouseName ?? undefined : fee.reason}
+            />
+            {fee.applicable ? (
+              <div className="space-y-2">
+                <div className="flex items-baseline justify-between rounded-xl bg-primary-50 p-3">
+                  <span className="inline-flex items-center gap-2 text-sm text-primary-700">
+                    <Banknote className="h-4 w-4" />
+                    Total a facturer
+                  </span>
+                  <span className="text-lg font-bold text-primary-800">
+                    {formatAmount(fee.totalFee)}
+                  </span>
+                </div>
+                <Row label="Entree en magasin" value={fee.enteredAt ? formatDate(fee.enteredAt) : '-'} />
+                <Row label="Jours en stock" value={String(fee.daysInWarehouse)} />
+                <Row label="Jours gratuits" value={String(fee.freeDays)} />
+                <Row label="Jours factures" value={String(fee.chargeableDays)} />
+                <Row label="Tarif / jour" value={formatAmount(fee.dailyRate)} />
+                {fee.dailyRate === 0 && (
+                  <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-800">
+                    Le tarif journalier de ce magasin est a 0. Configurez-le dans la fiche magasin pour activer la facturation.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">{fee.reason || 'Non applicable.'}</p>
+            )}
           </AppCard>
         )}
 

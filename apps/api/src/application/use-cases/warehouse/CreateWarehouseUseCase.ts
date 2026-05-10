@@ -7,6 +7,8 @@ interface CreateWarehouseInput {
   name: string;
   agencyId: string;
   location: string;
+  storageFreeDays?: number;
+  storageDailyRate?: number;
 }
 
 @injectable()
@@ -26,6 +28,8 @@ export class CreateWarehouseUseCase {
       name: input.name,
       location: input.location,
       agency: { connect: { id: input.agencyId } },
+      ...(input.storageFreeDays !== undefined && { storageFreeDays: input.storageFreeDays }),
+      ...(input.storageDailyRate !== undefined && { storageDailyRate: input.storageDailyRate }),
     });
   }
 }

@@ -94,6 +94,8 @@ router.get('/:id/label', async (req, res, next) => {
           : null,
         observation: parcel.observation ?? null,
         price: parcel.price ? Number(parcel.price) : null,
+        isFragile: parcel.isFragile,
+        isHazardous: parcel.isHazardous,
       },
       qrBuffer,
     );

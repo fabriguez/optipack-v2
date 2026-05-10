@@ -24,6 +24,7 @@ import { apiClient } from '@/lib/api/client';
 import { formatAmount, formatDate, formatDurationSince } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
 import { ParcelFormDialog } from '../../parcels/ParcelFormDialog';
+import { WarehouseFormDialog } from '../WarehouseFormDialog';
 import { AgencyAvatar } from '@/components/shared/AgencyAvatar';
 import { SpacesSection } from './SpacesSection';
 import { MoveToSpaceDialog } from './MoveToSpaceDialog';
@@ -43,6 +44,7 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
   const [handoverParcel, setHandoverParcel] = useState<any | null>(null);
   const [showUntrackedHandover, setShowUntrackedHandover] = useState(false);
   const [moveSpaceParcel, setMoveSpaceParcel] = useState<any | null>(null);
+  const [editWarehouseOpen, setEditWarehouseOpen] = useState(false);
   // Batch scan : ajout / retrait de colis existants par scan QR.
   const [batchAddOpen, setBatchAddOpen] = useState(false);
   const [batchAddCodes, setBatchAddCodes] = useState<string[]>([]);
@@ -305,7 +307,7 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
               <AgencyAvatar agency={warehouse.agency} size={48} rounded="lg" />
             </Link>
           )}
-          <div>
+          <div className="flex-1">
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold text-gray-900">{warehouse.name}</h1>
               <AppBadge variant={warehouse.isActive ? 'success' : 'error'}>{warehouse.isActive ? 'Actif' : 'Inactif'}</AppBadge>
@@ -322,7 +324,33 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
               )}
             </p>
           </div>
+          <AppButton variant="outline" size="sm" onClick={() => setEditWarehouseOpen(true)}>
+            <Edit className="h-3.5 w-3.5" />
+            Modifier
+          </AppButton>
         </div>
+
+        {/* Frais de magasinage : on affiche la config courante pour que l'utilisateur
+            sache si la facturation est active sur ce magasin. */}
+        <AppCard>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-gray-400">Frais de magasinage</p>
+              <p className="mt-1 text-sm text-gray-700">
+                {warehouse.storageDailyRate && Number(warehouse.storageDailyRate) > 0 ? (
+                  <>
+                    <span className="font-bold text-primary-700">
+                      {formatAmount(Number(warehouse.storageDailyRate))}/jour
+                    </span>
+                    {' '}apres {warehouse.storageFreeDays ?? 0} jour(s) gratuits
+                  </>
+                ) : (
+                  <span className="text-amber-700">Tarif a 0 — pas de facturation. Cliquez Modifier pour configurer.</span>
+                )}
+              </p>
+            </div>
+          </div>
+        </AppCard>
 
         {(() => {
           const summary = summaryData?.data;
@@ -530,6 +558,12 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
             ? { agencyId: warehouse.agency.id, warehouseId: id }
             : null
         }
+      />
+
+      <WarehouseFormDialog
+        open={editWarehouseOpen}
+        onClose={() => setEditWarehouseOpen(false)}
+        warehouse={warehouse}
       />
 
       <ParcelFormDialog

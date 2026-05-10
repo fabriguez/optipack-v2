@@ -51,6 +51,16 @@ const STATUS_LABELS: Record<string, string> = {
   UNLOADED: 'Decharge',
 };
 
+// Sequence canonique des statuts conteneur, utilisee par le stepper.
+const CONTAINER_STATUS_STEPS = ['EMPTY', 'LOADING', 'IN_TRANSIT', 'RECEIVED', 'UNLOADED'] as const;
+const CONTAINER_STEP_LABELS: Record<string, string> = {
+  EMPTY: 'Vide',
+  LOADING: 'Chargement',
+  IN_TRANSIT: 'En transit',
+  RECEIVED: 'Receptionne',
+  UNLOADED: 'Decharge',
+};
+
 const TYPE_LABELS: Record<string, string> = {
   AIR: 'Aerien',
   SEA: 'Maritime',
@@ -586,6 +596,42 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
             )}
           </div>
         </div>
+
+        {/* Stepper du statut conteneur (analogue a celui des colis pour montrer
+            la progression visuellement). Statuts canoniques :
+            EMPTY -> LOADING -> IN_TRANSIT -> RECEIVED -> UNLOADED. */}
+        <AppCard>
+          <div className="flex items-center justify-between px-2">
+            {CONTAINER_STATUS_STEPS.map((step, i) => {
+              const currentIdx = CONTAINER_STATUS_STEPS.indexOf(container.status);
+              const isCompleted = i <= currentIdx;
+              const isCurrent = i === currentIdx;
+              return (
+                <div key={step} className="flex flex-1 items-center">
+                  <div className="flex flex-col items-center">
+                    <div
+                      className={`flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold transition-all ${
+                        isCompleted ? 'bg-primary-500 text-white' : 'bg-gray-200 text-gray-400'
+                      } ${isCurrent ? 'ring-4 ring-primary-100 scale-110' : ''}`}
+                    >
+                      {i + 1}
+                    </div>
+                    <span
+                      className={`mt-2 text-[10px] font-medium ${isCompleted ? 'text-primary-700' : 'text-gray-400'}`}
+                    >
+                      {CONTAINER_STEP_LABELS[step]}
+                    </span>
+                  </div>
+                  {i < CONTAINER_STATUS_STEPS.length - 1 && (
+                    <div
+                      className={`mx-2 h-0.5 flex-1 rounded-full ${i < currentIdx ? 'bg-primary-500' : 'bg-gray-200'}`}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </AppCard>
 
         <AppTabs
           tabs={[

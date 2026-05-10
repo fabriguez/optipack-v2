@@ -631,35 +631,95 @@ export class PDFService {
       agencyName?: string | null;
       observation?: string | null;
       price?: number | null;
+      // Marquages speciaux pour la manutention. Affiches en haut de l'etiquette
+      // et signales par une bordure speciale autour du PDF.
+      isFragile?: boolean;
+      isHazardous?: boolean;
     },
     qrBuffer: Buffer,
   ): Promise<Buffer> {
     const doc = new PDFDocument({ size: [283, 425], margin: 15 }); // ~100x150mm label
     const w = 283 - 30;
+    const pageW = 283;
+    const pageH = 425;
+
+    // ----- Bordure speciale fragile / dangereux ------
+    // Hazardous = bordure rouge double + bandes diagonales hachurees
+    // (TRANSPORT DE MARCHANDISES DANGEREUSES bien visible).
+    if (parcel.isHazardous) {
+      // Double bordure rouge
+      doc.rect(2, 2, pageW - 4, pageH - 4).strokeColor('#C62828').lineWidth(2.5).stroke();
+      doc.rect(7, 7, pageW - 14, pageH - 14).strokeColor('#C62828').lineWidth(1).stroke();
+      // Hachures diagonales sur les coins (motif "danger")
+      const stripeStep = 8;
+      doc.strokeColor('#C62828').lineWidth(1.5);
+      // coin haut-gauche
+      for (let i = 0; i < 30; i += stripeStep) {
+        doc.moveTo(2 + i, 2).lineTo(2, 2 + i).stroke();
+      }
+      // coin haut-droit
+      for (let i = 0; i < 30; i += stripeStep) {
+        doc.moveTo(pageW - 2 - i, 2).lineTo(pageW - 2, 2 + i).stroke();
+      }
+      // coin bas-gauche
+      for (let i = 0; i < 30; i += stripeStep) {
+        doc.moveTo(2, pageH - 2 - i).lineTo(2 + i, pageH - 2).stroke();
+      }
+      // coin bas-droit
+      for (let i = 0; i < 30; i += stripeStep) {
+        doc.moveTo(pageW - 2, pageH - 2 - i).lineTo(pageW - 2 - i, pageH - 2).stroke();
+      }
+    } else if (parcel.isFragile) {
+      // Bordure orange-jaune simple (manipulation prudente, pas dangereux).
+      doc.rect(3, 3, pageW - 6, pageH - 6).strokeColor('#F57C00').lineWidth(2).stroke();
+    }
+
+    // ----- Bandeaux d'alerte (fragile + hazardous) en haut, AVANT le header -----
+    // On decale le contenu vers le bas si une bande est presente.
+    let topOffset = 10;
+    if (parcel.isHazardous) {
+      doc.rect(15, topOffset, w, 16).fill('#C62828');
+      doc.fontSize(9).fillColor(COLORS.white).text(
+        '!!  MARCHANDISE DANGEREUSE  !!',
+        15, topOffset + 4, { width: w, align: 'center' },
+      );
+      topOffset += 18;
+    }
+    if (parcel.isFragile) {
+      doc.rect(15, topOffset, w, 16).fill('#F57C00');
+      doc.fontSize(9).fillColor(COLORS.white).text(
+        'FRAGILE - MANIPULER AVEC SOIN',
+        15, topOffset + 4, { width: w, align: 'center' },
+      );
+      topOffset += 18;
+    }
 
     // Header
-    doc.rect(15, 10, w, 28).fill(COLORS.primary);
+    doc.rect(15, topOffset, w, 28).fill(COLORS.primary);
     doc.fontSize(12).fillColor(COLORS.white).text(
       'TRANSITSOFTSERVICES',
-      18, 17, { width: w - 6, align: 'center' },
+      18, topOffset + 7, { width: w - 6, align: 'center' },
     );
 
-    // QR code
-    doc.image(qrBuffer, 92, 42, { width: 100 });
+    // QR code (decale si bandeaux)
+    const qrY = topOffset + 32;
+    doc.image(qrBuffer, 92, qrY, { width: 100 });
 
     // Tracking number
+    const trackingY = topOffset + 138;
     doc.fontSize(11).fillColor(COLORS.dark).text(
       parcel.trackingNumber,
-      15, 148, { width: w, align: 'center' },
+      15, trackingY, { width: w, align: 'center' },
     );
 
     // Separator
-    doc.moveTo(20, 165).lineTo(15 + w - 5, 165).strokeColor(COLORS.lightGray).lineWidth(0.5).stroke();
+    const sepY = topOffset + 155;
+    doc.moveTo(20, sepY).lineTo(15 + w - 5, sepY).strokeColor(COLORS.lightGray).lineWidth(0.5).stroke();
 
     // Pesee / mesure
     const pv = parcel.weight != null ? `${Number(parcel.weight)} kg` : parcel.volume != null ? `${Number(parcel.volume)} m3` : '-';
 
-    let y = 172;
+    let y = topOffset + 162;
     const lines: [string, string][] = [
       ['Designation', parcel.designation],
       ['Pesee', pv],
