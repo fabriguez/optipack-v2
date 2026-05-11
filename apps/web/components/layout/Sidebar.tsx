@@ -143,7 +143,7 @@ function NavSection({
       <div
         className={cn(
           'overflow-hidden transition-all duration-200',
-          !collapsed && !open ? 'max-h-0 opacity-0' : 'max-h-[500px] opacity-100',
+          !collapsed && !open ? 'max-h-0 opacity-0' : 'max-h-125 opacity-100',
         )}
       >
         <nav className="flex flex-col gap-0.5 px-2 pb-2">
@@ -194,10 +194,10 @@ export function Sidebar() {
         'top-0 z-40 flex h-screen shrink-0 flex-col bg-sidebar-bg transition-all duration-200',
         // md+ : behavior original
         'md:sticky md:translate-x-0',
-        collapsed ? 'md:w-[68px]' : 'md:w-[260px]',
+        collapsed ? 'md:w-17' : 'md:w-65',
         // Mobile : fixed off-canvas
         'fixed left-0',
-        mobileOpen ? 'translate-x-0 w-[260px]' : '-translate-x-full w-[260px]',
+        mobileOpen ? 'translate-x-0 w-65' : '-translate-x-full w-65',
       )}
     >
       {/* Logo + nom dynamique du tenant */}
