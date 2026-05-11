@@ -58,6 +58,10 @@ router.get('/', validate(paginationSchema, 'query'), async (req, res, next) => {
     const clientId = req.query.clientId as string | undefined;
     const agencyId = req.query.agencyId as string | undefined;
 
+    // Recherche elargie : reference facture, nom/telephone/email client, et
+    // tracking number d'un colis lie. Permet a la barre de recherche du
+    // form paiement de trouver vite la facture via le bordereau papier
+    // (tracking) ou un appel client (telephone).
     const where: any = {
       isActive: true,
       ...(status && { status }),
@@ -67,6 +71,9 @@ router.get('/', validate(paginationSchema, 'query'), async (req, res, next) => {
         OR: [
           { reference: { contains: search, mode: 'insensitive' } },
           { client: { fullName: { contains: search, mode: 'insensitive' } } },
+          { client: { phone: { contains: search, mode: 'insensitive' } } },
+          { client: { email: { contains: search, mode: 'insensitive' } } },
+          { parcels: { some: { trackingNumber: { contains: search, mode: 'insensitive' } } } },
         ],
       }),
     };

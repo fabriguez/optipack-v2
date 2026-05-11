@@ -5,9 +5,24 @@ import type { PaginationInput, PaginatedResponse } from '@transitsoftservices/sh
 import { prisma } from '../../../config/database';
 
 const PAYMENT_INCLUDE = {
-  invoice: { select: { id: true, reference: true, clientId: true } },
+  // On expose les colis lies a la facture (pour la colonne "Ref colis" de
+  // la liste) + le colis specifique du paiement s'il est scope. attachments
+  // sert au detail + a la mini-preview de la liste.
+  invoice: {
+    select: {
+      id: true,
+      reference: true,
+      clientId: true,
+      client: { select: { id: true, fullName: true, phone: true } },
+      parcels: { select: { id: true, trackingNumber: true, designation: true } },
+    },
+  },
+  parcel: { select: { id: true, trackingNumber: true, designation: true } },
   agency: { select: { id: true, name: true, code: true } },
   receivedBy: { select: { id: true, firstName: true, lastName: true } },
+  attachments: {
+    select: { id: true, url: true, key: true, kind: true, caption: true, createdAt: true },
+  },
 };
 
 @injectable()
@@ -33,13 +48,22 @@ export class PrismaPaymentRepository implements IPaymentRepository {
     const { page, limit, search } = pagination;
     const skip = (page - 1) * limit;
 
+    // Recherche elargie : ref paiement, ref facture, nom/tel client de la
+    // facture, tracking d'un colis lie (direct via parcel ou indirect via
+    // invoice.parcels). Permet a la barre de recherche du module Paiements
+    // de retrouver une transaction depuis n'importe quel angle.
     const where: Prisma.PaymentWhereInput = {
       ...(filters.agencyId && { agencyId: filters.agencyId }),
       ...(filters.agencyIds?.length && { agencyId: { in: filters.agencyIds } }),
       ...(search && {
         OR: [
           { reference: { contains: search, mode: 'insensitive' } },
+          { transactionReference: { contains: search, mode: 'insensitive' } },
           { invoice: { reference: { contains: search, mode: 'insensitive' } } },
+          { invoice: { client: { fullName: { contains: search, mode: 'insensitive' } } } },
+          { invoice: { client: { phone: { contains: search, mode: 'insensitive' } } } },
+          { parcel: { trackingNumber: { contains: search, mode: 'insensitive' } } },
+          { invoice: { parcels: { some: { trackingNumber: { contains: search, mode: 'insensitive' } } } } },
         ],
       }),
     };

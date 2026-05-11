@@ -107,8 +107,144 @@ par magasin). `ComputeStorageFeeUseCase` calcule (jours - free) × rate.
   `storageFreeDays`/`storageDailyRate` actuels (catégorie ANY, masse ANY,
   volume ANY).
 
-## 4. Décisions design en attente
+## 4. Paiements — refonte du form + liste
 
+**Form `PaymentFormDialog` :**
+
+- **Filtre facture intelligent** : remplacer le `AppSelect` actuel par un
+  `AppSearchSelect` qui filtre par : numéro de facture, nom client, numéro
+  client (téléphone), ou tracking colis. Endpoint backend à étendre :
+  `/invoices?search=...` doit chercher dans `reference`, `client.fullName`,
+  `client.phone`, `parcels.trackingNumber`.
+- **Sélection du colis (optionnelle)** : si la facture couvre plusieurs colis,
+  permettre de scoper le paiement sur un colis précis (au lieu de tout
+  proportionnellement). Impact : ajouter `parcelId?` sur `Payment` + use case
+  pour répartir l'avance différemment.
+- **Modes de paiement en select strict** : déjà des options ; bien valider que
+  `paymentMethod` est `z.enum([...])` côté schema et option list ferme côté UI
+  (pas de texte libre). À vérifier : actuellement c'est déjà le cas mais
+  l'enum n'est pas réexporté depuis `@transitsoftservices/shared`.
+- **Upload justificatifs (multi)** :
+  - Ajouter un champ multi-fichiers (images + PDF) avec capture caméra
+    (`<input type="file" accept="image/*,application/pdf" capture multiple>`).
+  - Uploader chaque fichier via `uploadFile` puis persister sur le paiement.
+  - Nécessite migration Prisma : nouvelle table `PaymentAttachment`
+    (`paymentId`, `url`, `key`, `kind` IMAGE|PDF, `caption?`, `createdAt`).
+- **Liste paiements** :
+  - Colonne "Colis" cliquable affichant le(s) tracking number(s) liés via
+    la facture, ou directement via le futur `parcelId` du paiement.
+  - Filtres : par tracking colis, par mode, période.
+
+## 5. Transfert de fonds — fix & extensions
+
+État actuel : modèle `FundTransfer` avec `paymentMethod`, validation à 2 étapes
+(initiate + confirm). La confirmation est rapportée KO par l'utilisateur.
+
+**À faire :**
+
+- **Reproduire et fixer la confirmation** : analyser `ConfirmFundTransferUseCase`
+  pour comprendre pourquoi elle ne passe pas (probablement permission, statut
+  source, ou solde caisse destination). Ajouter logs explicites des conditions
+  de rejet.
+- **Source** : déjà une agence ; ajouter `sourcePaymentMethod` (CASH, MOMO,
+  VIREMENT...). Permet de tracer d'où sort l'argent (caisse vs compte
+  bancaire) au sein de la même agence.
+- **Destination** : symmétrique — `destinationPaymentMethod` (où va l'argent
+  côté destination). Permet "caisse → compte bancaire", "MoMo → caisse", etc.
+- **Filtres liste `/fund-transfers`** :
+  - Référence (search exact)
+  - Agence source (search-select)
+  - Agence destination (search-select)
+  - Statut (PENDING / CONFIRMED / REJECTED)
+  - Date / heure / période (from / to datepicker)
+  - Mode source + mode destination (multi-select)
+  - Montant (min / max)
+
+## 6. Livre comptable — lignes cliquables + actor + détails
+
+État actuel : `JournalEntry` listé avec ligne sommaire ; pas de lien vers le
+détail, pas d'attribut "qui a fait l'opération" visible.
+
+**À faire :**
+
+- Stocker / exposer `createdByUserId` sur `JournalEntry` (déjà présent dans
+  schema, à exposer dans l'API list + UI).
+- Chaque ligne dans `/accounting` → cliquable, route vers
+  `/accounting/journal/[id]` qui montre :
+  - Description complète.
+  - Toutes les écritures (debit / credit / compte / montant).
+  - Source liée (`Disbursement` / `Payment` / `Expense` / etc.) → lien cliquable.
+  - User créateur + date heure.
+  - Note de réconciliation s'il existe.
+
+## 7. Magasin — imports/exports + inventaire + flux stock
+
+**Imports/exports en XLSX (pas CSV)** :
+- Remplacer tous les imports/exports magasin (parcels list, manifestes,
+  inventaires) par du XLSX via `ExcelService.generate` / `.parse`.
+- Couvrir tous les champs de création (designation, weight, volume, category,
+  isFragile, isHazardous, destinationAgencyId, destinationAddress, clientId,
+  recipientId, warehouseId, transitRouteId, declaredValue, observation,
+  trackingFournisseur, …). Aujourd'hui les imports CSV ne couvrent qu'un
+  sous-ensemble.
+
+**Règle d'admission au stock** : seuls les colis suivants doivent apparaître
+comme "en stock" dans un magasin :
+- Créés directement (créateur attribue warehouseId).
+- Reçus d'un conteneur (dechargement → warehouseId destination).
+- Découverts comme "extra physique" lors d'un inventaire (créés via
+  `RegisterExtraManifestParcelUseCase` ou équivalent inventaire).
+→ Auditer toutes les sources de "Parcel.warehouseId" et bloquer les autres
+chemins (ex: import qui crée des parcels sans flux d'entrée explicite doit
+les marquer LOST ou en erreur).
+
+**Module inventaire** : aujourd'hui ne fonctionne pas (scan, sélection manuelle
+des colis trouvés, clôture).
+
+Refonte demandée :
+- Démarrer un inventaire → fige les colis attendus (snapshot).
+- Scanner colis présent → marque l'item correspondant `scanned = true`.
+- Sélection manuelle (caméra HS) → marque `markedManually = true`.
+- Détection automatique de "extra physique" (scan d'un tracking inattendu) →
+  permet de créer la fiche colis en flux d'entrée.
+- Clôture → génère un rapport PDF immuable listant :
+  - Colis attendus / scannés / non scannés / extra.
+  - Écarts (MISSING / EXTRA) avec motif.
+  - Total : nombre, valeur, masse.
+  - Signature numérique du clôturant.
+
+**Stock display mismatch** : le compteur "Colis en magasin" dans la liste
+diffère de la page détail. Source : filtres distincts (list utilise un
+`_count.parcels`, detail filtre `isPresent && status IN_STOCK|RECEIVED &&
+!isArchived`). Aligner sur le filtre détail (déjà fait pour `_count` mais
+re-vérifier sur la list page).
+
+**Actions stock** :
+- Permettre de retirer un colis du stock depuis l'UI (UnloadParcel /
+  manuallyRemove) — actuellement bloqué.
+- Permettre de transférer un colis entre magasins (même agence) ou inter-agence.
+- Permettre la modification directe du colis depuis sa fiche stock.
+- **Règle de sortie** : retrait définitif (handover) uniquement si la facture
+  est totalement soldée (`balance = 0`) OU validation explicite par
+  SUPER_ADMIN avec motif obligatoire. Voir le bloc dette Phase 2 pour le
+  blocage auto.
+
+## 8. Client — image à la création + import XLSX complet
+
+- **Image client à la création** : le formulaire de création client ne permet
+  pas d'uploader l'image (existe sur l'édition). Ajouter `ImageInput` dans
+  `ClientFormDialog` (mode create) + persister avec `imageUrl`/`imageKey`.
+  Note : la CNI est déjà uploadable, c'est la photo profil qui manque.
+- **Import / export client en XLSX** : convertir le CSV existant, et couvrir
+  tous les champs : fullName, phone, email, address, agencyId, clientType,
+  cniRectoUrl, cniVersoUrl, photoUrl, notes, ... (idem schema création).
+  Réutiliser `ExcelService.generate/.parse` avec images embarquées.
+
+## 9. Décisions design en attente
+
+- **Inventaire : que faire des colis "extra physique" trouvés au scan ?**
+  Création silencieuse en stock OU obligation de passer par un workflow
+  RegisterExtra avec validation chef d'agence ? Différence : audit vs vitesse.
 - **Identifier les magasins admis pour stockage à la livraison** : si
   livraison directe sans passage en magasin (RECEIVED skip), comment
   facturer le magasinage ? Probable : `daysInWarehouse = 0` → fee = 0.

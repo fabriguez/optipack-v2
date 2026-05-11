@@ -55,7 +55,7 @@ export class RecordPaymentUseCase {
     const paymentCount = await this.paymentRepo.sumByAgencyAndDate(input.agencyId, new Date());
     const reference = generateReference('PAY', Math.floor(paymentCount) + 1);
 
-    // 4. Create IMMUTABLE payment
+    // 4. Create IMMUTABLE payment (+ optional parcelId scope + attachments)
     const payment = await this.paymentRepo.create({
       reference,
       amount: input.amount,
@@ -67,6 +67,18 @@ export class RecordPaymentUseCase {
       invoice: { connect: { id: input.invoiceId } },
       agency: { connect: { id: input.agencyId } },
       receivedBy: { connect: { id: userId } },
+      ...(input.parcelId && { parcel: { connect: { id: input.parcelId } } }),
+      ...(input.attachments && input.attachments.length > 0 && {
+        attachments: {
+          create: input.attachments.map((a) => ({
+            url: a.url,
+            key: a.key,
+            kind: a.kind,
+            caption: a.caption ?? null,
+            uploadedBy: { connect: { id: userId } },
+          })),
+        },
+      }),
     });
 
     // 5. Update invoice

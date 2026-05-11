@@ -87,6 +87,46 @@ function PaymentsContent() {
       ),
     },
     { key: 'invoice', label: 'Facture', render: (row: any) => <span className="font-mono text-xs">{row.invoice?.reference || '-'}</span> },
+    {
+      key: 'parcels',
+      label: 'Colis',
+      render: (row: any) => {
+        // Si le paiement est scope sur un colis precis, on affiche celui-la
+        // en priorite ; sinon on liste les colis de la facture (max 2
+        // affiches + compteur).
+        const scoped = row.parcel;
+        const all: any[] = row.invoice?.parcels || [];
+        if (scoped) {
+          return (
+            <Link
+              href={`/parcels/${scoped.id}`}
+              onClick={(e) => e.stopPropagation()}
+              className="font-mono text-xs text-primary-700 hover:underline"
+            >
+              {scoped.trackingNumber}
+            </Link>
+          );
+        }
+        if (all.length === 0) return <span className="text-xs text-gray-300">-</span>;
+        const visible = all.slice(0, 2);
+        const extra = all.length - visible.length;
+        return (
+          <div className="flex flex-wrap gap-1">
+            {visible.map((p) => (
+              <Link
+                key={p.id}
+                href={`/parcels/${p.id}`}
+                onClick={(e) => e.stopPropagation()}
+                className="font-mono text-xs text-primary-700 hover:underline"
+              >
+                {p.trackingNumber}
+              </Link>
+            ))}
+            {extra > 0 && <span className="text-[10px] text-gray-500">+{extra}</span>}
+          </div>
+        );
+      },
+    },
     { key: 'agency', label: 'Agence', render: (row: any) => <span className="text-sm">{row.agency?.name || '-'}</span> },
     {
       key: 'amount',
@@ -144,7 +184,7 @@ function PaymentsContent() {
         {/* Search --- Export | Filtres | Effacer */}
         <div className="flex items-center justify-between gap-3">
           <div className="flex-1">
-            <SearchBar value={search} onChange={setSearch} placeholder="Reference, facture..." />
+            <SearchBar value={search} onChange={setSearch} placeholder="Ref paiement, facture, client, tracking colis..." />
           </div>
           <div className="flex items-center gap-2">
             <ExportButton data={data?.data || []} columns={exportColumns} fileName="paiements" />

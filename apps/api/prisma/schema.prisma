@@ -503,6 +503,7 @@ model User {
   debtPaymentsReceived    DebtPayment[]                 @relation("DebtPaymentReceivedBy")
   debtPaymentsVoided      DebtPayment[]                 @relation("DebtPaymentVoidedBy")
   debtHistoryActions      DebtHistory[]
+  paymentAttachmentsUploaded PaymentAttachment[]        @relation("PaymentAttachmentUploader")
   permissionOverrides     UserPermissionOverride[]
   justificationsSubmitted AttendanceJustification[]     @relation("JustificationSubmitter")
   justificationsReviewed  AttendanceJustification[]     @relation("JustificationReviewer")
@@ -1360,6 +1361,8 @@ model Parcel {
   // Dettes liees a ce colis (retrait sans paiement, paiement partiel,
   // remboursement client). Une dette CLIENT typique a un parcelId.
   debts          Debt[]
+  // Paiements scopes a ce colis (cas facture multi-colis, paiement partiel).
+  payments       Payment[]                @relation("ParcelPayments")
 
   @@index([organizationId])
   @@index([clientId])
@@ -1536,6 +1539,10 @@ model Payment {
   reference            String        @unique
   invoiceId            String
   agencyId             String
+  // Optionnel : scope d'un paiement a un colis precis de la facture
+  // (cas facture multi-colis et client paie un seul). Si null, le paiement
+  // s'applique a toute la facture (repartition proportionnelle au prix).
+  parcelId             String?
   amount               Decimal       @db.Decimal(15, 2)
   discount             Decimal       @default(0) @db.Decimal(15, 2)
   discountReason       String?
@@ -1553,15 +1560,38 @@ model Payment {
   createdAt DateTime @default(now())
   // PAS de updatedAt -- paiement immutable
 
-  invoice    Invoice @relation(fields: [invoiceId], references: [id])
-  agency     Agency  @relation(fields: [agencyId], references: [id])
-  receivedBy User    @relation(fields: [receivedByUserId], references: [id])
-  voidedBy   User?   @relation("VoidedByUser", fields: [voidedByUserId], references: [id])
+  invoice     Invoice             @relation(fields: [invoiceId], references: [id])
+  agency      Agency              @relation(fields: [agencyId], references: [id])
+  parcel      Parcel?             @relation("ParcelPayments", fields: [parcelId], references: [id])
+  receivedBy  User                @relation(fields: [receivedByUserId], references: [id])
+  voidedBy    User?               @relation("VoidedByUser", fields: [voidedByUserId], references: [id])
+  attachments PaymentAttachment[]
 
   @@index([invoiceId])
   @@index([agencyId])
+  @@index([parcelId])
   @@index([createdAt])
   @@map("payments")
+}
+
+// Justificatifs d'un paiement : 0..N par paiement, peuvent etre des images
+// (caisse capture la cession), des PDF (recus virement, ordres MoMo) ou
+// d'autres documents. L'URL pointe sur MinIO via /uploads/object/<key>.
+model PaymentAttachment {
+  id          String   @id @default(uuid())
+  paymentId   String
+  url         String
+  key         String
+  kind        String   // 'IMAGE' | 'PDF' | 'OTHER'
+  caption     String?
+  uploadedByUserId String?
+  createdAt   DateTime @default(now())
+
+  payment    Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  uploadedBy User?   @relation("PaymentAttachmentUploader", fields: [uploadedByUserId], references: [id])
+
+  @@index([paymentId])
+  @@map("payment_attachments")
 }
 
 enum PaymentMethod {
