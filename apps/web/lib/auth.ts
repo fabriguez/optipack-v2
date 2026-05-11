@@ -135,34 +135,64 @@ export const { handlers, signIn, signOut, auth }: any = NextAuth({
       const refresh = (token as any).refreshToken as string | undefined;
       if (!refresh) return token;
 
-      try {
-        const res = await fetch(`${API_URL}/auth/refresh`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refreshToken: refresh }),
-        });
-        const data = await res.json();
-        if (res.ok && data?.success) {
-          (token as any).accessToken = data.data.accessToken;
-          (token as any).refreshToken = data.data.refreshToken;
-          const realExp = jwtExpMs(data.data.accessToken);
-          (token as any).accessTokenExpiresAt = realExp ?? Date.now() + 12 * 60 * 60 * 1000;
-          // Permissions : pas stockees dans le token NextAuth (cf. authorize ci-dessus).
-          // Elles seront re-extraites du nouveau accessToken par usePermission().
-          (token as any).error = undefined;
-          // eslint-disable-next-line no-console
-          console.log(
-            `[Auth.refresh] token refreshed, new exp=${realExp ? new Date(realExp).toISOString() : 'unknown'}`,
-          );
-        } else {
-          (token as any).error = 'RefreshFailed';
-          // eslint-disable-next-line no-console
-          console.warn('[Auth.refresh] failed:', data?.message ?? res.status);
+      // Retry doux : 2 tentatives avec backoff. Un seul blip reseau ne doit
+      // pas suffire a poser 'RefreshFailed' qui condamnait l'utilisateur
+      // jusqu'au re-login. Total max ~1.5s d'attente.
+      let lastErr: unknown = null;
+      let success = false;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const res = await fetch(`${API_URL}/auth/refresh`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refreshToken: refresh }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (res.ok && data?.success && data?.data?.accessToken) {
+            (token as any).accessToken = data.data.accessToken;
+            (token as any).refreshToken = data.data.refreshToken ?? refresh;
+            const realExp = jwtExpMs(data.data.accessToken);
+            (token as any).accessTokenExpiresAt =
+              realExp ?? Date.now() + 12 * 60 * 60 * 1000;
+            (token as any).error = undefined;
+            // eslint-disable-next-line no-console
+            console.log(
+              `[Auth.refresh] token refreshed (attempt ${attempt + 1}), exp=${
+                realExp ? new Date(realExp).toISOString() : 'unknown'
+              }`,
+            );
+            success = true;
+            break;
+          }
+          // Distingue les erreurs definitives (401/403 : refresh token revoque)
+          // des erreurs transitoires (5xx, 502, 503).
+          const status = res.status;
+          if (status === 401 || status === 403) {
+            (token as any).error = 'RefreshFailed';
+            // eslint-disable-next-line no-console
+            console.warn(`[Auth.refresh] definitif ${status} : token revoque`);
+            return token;
+          }
+          lastErr = `HTTP ${status} : ${data?.message ?? 'erreur serveur'}`;
+        } catch (err) {
+          lastErr = err;
         }
-      } catch (err) {
-        (token as any).error = 'RefreshFailed';
+        // Petit delai avant retry (200ms puis 800ms total).
+        if (attempt === 0) await new Promise((r) => setTimeout(r, 600));
+      }
+
+      if (!success) {
+        // SOFT-FAIL : on N'ECRIT PAS 'error=RefreshFailed' tant que le
+        // refresh token n'a pas ete explicitement rejete (401/403). Un
+        // serveur indisponible ne doit pas condamner la session : on
+        // laisse l'accessToken expire en place ; les requetes API echoueront
+        // mais le client pourra retenter et le PROCHAIN trigger ou
+        // expiration relancera un refresh. C'est exactement ce qu'il faut
+        // pour traverser un redeploiement API ou un blip reseau prolonge.
         // eslint-disable-next-line no-console
-        console.warn('[Auth.refresh] error:', err);
+        console.warn(
+          `[Auth.refresh] echec transitoire, on garde la session : ${String(lastErr)}`,
+        );
       }
       return token;
     },

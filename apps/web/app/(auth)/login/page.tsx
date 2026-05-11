@@ -15,6 +15,8 @@ const REASON_LABELS: Record<string, string> = {
   'refresh-failed': "Votre session a expire (refresh token invalide).",
   'refresh-exception': 'Erreur reseau pendant le rafraichissement de la session.',
   'repeated-401-after-refresh': 'Le serveur a refuse plusieurs requetes successives.',
+  'session-unauthenticated':
+    "Votre session a ete invalidee par NextAuth (cookie expire ou supprime). Consultez le journal ci-dessous.",
 };
 
 export default function LoginPage() {

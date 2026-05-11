@@ -77,9 +77,9 @@ export function generatePalette(baseHex: string): ColorPalette {
   const [r, g, b] = hexToRgb(baseHex);
   const [h, s] = rgbToHsl(r, g, b);
   const palette = {} as ColorPalette;
-  for (const [key, lightness] of Object.entries(TARGET_LIGHTNESS) as Array<
-    [keyof ColorPalette, number]
-  >) {
+  const keys = Object.keys(TARGET_LIGHTNESS) as Array<keyof ColorPalette>;
+  for (const key of keys) {
+    const lightness = TARGET_LIGHTNESS[key];
     const [pr, pg, pb] = hslToRgb(h, Math.min(s, 70), lightness);
     palette[key] = rgbToHex(pr, pg, pb);
   }

@@ -3,19 +3,35 @@
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { LogOut, UserCircle } from 'lucide-react';
 import { useLogout } from '@/lib/hooks/useAuth';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 import { AppButton } from '@/components/ui/AppButton';
+import { authLog } from '@/lib/api/authDebug';
 
 export default function SelfPortalLayout({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession();
   const router = useRouter();
   const { mutate: logout } = useLogout();
 
+  // Grace period 1.5s avant redirect : evite les redirects silencieux sur des
+  // transitions transitoires de status (re-hydratation de session).
+  const unauthSinceRef = useRef<number | null>(null);
   useEffect(() => {
-    if (status === 'unauthenticated') router.replace('/login');
+    if (status !== 'unauthenticated') {
+      unauthSinceRef.current = null;
+      return;
+    }
+    if (unauthSinceRef.current == null) unauthSinceRef.current = Date.now();
+    const timer = setTimeout(() => {
+      if (unauthSinceRef.current == null) return;
+      authLog('me-layout.unauthenticated.redirect', {
+        graceMs: Date.now() - unauthSinceRef.current,
+      });
+      router.replace('/login?reason=session-unauthenticated');
+    }, 1500);
+    return () => clearTimeout(timer);
   }, [status, router]);
 
   if (status === 'loading') {

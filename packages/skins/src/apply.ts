@@ -1,7 +1,13 @@
 /**
  * Browser-only helpers : apply a resolved skin to the document's CSS variables,
  * and serialize a skin to a CSS string (used for scoped previews/iframes).
+ *
+ * This module is imported by server runtimes too (api, orchestrator) through
+ * the package barrel, so we declare `document` ambiently to compile under
+ * non-DOM `lib` configurations. Runtime guard below prevents server execution.
  */
+
+declare const document: any;
 
 import { generatePalette } from './palette';
 import { resolveSkin } from './registry';

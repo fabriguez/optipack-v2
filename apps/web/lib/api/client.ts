@@ -40,7 +40,21 @@ let refreshInFlight: Promise<string | null> | null = null;
 // (cas reel ou le token est revoque cote serveur). Sinon on tolere des
 // requetes deja en vol qui arrivent apres une rotation.
 let postRefreshFailures = 0;
+let lastFailureAt = 0;
 const FAILURE_THRESHOLD = 3;
+// Au-dela de cette duree d'inactivite entre 2 echecs, on reset le compteur :
+// 2 echecs espaces de 5 min ne doivent pas s'agreger en "3 echecs successifs".
+const FAILURE_WINDOW_MS = 30_000;
+
+function bumpFailures(): number {
+  const now = Date.now();
+  if (now - lastFailureAt > FAILURE_WINDOW_MS) {
+    postRefreshFailures = 0;
+  }
+  lastFailureAt = now;
+  postRefreshFailures += 1;
+  return postRefreshFailures;
+}
 
 async function performRefresh(): Promise<string | null> {
   authLog('refresh.start');
@@ -186,15 +200,17 @@ apiClient.interceptors.response.use(
 
       if (newToken === oldToken) {
         // Le refresh n'a pas change le token. Cas pathologique : le serveur
-        // rejette quand meme. On compte les echecs avant de signOut pour eviter
-        // une deco trop agressive sur un blip reseau.
-        postRefreshFailures += 1;
+        // rejette quand meme. On compte les echecs avec une fenetre glissante
+        // de 30s : seuls des echecs RAPPROCHES s'agregent (vrai probleme).
+        // Sinon on reset -- evite que 2 incidents espaces d'une heure
+        // s'accumulent et declenchent un signOut surprise.
+        const count = bumpFailures();
         authLog('401.same-token-after-refresh', {
-          count: postRefreshFailures,
+          count,
           oldSuffix: oldToken?.slice(-12),
           newSuffix: newToken.slice(-12),
         });
-        if (postRefreshFailures >= FAILURE_THRESHOLD) {
+        if (count >= FAILURE_THRESHOLD) {
           redirectToLogin('repeated-401-after-refresh');
         }
         return Promise.reject(error);
