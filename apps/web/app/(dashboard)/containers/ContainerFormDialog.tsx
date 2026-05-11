@@ -72,7 +72,17 @@ export function ContainerFormDialog({ open, onClose }: ContainerFormDialogProps)
       }
     >
       <form id="container-form" onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-        <AppInput label="Designation" {...register('designation')} error={errors.designation?.message} />
+        <div className="space-y-1">
+          <AppInput
+            label="Designation (optionnel)"
+            {...register('designation')}
+            error={errors.designation?.message}
+            placeholder="Auto-genere si vide (ex: ACME-AIR-DOUALA-001)"
+          />
+          <p className="text-xs text-gray-500">
+            Laissez vide pour generer automatiquement : nom entreprise + type + ville destination + numero.
+          </p>
+        </div>
 
         <div className="flex items-center justify-between rounded-xl bg-primary-50 p-3">
           <div>

@@ -4,11 +4,24 @@ import Link from 'next/link';
 import { Warehouse as WarehouseIcon, Container as ContainerIcon, MapPin, User, Calendar } from 'lucide-react';
 import { formatDate, formatDateTime } from '@transitsoftservices/shared';
 
+interface AgencyRef {
+  id: string;
+  name: string;
+  city?: string | null;
+}
+
+interface ContainerRef {
+  id: string;
+  designation: string;
+  departureAgency?: AgencyRef | null;
+  arrivalAgency?: AgencyRef | null;
+}
+
 interface ParcelLike {
   status: string;
   warehouse?: { id: string; name: string; agency?: { id?: string; name?: string } | null } | null;
-  container?: { id: string; designation: string } | null;
-  lastContainer?: { id: string; designation: string } | null;
+  container?: ContainerRef | null;
+  lastContainer?: ContainerRef | null;
   transitRoute?: { id: string; name: string; type?: string | null; departureCity?: string | null; arrivalCity?: string | null } | null;
   destination?: string | null;
   destinationAgency?: { id?: string; name?: string; city?: string | null } | null;
@@ -60,38 +73,60 @@ export function ParcelStatusContext({ parcel }: { parcel: ParcelLike }) {
     ) : (
       <span className="text-gray-500">-</span>
     );
-  const FromCity = () => {
-    const v = route?.departureCity ?? parcel.origin ?? wh?.agency?.name ?? null;
-    return v ? <span className="font-semibold text-gray-900">{v}</span> : <span className="text-gray-500">-</span>;
-  };
-  const ToCity = () => {
-    const v = route?.arrivalCity ?? parcel.destinationAgency?.city ?? parcel.destination ?? null;
-    return v ? <span className="font-semibold text-gray-900">{v}</span> : <span className="text-gray-500">-</span>;
-  };
-  const DestAgency = () =>
-    parcel.destinationAgency?.id ? (
-      <Link href={`/agencies/${parcel.destinationAgency.id}`} className="font-semibold text-primary-700 hover:underline">
-        <MapPin className="inline h-3.5 w-3.5 mr-0.5" />
-        {parcel.destinationAgency.name ?? parcel.destinationAgency.city}
-      </Link>
-    ) : parcel.destination ? (
-      <span className="font-semibold text-gray-900">{parcel.destination}</span>
+  // Agence cliquable : si on a l'id, lien vers /agencies/:id ; sinon fallback
+  // texte. Utilisee pour les bornes depart/arrivee du conteneur en IN_TRANSIT
+  // et la destination en ARRIVED/RECEIVED.
+  const AgencyLink = ({ agency, fallback }: { agency?: AgencyRef | null; fallback?: string | null }) => {
+    if (agency?.id) {
+      return (
+        <Link href={`/agencies/${agency.id}`} className="font-semibold text-primary-700 hover:underline">
+          <MapPin className="inline h-3.5 w-3.5 mr-0.5" />
+          {agency.name}
+          {agency.city && <span className="text-gray-500"> ({agency.city})</span>}
+        </Link>
+      );
+    }
+    return fallback ? (
+      <span className="font-semibold text-gray-900">{fallback}</span>
     ) : (
       <span className="text-gray-500">-</span>
     );
-
+  };
   // Aiguillage selon statut.
   switch (status) {
-    case 'IN_STOCK':
-    case 'RECEIVED': {
+    case 'IN_STOCK': {
       const since = parcel.warehouseEnteredAt
         ? <span className="ml-1 text-gray-500">depuis le {formatDate(parcel.warehouseEnteredAt)}</span>
         : null;
       return (
         <div className="text-sm text-gray-600">
-          <span className="text-gray-500 mr-1">{status === 'RECEIVED' ? 'Receptionne' : 'En stock'} a</span>
+          <span className="text-gray-500 mr-1">En stock a</span>
           <Wh />
           {since}
+        </div>
+      );
+    }
+
+    case 'RECEIVED': {
+      // RECEIVED = colis arrive a l'agence de destination du conteneur et
+      // receptionne en magasin. L'utilisateur veut voir l'AGENCE de
+      // destination du conteneur (pas seulement le magasin), comme pour
+      // ARRIVED.
+      const arrAgency = ct?.arrivalAgency ?? null;
+      return (
+        <div className="text-sm text-gray-600 flex flex-wrap items-center gap-1">
+          <span className="text-gray-500">Arrive a</span>
+          <AgencyLink agency={arrAgency} fallback={parcel.destinationAgency?.name ?? parcel.destination ?? null} />
+          {wh && (
+            <>
+              <span className="text-gray-400">·</span>
+              <span className="text-gray-500">receptionne en</span>
+              <Wh />
+            </>
+          )}
+          {parcel.warehouseEnteredAt && (
+            <span className="ml-1 text-gray-500">le {formatDate(parcel.warehouseEnteredAt)}</span>
+          )}
         </div>
       );
     }
@@ -104,13 +139,18 @@ export function ParcelStatusContext({ parcel }: { parcel: ParcelLike }) {
         </div>
       );
 
-    case 'IN_TRANSIT':
+    case 'IN_TRANSIT': {
+      // En transit de <agence depart conteneur> vers <agence arrivee conteneur>,
+      // les deux cliquables. Fallback sur les villes de la route de transit si
+      // le conteneur n'a pas ses agences hydratees.
+      const dep = ct?.departureAgency ?? null;
+      const arr = ct?.arrivalAgency ?? null;
       return (
         <div className="text-sm text-gray-600 flex flex-wrap items-center gap-1">
           <span className="text-gray-500">En transit de</span>
-          <FromCity />
+          <AgencyLink agency={dep} fallback={route?.departureCity ?? parcel.origin ?? null} />
           <span className="text-gray-500">vers</span>
-          <ToCity />
+          <AgencyLink agency={arr} fallback={route?.arrivalCity ?? parcel.destinationAgency?.city ?? parcel.destination ?? null} />
           {ct && (
             <>
               <span className="text-gray-400">·</span>
@@ -125,17 +165,23 @@ export function ParcelStatusContext({ parcel }: { parcel: ParcelLike }) {
           )}
         </div>
       );
+    }
 
-    case 'ARRIVED':
+    case 'ARRIVED': {
+      // Arrive a l'AGENCE de destination du conteneur (priorite sur la
+      // destinationAgency du colis, qui peut differer dans certains cas
+      // multi-tronçons).
+      const arrAgency = ct?.arrivalAgency ?? null;
       return (
         <div className="text-sm text-gray-600 flex flex-wrap items-center gap-1">
-          <span className="text-gray-500">Arrivee a</span>
-          <DestAgency />
+          <span className="text-gray-500">Arrive a</span>
+          <AgencyLink agency={arrAgency} fallback={parcel.destinationAgency?.name ?? parcel.destination ?? null} />
           {parcel.arrivalDate && (
             <span className="ml-1 text-gray-500">le {formatDateTime(parcel.arrivalDate)}</span>
           )}
         </div>
       );
+    }
 
     case 'DELIVERED': {
       // Le nom du destinataire (ou du client si pas de destinataire distinct)

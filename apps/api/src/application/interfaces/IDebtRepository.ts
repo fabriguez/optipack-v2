@@ -5,7 +5,15 @@ export interface IDebtRepository {
   findById(id: string): Promise<Debt | null>;
   findByClient(clientId: string): Promise<Debt[]>;
   findAll(
-    filters: { clientId?: string; status?: string },
+    filters: {
+      clientId?: string;
+      employeeId?: string;
+      carrierId?: string;
+      agencyId?: string;
+      type?: string;
+      status?: string;
+      bucket?: 'client' | 'company';
+    },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<Debt>>;
   findOverdue(): Promise<Debt[]>;

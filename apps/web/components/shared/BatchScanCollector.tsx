@@ -169,6 +169,12 @@ export function BatchScanCollector({
         }}
         closeOnDetect={false}
         title={cameraTitle}
+        // On expose la liste en temps reel a l'interieur du dialog pour que
+        // l'utilisateur voie ce qu'il vient de scanner sans devoir fermer la
+        // camera pour verifier (fluidite scan en chaine).
+        accumulatedCodes={codes}
+        onRemoveAccumulatedCode={removeCode}
+        onClearAccumulated={() => onChange([])}
       />
     </div>
   );

@@ -16,6 +16,7 @@ import disbursementRoutes from './disbursement.routes';
 import fundTransferRoutes from './fund-transfer.routes';
 import expenseRoutes from './expense.routes';
 import debtRoutes from './debt.routes';
+import carrierRoutes from './carrier.routes';
 import loyaltyRoutes from './loyalty.routes';
 import penaltyRoutes from './penalty.routes';
 import employeeRoutes from './employee.routes';
@@ -74,6 +75,7 @@ router.use('/disbursements', disbursementRoutes);
 router.use('/fund-transfers', fundTransferRoutes);
 router.use('/expenses', expenseRoutes);
 router.use('/debts', debtRoutes);
+router.use('/carriers', carrierRoutes);
 
 // Systeme
 router.use('/loyalty', loyaltyRoutes);

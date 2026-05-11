@@ -125,8 +125,10 @@ function ParcelsContent() {
   const exportColumns = [
     { key: 'trackingNumber', label: 'Tracking' },
     { key: 'designation', label: 'Designation' },
+    { key: 'category', label: 'Type' },
     { key: 'client', label: 'Client' },
     { key: 'weight', label: 'Masse' },
+    { key: 'volume', label: 'Volume (m3)' },
     { key: 'destination', label: 'Destination' },
     { key: 'price', label: 'Prix' },
     { key: 'status', label: 'Statut' },
@@ -208,9 +210,46 @@ function ParcelsContent() {
       ),
     },
     {
+      key: 'category',
+      label: 'Type',
+      render: (row: any) => {
+        const labels: Record<string, string> = {
+          STANDARD: 'Standard',
+          DOCUMENT: 'Document',
+          FOOD: 'Alimentaire',
+          ELECTRONICS: 'Electronique',
+          CLOTHING: 'Vetement',
+          OTHER: 'Autre',
+        };
+        return (
+          <div className="flex flex-col gap-0.5">
+            <AppBadge variant="default">{labels[row.category] || row.category || 'Standard'}</AppBadge>
+            {(row.isFragile || row.isHazardous) && (
+              <div className="flex gap-1">
+                {row.isFragile && <AppBadge variant="warning">Fragile</AppBadge>}
+                {row.isHazardous && <AppBadge variant="error">Dangereux</AppBadge>}
+              </div>
+            )}
+          </div>
+        );
+      },
+    },
+    {
       key: 'weight',
-      label: 'Masse',
-      render: (row: any) => <span className="text-sm font-medium">{Number(row.weight).toFixed(1)} kg</span>,
+      label: 'Masse / Volume',
+      render: (row: any) => (
+        <div className="flex flex-col text-sm">
+          {row.weight != null && (
+            <span className="font-medium text-gray-900">{Number(row.weight).toFixed(1)} kg</span>
+          )}
+          {row.volume != null && (
+            <span className="text-xs text-gray-500">{Number(row.volume).toFixed(3)} m3</span>
+          )}
+          {row.weight == null && row.volume == null && (
+            <span className="text-xs text-gray-300">-</span>
+          )}
+        </div>
+      ),
     },
     {
       key: 'warehouse',

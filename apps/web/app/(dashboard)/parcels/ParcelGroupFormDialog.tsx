@@ -52,6 +52,12 @@ interface ParcelInGroup {
   isHazardous: boolean;
   observation: string;
   price: string;
+  // Champs propres a chaque colis du groupe (destinataire et adresse de
+  // livraison sont specifiques par colis -- on ne peut pas les imposer au
+  // niveau du groupe).
+  recipientId: string;
+  destinationAgencyId: string;
+  destinationAddress: string;
   collapsed: boolean;
   images: PendingImage[];
 }
@@ -69,6 +75,9 @@ function emptyParcel(): ParcelInGroup {
     isHazardous: false,
     observation: '',
     price: '0',
+    recipientId: '',
+    destinationAgencyId: '',
+    destinationAddress: '',
     collapsed: false,
     images: [],
   };
@@ -95,13 +104,17 @@ export function ParcelGroupFormDialog({ open, onClose, defaultAgency }: Props) {
   const router = useRouter();
 
   // Champs partages par tous les colis du groupe.
+  // Note metier : un colis n'est plus associe a une agence en propre ;
+  // l'agence est derivee par sa relation warehouse -> agency. Au niveau
+  // du groupe, on ne demande donc PAS d'agence : juste le magasin de depart.
+  // L'agence emettrice du groupe est calculee cote backend depuis
+  // `warehouseId.agencyId`.
+  // Le destinataire et l'adresse de destination sont PROPRES a chaque colis
+  // du groupe (un meme groupe peut livrer plusieurs personnes a plusieurs
+  // adresses), donc ils ne figurent pas ici mais sur chaque carte de colis.
   const [clientId, setClientId] = useState<string>('');
-  const [recipientId, setRecipientId] = useState<string>('');
   const [warehouseId, setWarehouseId] = useState<string>('');
   const [transitRouteId, setTransitRouteId] = useState<string>('');
-  const [destinationAgencyId, setDestinationAgencyId] = useState<string>('');
-  const [destinationAddress, setDestinationAddress] = useState('');
-  const [agencyId, setAgencyId] = useState<string>(defaultAgency?.id ?? '');
   const [label, setLabel] = useState('');
   const [notes, setNotes] = useState('');
 
@@ -121,12 +134,8 @@ export function ParcelGroupFormDialog({ open, onClose, defaultAgency }: Props) {
       return;
     }
     setClientId('');
-    setRecipientId('');
     setWarehouseId('');
     setTransitRouteId('');
-    setDestinationAgencyId('');
-    setDestinationAddress('');
-    setAgencyId(defaultAgency?.id ?? '');
     setLabel('');
     setNotes('');
     setParcels([emptyParcel()]);
@@ -148,7 +157,11 @@ export function ParcelGroupFormDialog({ open, onClose, defaultAgency }: Props) {
     mutationFn: () =>
       apiClient.post('/parcel-groups', {
         clientId,
-        agencyId,
+        // agencyId derive cote backend depuis warehouseId.agencyId (le
+        // groupe est emis par l'agence du magasin de depart, plus de
+        // selection explicite).
+        warehouseId,
+        transitRouteId,
         label: label || undefined,
         notes: notes || undefined,
         parcels: parcels
@@ -161,13 +174,13 @@ export function ParcelGroupFormDialog({ open, onClose, defaultAgency }: Props) {
               trackingFournisseur: p.trackingFournisseur.trim() || undefined,
               weight: w && w > 0 ? w : undefined,
               volume: v && v > 0 ? v : undefined,
-              // Champs partages propages a chaque colis (le backend les attend
-              // par colis, on les recopie depuis le contexte du groupe).
-              recipientId: recipientId || undefined,
+              // Contexte du groupe : magasin et route partages.
               warehouseId: warehouseId || undefined,
               transitRouteId: transitRouteId || undefined,
-              destinationAgencyId: destinationAgencyId || undefined,
-              destinationAddress: destinationAddress || undefined,
+              // Champs PROPRES au colis : destinataire + agence/adresse dest.
+              recipientId: p.recipientId || undefined,
+              destinationAgencyId: p.destinationAgencyId || undefined,
+              destinationAddress: p.destinationAddress || undefined,
               category: p.category,
               isFragile: p.isFragile,
               isHazardous: p.isHazardous,
@@ -225,7 +238,10 @@ export function ParcelGroupFormDialog({ open, onClose, defaultAgency }: Props) {
 
   const total = parcels.reduce((sum, p) => sum + Number(p.price || 0), 0);
   const validCount = parcels.filter((p) => p.designation.trim()).length;
-  const sharedReady = !!clientId && !!agencyId && !!warehouseId && !!transitRouteId && !!destinationAgencyId;
+  // Le groupe est pret a etre cree si on a le contexte partage minimal
+  // (client + magasin + route). Les destinataires/adresses sont au niveau
+  // de chaque colis, donc on ne les exige pas ici.
+  const sharedReady = !!clientId && !!warehouseId && !!transitRouteId;
 
   return (
     <AppDialog
@@ -268,13 +284,6 @@ export function ParcelGroupFormDialog({ open, onClose, defaultAgency }: Props) {
               placeholder="Rechercher un client..."
             />
             <AppSearchSelect
-              label="Destinataire"
-              value={recipientId || null}
-              onChange={(v) => setRecipientId(v ?? '')}
-              search={searchers.recipients}
-              placeholder="Selectionner un destinataire (optionnel)"
-            />
-            <AppSearchSelect
               label="Magasin de depart"
               value={warehouseId}
               onChange={(v) => setWarehouseId(v ?? '')}
@@ -290,30 +299,6 @@ export function ParcelGroupFormDialog({ open, onClose, defaultAgency }: Props) {
               required
               placeholder="Selectionner une route"
             />
-            <AppSearchSelect
-              label="Agence de destination"
-              value={destinationAgencyId}
-              onChange={(v) => setDestinationAgencyId(v ?? '')}
-              search={searchers.agencies}
-              required
-              placeholder="Agence d'arrivee"
-            />
-            <AppInput
-              label="Adresse precise (optionnel)"
-              placeholder="Quartier, rue, point de repere..."
-              value={destinationAddress}
-              onChange={(e) => setDestinationAddress(e.target.value)}
-            />
-            <AppSearchSelect
-              label="Agence emettrice du groupe"
-              value={agencyId}
-              onChange={(v) => setAgencyId(v ?? '')}
-              search={searchers.agencies}
-              selectedOption={defaultAgency ? toSearchOption.agency(defaultAgency) : undefined}
-              disabled={!!defaultAgency}
-              required
-              placeholder="Selectionner une agence"
-            />
             <AppInput
               label="Libelle du groupe (optionnel)"
               value={label}
@@ -321,6 +306,11 @@ export function ParcelGroupFormDialog({ open, onClose, defaultAgency }: Props) {
               placeholder="Ex: Envoi du 10 mai"
             />
           </div>
+          <p className="mt-3 text-xs text-primary-700/80">
+            Le destinataire et l&apos;adresse de destination sont a renseigner sur chaque
+            colis individuel ci-dessous (ils peuvent differer d&apos;un colis a l&apos;autre).
+            L&apos;agence emettrice est deduite automatiquement du magasin de depart.
+          </p>
           {notes !== '' || true ? (
             <div className="mt-3">
               <AppTextarea
@@ -530,10 +520,12 @@ function ParcelCard({
               onValueChange={(v) => onChange({ category: v })}
             />
             <AppInput
-              label="Valeur declaree (XAF)"
-              type="number"
-              step="100"
-              placeholder="Pour assurance"
+              label="Valeur declaree (XAF, optionnel)"
+              // Champ libre : pas de type=number, pas de validation, l'utilisateur
+              // peut laisser vide. La conversion en number se fait au submit.
+              type="text"
+              inputMode="decimal"
+              placeholder="Optionnel - pour assurance"
               value={parcel.declaredValue}
               onChange={(e) => onChange({ declaredValue: e.target.value })}
             />
@@ -566,6 +558,37 @@ function ParcelCard({
                 checked={parcel.isHazardous}
                 onCheckedChange={(v) => onChange({ isHazardous: v })}
               />
+            </div>
+          </div>
+
+          {/* Destinataire et destination -- specifiques a ce colis. */}
+          <div className="rounded-xl bg-gray-50 p-3">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+              Destinataire & livraison de ce colis
+            </p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <AppSearchSelect
+                label="Destinataire"
+                value={parcel.recipientId || null}
+                onChange={(v) => onChange({ recipientId: v ?? '' })}
+                search={searchers.recipients}
+                placeholder="Selectionner un destinataire (optionnel)"
+              />
+              <AppSearchSelect
+                label="Agence de destination"
+                value={parcel.destinationAgencyId || null}
+                onChange={(v) => onChange({ destinationAgencyId: v ?? '' })}
+                search={searchers.agencies}
+                placeholder="Agence d'arrivee"
+              />
+              <div className="sm:col-span-2">
+                <AppInput
+                  label="Adresse precise (optionnel)"
+                  placeholder="Quartier, rue, point de repere..."
+                  value={parcel.destinationAddress}
+                  onChange={(e) => onChange({ destinationAddress: e.target.value })}
+                />
+              </div>
             </div>
           </div>
 

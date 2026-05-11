@@ -30,6 +30,8 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
 
   const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
 
+  const [xlsxLoading, setXlsxLoading] = useState(false);
+
   const handleDownloadPdf = async () => {
     setPdfLoading(true);
     try {
@@ -48,6 +50,27 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       // l'API repondra 401 dans le nouvel onglet. On laisse le toast d'erreur.
     }
     setPdfLoading(false);
+  };
+
+  const handleDownloadXlsx = async () => {
+    setXlsxLoading(true);
+    try {
+      const res = await apiClient.get(`/invoices/${id}/xlsx`, { responseType: 'blob' });
+      const blob = new Blob([res.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `facture-${invoice?.reference || id}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      // noop
+    }
+    setXlsxLoading(false);
   };
 
   const { data: invoiceData, isLoading } = useQuery({
@@ -116,7 +139,11 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           <div className="flex gap-2">
             <AppButton variant="outline" onClick={handleDownloadPdf} loading={pdfLoading}>
               <Download className="h-4 w-4" />
-              Telecharger PDF
+              PDF
+            </AppButton>
+            <AppButton variant="outline" onClick={handleDownloadXlsx} loading={xlsxLoading}>
+              <Download className="h-4 w-4" />
+              XLSX
             </AppButton>
             <AppButton onClick={() => setShowPayment(true)} disabled={invoice.status === 'PAID'}>
               <Plus className="h-4 w-4" />
@@ -222,9 +249,60 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             <InfoItem label="Remise" value={formatAmount(Number(invoice.discount))} />
             <InfoItem label="TVA" value={formatAmount(Number(invoice.tva))} />
             <InfoItem label="Devise" value={invoice.currency || 'XAF'} />
+            {invoice.storageFeesTotal != null && Number(invoice.storageFeesTotal) > 0 && (
+              <InfoItem
+                label="Frais magasinage"
+                value={formatAmount(Number(invoice.storageFeesTotal))}
+              />
+            )}
             {invoice.dueDate && <InfoItem label="Echeance" value={formatDate(invoice.dueDate)} />}
           </div>
         </AppCard>
+
+        {/* Frais de magasinage detailles par colis : visible uniquement si au
+            moins un colis a des frais > 0. Permet au client de comprendre le
+            cumul (X jours payants x tarif). */}
+        {Array.isArray(invoice.parcels) && invoice.parcels.some((p: any) => Number(p.storageFee) > 0) && (
+          <AppCard>
+            <AppCardHeader
+              title="Frais de magasinage par colis"
+              description={`Total : ${formatAmount(Number(invoice.storageFeesTotal || 0))}`}
+            />
+            <div className="overflow-hidden rounded-xl border border-gray-100">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 text-xs text-gray-500">
+                  <tr>
+                    <th className="p-2 text-left">Tracking</th>
+                    <th className="p-2 text-left">Designation</th>
+                    <th className="p-2 text-right">Jours payants</th>
+                    <th className="p-2 text-right">Frais</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {invoice.parcels
+                    .filter((p: any) => Number(p.storageFee) > 0)
+                    .map((p: any) => (
+                      <tr key={p.id} className="hover:bg-gray-50">
+                        <td className="p-2">
+                          <Link
+                            href={`/parcels/${p.id}`}
+                            className="font-mono text-xs text-primary-700 hover:underline"
+                          >
+                            {p.trackingNumber}
+                          </Link>
+                        </td>
+                        <td className="p-2 text-gray-700">{p.designation}</td>
+                        <td className="p-2 text-right text-gray-700">{p.storageDays}</td>
+                        <td className="p-2 text-right font-semibold text-gray-900">
+                          {formatAmount(Number(p.storageFee))}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </AppCard>
+        )}
 
         {/* Payments */}
         <AppCard>

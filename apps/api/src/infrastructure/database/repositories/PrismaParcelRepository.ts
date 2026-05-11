@@ -16,12 +16,29 @@ const PARCEL_INCLUDE = {
   // Zone de rangement (WarehouseSpace) du colis. Necessaire pour afficher
   // l'emplacement dans les listes magasin / inventaire.
   space: { select: { id: true, name: true } },
-  container: { select: { id: true, designation: true } },
+  // Inclure les agences depart/arrivee du conteneur permet a l'UI d'afficher
+  // les liens cliquables "en transit de X vers Y" et "arrive a <agence>" sans
+  // requete supplementaire (fetch sur la page parcel detail / list).
+  container: {
+    select: {
+      id: true,
+      designation: true,
+      departureAgency: { select: { id: true, name: true, city: true } },
+      arrivalAgency: { select: { id: true, name: true, city: true } },
+    },
+  },
   // Conteneur de livraison : le DERNIER conteneur d'ou le colis a ete decharge
   // (set lors du dechargement). Persiste meme apres dechargement, contrairement
   // a `container` (currentContainerId) qui est null pour les colis en stock.
   // Utile pour afficher la provenance dans les listes magasin.
-  lastContainer: { select: { id: true, designation: true } },
+  lastContainer: {
+    select: {
+      id: true,
+      designation: true,
+      departureAgency: { select: { id: true, name: true, city: true } },
+      arrivalAgency: { select: { id: true, name: true, city: true } },
+    },
+  },
   transitRoute: { select: { id: true, name: true, type: true } },
   invoice: { select: { id: true, reference: true, status: true } },
 };

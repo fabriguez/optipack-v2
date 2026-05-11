@@ -183,6 +183,10 @@ export class PrismaManifestRepository implements IManifestRepository {
         client: { select: { fullName: true, phone: true, email: true } },
         recipient: { select: { fullName: true, phone: true, email: true } },
         destinationAgency: { select: { city: true } },
+        // Route de transit propre au colis : peut differer de la route du
+        // conteneur (multi-tronçons, re-routages). Snapshote dans le
+        // bordereau pour tracer la route effective au moment de l'envoi.
+        transitRoute: { select: { name: true } },
         invoice: {
           select: {
             id: true,
@@ -234,7 +238,9 @@ export class PrismaManifestRepository implements IManifestRepository {
         volume: parcel.volume ?? null,
         origin: parcel.origin || departureCity,
         destination: parcel.destination || arrivalCity,
-        transit: arrivalCity,
+        // Priorite : route de transit propre au colis (s'il en a une), sinon
+        // ville d'arrivee du conteneur en fallback.
+        transit: parcel.transitRoute?.name || arrivalCity,
         price: parcel.price,
         invoiceTotal,
         advanceAmount: Number(advance.toFixed(2)),

@@ -91,11 +91,12 @@ export class ContainerController {
   static async getLoadableParcels(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(ListLoadableParcelsUseCase);
-      const { search, page, limit } = req.query;
+      const { search, page, limit, warehouseId } = req.query;
       const result = await useCase.execute(req.params.id, {
         search: search as string | undefined,
         page: page ? Number(page) : undefined,
         limit: limit ? Number(limit) : undefined,
+        warehouseId: warehouseId ? String(warehouseId) : undefined,
       });
       res.json({ success: true, ...result });
     } catch (err) {

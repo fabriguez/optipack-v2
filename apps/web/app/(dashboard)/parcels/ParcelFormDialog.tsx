@@ -417,17 +417,20 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
           />
           <AppInput
             label="Valeur declaree (XAF, optionnel)"
-            type="number"
-            step="100"
-            placeholder="Pour assurance"
-            // valueAsNumber genere NaN sur input vide => casse la validation zod
-            // (z.number().optional().nullable()). On gere le cast manuellement
-            // pour renvoyer null quand le champ est vide.
+            // type=text + inputMode=decimal : champ totalement libre, le mobile
+            // ouvre un clavier numerique mais accepte aussi des caracteres
+            // (espaces, "XAF", ~). On extrait les chiffres et la virgule cote
+            // setValueAs pour produire un number ou null sans bloquer la saisie.
+            type="text"
+            inputMode="decimal"
+            placeholder="Optionnel - pour assurance"
             {...register('declaredValue', {
-              setValueAs: (v: string) => {
-                if (v === '' || v === null || v === undefined) return null;
-                const n = Number(v);
-                return Number.isFinite(n) ? n : null;
+              setValueAs: (v: unknown) => {
+                if (v === '' || v == null) return null;
+                const s = String(v).replace(/[^\d.,-]/g, '').replace(',', '.');
+                if (!s) return null;
+                const n = Number(s);
+                return Number.isFinite(n) && n >= 0 ? n : null;
               },
             })}
           />

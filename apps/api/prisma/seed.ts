@@ -217,6 +217,13 @@ const PERMISSION_CATALOG: Array<{ key: string; label: string; category: string; 
   { key: 'cashregister.read', label: 'Voir la caisse', category: 'finance' },
   { key: 'cashregister.close', label: 'Cloturer la caisse', category: 'finance' },
   { key: 'cashregister.disburse', label: 'Decaisser depuis la caisse', category: 'finance' },
+  // Cree un bon de decaissement. Reserve a l'admin (et SUPER_ADMIN) : un admin
+  // peut soit choisir l'ordonnateur (employe avec disbursement.order), soit
+  // s'auto-designer comme ordonnateur.
+  { key: 'disbursement.create', label: 'Creer un bon de decaissement', category: 'finance' },
+  // Permet a un employe d'etre selectionne comme ordonnateur d'un decaissement.
+  // L'ordonnateur valide la depense mais ne l'enregistre pas necessairement.
+  { key: 'disbursement.order', label: 'Ordonner une depense', category: 'finance' },
   { key: 'expense.read', label: 'Voir les depenses', category: 'finance' },
   { key: 'expense.create', label: 'Saisir une depense', category: 'finance' },
   { key: 'expense.approve', label: 'Approuver une depense', category: 'finance' },

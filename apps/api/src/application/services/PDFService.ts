@@ -23,6 +23,10 @@ interface InvoiceParcel {
   weight: number;
   destination: string;
   price: number;
+  // Frais de magasinage propres au colis (jours payants x tarif jour). Affiches
+  // dans le PDF sous la forme "+ NNN FCFA frais magasinage (N jrs)" quand > 0.
+  storageFee?: number;
+  storageDays?: number;
 }
 
 interface InvoicePayment {
@@ -45,6 +49,9 @@ export interface InvoiceData {
   netAmount: number;
   paidAmount: number;
   balance: number;
+  // Total des frais de magasinage cumules sur tous les colis de la facture.
+  // Si > 0, on affiche une ligne dediee dans le bloc total.
+  storageFeesTotal?: number;
 }
 
 interface ManifestParcel {
@@ -54,6 +61,9 @@ interface ManifestParcel {
   volume?: number | null;
   destination: string;
   destinationCity?: string | null;
+  // Route de transit propre au colis (snapshote sur la ligne de bordereau).
+  // Si null, on retombe sur la route du conteneur (au niveau du rendu).
+  transit?: string | null;
   price: number;
   clientName?: string | null;
   clientPhone?: string | null;
@@ -298,12 +308,35 @@ export class PDFService {
       y += 20;
     });
 
+    // --- Frais de magasinage detailles (si > 0) ---
+    // Affiche un bloc avant le summary pour expliciter comment se composent
+    // les frais de magasinage cumules : tracking + jours payants + montant.
+    const parcelsWithStorage = parcels.filter((p) => (p.storageFee ?? 0) > 0);
+    if (parcelsWithStorage.length > 0) {
+      y += 12;
+      if (y > 680) { doc.addPage(); y = 50; }
+      doc.fontSize(10).fillColor(COLORS.primary).text('Frais de magasinage', 50, y);
+      y += 16;
+      doc.fontSize(8).fillColor(COLORS.dark);
+      for (const p of parcelsWithStorage) {
+        if (y > 720) { doc.addPage(); y = 50; }
+        const left = `${p.trackingNumber} - ${p.designation || '-'}`;
+        const right = `${p.storageDays ?? 0} jr(s) payants  ·  ${formatCurrency(p.storageFee ?? 0)}`;
+        doc.text(left, 55, y, { width: 320, lineBreak: false, ellipsis: true });
+        doc.text(right, 380, y, { width: pageWidth - 330, align: 'right' });
+        y += 12;
+      }
+    }
+
     // --- Financial summary ---
     y += 15;
     const summaryX = 320;
     const summaryW = pageWidth - 270;
     const summaryLines: [string, string][] = [
-      ['Total', formatCurrency(invoiceData.totalAmount)],
+      ['Total transport', formatCurrency(invoiceData.totalAmount)],
+      ...(invoiceData.storageFeesTotal && invoiceData.storageFeesTotal > 0
+        ? [['Frais magasinage', formatCurrency(invoiceData.storageFeesTotal)] as [string, string]]
+        : []),
       ['Remise', formatCurrency(invoiceData.discount)],
       ['TVA', formatCurrency(invoiceData.tax)],
       ['Net a payer', formatCurrency(invoiceData.netAmount)],
@@ -453,10 +486,11 @@ export class PDFService {
       const cols = [
         { label: '#', width: 18 },
         { label: 'Tracking', width: 65 },
-        { label: 'Designation', width: 70 },
-        { label: 'Client', width: 95 },
-        { label: 'Destinataire', width: 95 },
-        { label: 'Ville', width: 50 },
+        { label: 'Designation', width: 55 },
+        { label: 'Client', width: 85 },
+        { label: 'Destinataire', width: 85 },
+        { label: 'Ville', width: 45 },
+        { label: 'Route', width: 55 },
         { label: 'P/V', width: 40 },
         { label: 'A payer', width: 50 },
         { label: 'Avance', width: 45 },
@@ -512,6 +546,9 @@ export class PDFService {
           clientCellLines,
           recipientCellLines,
           p.destinationCity || p.destination || '-',
+          // Route propre au colis ; fallback sur la route globale du
+          // conteneur affichee dans l'en-tete si non renseignee.
+          p.transit || manifestData.transitRoute || '-',
           pv,
           formatCurrency(Number(p.price) || 0),
           formatCurrency(Number(p.advanceAmount) || 0),

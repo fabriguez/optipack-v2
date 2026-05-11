@@ -67,6 +67,10 @@ model Organization {
   accounts      AccountingAccount[]
   loyaltyTiers  LoyaltyTierConfig[]
   systemConfigs SystemConfig[]
+  // Dettes scopees a l'organisation (tous types confondus).
+  debts         Debt[]
+  // Transporteurs tiers utilises par l'organisation.
+  carriers      Carrier[]
 
   @@map("organizations")
 }
@@ -134,6 +138,10 @@ model Agency {
   dailyReports          AgencyDailyReport[]
   reviewConfig          AgencyReviewConfig?   @relation("AgencyReviewConfig")
   parcelGroups          ParcelGroup[]
+  // Dettes rattachees a cette agence (tous types confondus).
+  debts                 Debt[]
+  // Paiements de dette encaisses/effectues depuis cette agence.
+  debtPayments          DebtPayment[]
 
   @@index([organizationId])
   @@index([city])
@@ -254,6 +262,8 @@ model AgencyCharge {
   expenses  Expense[]
   documents AgencyChargeDocument[]
   history   AgencyChargeHistory[]
+  // Dettes agence rattachees a cette charge recurrente (loyer impaye, etc.).
+  debts     Debt[]
 
   // Une seule charge auto-geree par agence et par type (ex: une seule SALARY auto)
   @@unique([agencyId, type, isAutoManaged])
@@ -456,6 +466,10 @@ model User {
   voidedPayments          Payment[]                     @relation("VoidedByUser")
   disbursementsIssued     DisbursementVoucher[]         @relation("IssuedByUser")
   disbursementsApproved   DisbursementVoucher[]         @relation("ApprovedByUser")
+  // Decaissements pour lesquels cet utilisateur a ete l'ordonnateur (lien
+  // optionnel : un ordonnateur peut etre un employe non-user, dans ce cas
+  // seul le champ texte `orderer` est rempli).
+  disbursementsOrdered    DisbursementVoucher[]         @relation("OrdererUser")
   transfersInitiated      FundTransfer[]                @relation("InitiatedByUser")
   transfersConfirmed      FundTransfer[]                @relation("ConfirmedByUser")
   closedCashRegisters     AgencyCashRegister[]
@@ -483,6 +497,12 @@ model User {
   terminationsDecided     ContractTermination[]         @relation("TerminationDecider")
   reviewsAuthored         EmployeeReview[]              @relation("ReviewAuthor")
   passwordResetTokens     PasswordResetToken[]
+  // Dettes : creation, annulation, encaissement paiements (cote agent).
+  debtsCreated            Debt[]                        @relation("DebtCreatedBy")
+  debtsVoided             Debt[]                        @relation("DebtVoidedBy")
+  debtPaymentsReceived    DebtPayment[]                 @relation("DebtPaymentReceivedBy")
+  debtPaymentsVoided      DebtPayment[]                 @relation("DebtPaymentVoidedBy")
+  debtHistoryActions      DebtHistory[]
   permissionOverrides     UserPermissionOverride[]
   justificationsSubmitted AttendanceJustification[]     @relation("JustificationSubmitter")
   justificationsReviewed  AttendanceJustification[]     @relation("JustificationReviewer")
@@ -623,6 +643,8 @@ model Employee {
   sanctions         EmployeeSanction[]
   termination       ContractTermination?
   reviews           EmployeeReview[]
+  // Dettes EMPLOYEE : avances sur salaire, remboursements frais, etc.
+  debts             Debt[]                     @relation("EmployeeDebts")
 
   @@index([agencyId])
   @@index([managerId])
@@ -1074,19 +1096,21 @@ model Client {
   notificationPrefs Json?
 
   organization        Organization[]
-  agency              Agency?              @relation(fields: [agencyId], references: [id])
-  parcels             Parcel[]             @relation("ParcelClient")
-  parcelsAsRecipient  Parcel[]             @relation("ParcelRecipient")
+  agency              Agency?               @relation(fields: [agencyId], references: [id])
+  parcels             Parcel[]              @relation("ParcelClient")
+  parcelsAsRecipient  Parcel[]              @relation("ParcelRecipient")
   invoices            Invoice[]
   debts               Debt[]
   loyaltyTransactions LoyaltyTransaction[]
   penalties           Penalty[]
   chatConversations   ChatConversation[]
-  notifications       Notification[]       @relation("ClientNotifications")
+  notifications       Notification[]        @relation("ClientNotifications")
   partnerPricings     PartnerPricing[]
-  parcelGroups        ParcelGroup[]        @relation("ClientParcelGroups")
+  parcelGroups        ParcelGroup[]         @relation("ClientParcelGroups")
   // Lien retour 1-1 si ce client correspond a un membre du personnel.
-  employee            Employee?            @relation("EmployeeClient")
+  employee            Employee?             @relation("EmployeeClient")
+  // Decaissements rembourses a ce client (cas remboursement client).
+  disbursements       DisbursementVoucher[]
 
   @@index([organizationId])
   @@index([agencyId])
@@ -1210,6 +1234,8 @@ model Container {
   histories        ContainerHistory[]
   manifests        ShippingManifest[]
   expenses         Expense[]
+  // Decaissements imputes a ce conteneur (frais transit, douane, surcout).
+  disbursements    DisbursementVoucher[]
   routingSource    InterAgencyRouting[]  @relation("SourceContainer")
   routingTarget    InterAgencyRouting[]  @relation("TargetContainer")
   discrepancies    ManifestDiscrepancy[]
@@ -1329,6 +1355,11 @@ model Parcel {
   images         ParcelImage[]
   discrepancies  ManifestDiscrepancy[]
   inventoryItems WarehouseInventoryItem[]
+  // Decaissements imputes a ce colis (frais douane, remboursement, indemnite).
+  disbursements  DisbursementVoucher[]
+  // Dettes liees a ce colis (retrait sans paiement, paiement partiel,
+  // remboursement client). Une dette CLIENT typique a un parcelId.
+  debts          Debt[]
 
   @@index([organizationId])
   @@index([clientId])
@@ -1567,6 +1598,9 @@ model AgencyCashRegister {
 
   disbursements DisbursementVoucher[]
   expenses      Expense[]
+  // Paiements de dette encaisses depuis cette caisse (cas dette client) ou
+  // payes depuis cette caisse (cas dette personnel/agence/transporteur).
+  debtPayments  DebtPayment[]
 
   @@unique([agencyId, date])
   @@index([agencyId])
@@ -1578,18 +1612,34 @@ model AgencyCashRegister {
 // ============================================================
 
 model DisbursementVoucher {
-  id               String  @id @default(uuid())
-  reference        String  @unique
-  agencyId         String
-  cashRegisterId   String
-  reason           String
-  description      String?
-  orderer          String
-  amount           Decimal @db.Decimal(15, 2)
-  amountInWords    String
-  proofUrl         String?
-  issuedByUserId   String
-  approvedByUserId String?
+  id                       String  @id @default(uuid())
+  reference                String  @unique
+  agencyId                 String
+  cashRegisterId           String
+  reason                   String
+  description              String?
+  // Ordonnateur : nom snapshote (immutable, garde la trace meme si l'employe
+  // est supprime/renomme). ordererUserId reference l'utilisateur reel pour
+  // navigation (cliquable vers /employees/:id si l'utilisateur est un employe).
+  orderer                  String
+  ordererUserId            String?
+  amount                   Decimal @db.Decimal(15, 2)
+  amountInWords            String
+  // proofUrl : justificatif principal (PDF, jpg, png). Stocke dans MinIO.
+  // proofKey : cle objet MinIO pour pouvoir le remplacer/supprimer ; utile
+  // pour l'audit interne. justificationDescription : commentaire libre sur
+  // le justificatif (facture, recu, devis, ...).
+  proofUrl                 String?
+  proofKey                 String?
+  justificationDescription String?
+  // Liens optionnels : pour les decaissements de remboursement ou de charge
+  // attribuable a un conteneur / colis / client specifique. Au moins zero
+  // ou un de ces trois liens peut etre defini (independants).
+  containerId              String?
+  parcelId                 String?
+  clientId                 String?
+  issuedByUserId           String
+  approvedByUserId         String?
 
   // Immutabilite
   isVoided       Boolean   @default(false)
@@ -1602,6 +1652,10 @@ model DisbursementVoucher {
 
   agency       Agency               @relation(fields: [agencyId], references: [id])
   cashRegister AgencyCashRegister   @relation(fields: [cashRegisterId], references: [id])
+  ordererUser  User?                @relation("OrdererUser", fields: [ordererUserId], references: [id])
+  container    Container?           @relation(fields: [containerId], references: [id])
+  parcel       Parcel?              @relation(fields: [parcelId], references: [id])
+  client       Client?              @relation(fields: [clientId], references: [id])
   issuedBy     User                 @relation("IssuedByUser", fields: [issuedByUserId], references: [id])
   approvedBy   User?                @relation("ApprovedByUser", fields: [approvedByUserId], references: [id])
   reverseEntry DisbursementVoucher? @relation("ReverseVoucher", fields: [reverseEntryId], references: [id])
@@ -1609,6 +1663,9 @@ model DisbursementVoucher {
 
   @@index([agencyId])
   @@index([cashRegisterId])
+  @@index([containerId])
+  @@index([parcelId])
+  @@index([clientId])
   @@map("disbursement_vouchers")
 }
 
@@ -1710,38 +1767,209 @@ model Expense {
 // DETTES
 // ============================================================
 
+// ============================================================
+// DETTES - REFONTE TYPEE
+// ============================================================
+// Une dette peut etre : CLIENT (colis non paye), PERSONNEL (avance salaire),
+// AGENCY (charge non reglee), CARRIER (compte transporteur). Le champ `type`
+// determine quelle cle etrangere est utilisee (validation cote use case).
+// Les modifications sont tracees via DebtHistory ; les paiements via
+// DebtPayment. Modification directe du montant interdite : passer par
+// AdjustDebtUseCase (admin only) qui ecrit dans DebtHistory.
+
 model Debt {
-  id               String         @id @default(uuid())
-  clientId         String
-  invoiceId        String?
-  creditor         String?
-  description      String
-  paymentMethod    PaymentMethod?
-  paymentProofUrl  String?
-  totalAmount      Decimal        @db.Decimal(15, 2)
-  remainingAmount  Decimal        @db.Decimal(15, 2)
-  installmentCount Int?
-  installmentPlan  Json?
-  nextDueDate      DateTime?
-  status           DebtStatus     @default(ACTIVE)
-  isCleared        Boolean        @default(false)
-  alertSent        Boolean        @default(false)
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  id             String   @id @default(uuid())
+  // Reference unique generee a la creation (DET-AAAAMMDD-NNNN).
+  reference      String   @unique
+  // organizationId pour isolation multi-tenant (toutes les dettes sont
+  // scopees par organisation).
+  organizationId String
+  type           DebtType
+  // Agence rattachee : pour CLIENT/PERSONNEL c'est l'agence operante ; pour
+  // AGENCY c'est l'agence qui doit ; pour CARRIER c'est l'agence emettrice.
+  agencyId       String
 
-  client  Client   @relation(fields: [clientId], references: [id])
-  invoice Invoice? @relation(fields: [invoiceId], references: [id])
+  // FKs typees -- au moins une est definie selon `type`. La coherence est
+  // garantie par CreateDebtUseCase (validation au create).
+  clientId       String?
+  employeeId     String?
+  carrierId      String?
+  parcelId       String?
+  // Lien optionnel vers une facture (cas dette client adossee a facture
+  // partiellement payee au retrait colis).
+  invoiceId      String?
+  // Charge recurrente (agence) qui a genere la dette (loyer, eau, ...).
+  agencyChargeId String?
 
+  // Motif resume (court, recherche). description = long form si besoin.
+  motif       String
+  description String?
+  // Creancier libre si pas de FK adequate (ex: prestataire ponctuel pour
+  // dette agence). Persiste pour audit meme apres suppression du tiers.
+  creditor    String?
+
+  totalAmount     Decimal @db.Decimal(15, 2)
+  paidAmount      Decimal @default(0) @db.Decimal(15, 2)
+  // remainingAmount = totalAmount - paidAmount, denormalise pour requetes
+  // rapides. Maintenu par RecordDebtPaymentUseCase / AdjustDebtUseCase.
+  remainingAmount Decimal @db.Decimal(15, 2)
+
+  // Echeancier : nextDueDate = prochaine echeance, dueDateFinal = echeance
+  // finale (tout doit etre paye avant). subDueDates = sous-echeances
+  // intermediaires (JSON [{ date, amount, paid }]) pour paiement echelonne.
+  nextDueDate  DateTime?
+  dueDateFinal DateTime?
+  subDueDates  Json?
+
+  status    DebtStatus @default(ACTIVE)
+  isCleared Boolean    @default(false)
+  alertSent Boolean    @default(false)
+
+  // Trace : qui a cree, qui a annule (le cas echeant). Annulation est
+  // soft : status = CANCELLED, voidReason rempli, mais la ligne reste.
+  createdByUserId String?
+  voidedAt        DateTime?
+  voidReason      String?
+  voidedByUserId  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id])
+  agency       Agency        @relation(fields: [agencyId], references: [id])
+  client       Client?       @relation(fields: [clientId], references: [id])
+  employee     Employee?     @relation("EmployeeDebts", fields: [employeeId], references: [id])
+  carrier      Carrier?      @relation(fields: [carrierId], references: [id])
+  parcel       Parcel?       @relation(fields: [parcelId], references: [id])
+  invoice      Invoice?      @relation(fields: [invoiceId], references: [id])
+  agencyCharge AgencyCharge? @relation(fields: [agencyChargeId], references: [id])
+  createdBy    User?         @relation("DebtCreatedBy", fields: [createdByUserId], references: [id])
+  voidedBy     User?         @relation("DebtVoidedBy", fields: [voidedByUserId], references: [id])
+  payments     DebtPayment[]
+  histories    DebtHistory[]
+
+  @@index([organizationId])
+  @@index([agencyId])
+  @@index([type])
   @@index([clientId])
+  @@index([employeeId])
+  @@index([carrierId])
+  @@index([parcelId])
+  @@index([invoiceId])
   @@index([status])
+  @@index([nextDueDate])
   @@map("debts")
 }
 
+enum DebtType {
+  CLIENT // client doit a la societe (colis retire sans paiement, avance partielle)
+  EMPLOYEE // societe doit a un employe (avance salaire, remboursement frais)
+  AGENCY // societe doit a un tiers (charge agence non reglee : loyer, eau, ...)
+  CARRIER // societe doit a un transporteur (compte transporteur, surcout)
+}
+
 enum DebtStatus {
-  ACTIVE
-  PARTIALLY_PAID
-  CLEARED
-  OVERDUE
+  ACTIVE // dette en cours, pas encore d'echeance depassee
+  PARTIALLY_PAID // paiement(s) effectue(s) mais pas solde
+  CLEARED // soldee (remainingAmount = 0)
+  OVERDUE // echeance depassee (calcul cron)
+  LITIGATED // contestee : pas de relance auto, fige le statut
+  CANCELLED // annulee par admin avec voidReason
+}
+
+// ============================================================
+// Paiements de dette : ne JAMAIS modifier Debt directement.
+// Chaque paiement = une ligne ici, le solde est recalcule par le use case.
+// ============================================================
+model DebtPayment {
+  id                   String        @id @default(uuid())
+  reference            String        @unique
+  debtId               String
+  amount               Decimal       @db.Decimal(15, 2)
+  paymentMethod        PaymentMethod
+  // Justificatif (image ou PDF) : URL MinIO + key pour suppression/rotation.
+  proofUrl             String?
+  proofKey             String?
+  // Reference externe (transaction MoMo, virement bancaire, n° cheque).
+  transactionReference String?
+  comment              String?
+  receivedByUserId     String
+  agencyId             String
+  // Caisse depuis laquelle le paiement a ete encaisse (cas dette client) ou
+  // depuis laquelle on a paye (cas dette personnel/agence/carrier).
+  cashRegisterId       String?
+
+  // Immutabilite -- pour corriger, on annule + cree un nouveau paiement.
+  isVoided       Boolean   @default(false)
+  voidedAt       DateTime?
+  voidReason     String?
+  voidedByUserId String?
+
+  createdAt DateTime @default(now())
+
+  debt         Debt                @relation(fields: [debtId], references: [id], onDelete: Cascade)
+  agency       Agency              @relation(fields: [agencyId], references: [id])
+  receivedBy   User                @relation("DebtPaymentReceivedBy", fields: [receivedByUserId], references: [id])
+  voidedBy     User?               @relation("DebtPaymentVoidedBy", fields: [voidedByUserId], references: [id])
+  cashRegister AgencyCashRegister? @relation(fields: [cashRegisterId], references: [id])
+
+  @@index([debtId])
+  @@index([agencyId])
+  @@index([createdAt])
+  @@map("debt_payments")
+}
+
+// ============================================================
+// Audit des modifications de dette : tout changement (ajustement montant,
+// changement echeance, changement statut, annulation) est trace ici.
+// ============================================================
+model DebtHistory {
+  id        String   @id @default(uuid())
+  debtId    String
+  action    String // 'CREATED' | 'ADJUSTED' | 'PAYMENT_RECORDED' | 'PAYMENT_VOIDED' | 'STATUS_CHANGED' | 'DUE_DATE_CHANGED' | 'CANCELLED'
+  // Snapshot avant/apres pour les champs modifies, sous forme libre JSON.
+  // Ex: { field: 'totalAmount', before: 100000, after: 120000 }.
+  changes   Json?
+  comment   String?
+  userId    String?
+  createdAt DateTime @default(now())
+
+  debt Debt  @relation(fields: [debtId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([debtId])
+  @@index([createdAt])
+  @@map("debt_histories")
+}
+
+// ============================================================
+// Transporteurs : entites tiers qui assurent un tronçon de transit.
+// Permet d'imputer dettes / decaissements / benefices a un transporteur
+// nomme, distinct des agences internes.
+// ============================================================
+model Carrier {
+  id             String   @id @default(uuid())
+  organizationId String
+  name           String
+  contactName    String?
+  phone          String?
+  email          String?
+  address        String?
+  // Type d'activite (terrestre, maritime, aerien, multi). Texte libre pour
+  // ne pas contraindre prematurement.
+  carrierType    String?
+  notes          String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  debts        Debt[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@index([isActive])
+  @@map("carriers")
 }
 
 // ============================================================

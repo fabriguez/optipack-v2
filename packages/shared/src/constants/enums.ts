@@ -156,15 +156,18 @@ export const TransferStatus = {
 
 export type TransferStatus = (typeof TransferStatus)[keyof typeof TransferStatus];
 
-// -- Statut dette --
-export const DebtStatus = {
+// -- Statut dette (legacy) --
+// La verite metier est maintenant dans schemas/debt.schema.ts (DebtStatusValues),
+// qui inclut aussi LITIGATED et CANCELLED. Ce const est conserve pour la
+// retro-compat mais n'est plus re-exporte depuis index.ts pour eviter le
+// conflit de noms avec le z.enum du schema.
+const DebtStatusLegacy = {
   ACTIVE: 'ACTIVE',
   PARTIALLY_PAID: 'PARTIALLY_PAID',
   CLEARED: 'CLEARED',
   OVERDUE: 'OVERDUE',
 } as const;
-
-export type DebtStatus = (typeof DebtStatus)[keyof typeof DebtStatus];
+export { DebtStatusLegacy };
 
 // -- Type transaction fidelite --
 export const LoyaltyTransactionType = {

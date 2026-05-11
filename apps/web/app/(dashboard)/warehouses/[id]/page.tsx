@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { ArrowLeft, Package, Plus, Eye, Edit, Trash2, ArrowRightLeft, ClipboardCheck, PlayCircle, QrCode, HandCoins, MapPin, Camera, ScanLine } from 'lucide-react';
 import { BatchScanCollector } from '@/components/shared/BatchScanCollector';
 import { ParcelPickerList } from '@/components/shared/ParcelPickerList';
+import { normalizeScannedTracking } from '@/lib/utils/scanNormalize';
 import { scanSound } from '@/lib/utils/scanSound';
 import { ParcelQRDialog } from '@/components/shared/ParcelQRDialog';
 import { ParcelHandoverDialog } from '@/components/shared/ParcelHandoverDialog';
@@ -162,7 +163,10 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
   // Resout un tracking number en parcel id (en n'acceptant que les colis
   // existants). On va chercher dans la base via l'endpoint de recherche
   // generique. Echoue clairement si introuvable.
-  const findParcelByTracking = async (tracking: string) => {
+  const findParcelByTracking = async (rawTracking: string) => {
+    // BUG FIX : les QR encodent une URL ("https://.../tracking/TST-X"), pas
+    // le tracking nu. Normalisation systematique avant la recherche.
+    const tracking = normalizeScannedTracking(rawTracking);
     const r = await apiClient.get('/parcels', { params: { search: tracking, limit: 5 } });
     const list = (r.data?.data || []) as any[];
     const match = list.find((p) => p.trackingNumber === tracking) || list[0];

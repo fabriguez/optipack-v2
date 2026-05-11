@@ -4,15 +4,44 @@ import type { IDebtRepository } from '../../../application/interfaces/IDebtRepos
 import type { PaginationInput, PaginatedResponse } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
 
+// Relations charges sur les requetes detail/list : tous les liens typees
+// + la timeline (paiements + history) sur le detail.
+const DEBT_LIST_INCLUDE = {
+  agency: { select: { id: true, name: true } },
+  client: { select: { id: true, fullName: true, phone: true } },
+  employee: { select: { id: true, fullName: true, phone: true } },
+  carrier: { select: { id: true, name: true } },
+  parcel: { select: { id: true, trackingNumber: true, designation: true } },
+  invoice: { select: { id: true, reference: true } },
+  agencyCharge: { select: { id: true, label: true } },
+} satisfies Prisma.DebtInclude;
+
+const DEBT_DETAIL_INCLUDE = {
+  ...DEBT_LIST_INCLUDE,
+  payments: {
+    orderBy: { createdAt: 'desc' as const },
+    include: {
+      receivedBy: { select: { id: true, firstName: true, lastName: true } },
+      voidedBy: { select: { id: true, firstName: true, lastName: true } },
+      agency: { select: { id: true, name: true } },
+    },
+  },
+  histories: {
+    orderBy: { createdAt: 'desc' as const },
+    include: {
+      user: { select: { id: true, firstName: true, lastName: true } },
+    },
+  },
+  createdBy: { select: { id: true, firstName: true, lastName: true } },
+  voidedBy: { select: { id: true, firstName: true, lastName: true } },
+} satisfies Prisma.DebtInclude;
+
 @injectable()
 export class PrismaDebtRepository implements IDebtRepository {
   async findById(id: string): Promise<Debt | null> {
     return prisma.debt.findUnique({
       where: { id },
-      include: {
-        client: { select: { id: true, fullName: true, phone: true } },
-        invoice: { select: { id: true, reference: true } },
-      },
+      include: DEBT_DETAIL_INCLUDE,
     });
   }
 
@@ -20,11 +49,23 @@ export class PrismaDebtRepository implements IDebtRepository {
     return prisma.debt.findMany({
       where: { clientId, isCleared: false },
       orderBy: { nextDueDate: 'asc' },
+      include: DEBT_LIST_INCLUDE,
     });
   }
 
   async findAll(
-    filters: { clientId?: string; status?: string },
+    filters: {
+      // Filtres principaux exposes a l'UI : segmentation client/entreprise
+      // se fait via `type` (CLIENT vs EMPLOYEE/AGENCY/CARRIER).
+      clientId?: string;
+      employeeId?: string;
+      carrierId?: string;
+      agencyId?: string;
+      type?: string;
+      status?: string;
+      // 'company' : raccourci pour types EMPLOYEE+AGENCY+CARRIER (dette entreprise).
+      bucket?: 'client' | 'company' | undefined;
+    },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<Debt>> {
     const { page, limit, search } = pagination;
@@ -32,20 +73,34 @@ export class PrismaDebtRepository implements IDebtRepository {
 
     const where: Prisma.DebtWhereInput = {
       ...(filters.clientId && { clientId: filters.clientId }),
+      ...(filters.employeeId && { employeeId: filters.employeeId }),
+      ...(filters.carrierId && { carrierId: filters.carrierId }),
+      ...(filters.agencyId && { agencyId: filters.agencyId }),
+      ...(filters.type && { type: filters.type as any }),
       ...(filters.status && { status: filters.status as any }),
+      ...(filters.bucket === 'client' && { type: 'CLIENT' as const }),
+      ...(filters.bucket === 'company' && {
+        type: { in: ['EMPLOYEE', 'AGENCY', 'CARRIER'] as const },
+      }),
       ...(search && {
-        client: { fullName: { contains: search, mode: 'insensitive' } },
+        OR: [
+          { reference: { contains: search, mode: 'insensitive' as const } },
+          { motif: { contains: search, mode: 'insensitive' as const } },
+          { creditor: { contains: search, mode: 'insensitive' as const } },
+          { client: { fullName: { contains: search, mode: 'insensitive' as const } } },
+          { employee: { fullName: { contains: search, mode: 'insensitive' as const } } },
+          { carrier: { name: { contains: search, mode: 'insensitive' as const } } },
+        ],
       }),
     };
 
     const [data, total] = await Promise.all([
       prisma.debt.findMany({
-        where, skip, take: limit,
+        where,
+        skip,
+        take: limit,
         orderBy: { createdAt: 'desc' },
-        include: {
-          client: { select: { id: true, fullName: true, phone: true } },
-          invoice: { select: { id: true, reference: true } },
-        },
+        include: DEBT_LIST_INCLUDE,
       }),
       prisma.debt.count({ where }),
     ]);
@@ -57,11 +112,13 @@ export class PrismaDebtRepository implements IDebtRepository {
     return prisma.debt.findMany({
       where: {
         isCleared: false,
-        nextDueDate: { lt: new Date() },
+        status: { notIn: ['CANCELLED', 'LITIGATED'] },
+        OR: [
+          { nextDueDate: { lt: new Date() } },
+          { dueDateFinal: { lt: new Date() } },
+        ],
       },
-      include: {
-        client: { select: { id: true, fullName: true, phone: true } },
-      },
+      include: DEBT_LIST_INCLUDE,
     });
   }
 

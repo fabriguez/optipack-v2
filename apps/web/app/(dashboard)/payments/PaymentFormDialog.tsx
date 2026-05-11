@@ -13,24 +13,52 @@ import { useRecordPayment } from '@/lib/hooks/usePayments';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 
-interface Props { open: boolean; onClose: () => void; invoiceId?: string; }
+interface Props {
+  open: boolean;
+  onClose: () => void;
+  invoiceId?: string;
+  /**
+   * Tracking number du colis a l'origine du paiement (cas "Enregistrer
+   * paiement" depuis la page detail colis). Affiche un bandeau de contexte
+   * pour confirmer a l'utilisateur que le paiement concerne bien ce colis.
+   */
+  parcelTracking?: string;
+}
 
-export function PaymentFormDialog({ open, onClose, invoiceId }: Props) {
+export function PaymentFormDialog({ open, onClose, invoiceId, parcelTracking }: Props) {
   const mutation = useRecordPayment();
 
-  // Charger les factures non soldees
+  // Charger les factures non soldees (quand pas d'invoice pre-fixee).
   const { data: invoicesData } = useQuery({
     queryKey: ['invoices-unpaid'],
     queryFn: () => apiClient.get('/invoices', { params: { limit: 100 } }).then((r) => r.data),
     enabled: open && !invoiceId,
   });
 
+  // Charge la facture pre-fixee pour afficher un libelle clair (reference +
+  // client + solde) plutot que l'UUID brut.
+  const { data: pinnedInvoiceData } = useQuery({
+    queryKey: ['invoice-for-payment', invoiceId],
+    queryFn: () => apiClient.get(`/invoices/${invoiceId}`).then((r) => r.data),
+    enabled: open && !!invoiceId,
+  });
+  const pinnedInvoice = pinnedInvoiceData?.data;
+  const pinnedLabel = pinnedInvoice
+    ? `${pinnedInvoice.reference} - ${pinnedInvoice.client?.fullName || ''} (solde ${Number(pinnedInvoice.balance).toLocaleString()} XAF)`
+    : invoiceId || '';
+
   const { register, handleSubmit, reset, control, formState: { errors } } = useForm<RecordPaymentInput>({
     resolver: zodResolver(recordPaymentSchema),
     defaultValues: { invoiceId: invoiceId || '' },
   });
 
-  const onSubmit = (data: RecordPaymentInput) => { mutation.mutate(data); reset(); onClose(); };
+  const onSubmit = (data: RecordPaymentInput) => {
+    // Force invoiceId au pinned : meme si le hidden input est altere, on
+    // garantit que le paiement va sur la bonne facture.
+    mutation.mutate({ ...data, invoiceId: invoiceId || data.invoiceId });
+    reset();
+    onClose();
+  };
 
   const invoiceOptions = (invoicesData?.data || [])
     .filter((inv: any) => inv.status !== 'PAID')
@@ -53,8 +81,18 @@ export function PaymentFormDialog({ open, onClose, invoiceId }: Props) {
       }
     >
       <form id="payment-form" onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        {parcelTracking && (
+          <div className="rounded-xl border border-primary-100 bg-primary-50/50 px-3 py-2 text-xs text-primary-900">
+            Paiement enregistre pour le colis <span className="font-mono font-bold">{parcelTracking}</span>.
+          </div>
+        )}
         {invoiceId ? (
-          <AppInput label="Facture" value={invoiceId} disabled {...register('invoiceId')} />
+          // Champ grise affichant le libelle convivial ; on garde un input
+          // cache pour que React Hook Form transmette bien l'invoiceId.
+          <>
+            <AppInput label="Facture" value={pinnedLabel} disabled readOnly />
+            <input type="hidden" {...register('invoiceId')} value={invoiceId} />
+          </>
         ) : (
           <AppSelect
             label="Facture"

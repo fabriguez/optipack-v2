@@ -136,17 +136,123 @@ router.get('/:id/label', async (req, res, next) => {
   }
 });
 
-// Historique complet d'un colis
+// Historique complet d'un colis : evenements operationnels (ParcelHistory)
+// + actions financieres (creation facture, paiements, annulations, debts).
+// On fusionne tout dans une timeline triee desc par date pour que la page
+// detail montre l'historique complet, op + finance, en un seul flux.
 router.get('/:id/history', async (req, res, next) => {
   try {
-    const history = await prisma.parcelHistory.findMany({
-      where: { parcelId: req.params.id },
-      orderBy: { createdAt: 'desc' },
-      include: {
-        user: { select: { id: true, firstName: true, lastName: true } },
-      },
-    });
-    res.json({ success: true, data: history });
+    const parcelId = req.params.id;
+    const [history, parcel] = await Promise.all([
+      prisma.parcelHistory.findMany({
+        where: { parcelId },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          user: { select: { id: true, firstName: true, lastName: true } },
+        },
+      }),
+      prisma.parcel.findUnique({
+        where: { id: parcelId },
+        select: { id: true, price: true, invoiceId: true, trackingNumber: true, designation: true },
+      }),
+    ]);
+
+    // Evenements financiers derives. Forme volontairement compatible avec
+    // les entrees ParcelHistory pour que l'UI utilise un seul renderer.
+    const financialEvents: Array<{
+      id: string;
+      action: string;
+      createdAt: Date;
+      comment: string | null;
+      user: { id: string; firstName: string | null; lastName: string | null } | null;
+      metadata: Record<string, unknown>;
+      financial: true;
+    }> = [];
+
+    if (parcel?.invoiceId) {
+      const invoice = await prisma.invoice.findUnique({
+        where: { id: parcel.invoiceId },
+        include: {
+          payments: {
+            orderBy: { createdAt: 'asc' },
+            include: {
+              receivedBy: { select: { id: true, firstName: true, lastName: true } },
+              voidedBy: { select: { id: true, firstName: true, lastName: true } },
+              agency: { select: { id: true, name: true } },
+            },
+          },
+          debts: true,
+        },
+      });
+
+      if (invoice) {
+        // Creation de la facture
+        financialEvents.push({
+          id: `invoice-created-${invoice.id}`,
+          action: 'INVOICE_GENERATED',
+          createdAt: invoice.createdAt,
+          comment: `Facture ${invoice.reference} generee (${Number(invoice.totalAmount).toLocaleString()} XAF)`,
+          user: null,
+          metadata: {
+            invoiceId: invoice.id,
+            reference: invoice.reference,
+            totalAmount: Number(invoice.totalAmount),
+            status: invoice.status,
+          },
+          financial: true,
+        });
+
+        for (const pay of invoice.payments) {
+          financialEvents.push({
+            id: `payment-${pay.id}`,
+            action: pay.isVoided ? 'PAYMENT_VOIDED' : 'PAYMENT_RECORDED',
+            createdAt: pay.createdAt,
+            comment: pay.isVoided
+              ? `Paiement ${pay.reference} annule (${pay.voidReason ?? 'sans motif'})`
+              : `Paiement ${pay.reference} : ${Number(pay.amount).toLocaleString()} XAF (${pay.paymentMethod})`,
+            user: pay.receivedBy,
+            metadata: {
+              paymentId: pay.id,
+              reference: pay.reference,
+              amount: Number(pay.amount),
+              method: pay.paymentMethod,
+              agency: pay.agency,
+              isVoided: pay.isVoided,
+              voidedAt: pay.voidedAt,
+              voidReason: pay.voidReason,
+              voidedBy: pay.voidedBy,
+            },
+            financial: true,
+          });
+        }
+
+        for (const debt of invoice.debts) {
+          financialEvents.push({
+            id: `debt-${debt.id}`,
+            action: 'DEBT_OPENED',
+            createdAt: debt.createdAt,
+            comment: `Dette ouverte : ${Number(debt.totalAmount).toLocaleString()} XAF${debt.nextDueDate ? ` (prochaine echeance ${new Date(debt.nextDueDate).toLocaleDateString()})` : ''}`,
+            user: null,
+            metadata: {
+              debtId: debt.id,
+              totalAmount: Number(debt.totalAmount),
+              remainingAmount: Number(debt.remainingAmount),
+              status: debt.status,
+              nextDueDate: debt.nextDueDate,
+            },
+            financial: true,
+          });
+        }
+      }
+    }
+
+    // Fusion + tri desc.
+    const merged = [
+      ...history.map((h) => ({ ...h, financial: false as const })),
+      ...financialEvents,
+    ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    res.json({ success: true, data: merged });
   } catch (err) {
     next(err);
   }

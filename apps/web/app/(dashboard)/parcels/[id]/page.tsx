@@ -29,6 +29,7 @@ import {
 import { apiClient } from '@/lib/api/client';
 import { formatAmount, formatDate, formatDateTime } from '@transitsoftservices/shared';
 import { ParcelFormDialog } from '../ParcelFormDialog';
+import { PaymentFormDialog } from '../../payments/PaymentFormDialog';
 import { ImageInput } from '@/components/shared/ImageInput';
 import { AuthedImage } from '@/components/shared/AuthedImage';
 import { uploadImage } from '@/lib/api/uploads';
@@ -112,6 +113,12 @@ const ACTION_LABELS: Record<string, string> = {
   UNLOADED_MODIFIED: 'Decharge - modifie',
   IMAGE_ADDED: 'Image ajoutee',
   IMAGE_REMOVED: 'Image retiree',
+  // Evenements financiers : injectes cote API en fusionnant les paiements,
+  // factures et dettes liees au colis dans le meme flux d'historique.
+  INVOICE_GENERATED: 'Facture generee',
+  PAYMENT_RECORDED: 'Paiement enregistre',
+  PAYMENT_VOIDED: 'Paiement annule',
+  DEBT_OPENED: 'Dette ouverte',
 };
 
 export default function ParcelDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -124,6 +131,7 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
   const removeImage = useRemoveParcelImage(id);
 
   const [editOpen, setEditOpen] = useState(false);
+  const [paymentOpen, setPaymentOpen] = useState(false);
   const [imageCaption, setImageCaption] = useState('');
   const [imageUploading, setImageUploading] = useState(false);
   const [imageToDelete, setImageToDelete] = useState<string | null>(null);
@@ -234,12 +242,17 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
                   </AppButton>
                 </Link>
                 {parcel.invoice.status !== 'PAID' && (
-                  <Link href={`/payments?invoiceId=${parcel.invoice.id}`}>
-                    <AppButton className="w-full" size="sm">
-                      <CreditCard className="h-4 w-4" />
-                      Enregistrer paiement
-                    </AppButton>
-                  </Link>
+                  // Ouvre le dialog directement plutot que de rediriger vers
+                  // la page /payments. La facture est pre-fixee et grisee dans
+                  // le formulaire pour eviter toute mauvaise selection.
+                  <AppButton
+                    className="w-full"
+                    size="sm"
+                    onClick={() => setPaymentOpen(true)}
+                  >
+                    <CreditCard className="h-4 w-4" />
+                    Enregistrer paiement
+                  </AppButton>
                 )}
               </div>
             </div>
@@ -476,13 +489,20 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
               <div key={entry.id} className="relative flex gap-4 py-3">
                 <div className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center">
                   <div className={`h-3 w-3 rounded-full border-2 ${
-                    i === 0 ? 'border-primary-500 bg-primary-500' : 'border-gray-300 bg-white'
+                    entry.financial
+                      ? 'border-amber-500 bg-amber-500'
+                      : i === 0
+                        ? 'border-primary-500 bg-primary-500'
+                        : 'border-gray-300 bg-white'
                   }`} />
                 </div>
 
-                <div className="flex-1 rounded-xl bg-gray-50 p-3">
+                <div className={`flex-1 rounded-xl p-3 ${entry.financial ? 'bg-amber-50/60 border border-amber-100' : 'bg-gray-50'}`}>
                   <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-gray-900">
+                    <p className="text-sm font-medium text-gray-900 flex items-center gap-1.5">
+                      {entry.financial && (
+                        <Banknote className="h-3.5 w-3.5 text-amber-600" />
+                      )}
                       {ACTION_LABELS[entry.action] || entry.action}
                     </p>
                     <span className="text-xs text-gray-400">{formatDateTime(entry.createdAt)}</span>
@@ -591,6 +611,15 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
         onClose={() => setEditOpen(false)}
         parcel={parcel}
       />
+
+      {parcel.invoice && (
+        <PaymentFormDialog
+          open={paymentOpen}
+          onClose={() => setPaymentOpen(false)}
+          invoiceId={parcel.invoice.id}
+          parcelTracking={parcel.trackingNumber}
+        />
+      )}
 
       <ConfirmDialog
         open={!!imageToDelete}

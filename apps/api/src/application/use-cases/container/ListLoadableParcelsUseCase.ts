@@ -7,6 +7,10 @@ interface LoadableParcelsFilters {
   search?: string;
   page?: number;
   limit?: number;
+  // Restriction optionnelle a un magasin source precis (au sein de l'agence
+  // de depart). Permet a un magasinier d'isoler les colis presents dans son
+  // magasin avant chargement, plutot que de scroller toute l'agence.
+  warehouseId?: string;
 }
 
 @injectable()
@@ -34,7 +38,13 @@ export class ListLoadableParcelsUseCase {
       status: 'IN_STOCK',
       isPresent: true,
       // colis qui se trouvent physiquement dans une agence == agence de depart du conteneur
-      warehouse: { agencyId: c.departureAgencyId },
+      // Si un warehouseId est fourni, on restreint au magasin precis (cas
+      // magasinier qui ne voit que son perimetre). On verifie quand meme que
+      // ce magasin appartient bien a l'agence de depart pour eviter les
+      // injections d'IDs hors scope.
+      warehouse: filters.warehouseId
+        ? { id: filters.warehouseId, agencyId: c.departureAgencyId }
+        : { agencyId: c.departureAgencyId },
       // exclure ceux dont la destination finale = agence de depart
       NOT: { destinationAgencyId: c.departureAgencyId },
     };

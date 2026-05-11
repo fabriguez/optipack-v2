@@ -2,7 +2,11 @@ import { z } from 'zod';
 import { TransitType } from '../constants/enums';
 
 export const createContainerSchema = z.object({
-  designation: z.string().min(2, 'La designation doit contenir au moins 2 caracteres'),
+  // Designation optionnelle : si omise (ou vide), le backend genere une
+  // designation auto de la forme <ORG>-<TYPE>-<DEST>-<NUM> via
+  // CreateContainerUseCase / buildAutoDesignation. Permet d'eviter les
+  // collisions et les noms non normalises saisis a la main.
+  designation: z.string().trim().min(2, 'La designation doit contenir au moins 2 caracteres').optional().or(z.literal('')),
   type: z.enum([TransitType.AIR, TransitType.SEA, TransitType.LAND]),
   isForwarding: z.boolean().optional().default(false),
   parentContainerId: z.string().uuid('ID conteneur parent invalide').optional(),

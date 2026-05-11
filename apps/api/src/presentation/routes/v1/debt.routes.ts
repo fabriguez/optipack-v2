@@ -1,8 +1,15 @@
 import { Router } from 'express';
 import { DebtController } from '../../controllers/DebtController';
-import { authenticate } from '../../middleware/authMiddleware';
+import { authenticate, authorize } from '../../middleware/authMiddleware';
 import { validate } from '../../middleware/validate';
-import { paginationSchema } from '@transitsoftservices/shared';
+import {
+  paginationSchema,
+  createDebtSchema,
+  recordDebtPaymentSchema,
+  voidDebtSchema,
+  adjustDebtSchema,
+  markDebtLitigatedSchema,
+} from '@transitsoftservices/shared';
 
 const router = Router();
 
@@ -11,6 +18,38 @@ router.use(authenticate);
 router.get('/', validate(paginationSchema, 'query'), DebtController.list);
 router.get('/:id', DebtController.getById);
 router.get('/client/:clientId', DebtController.getByClient);
-router.post('/', DebtController.create);
+router.post('/', validate(createDebtSchema), DebtController.create);
+
+// Paiement d'une dette : permission cassiere / agent / admin.
+router.post(
+  '/:id/payments',
+  authorize('SUPER_ADMIN', 'ADMIN', 'AGENT'),
+  validate(recordDebtPaymentSchema),
+  DebtController.recordPayment,
+);
+
+// Annulation : admin uniquement.
+router.post(
+  '/:id/void',
+  authorize('SUPER_ADMIN', 'ADMIN'),
+  validate(voidDebtSchema),
+  DebtController.voidDebt,
+);
+
+// Ajustement du montant ou de l'echeance : admin uniquement.
+router.post(
+  '/:id/adjust',
+  authorize('SUPER_ADMIN', 'ADMIN'),
+  validate(adjustDebtSchema),
+  DebtController.adjust,
+);
+
+// Bascule en LITIGATED : admin uniquement.
+router.post(
+  '/:id/litigated',
+  authorize('SUPER_ADMIN', 'ADMIN'),
+  validate(markDebtLitigatedSchema),
+  DebtController.markLitigated,
+);
 
 export default router;

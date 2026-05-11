@@ -4,6 +4,7 @@ import { MANIFEST_REPOSITORY, type IManifestRepository } from '../../application
 import { NotFoundError } from '../../domain/errors/BusinessError';
 import { prisma } from '../../config/database';
 import { PDFService } from '../../application/services/PDFService';
+import { ExcelService } from '../../infrastructure/excel/ExcelService';
 import { HistoryService } from '../../application/services/HistoryService';
 import { RegisterExtraManifestParcelUseCase } from '../../application/use-cases/manifest/RegisterExtraManifestParcelUseCase';
 
@@ -206,6 +207,7 @@ export class ManifestController {
           volume: l.volume ? Number(l.volume) : null,
           destination: l.destination || '-',
           destinationCity: l.destinationCity ?? null,
+          transit: l.transit ?? null,
           price: Number(l.price),
           clientName: l.clientName ?? '-',
           clientPhone: l.clientPhone ?? null,
@@ -222,6 +224,81 @@ export class ManifestController {
       res.set({
         'Content-Type': 'application/pdf',
         'Content-Disposition': `inline; filename="${manifest.number}.pdf"`,
+        'Content-Length': buf.length.toString(),
+      });
+      res.send(buf);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * Export XLSX d'un bordereau. Reprend les lignes snapshotees du bordereau
+   * (immuables), une ligne par colis avec route de transit propre au colis.
+   * Permet aux operationnels (douane, transporteur) d'exploiter le bordereau
+   * dans Excel sans repasser par un parseur PDF.
+   */
+  static async getXLSX(req: Request, res: Response, next: NextFunction) {
+    try {
+      const manifest = await prisma.shippingManifest.findUnique({
+        where: { id: req.params.id },
+        include: {
+          lines: { orderBy: { addedAt: 'asc' } },
+          container: {
+            include: {
+              departureAgency: { select: { name: true, city: true } },
+              arrivalAgency: { select: { name: true, city: true } },
+              transitRoute: { select: { name: true } },
+            },
+          },
+        },
+      });
+      if (!manifest) throw new NotFoundError('Bordereau', req.params.id);
+
+      const excel = new ExcelService();
+      const rows = manifest.lines.map((l, i) => ({
+        num: i + 1,
+        tracking: l.trackingNumber || '-',
+        designation: l.designation,
+        clientName: l.clientName ?? '',
+        clientPhone: l.clientPhone ?? '',
+        recipientName: l.recipientName ?? '',
+        recipientPhone: l.recipientPhone ?? '',
+        destinationCity: l.destinationCity ?? l.destination ?? '',
+        transit: l.transit ?? manifest.container.transitRoute?.name ?? '',
+        weight: l.weight != null ? Number(l.weight) : '',
+        volume: l.volume != null ? Number(l.volume) : '',
+        price: Number(l.price),
+        advance: Number(l.advanceAmount),
+        balance: Number(l.balanceAmount),
+        status: l.status ?? '',
+      }));
+
+      const buf = await excel.generate(
+        manifest.type === 'DISPATCH' ? 'Bordereau envoi' : 'Bordereau reception',
+        [
+          { key: 'num', header: '#', width: 6 },
+          { key: 'tracking', header: 'Tracking', width: 18 },
+          { key: 'designation', header: 'Designation', width: 28 },
+          { key: 'clientName', header: 'Client', width: 24 },
+          { key: 'clientPhone', header: 'Tel client', width: 16 },
+          { key: 'recipientName', header: 'Destinataire', width: 24 },
+          { key: 'recipientPhone', header: 'Tel destinataire', width: 16 },
+          { key: 'destinationCity', header: 'Ville', width: 18 },
+          { key: 'transit', header: 'Route de transit', width: 22 },
+          { key: 'weight', header: 'Masse (kg)', width: 12 },
+          { key: 'volume', header: 'Volume (m3)', width: 12 },
+          { key: 'price', header: 'Prix', width: 14 },
+          { key: 'advance', header: 'Avance', width: 14 },
+          { key: 'balance', header: 'Reste a payer', width: 14 },
+          { key: 'status', header: 'Statut', width: 14 },
+        ],
+        rows,
+      );
+
+      res.set({
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Disposition': `attachment; filename="${manifest.number}.xlsx"`,
         'Content-Length': buf.length.toString(),
       });
       res.send(buf);

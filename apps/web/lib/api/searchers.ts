@@ -67,11 +67,12 @@ export const searchers = {
     }));
   }, 'searchers.recipients'),
 
-  warehouses: tag(async (q: string, limit = DEFAULT_LIMIT): Promise<SearchOption[]> => {
+  warehouses: tag(async (q: string, limit = DEFAULT_LIMIT, extra?: Record<string, unknown>): Promise<SearchOption[]> => {
     const items = await searchPaginated<{ id: string; name: string; agency?: { name: string } }>(
       '/warehouses',
       q,
       limit,
+      extra,
     );
     return items.map((w) => ({
       value: w.id,

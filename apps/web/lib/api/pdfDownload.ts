@@ -13,12 +13,15 @@ import { toast } from 'sonner';
  */
 export async function fetchPdfAuthed(
   path: string,
-  opts: { mode?: 'open' | 'download'; fileName?: string } = {},
+  opts: { mode?: 'open' | 'download'; fileName?: string; mime?: string } = {},
 ) {
-  const mode = opts.mode ?? 'open';
+  // Si on telecharge un fichier non-PDF (XLSX par ex.), on force le mode
+  // download : ouvrir un blob XLSX dans un onglet ne fait rien d'utile.
+  const mime = opts.mime ?? 'application/pdf';
+  const mode = opts.mode ?? (mime === 'application/pdf' ? 'open' : 'download');
   try {
     const res = await apiClient.get(path, { responseType: 'blob' });
-    const blob = new Blob([res.data], { type: 'application/pdf' });
+    const blob = new Blob([res.data], { type: mime });
     const url = window.URL.createObjectURL(blob);
 
     if (mode === 'download') {

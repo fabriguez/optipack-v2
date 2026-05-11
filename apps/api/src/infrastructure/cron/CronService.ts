@@ -103,9 +103,14 @@ async function checkDebtAlerts(): Promise<void> {
   const threeDaysFromNow = new Date();
   threeDaysFromNow.setDate(threeDaysFromNow.getDate() + 3);
 
-  // Find debts due within 3 days that haven't been alerted yet
+  // Find debts due within 3 days that haven't been alerted yet.
+  // Depuis la refonte (Phase 1), seules les dettes CLIENT ont un clientId
+  // sur lequel envoyer une notif client ; les autres types (EMPLOYEE/AGENCY/
+  // CARRIER) seront alertes via un autre canal en Phase 2.
   const debts = await prisma.debt.findMany({
     where: {
+      type: 'CLIENT',
+      clientId: { not: null },
       status: { in: ['ACTIVE', 'PARTIALLY_PAID'] },
       alertSent: false,
       nextDueDate: { lte: threeDaysFromNow, gte: new Date() },
@@ -118,10 +123,11 @@ async function checkDebtAlerts(): Promise<void> {
 
   let alerted = 0;
   for (const debt of debts) {
-    // Create notification for the client
+    // clientId garanti non-null par le filtre `clientId: { not: null }`
+    // ci-dessus ; on assert pour le compilateur.
     await prisma.notification.create({
       data: {
-        clientId: debt.clientId,
+        clientId: debt.clientId!,
         title: 'Echeance de dette proche',
         message: `Votre echeance de ${Number(debt.remainingAmount).toLocaleString()} FCFA arrive le ${debt.nextDueDate?.toLocaleDateString('fr-FR')}. Facture: ${debt.invoice?.reference || '-'}`,
         type: 'IN_APP',

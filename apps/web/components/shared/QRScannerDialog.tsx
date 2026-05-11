@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Camera, CameraOff, RefreshCw, RotateCw, Keyboard, Bug, Trash2, Volume2, VolumeX } from 'lucide-react';
+import { Camera, CameraOff, RefreshCw, RotateCw, Keyboard, Bug, Trash2, Volume2, VolumeX, ScanLine, X } from 'lucide-react';
 import { AppDialog } from '@/components/ui/AppDialog';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppInput } from '@/components/ui/AppInput';
@@ -19,6 +19,17 @@ interface QRScannerDialogProps {
   onDetected: (decoded: string) => void;
   title?: string;
   closeOnDetect?: boolean;
+  /**
+   * Liste de codes deja accumules a afficher en temps reel sous la camera.
+   * Permet a l'utilisateur de scanner en chaine sans devoir fermer le dialog
+   * pour verifier ce qui a ete capture. Si absent, l'ancien comportement est
+   * conserve (camera seule).
+   */
+  accumulatedCodes?: string[];
+  /** Callback pour retirer un code de la liste accumulee (croix par item). */
+  onRemoveAccumulatedCode?: (code: string) => void;
+  /** Callback pour vider toute la liste accumulee. */
+  onClearAccumulated?: () => void;
 }
 
 /**
@@ -42,6 +53,9 @@ export function QRScannerDialog({
   onDetected,
   title = 'Scanner (QR / code-barres)',
   closeOnDetect = true,
+  accumulatedCodes,
+  onRemoveAccumulatedCode,
+  onClearAccumulated,
 }: QRScannerDialogProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -435,6 +449,67 @@ export function QRScannerDialog({
 
         {!error && !running && (
           <p className="text-xs text-gray-400">Demarrage de la camera...</p>
+        )}
+
+        {accumulatedCodes && (
+          <div className="rounded-xl border border-primary-100 bg-primary-50/40">
+            <div className="flex items-center justify-between border-b border-primary-100/60 px-3 py-2">
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary-900">
+                <ScanLine className="h-3.5 w-3.5" />
+                {accumulatedCodes.length} code{accumulatedCodes.length > 1 ? 's' : ''} scanne{accumulatedCodes.length > 1 ? 's' : ''}
+              </span>
+              {accumulatedCodes.length > 0 && onClearAccumulated && (
+                <button
+                  type="button"
+                  onClick={onClearAccumulated}
+                  className="inline-flex items-center gap-1 text-[11px] text-red-600 hover:underline"
+                >
+                  <Trash2 className="h-3 w-3" />
+                  Tout vider
+                </button>
+              )}
+            </div>
+            {accumulatedCodes.length === 0 ? (
+              <div className="p-3 text-center text-[11px] text-gray-500">
+                Scannez un code, il apparaitra ici en temps reel. Continuez a scanner sans fermer.
+              </div>
+            ) : (
+              <ul className="max-h-44 divide-y divide-primary-100/60 overflow-auto">
+                {accumulatedCodes
+                  .slice()
+                  .reverse()
+                  .map((c, i) => {
+                    const num = accumulatedCodes.length - i;
+                    return (
+                      <li
+                        key={c}
+                        className={`flex items-center justify-between px-3 py-1.5 text-xs ${i === 0 ? 'bg-primary-100/50' : ''}`}
+                      >
+                        <span className="font-mono text-gray-700">
+                          <span className="mr-2 text-gray-400">#{num}</span>
+                          {c}
+                          {i === 0 && (
+                            <span className="ml-2 rounded bg-primary-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                              nouveau
+                            </span>
+                          )}
+                        </span>
+                        {onRemoveAccumulatedCode && (
+                          <button
+                            type="button"
+                            onClick={() => onRemoveAccumulatedCode(c)}
+                            className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                            aria-label="Retirer"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
+              </ul>
+            )}
+          </div>
         )}
 
         <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">

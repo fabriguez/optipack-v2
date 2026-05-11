@@ -31,6 +31,7 @@ router.post(
 );
 router.get('/:id', ManifestController.getById);
 router.get('/:id/pdf', ManifestController.getPDF);
+router.get('/:id/xlsx', ManifestController.getXLSX);
 router.post(
   '/dispatch/:containerId',
   authorize('SUPER_ADMIN', 'ADMIN', 'AGENT'),

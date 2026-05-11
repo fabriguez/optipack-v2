@@ -12,7 +12,7 @@ import { authLog } from '@/lib/api/authDebug';
 // Tag de build expose en console pour verifier que le bundle deploye est bien
 // celui attendu (et non un cache navigateur ou un docker image stale).
 // A bumper a chaque correctif important d'auth/scanner.
-const BUILD_TAG = 'web@2026-05-11-auth-grace-refresh-retry';
+const BUILD_TAG = 'web@2026-05-11-group-per-parcel-recipient';
 
 export default function DashboardRootLayout({ children }: { children: React.ReactNode }) {
   const { status } = useSession();

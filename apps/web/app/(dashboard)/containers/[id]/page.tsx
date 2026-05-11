@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState } from 'react';
+import { use, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -38,6 +38,7 @@ import { ParcelFormDialog } from '@/app/(dashboard)/parcels/ParcelFormDialog';
 import { QRScannerDialog } from '@/components/shared/QRScannerDialog';
 import { BatchScanCollector } from '@/components/shared/BatchScanCollector';
 import { ParcelPickerList } from '@/components/shared/ParcelPickerList';
+import { normalizeScannedTracking } from '@/lib/utils/scanNormalize';
 import { scanSound } from '@/lib/utils/scanSound';
 import { AgencyAvatar } from '@/components/shared/AgencyAvatar';
 
@@ -124,6 +125,10 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
   const [selectedParcelIds, setSelectedParcelIds] = useState<string[]>([]);
   const [parcelSearch, setParcelSearch] = useState('');
   const [parcelPage, setParcelPage] = useState(1);
+  // Filtre magasin source : pre-rempli avec un magasin de l'agence de depart
+  // a l'ouverture du dialog (voir useEffect plus bas). Permet au magasinier
+  // d'isoler ses colis avant chargement.
+  const [loadSourceWarehouseId, setLoadSourceWarehouseId] = useState<string | null>(null);
   const [showComparison, setShowComparison] = useState(false);
   const [showCreateParcel, setShowCreateParcel] = useState(false);
   const [busyManifest, setBusyManifest] = useState<'dispatch' | 'reception' | null>(null);
@@ -150,12 +155,13 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
   const isForwarding = !!data?.data?.isForwarding;
 
   const { data: availableParcels, isLoading: loadingAvailable } = useQuery({
-    queryKey: ['containers', id, 'loadable', parcelSearch, parcelPage],
+    queryKey: ['containers', id, 'loadable', parcelSearch, parcelPage, loadSourceWarehouseId],
     queryFn: () => apiClient.get(`/containers/${id}/loadable-parcels`, {
       params: {
         page: parcelPage,
         limit: PARCEL_PAGE_SIZE,
         search: parcelSearch || undefined,
+        warehouseId: loadSourceWarehouseId || undefined,
       },
     }).then((r) => r.data),
     enabled: showLoadDialog && !!containerType,
@@ -164,6 +170,28 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
   const container = data?.data;
   const parcels = parcelsData?.data || [];
   const history = historyData?.data || [];
+
+  // Pre-selection du magasin source a l'ouverture du dialog de chargement :
+  // on prend le premier magasin de l'agence de depart si aucun n'est encore
+  // selectionne. Si l'utilisateur change explicitement, on respecte son choix.
+  useEffect(() => {
+    if (!showLoadDialog) return;
+    if (loadSourceWarehouseId) return;
+    const depAgencyId = container?.departureAgencyId || container?.departureAgency?.id;
+    if (!depAgencyId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await apiClient.get('/warehouses', { params: { agencyId: depAgencyId, limit: 1 } });
+        const first = (res.data?.data || [])[0];
+        if (!cancelled && first?.id) setLoadSourceWarehouseId(first.id);
+      } catch {
+        // Pas de magasin pre-rempli : l'utilisateur pourra en choisir un
+        // manuellement, ou laisser vide (= tous les magasins de l'agence).
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [showLoadDialog, container?.departureAgencyId, container?.departureAgency?.id, loadSourceWarehouseId]);
 
   if (isLoading) return <DashboardSkeleton />;
   if (!container) return <p className="p-6 text-gray-500">Conteneur introuvable</p>;
@@ -255,7 +283,8 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
     setBatchLoadBusy(true);
     let ok = 0;
     const failed: string[] = [];
-    for (const code of codes) {
+    for (const rawCode of codes) {
+      const code = normalizeScannedTracking(rawCode);
       try {
         const res = await containersApi.loadByQr(id, code);
         if (res?.data?.success) ok++;
@@ -327,7 +356,10 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
     const failed: string[] = [];
     // On doit d'abord resoudre tracking -> parcelId puisque l'API unload prend
     // un parcelId. On utilise les colis charges actuellement dans le conteneur.
-    for (const code of codes) {
+    // BUG FIX : les QR encodent une URL ("https://.../tracking/TST-XXX"),
+    // pas le tracking nu. On normalise avant comparaison.
+    for (const rawCode of codes) {
+      const code = normalizeScannedTracking(rawCode);
       const match = parcels.find((p: any) => p.trackingNumber === code);
       if (!match) {
         failed.push(`${code}: non present dans ce conteneur`);
@@ -345,7 +377,13 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
       }
     }
     setBatchUnloadBusy(false);
-    setBatchUnloadCodes(failed.length === 0 ? [] : codes.filter((c) => failed.some((f) => f.startsWith(`${c}:`))));
+    // On compare via la version normalisee (failed[] pousse `${code}:` ou
+    // code est la valeur extraite du QR/URL).
+    setBatchUnloadCodes(
+      failed.length === 0
+        ? []
+        : codes.filter((c) => failed.some((f) => f.startsWith(`${normalizeScannedTracking(c)}:`))),
+    );
     if (ok > 0 && failed.length === 0) scanSound.success();
     else if (failed.length > 0) scanSound.error();
     if (ok > 0) toast.success(`${ok} colis decharge${ok > 1 ? 's' : ''}`);
@@ -554,6 +592,18 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
               toast.error('Erreur lors du telechargement');
             }
           };
+          const handleDownloadXlsx = async (manifestId: string, manifestNumber: string) => {
+            try {
+              // Reutilise fetchPdfAuthed : meme logique (GET authentifie + blob download),
+              // l'extension du fichier suffit pour qu'Excel ouvre correctement.
+              await fetchPdfAuthed(`/manifests/${manifestId}/xlsx`, {
+                fileName: `${manifestNumber}.xlsx`,
+                mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              });
+            } catch {
+              toast.error('Erreur lors du telechargement XLSX');
+            }
+          };
 
           return (
             <div className="mt-4 border-t border-gray-100 pt-4">
@@ -613,15 +663,26 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
                             {m.status === 'CANCELLED' && <AppBadge variant="error">Annulee</AppBadge>}
                           </td>
                           <td className="p-2 text-right">
-                            <AppButton
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => handleDownload(m.id, m.number)}
-                              title="Telecharger le PDF"
-                            >
-                              <Printer className="h-3.5 w-3.5" />
-                              PDF
-                            </AppButton>
+                            <div className="flex justify-end gap-1">
+                              <AppButton
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleDownload(m.id, m.number)}
+                                title="Telecharger le PDF"
+                              >
+                                <Printer className="h-3.5 w-3.5" />
+                                PDF
+                              </AppButton>
+                              <AppButton
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleDownloadXlsx(m.id, m.number)}
+                                title="Telecharger XLSX"
+                              >
+                                <FileText className="h-3.5 w-3.5" />
+                                XLSX
+                              </AppButton>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -854,6 +915,21 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
                     cameraTitle="Scanner pour charger"
                   />
                 </div>
+                <AppSearchSelect
+                  label="Magasin source (optionnel)"
+                  value={loadSourceWarehouseId}
+                  onChange={(v) => { setLoadSourceWarehouseId(v); setParcelPage(1); }}
+                  // Restreint aux magasins de l'agence de depart : on ne
+                  // peut charger que des colis physiquement presents sur le
+                  // site de depart du conteneur.
+                  search={(q, limit) =>
+                    searchers.warehouses(q, limit, {
+                      agencyId: container.departureAgencyId || container.departureAgency?.id,
+                    })
+                  }
+                  placeholder="Tous les magasins de l'agence de depart"
+                  clearable
+                />
                 <AppInput
                   placeholder="Rechercher par tracking, designation, client..."
                   value={parcelSearch}
@@ -1006,8 +1082,15 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
                 label="Magasin de destination"
                 value={unloadWarehouseId}
                 onChange={setUnloadWarehouseId}
-                search={searchers.warehouses}
-                placeholder="Selectionner un magasin"
+                // Restreint aux magasins de l'agence d'arrivee du conteneur :
+                // un dechargement ne peut pas ranger les colis dans un magasin
+                // d'une autre agence (incoherence physique).
+                search={(q, limit) =>
+                  searchers.warehouses(q, limit, {
+                    agencyId: container.arrivalAgencyId || container.arrivalAgency?.id,
+                  })
+                }
+                placeholder={`Magasin de ${container.arrivalAgency?.name || "l'agence d'arrivee"}`}
                 required
               />
             )}
@@ -1070,8 +1153,15 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
               label="Magasin de destination"
               value={batchUnloadWarehouseId}
               onChange={setBatchUnloadWarehouseId}
-              search={searchers.warehouses}
-              placeholder="Selectionner un magasin"
+              // Restreint aux magasins de l'agence d'arrivee : evite qu'un
+              // operateur range les colis d'un conteneur dans un magasin
+              // d'une autre agence par erreur de selection.
+              search={(q, limit) =>
+                searchers.warehouses(q, limit, {
+                  agencyId: container.arrivalAgencyId || container.arrivalAgency?.id,
+                })
+              }
+              placeholder={`Magasin de ${container.arrivalAgency?.name || "l'agence d'arrivee"}`}
               required
             />
 

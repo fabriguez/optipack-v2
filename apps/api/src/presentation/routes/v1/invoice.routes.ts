@@ -5,6 +5,46 @@ import { paginationSchema } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
 import { PDFService } from '../../../application/services/PDFService';
 import type { InvoiceData } from '../../../application/services/PDFService';
+import { ExcelService } from '../../../infrastructure/excel/ExcelService';
+
+/**
+ * Calcule la part de frais de magasinage par colis d'une facture. Reproduit
+ * la logique de ComputeStorageFeeUseCase sans passer par le container DI
+ * (cette route est handler-based, pas use-case). Retourne un objet par parcelId.
+ */
+async function computeStorageFeesForInvoice(invoiceId: string): Promise<{
+  perParcel: Map<string, { fee: number; days: number }>;
+  total: number;
+}> {
+  const parcels = await prisma.parcel.findMany({
+    where: { invoiceId },
+    select: {
+      id: true,
+      warehouseEnteredAt: true,
+      createdAt: true,
+      lastContainerId: true,
+      warehouse: { select: { storageFreeDays: true, storageDailyRate: true } },
+    },
+  });
+  const now = Date.now();
+  const ONE_DAY = 24 * 60 * 60 * 1000;
+  const perParcel = new Map<string, { fee: number; days: number }>();
+  let total = 0;
+  for (const p of parcels) {
+    if (!p.lastContainerId || !p.warehouse) {
+      perParcel.set(p.id, { fee: 0, days: 0 });
+      continue;
+    }
+    const enteredAt = p.warehouseEnteredAt ?? p.createdAt;
+    const days = Math.max(0, Math.floor((now - new Date(enteredAt).getTime()) / ONE_DAY));
+    const chargeable = Math.max(0, days - p.warehouse.storageFreeDays);
+    const rate = Number(p.warehouse.storageDailyRate);
+    const fee = chargeable * rate;
+    perParcel.set(p.id, { fee, days: chargeable });
+    total += fee;
+  }
+  return { perParcel, total };
+}
 
 const router = Router();
 
@@ -64,7 +104,19 @@ router.get('/:id', async (req, res, next) => {
       },
     });
     if (!invoice) return res.status(404).json({ success: false, message: 'Facture introuvable' });
-    res.json({ success: true, data: invoice });
+    const storage = await computeStorageFeesForInvoice(invoice.id);
+    // On enrichit la reponse avec le breakdown des frais magasinage par colis
+    // et le total : l'UI peut afficher la ligne dediee + le detail par colis.
+    const enriched = {
+      ...invoice,
+      parcels: (invoice as any).parcels?.map((p: any) => ({
+        ...p,
+        storageFee: storage.perParcel.get(p.id)?.fee ?? 0,
+        storageDays: storage.perParcel.get(p.id)?.days ?? 0,
+      })),
+      storageFeesTotal: storage.total,
+    };
+    res.json({ success: true, data: enriched });
   } catch (err) { next(err); }
 });
 
@@ -91,6 +143,12 @@ router.get('/:id/pdf', async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Facture introuvable' });
     }
 
+    // Calcul des frais de magasinage par colis a l'instant T. On les rend
+    // visibles sur la facture pour transparence (non additionnes au netAmount
+    // tant que la matrice configurable n'est pas implementee -- voir todo
+    // differe).
+    const storage = await computeStorageFeesForInvoice(invoice.id);
+
     const invoiceData: InvoiceData = {
       reference: invoice.reference,
       createdAt: invoice.createdAt,
@@ -103,13 +161,18 @@ router.get('/:id/pdf', async (req, res, next) => {
         ? { name: invoice.agency.name, code: invoice.agency.code, address: invoice.agency.address, phone: invoice.agency.phone }
         : null,
       // Audit fix #5 : 1 facture peut couvrir N colis (toujours un array maintenant)
-      parcel: ((invoice as unknown as { parcels?: any[] }).parcels ?? []).map((p: any) => ({
-        trackingNumber: p.trackingNumber,
-        designation: p.designation,
-        weight: Number(p.weight),
-        destination: p.destination,
-        price: Number(p.price),
-      })),
+      parcel: ((invoice as unknown as { parcels?: any[] }).parcels ?? []).map((p: any) => {
+        const s = storage.perParcel.get(p.id);
+        return {
+          trackingNumber: p.trackingNumber,
+          designation: p.designation,
+          weight: Number(p.weight),
+          destination: p.destination,
+          price: Number(p.price),
+          storageFee: s?.fee ?? 0,
+          storageDays: s?.days ?? 0,
+        };
+      }),
       payments: invoice.payments.map((p: any) => ({
         createdAt: p.createdAt,
         method: p.method,
@@ -122,6 +185,7 @@ router.get('/:id/pdf', async (req, res, next) => {
       netAmount: Number((invoice as any).netAmount ?? 0),
       paidAmount: Number((invoice as any).paidAmount ?? 0),
       balance: Number((invoice as any).balance ?? 0),
+      storageFeesTotal: storage.total,
     };
 
     const pdfBuffer = await PDFService.generateInvoicePDF(invoiceData);
@@ -132,6 +196,68 @@ router.get('/:id/pdf', async (req, res, next) => {
       'Content-Length': pdfBuffer.length.toString(),
     });
     res.send(pdfBuffer);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * Export XLSX d'une facture : une ligne par colis avec montant + frais
+ * magasinage + part allouee de l'avance/solde. Utile pour la compta / export
+ * comptable client.
+ */
+router.get('/:id/xlsx', async (req, res, next) => {
+  try {
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: req.params.id },
+      include: {
+        client: { select: { fullName: true, phone: true, email: true } },
+        agency: { select: { name: true, code: true } },
+        parcels: { select: { id: true, trackingNumber: true, designation: true, weight: true, destination: true, price: true } },
+        payments: { orderBy: { createdAt: 'asc' }, select: { createdAt: true, paymentMethod: true, amount: true } },
+      },
+    });
+    if (!invoice) return res.status(404).json({ success: false, message: 'Facture introuvable' });
+
+    const storage = await computeStorageFeesForInvoice(invoice.id);
+    const excel = new ExcelService();
+    const parcelRows = ((invoice as any).parcels ?? []).map((p: any, i: number) => {
+      const s = storage.perParcel.get(p.id);
+      return {
+        num: i + 1,
+        tracking: p.trackingNumber || '-',
+        designation: p.designation,
+        weight: p.weight != null ? Number(p.weight) : '',
+        destination: p.destination || '',
+        price: Number(p.price),
+        storageDays: s?.days ?? 0,
+        storageFee: s?.fee ?? 0,
+        totalLine: Number(p.price) + (s?.fee ?? 0),
+      };
+    });
+
+    const buf = await excel.generate(
+      `Facture ${invoice.reference}`,
+      [
+        { key: 'num', header: '#', width: 6 },
+        { key: 'tracking', header: 'Tracking', width: 18 },
+        { key: 'designation', header: 'Designation', width: 28 },
+        { key: 'weight', header: 'Masse (kg)', width: 12 },
+        { key: 'destination', header: 'Destination', width: 18 },
+        { key: 'price', header: 'Prix transport', width: 14 },
+        { key: 'storageDays', header: 'Jrs magasinage', width: 14 },
+        { key: 'storageFee', header: 'Frais magasinage', width: 14 },
+        { key: 'totalLine', header: 'Total ligne', width: 14 },
+      ],
+      parcelRows,
+    );
+
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="facture-${invoice.reference}.xlsx"`,
+      'Content-Length': buf.length.toString(),
+    });
+    res.send(buf);
   } catch (err) {
     next(err);
   }

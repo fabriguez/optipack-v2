@@ -31,7 +31,12 @@ interface ParcelInGroupInput {
 interface CreateGroupInput {
   organizationId: string;
   clientId: string;
-  agencyId: string;
+  /** Agence emettrice -- optionnel : si absent, derivee depuis warehouseId.agencyId. */
+  agencyId?: string;
+  /** Magasin de depart partage par tous les colis du groupe. */
+  warehouseId?: string;
+  /** Route de transit partagee par tous les colis du groupe. */
+  transitRouteId?: string;
   label?: string;
   notes?: string;
   parcels: ParcelInGroupInput[];
@@ -47,8 +52,28 @@ export class CreateParcelGroupUseCase {
     if (!input.parcels?.length) throw new BusinessError('Au moins un colis requis dans le groupe');
     const client = await prisma.client.findUnique({ where: { id: input.clientId } });
     if (!client) throw new NotFoundError('Client', input.clientId);
-    const agency = await prisma.agency.findUnique({ where: { id: input.agencyId } });
-    if (!agency) throw new NotFoundError('Agence', input.agencyId);
+
+    // Resolution de l'agence emettrice :
+    //   1) si l'appelant fournit agencyId, on l'utilise (legacy)
+    //   2) sinon on la derive depuis warehouseId.agencyId -- nouvelle regle
+    //      metier : un groupe (et un colis) ne sont plus associes a une agence
+    //      en propre, l'agence se deduit du magasin.
+    let resolvedAgencyId = input.agencyId ?? null;
+    if (!resolvedAgencyId) {
+      if (!input.warehouseId) {
+        throw new BusinessError(
+          'Magasin de depart obligatoire pour deriver l\'agence du groupe.',
+        );
+      }
+      const wh = await prisma.warehouse.findUnique({
+        where: { id: input.warehouseId },
+        select: { agencyId: true },
+      });
+      if (!wh) throw new NotFoundError('Magasin', input.warehouseId);
+      resolvedAgencyId = wh.agencyId;
+    }
+    const agency = await prisma.agency.findUnique({ where: { id: resolvedAgencyId } });
+    if (!agency) throw new NotFoundError('Agence', resolvedAgencyId);
 
     // Pre-charge les villes des agences referencees pour deriver le champ
     // `destination` (compat ascendante PDF/manifest) sans appel DB par colis.
@@ -64,14 +89,14 @@ export class CreateParcelGroupUseCase {
     const cityByAgency = new Map(agencies.map((a) => [a.id, a.city]));
 
     return prisma.$transaction(async (tx) => {
-      const count = await tx.parcelGroup.count({ where: { agencyId: input.agencyId } });
+      const count = await tx.parcelGroup.count({ where: { agencyId: resolvedAgencyId } });
       const reference = generateReference('GRP', count + 1);
 
       const group = await tx.parcelGroup.create({
         data: {
           organizationId: input.organizationId,
           clientId: input.clientId,
-          agencyId: input.agencyId,
+          agencyId: resolvedAgencyId,
           reference,
           label: input.label ?? null,
           notes: input.notes ?? null,
@@ -105,11 +130,14 @@ export class CreateParcelGroupUseCase {
             isPresent: true,
             price: p.price ?? 0,
             clientId: input.clientId,
-            warehouseId: p.warehouseId ?? null,
-            originalWarehouseId: p.warehouseId ?? null,
+            // Magasin et route propages depuis le contexte du groupe en
+            // priorite ; chaque colis peut neanmoins surcharger localement
+            // (cas rares de groupes heterogenes).
+            warehouseId: p.warehouseId ?? input.warehouseId ?? null,
+            originalWarehouseId: p.warehouseId ?? input.warehouseId ?? null,
             spaceId: p.spaceId ?? null,
-            transitRouteId: p.transitRouteId ?? null,
-            warehouseEnteredAt: p.warehouseId ? new Date() : null,
+            transitRouteId: p.transitRouteId ?? input.transitRouteId ?? null,
+            warehouseEnteredAt: (p.warehouseId ?? input.warehouseId) ? new Date() : null,
             parcelGroupId: group.id,
           },
         });

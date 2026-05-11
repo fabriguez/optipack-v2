@@ -225,18 +225,27 @@ export class ReportController {
         invoiceWhere.agencyId = { in: req.user!.agencyIds };
       }
 
+      // Depuis la refonte dette (Phase 1), clientId est nullable (les dettes
+      // typees EMPLOYEE/AGENCY/CARRIER n'ont pas de clientId). On filtre
+      // explicitement aux dettes CLIENT pour ce rapport.
       const byClient = await prisma.debt.groupBy({
         by: ['clientId'],
         where: {
           isCleared: false,
+          type: 'CLIENT',
+          clientId: { not: null },
           invoice: invoiceWhere,
         },
         _sum: { totalAmount: true, remainingAmount: true },
         _count: { id: true },
       });
 
+      const clientIds = byClient
+        .map((g) => g.clientId)
+        .filter((id): id is string => id !== null);
+
       const clients = await prisma.client.findMany({
-        where: { id: { in: byClient.map((g) => g.clientId) } },
+        where: { id: { in: clientIds } },
         select: { id: true, fullName: true, phone: true },
       });
       const clientMap = new Map(clients.map((c) => [c.id, c]));
@@ -254,14 +263,16 @@ export class ReportController {
             clientCount: byClient.length,
             debtCount: byClient.reduce((sum, g) => sum + g._count.id, 0),
           },
-          details: byClient.map((g) => ({
-            clientId: g.clientId,
-            clientName: clientMap.get(g.clientId)?.fullName ?? 'Inconnu',
-            clientPhone: clientMap.get(g.clientId)?.phone ?? '',
-            totalAmount: Number(g._sum.totalAmount ?? 0),
-            remainingAmount: Number(g._sum.remainingAmount ?? 0),
-            debtCount: g._count.id,
-          })),
+          details: byClient
+            .filter((g) => g.clientId !== null)
+            .map((g) => ({
+              clientId: g.clientId!,
+              clientName: clientMap.get(g.clientId!)?.fullName ?? 'Inconnu',
+              clientPhone: clientMap.get(g.clientId!)?.phone ?? '',
+              totalAmount: Number(g._sum.totalAmount ?? 0),
+              remainingAmount: Number(g._sum.remainingAmount ?? 0),
+              debtCount: g._count.id,
+            })),
         },
       });
     } catch (err) {
