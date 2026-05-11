@@ -5,6 +5,7 @@ import { NotFoundError } from '../../domain/errors/BusinessError';
 import { prisma } from '../../config/database';
 import { PDFService } from '../../application/services/PDFService';
 import { HistoryService } from '../../application/services/HistoryService';
+import { RegisterExtraManifestParcelUseCase } from '../../application/use-cases/manifest/RegisterExtraManifestParcelUseCase';
 
 function getRepo(): IManifestRepository {
   return container.resolve<IManifestRepository>(MANIFEST_REPOSITORY);
@@ -143,6 +144,22 @@ export class ManifestController {
       const repo = getRepo();
       await repo.removeDiscrepancy(req.params.discrepancyId);
       res.json({ success: true });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * Enregistre un colis trouve PHYSIQUEMENT dans le conteneur mais non
+   * enregistre en ligne. Cree un vrai Parcel + une ManifestDiscrepancy
+   * EXTRA_PHYSICAL liee. Le colis apparait dans la comparaison et dans tous
+   * les listings (magasin courant, historique container, etc).
+   */
+  static async registerExtraParcel(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(RegisterExtraManifestParcelUseCase);
+      const parcel = await useCase.execute(req.params.containerId, req.body, req.user!.userId);
+      res.status(201).json({ success: true, data: parcel });
     } catch (err) {
       next(err);
     }

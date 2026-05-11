@@ -1,0 +1,157 @@
+'use client';
+
+import Link from 'next/link';
+import { useQuery } from '@tanstack/react-query';
+import { motion } from 'framer-motion';
+import { Search, Package, PlusCircle, Loader2 } from 'lucide-react';
+import { useState } from 'react';
+import { portalApi } from '@/lib/api/client';
+
+interface Parcel {
+  id: string;
+  trackingNumber: string;
+  description: string;
+  status: string;
+  weight?: number;
+  receiverName?: string;
+  receiverCity?: string;
+  createdAt: string;
+}
+
+interface ParcelsResponse {
+  data: Parcel[];
+  meta?: { total: number; page: number; pageSize: number };
+}
+
+const STATUS_TONE: Record<string, { bg: string; fg: string }> = {
+  PENDING: { bg: 'rgba(234,179,8,0.15)', fg: '#ca8a04' },
+  IN_TRANSIT: { bg: 'rgba(59,130,246,0.15)', fg: '#2563eb' },
+  DELIVERED: { bg: 'rgba(34,197,94,0.15)', fg: '#16a34a' },
+  RETURNED: { bg: 'rgba(244,63,94,0.12)', fg: '#e11d48' },
+};
+
+export default function ParcelsPage() {
+  const [search, setSearch] = useState('');
+  const { data, isLoading } = useQuery<ParcelsResponse>({
+    queryKey: ['portal', 'parcels', search],
+    queryFn: () => portalApi.getParcels({ search }),
+  });
+
+  const items = data?.data ?? [];
+
+  return (
+    <div className="space-y-6">
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex flex-wrap items-end justify-between gap-4"
+      >
+        <div>
+          <h1
+            className="text-3xl font-bold tracking-tight skin-font-heading"
+            style={{ color: 'var(--skin-foreground)' }}
+          >
+            Mes colis
+          </h1>
+          <p
+            className="mt-1 text-sm"
+            style={{ color: 'var(--skin-muted)' }}
+          >
+            Retrouvez l'historique et l'etat de tous vos envois.
+          </p>
+        </div>
+        <Link
+          href="/app/new"
+          className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold skin-btn-primary"
+        >
+          <PlusCircle className="h-4 w-4" />
+          Nouvel envoi
+        </Link>
+      </motion.div>
+
+      <div className="relative">
+        <Search
+          className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4"
+          style={{ color: 'var(--skin-muted)' }}
+        />
+        <input
+          type="search"
+          placeholder="Rechercher par numero, destinataire..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="skin-input pl-10"
+        />
+      </div>
+
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="overflow-hidden skin-card"
+      >
+        {isLoading ? (
+          <div className="flex items-center justify-center py-16">
+            <Loader2
+              className="h-6 w-6 animate-spin"
+              style={{ color: 'var(--skin-primary)' }}
+            />
+          </div>
+        ) : items.length === 0 ? (
+          <div className="py-16 text-center">
+            <Package
+              className="mx-auto h-10 w-10"
+              style={{ color: 'var(--skin-muted)' }}
+            />
+            <p
+              className="mt-3 text-sm font-medium"
+              style={{ color: 'var(--skin-foreground)' }}
+            >
+              Aucun colis trouve.
+            </p>
+          </div>
+        ) : (
+          <ul className="divide-y" style={{ borderColor: 'var(--skin-border)' }}>
+            {items.map((p) => {
+              const tone = STATUS_TONE[p.status] ?? {
+                bg: 'color-mix(in oklab, var(--skin-primary) 12%, transparent)',
+                fg: 'var(--skin-primary)',
+              };
+              return (
+                <li key={p.id}>
+                  <Link
+                    href={`/track/${p.trackingNumber}`}
+                    className="flex items-center justify-between px-5 py-4 transition-colors hover:bg-black/[0.02]"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p
+                          className="truncate text-sm font-semibold skin-font-heading"
+                          style={{ color: 'var(--skin-foreground)' }}
+                        >
+                          {p.description || 'Colis sans description'}
+                        </p>
+                      </div>
+                      <p
+                        className="mt-0.5 text-xs"
+                        style={{ color: 'var(--skin-muted)' }}
+                      >
+                        #{p.trackingNumber} -{' '}
+                        {p.receiverName ?? 'Destinataire ?'}{' '}
+                        {p.receiverCity ? `- ${p.receiverCity}` : ''}
+                      </p>
+                    </div>
+                    <span
+                      className="px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide skin-radius-sm"
+                      style={{ background: tone.bg, color: tone.fg }}
+                    >
+                      {p.status}
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </motion.div>
+    </div>
+  );
+}

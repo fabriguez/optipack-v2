@@ -34,6 +34,59 @@ import { AuthedImage } from '@/components/shared/AuthedImage';
 import { uploadImage } from '@/lib/api/uploads';
 import { toast } from 'sonner';
 
+interface PricingBreakdown {
+  mode: 'weight' | 'volume' | 'max';
+  weight: number;
+  volume: number | null;
+  ratePerKg: number;
+  ratePerVolume: number;
+  rateSource: 'route' | 'partner';
+  partnerPricingId: string | null;
+  priceByWeight: number;
+  priceByVolume: number;
+  basePrice: number;
+}
+
+/** Affiche la formule explicite du calcul du prix (transparence). */
+function PricingBreakdownDetail({
+  breakdown,
+  routeName,
+}: {
+  breakdown: PricingBreakdown;
+  routeName: string | null;
+}) {
+  const sourceLabel =
+    breakdown.rateSource === 'partner' ? 'tarif partenaire client' : 'tarif route';
+  const fmt = (n: number) => formatAmount(n);
+  const wPart = (
+    <span className="font-mono">
+      {breakdown.weight} kg &times; {fmt(breakdown.ratePerKg)}/kg = <strong>{fmt(breakdown.priceByWeight)}</strong>
+    </span>
+  );
+  const vPart = (
+    <span className="font-mono">
+      {breakdown.volume} m3 &times; {fmt(breakdown.ratePerVolume)}/m3 = <strong>{fmt(breakdown.priceByVolume)}</strong>
+    </span>
+  );
+  return (
+    <span>
+      {' '}Detail :{' '}
+      {breakdown.mode === 'weight' && wPart}
+      {breakdown.mode === 'volume' && vPart}
+      {breakdown.mode === 'max' && (
+        <>
+          max( {wPart} ; {vPart} ) = <strong>{fmt(breakdown.basePrice)}</strong>
+        </>
+      )}
+      .{' '}
+      <span className="text-xs text-gray-500">
+        ({sourceLabel}
+        {routeName ? <> sur la route &laquo; {routeName} &raquo;</> : null})
+      </span>
+    </span>
+  );
+}
+
 const STATUS_STEPS = ['IN_STOCK', 'LOADING', 'IN_TRANSIT', 'ARRIVED', 'RECEIVED', 'DELIVERED'];
 const STEP_LABELS: Record<string, string> = {
   IN_STOCK: 'En stock', LOADING: 'Chargement', IN_TRANSIT: 'En transit',
@@ -257,14 +310,25 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
             description="Detail des montants affiches sur ce colis."
           />
           <ul className="space-y-2 text-sm text-gray-700">
+            {/* Bloc transport : utilise le breakdown serveur si dispo (formule
+                explicite), fallback texte sinon. */}
             <li className="flex gap-2">
               <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-primary-500" />
               <span>
                 <strong>Prix du transport</strong> : <strong>{formatAmount(Number(parcel.price ?? 0))}</strong>.
-                Calcule a partir de la {parcel.weight && Number(parcel.weight) > 0 ? <>masse ({Number(parcel.weight).toFixed(1)} kg)</> : parcel.volume && Number(parcel.volume) > 0 ? <>volume ({Number(parcel.volume).toFixed(2)} m3)</> : 'pesee'}{' '}
-                multipliee par le tarif unitaire de la route
-                {parcel.transitRoute?.name && <> &laquo; {parcel.transitRoute.name} &raquo;</>}, ajuste par
-                la tarification partenaire client (si applicable) et le palier de fidelite.
+                {parcel.pricingBreakdown ? (
+                  <PricingBreakdownDetail
+                    breakdown={parcel.pricingBreakdown as any}
+                    routeName={parcel.transitRoute?.name ?? null}
+                  />
+                ) : (
+                  <>
+                    {' '}Calcule a partir de la {parcel.weight && Number(parcel.weight) > 0 ? <>masse ({Number(parcel.weight).toFixed(1)} kg)</> : parcel.volume && Number(parcel.volume) > 0 ? <>volume ({Number(parcel.volume).toFixed(2)} m3)</> : 'pesee'}{' '}
+                    multipliee par le tarif unitaire de la route
+                    {parcel.transitRoute?.name && <> &laquo; {parcel.transitRoute.name} &raquo;</>}.
+                    {' '}<em>(Detail non disponible : colis cree avant la migration de transparence ; recreez-le ou modifiez-le pour generer le detail.)</em>
+                  </>
+                )}
               </span>
             </li>
             {fee?.applicable && (
@@ -308,6 +372,14 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
                 </strong>{' '}
                 (transport{fee?.applicable ? ' + magasinage' : ''}). Les penalites eventuelles, si applicables, sont calculees
                 separement et facturees a la livraison.
+              </span>
+            </li>
+            <li className="flex gap-2">
+              <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-purple-500" />
+              <span>
+                <strong>Points fidelite</strong> : la fidelite ne fait <em>plus</em> de remise automatique.
+                Les points sont accumules sur le profil client et peuvent etre convertis en remise FCFA
+                manuellement (taux configure par l&apos;admin).
               </span>
             </li>
           </ul>

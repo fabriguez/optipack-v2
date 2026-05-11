@@ -37,6 +37,7 @@ import { ComparisonDialog } from './ComparisonDialog';
 import { ParcelFormDialog } from '@/app/(dashboard)/parcels/ParcelFormDialog';
 import { QRScannerDialog } from '@/components/shared/QRScannerDialog';
 import { BatchScanCollector } from '@/components/shared/BatchScanCollector';
+import { ParcelPickerList } from '@/components/shared/ParcelPickerList';
 import { scanSound } from '@/lib/utils/scanSound';
 import { AgencyAvatar } from '@/components/shared/AgencyAvatar';
 
@@ -135,6 +136,8 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
   // Batch scan dechargement : tout en "received" vers un magasin selectionne.
   const [showBatchUnload, setShowBatchUnload] = useState(false);
   const [batchUnloadCodes, setBatchUnloadCodes] = useState<string[]>([]);
+  // IDs selectionnes manuellement (cas etiquettes defectueuses).
+  const [batchUnloadManualIds, setBatchUnloadManualIds] = useState<string[]>([]);
   const [batchUnloadWarehouseId, setBatchUnloadWarehouseId] = useState<string | null>(null);
   const [batchUnloadBusy, setBatchUnloadBusy] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<{ id: string; designation: string } | null>(null);
@@ -272,6 +275,44 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
     qc.invalidateQueries({ queryKey: ['containers', id] });
     qc.invalidateQueries({ queryKey: ['containers', id, 'parcels'] });
     qc.invalidateQueries({ queryKey: ['containers', id, 'loadable'] });
+  };
+
+  // Variante "by IDs" pour la selection manuelle dans la liste paginee
+  // (etiquette defectueuse). Reutilise la meme logique mais sans chercher
+  // par tracking : les ids sont deja resolus.
+  const handleBatchUnloadByIds = async (ids: string[]) => {
+    if (!batchUnloadWarehouseId) {
+      toast.error('Selectionnez un magasin de destination');
+      return;
+    }
+    if (ids.length === 0) return;
+    setBatchUnloadBusy(true);
+    let ok = 0;
+    const failed: { id: string; reason: string }[] = [];
+    for (const pid of ids) {
+      try {
+        await containersApi.unload(id, {
+          parcelId: pid,
+          action: 'received',
+          warehouseId: batchUnloadWarehouseId,
+        });
+        ok++;
+      } catch (e: any) {
+        failed.push({ id: pid, reason: e?.response?.data?.message || 'echec' });
+      }
+    }
+    setBatchUnloadBusy(false);
+    if (ok > 0) toast.success(`${ok} colis decharge${ok > 1 ? 's' : ''}`);
+    if (failed.length > 0) toast.error(`${failed.length} echec(s) : ${failed[0].reason}`);
+    qc.invalidateQueries({ queryKey: ['containers', id] });
+    qc.invalidateQueries({ queryKey: ['containers', id, 'parcels'] });
+    qc.invalidateQueries({ queryKey: ['parcels'] });
+    if (failed.length === 0) {
+      setShowBatchUnload(false);
+      setBatchUnloadManualIds([]);
+    } else {
+      setBatchUnloadManualIds(failed.map((f) => f.id));
+    }
   };
 
   // Batch dechargement : tout les codes vers un magasin (action received).
@@ -994,13 +1035,35 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
             passer par le dechargement individuel (action ligne par ligne). */}
         <AppDialog
           open={showBatchUnload}
-          onClose={() => { setShowBatchUnload(false); setBatchUnloadCodes([]); setBatchUnloadWarehouseId(null); }}
-          title="Decharger par scan"
-          size="lg"
+          onClose={() => {
+            setShowBatchUnload(false);
+            setBatchUnloadCodes([]);
+            setBatchUnloadManualIds([]);
+            setBatchUnloadWarehouseId(null);
+          }}
+          title="Decharger des colis"
+          size="xl"
+          footer={
+            batchUnloadManualIds.length > 0 ? (
+              <>
+                <AppButton variant="ghost" onClick={() => setBatchUnloadManualIds([])}>
+                  Vider la selection
+                </AppButton>
+                <AppButton
+                  onClick={() => handleBatchUnloadByIds(batchUnloadManualIds)}
+                  loading={batchUnloadBusy}
+                  disabled={!batchUnloadWarehouseId}
+                >
+                  <PackageCheck className="h-4 w-4" />
+                  Decharger {batchUnloadManualIds.length} colis selectionnes
+                </AppButton>
+              </>
+            ) : undefined
+          }
         >
           <div className="space-y-4">
             <p className="text-xs text-gray-500">
-              Scannez plusieurs colis. Tous seront decharges comme &quot;bien recus&quot; vers le magasin selectionne.
+              Tous les colis seront decharges comme &quot;bien recus&quot; vers le magasin selectionne.
               Pour signaler un colis modifie ou introuvable, utilisez le dechargement individuel.
             </p>
             <AppSearchSelect
@@ -1011,15 +1074,35 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
               placeholder="Selectionner un magasin"
               required
             />
-            <BatchScanCollector
-              codes={batchUnloadCodes}
-              onChange={setBatchUnloadCodes}
-              submitLabel={`Decharger ${batchUnloadCodes.length || ''} colis`}
-              onSubmit={handleBatchUnload}
-              submitting={batchUnloadBusy}
-              placeholder="Scanner ou coller un tracking..."
-              cameraTitle="Scanner pour decharger"
-            />
+
+            <div className="rounded-xl border border-primary-100 bg-primary-50/40 p-3">
+              <p className="mb-2 text-xs font-semibold text-primary-900">Par scan QR / code-barres</p>
+              <BatchScanCollector
+                codes={batchUnloadCodes}
+                onChange={setBatchUnloadCodes}
+                submitLabel={`Decharger ${batchUnloadCodes.length || ''} colis`}
+                onSubmit={handleBatchUnload}
+                submitting={batchUnloadBusy}
+                placeholder="Scanner ou coller un tracking..."
+                cameraTitle="Scanner pour decharger"
+              />
+            </div>
+
+            <div className="border-t border-gray-100 pt-3">
+              <p className="mb-2 text-xs font-semibold text-gray-700">
+                Ou selection manuelle (etiquette illisible)
+              </p>
+              <ParcelPickerList
+                endpoint="/parcels"
+                // Colis presents dans CE conteneur uniquement.
+                baseFilters={{ containerId: id }}
+                queryKey={['parcels', 'pickable-for-unload', id]}
+                selectedIds={batchUnloadManualIds}
+                onSelectedChange={setBatchUnloadManualIds}
+                emptyText="Aucun colis charge dans ce conteneur."
+                hideWarehouseColumn
+              />
+            </div>
           </div>
         </AppDialog>
 

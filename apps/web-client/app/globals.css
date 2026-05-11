@@ -1,0 +1,193 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --color-primary-50: var(--color-primary-50);
+  --color-primary-100: var(--color-primary-100);
+  --color-primary-200: var(--color-primary-200);
+  --color-primary-300: var(--color-primary-300);
+  --color-primary-400: var(--color-primary-400);
+  --color-primary-500: var(--color-primary-500);
+  --color-primary-600: var(--color-primary-600);
+  --color-primary-700: var(--color-primary-700);
+  --color-primary-800: var(--color-primary-800);
+  --color-primary-900: var(--color-primary-900);
+}
+
+/* --- Skin runtime tokens (overridden by SkinProvider) --- */
+:root {
+  --color-primary-50: #E8F5E9;
+  --color-primary-100: #C8E6C9;
+  --color-primary-200: #A5D6A7;
+  --color-primary-300: #81C784;
+  --color-primary-400: #66BB6A;
+  --color-primary-500: #4CAF50;
+  --color-primary-600: #43A047;
+  --color-primary-700: #388E3C;
+  --color-primary-800: #2E7D32;
+  --color-primary-900: #1B5E20;
+
+  --skin-primary: #1B5E20;
+  --skin-secondary: #4CAF50;
+  --skin-accent: #A5D6A7;
+  --skin-surface: #FFFFFF;
+  --skin-background: #F4F8F2;
+  --skin-foreground: #0B1A0D;
+  --skin-muted: #5A6B5C;
+  --skin-border: #DCE5DA;
+  --skin-hero-1: #1B5E20;
+  --skin-hero-2: #388E3C;
+  --skin-hero-3: #A5D6A7;
+  --skin-font-body: 'Geist', system-ui, sans-serif;
+  --skin-font-heading: 'Geist', system-ui, sans-serif;
+  --skin-radius: 0.75rem;
+  --skin-radius-sm: 0.45rem;
+  --skin-radius-lg: 1.05rem;
+  --skin-radius-xl: 1.35rem;
+  --skin-shadow: 0 10px 30px -12px rgba(0,0,0,0.18), 0 4px 12px -4px rgba(0,0,0,0.08);
+  --skin-glow: rgba(27,94,32,0.4);
+}
+
+body {
+  font-family: var(--skin-font-body);
+  background: var(--skin-background);
+  color: var(--skin-foreground);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: color-mix(in oklab, var(--skin-foreground) 18%, transparent);
+  border-radius: 4px;
+}
+
+/* --- Keyframes --- */
+@keyframes blob-float {
+  0%, 100% { transform: translate3d(0,0,0) scale(1); }
+  33% { transform: translate3d(30px,-40px,0) scale(1.08); }
+  66% { transform: translate3d(-25px,30px,0) scale(0.94); }
+}
+@keyframes float-y {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+@keyframes tilt-spin {
+  0% { transform: rotateY(0deg) rotateX(8deg); }
+  100% { transform: rotateY(360deg) rotateX(8deg); }
+}
+@keyframes marquee-x {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+@keyframes gradient-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 var(--skin-glow); }
+  70% { box-shadow: 0 0 0 28px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+@keyframes fade-up {
+  0% { opacity: 0; transform: translateY(30px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* --- Utility classes that follow the skin --- */
+.skin-shadow { box-shadow: var(--skin-shadow); }
+.skin-radius { border-radius: var(--skin-radius); }
+.skin-radius-lg { border-radius: var(--skin-radius-lg); }
+.skin-radius-xl { border-radius: var(--skin-radius-xl); }
+.skin-radius-sm { border-radius: var(--skin-radius-sm); }
+.skin-font-body { font-family: var(--skin-font-body); }
+.skin-font-heading { font-family: var(--skin-font-heading); }
+
+.skin-gradient-hero {
+  background: linear-gradient(125deg, var(--skin-hero-1) 0%, var(--skin-hero-2) 45%, var(--skin-hero-3) 100%);
+}
+.skin-gradient-soft {
+  background: linear-gradient(145deg, color-mix(in oklab, var(--skin-hero-3) 40%, white) 0%, var(--skin-surface) 100%);
+}
+.skin-gradient-text {
+  background: linear-gradient(120deg, var(--skin-primary), var(--skin-secondary), var(--skin-accent));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  background-size: 200% 200%;
+  animation: gradient-shift 8s ease-in-out infinite;
+}
+.skin-blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(70px);
+  opacity: 0.55;
+  animation: blob-float 14s ease-in-out infinite;
+  pointer-events: none;
+}
+.skin-card {
+  background: var(--skin-surface);
+  border: 1px solid var(--skin-border);
+  border-radius: var(--skin-radius-lg);
+  box-shadow: var(--skin-shadow);
+}
+.skin-btn-primary {
+  background: var(--skin-primary);
+  color: #fff;
+  border-radius: var(--skin-radius);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+  cursor: pointer;
+}
+.skin-btn-primary:hover { filter: brightness(1.08); transform: translateY(-1px); box-shadow: 0 12px 28px -12px var(--skin-glow); }
+.skin-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.skin-btn-ghost {
+  background: transparent;
+  color: var(--skin-foreground);
+  border: 1px solid var(--skin-border);
+  border-radius: var(--skin-radius);
+  transition: background 0.2s ease, border-color 0.2s ease;
+  cursor: pointer;
+}
+.skin-btn-ghost:hover { background: color-mix(in oklab, var(--skin-primary) 8%, transparent); border-color: var(--skin-primary); }
+.skin-input {
+  background: var(--skin-surface);
+  border: 1px solid var(--skin-border);
+  border-radius: var(--skin-radius);
+  color: var(--skin-foreground);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  width: 100%;
+  padding: 0.7rem 1rem;
+  font-size: 0.95rem;
+}
+.skin-input::placeholder { color: var(--skin-muted); }
+.skin-input:focus {
+  outline: none;
+  border-color: var(--skin-primary);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--skin-primary) 20%, transparent);
+}
+
+[data-skin-mood='dark'] {
+  color-scheme: dark;
+}
+[data-skin-mood='dark'] ::-webkit-scrollbar-thumb {
+  background: color-mix(in oklab, white 20%, transparent);
+}
+
+.grid-bg {
+  background-image:
+    linear-gradient(to right, color-mix(in oklab, var(--skin-foreground) 6%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklab, var(--skin-foreground) 6%, transparent) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
+}
+
+.marquee {
+  display: flex;
+  gap: 3rem;
+  animation: marquee-x 32s linear infinite;
+  width: max-content;
+}

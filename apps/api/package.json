@@ -17,6 +17,8 @@
   },
   "dependencies": {
     "@transitsoftservices/shared": "workspace:*",
+    "@transitsoftservices/skins": "workspace:*",
+    "@transitsoftservices/payments": "workspace:*",
     "@prisma/client": "^6.4.1",
     "@types/node-cron": "^3.0.11",
     "@types/pdfkit": "^0.17.5",

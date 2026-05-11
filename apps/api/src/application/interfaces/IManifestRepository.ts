@@ -11,6 +11,11 @@ export interface ManifestComparison {
   reception: ManifestLine[];
   missingParcelIds: string[];
   extraParcelIds: string[];
+  // Colis lies en ligne au conteneur (Parcel.containerId / lastContainerId =
+  // ce conteneur) mais ABSENTS du bordereau d'envoi. Cas : chargement effectif
+  // non reflete dans le manifeste (manifeste genere avant ou apres l'evenement).
+  // Ces colis doivent apparaitre dans la comparaison pour audit.
+  outOfManifestParcelIds: string[];
   // Ecarts marques par l'admin (colis presents physiquement non enregistres,
   // ou en ligne mais absents physiquement)
   discrepancies: ManifestDiscrepancy[];

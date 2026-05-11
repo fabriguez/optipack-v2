@@ -284,7 +284,7 @@ export class PrismaManifestRepository implements IManifestRepository {
   }
 
   async getComparison(containerId: string): Promise<ManifestComparison> {
-    const [dispatches, receptions, discrepancies] = await Promise.all([
+    const [dispatches, receptions, discrepancies, linkedParcels] = await Promise.all([
       prisma.shippingManifest.findMany({
         where: { containerId, type: 'DISPATCH', status: 'ACTIVE' },
         include: { lines: true },
@@ -301,6 +301,18 @@ export class PrismaManifestRepository implements IManifestRepository {
         where: { containerId },
         orderBy: { createdAt: 'desc' },
       }),
+      // Colis lies en ligne a ce conteneur : actuellement (containerId) OU
+      // historiquement (lastContainerId, apres dechargement). Sert a detecter
+      // les colis "ghost" : presents en base, lies au conteneur, mais ABSENTS
+      // du bordereau d'envoi -- typique d'un manifeste genere avant le
+      // chargement effectif ou d'un ajout manuel apres coup.
+      prisma.parcel.findMany({
+        where: {
+          isDeleted: false,
+          OR: [{ containerId }, { lastContainerId: containerId }],
+        },
+        select: { id: true },
+      }),
     ]);
 
     const dispatchLines = dispatches[0]?.lines ?? [];
@@ -308,15 +320,21 @@ export class PrismaManifestRepository implements IManifestRepository {
 
     const dispatchParcelIds = new Set(dispatchLines.map((l) => l.parcelId).filter(Boolean) as string[]);
     const receptionParcelIds = new Set(receptionLines.map((l) => l.parcelId).filter(Boolean) as string[]);
+    const linkedParcelIds = new Set(linkedParcels.map((p) => p.id));
 
     const missingParcelIds = [...dispatchParcelIds].filter((id) => !receptionParcelIds.has(id));
     const extraParcelIds = [...receptionParcelIds].filter((id) => !dispatchParcelIds.has(id));
+    // outOfManifest : colis lie en ligne au conteneur mais absent du dispatch.
+    // Inclut implicitement les "extras" trouves a la reception qui n'etaient
+    // pas dans le dispatch -- au choix de l'UI de les dedoublonner.
+    const outOfManifestParcelIds = [...linkedParcelIds].filter((id) => !dispatchParcelIds.has(id));
 
     return {
       dispatch: dispatchLines,
       reception: receptionLines,
       missingParcelIds,
       extraParcelIds,
+      outOfManifestParcelIds,
       discrepancies,
     };
   }

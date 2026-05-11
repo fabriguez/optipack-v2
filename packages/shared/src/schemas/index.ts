@@ -10,3 +10,4 @@ export * from './payment.schema';
 export * from './disbursement.schema';
 export * from './fund-transfer.schema';
 export * from './common.schema';
+export * from './tenant-config.schema';

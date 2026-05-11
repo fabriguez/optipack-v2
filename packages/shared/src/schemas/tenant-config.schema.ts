@@ -1,0 +1,106 @@
+/**
+ * Tenant-level configuration shapes for the public site, app mobile and email.
+ * These are stored as JSON columns on Organization. Validated by the API on
+ * write, and serialized in the public /tenant-meta response (without secrets).
+ */
+
+import { z } from 'zod';
+
+// ---- Email config ----
+
+export const emailProviderSchema = z.enum(['resend', 'sendgrid', 'ses', 'shared']);
+export type EmailProvider = z.infer<typeof emailProviderSchema>;
+
+export const emailDkimStatusSchema = z.enum(['pending', 'verified', 'failed']);
+export type EmailDkimStatus = z.infer<typeof emailDkimStatusSchema>;
+
+/** Full config as stored. Secrets present. */
+export const emailConfigSchema = z.object({
+  provider: emailProviderSchema.default('shared'),
+  /** e.g. "no-reply@acme.com". If absent and provider='shared', we use OptiPack's default sender. */
+  senderEmail: z.string().email().optional(),
+  /** Display name in the From header. */
+  senderName: z.string().min(1).max(80).optional(),
+  /** Reply-to address used by the recipient when they hit "reply". */
+  replyTo: z.string().email().optional(),
+  /** Per-provider credentials. Stored as-is in DB column (encrypt at rest at infra level). */
+  credentials: z
+    .object({
+      apiKey: z.string().optional(),
+      region: z.string().optional(),
+      sender: z.string().optional(),
+    })
+    .partial()
+    .optional(),
+  /** Last verification timestamp (ISO). */
+  verifiedAt: z.string().datetime().optional(),
+  dkimStatus: emailDkimStatusSchema.optional(),
+  /** DNS records the tenant must add (rendered by the API on setup). */
+  dnsRecords: z
+    .array(
+      z.object({
+        type: z.enum(['TXT', 'CNAME', 'MX']),
+        name: z.string(),
+        value: z.string(),
+      }),
+    )
+    .optional(),
+});
+export type EmailConfig = z.infer<typeof emailConfigSchema>;
+
+/** Public-facing config (secrets stripped). Sent to /tenant-meta. */
+export const emailConfigPublicSchema = emailConfigSchema
+  .omit({ credentials: true })
+  .extend({
+    /** Last 4 chars of the API key for UI display ("****abcd"). */
+    apiKeyHint: z.string().optional(),
+  });
+export type EmailConfigPublic = z.infer<typeof emailConfigPublicSchema>;
+
+// ---- Mobile app config ----
+
+export const mobileAppModeSchema = z.enum(['shared', 'white_label']);
+export type MobileAppMode = z.infer<typeof mobileAppModeSchema>;
+
+export const mobileAppBuildStatusSchema = z.enum([
+  'idle',
+  'queued',
+  'building',
+  'published',
+  'failed',
+]);
+export type MobileAppBuildStatus = z.infer<typeof mobileAppBuildStatusSchema>;
+
+export const mobileAppConfigSchema = z.object({
+  mode: mobileAppModeSchema.default('shared'),
+  /** Display name on the home screen + store. */
+  appName: z.string().min(1).max(30).default('OptiPack'),
+  /** Icon (1024x1024 PNG recommended). */
+  iconUrl: z.string().url().optional(),
+  /** Splash screen (2732x2732 PNG recommended). */
+  splashUrl: z.string().url().optional(),
+  /** Primary color used by the native splash and status bar. */
+  primaryColor: z
+    .string()
+    .regex(/^#[0-9A-Fa-f]{6}$/)
+    .optional(),
+  /** iOS bundle id (white_label only). */
+  bundleId: z
+    .string()
+    .regex(/^[a-z0-9]+(\.[a-z0-9]+)+$/i)
+    .optional(),
+  /** Android package id (white_label only). */
+  packageId: z
+    .string()
+    .regex(/^[a-z0-9]+(\.[a-z0-9]+)+$/i)
+    .optional(),
+  buildStatus: mobileAppBuildStatusSchema.default('idle'),
+  storeLinks: z
+    .object({
+      ios: z.string().url().optional(),
+      android: z.string().url().optional(),
+    })
+    .partial()
+    .optional(),
+});
+export type MobileAppConfig = z.infer<typeof mobileAppConfigSchema>;

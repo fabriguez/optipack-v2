@@ -12,6 +12,7 @@ import { manifestsApi } from '@/lib/api/containers';
 import { fetchPdfAuthed } from '@/lib/api/pdfDownload';
 import { toast } from 'sonner';
 import { formatDateTime } from '@transitsoftservices/shared';
+import { RegisterExtraParcelDialog } from './RegisterExtraParcelDialog';
 
 interface Props {
   open: boolean;
@@ -30,6 +31,8 @@ export function ComparisonDialog({ open, onClose, containerId, containerDesignat
   const [extraComment, setExtraComment] = useState('');
   const [missingComment, setMissingComment] = useState<Record<string, string>>({});
   const [discToDelete, setDiscToDelete] = useState<string | null>(null);
+  // Dialog d'enregistrement complet d'un colis EXTRA_PHYSICAL.
+  const [showRegisterExtra, setShowRegisterExtra] = useState(false);
 
   const { data: comparisonData, isLoading } = useQuery({
     queryKey: ['manifests', 'comparison', containerId],
@@ -118,6 +121,16 @@ export function ComparisonDialog({ open, onClose, containerId, containerDesignat
     line: dispatchById.get(pid),
   }));
 
+  // Nouvelle categorie : colis lies en ligne au conteneur (containerId /
+  // lastContainerId) mais ABSENTS du bordereau d'envoi. Cas typique : ajout
+  // manuel apres generation du dispatch, ou colis decharge sans avoir ete
+  // declare. On les recupere depuis le tableau outOfManifestParcelIds du backend.
+  const outOfManifestIds: string[] = comparison?.outOfManifestParcelIds || [];
+  // On exclut ceux qui sont deja dans reception (sinon doublon avec "extras")
+  // pour ne montrer dans cette section que les colis qui n'apparaissent
+  // dans AUCUN bordereau mais qui sont pourtant lies au conteneur.
+  const outOfManifestOnly = outOfManifestIds.filter((id) => !receptionById.has(id));
+
   const adminMissing = discrepancies.filter((d) => d.type === 'MISSING_PHYSICAL');
   const adminExtra = discrepancies.filter((d) => d.type === 'EXTRA_PHYSICAL');
 
@@ -144,10 +157,11 @@ export function ComparisonDialog({ open, onClose, containerId, containerDesignat
           <p className="p-4 text-sm text-gray-400">Aucune donnee disponible. Generez d&apos;abord les bordereaux d&apos;envoi et de reception.</p>
         ) : (
           <div className="space-y-5">
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-5 gap-3">
               <Stat label="Envoyes" value={comparison.dispatch?.length || 0} />
               <Stat label="Recus" value={comparison.reception?.length || 0} />
               <Stat label="Manquants auto" value={missingAuto.length} accent={missingAuto.length > 0 ? 'red' : undefined} />
+              <Stat label="Hors bordereau" value={outOfManifestOnly.length} accent={outOfManifestOnly.length > 0 ? 'orange' : undefined} />
               <Stat label="Ecarts admin" value={discrepancies.length} accent={discrepancies.length > 0 ? 'orange' : undefined} />
             </div>
 
@@ -196,14 +210,56 @@ export function ComparisonDialog({ open, onClose, containerId, containerDesignat
               )}
             </AppCard>
 
+            {/* Nouvelle section : colis lies au conteneur en ligne mais
+                pas presents dans le bordereau d'envoi (manifeste genere
+                avant chargement, ou ajout manuel apres coup). */}
             <AppCard padding="sm">
-              <AppCardHeader title="2. Colis trouves physiquement mais non enregistres en ligne" description="L'admin peut ajouter ces excedents." />
+              <AppCardHeader
+                title="2. Colis lies au conteneur mais hors bordereau d'envoi"
+                description="Colis enregistres en ligne sur ce conteneur mais qui n'apparaissent dans aucun bordereau d'envoi actif. A regulariser."
+              />
+              {outOfManifestOnly.length === 0 ? (
+                <p className="text-sm text-gray-400 py-4 text-center">Aucun colis hors bordereau</p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {outOfManifestOnly.map((pid) => (
+                    <li
+                      key={pid}
+                      className="rounded-lg border border-orange-100 bg-orange-50/60 p-2 font-mono text-xs"
+                    >
+                      <span className="font-bold text-orange-800">{pid.slice(0, 8)}...</span>
+                      <span className="ml-2 text-gray-600">
+                        Lie en ligne au conteneur mais absent du bordereau d&apos;envoi.
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </AppCard>
+
+            <AppCard padding="sm">
+              <AppCardHeader
+                title="3. Colis trouves physiquement mais non enregistres en ligne"
+                description="Marquage rapide (ecart) ou enregistrement complet (colis avec tous les details)."
+              />
               <div className="space-y-3">
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-5 rounded-xl bg-orange-50 border border-orange-100 p-3">
                   <AppInput placeholder="Designation *" value={extraDesignation} onChange={(e) => setExtraDesignation(e.target.value)} className="sm:col-span-2" />
                   <AppInput placeholder="Tracking" value={extraTracking} onChange={(e) => setExtraTracking(e.target.value)} />
                   <AppInput placeholder="Poids (kg)" type="number" value={extraWeight} onChange={(e) => setExtraWeight(e.target.value)} />
-                  <AppButton size="sm" onClick={handleAddExtra}><Plus className="h-3.5 w-3.5" />Ajouter</AppButton>
+                  <AppButton size="sm" onClick={handleAddExtra}><Plus className="h-3.5 w-3.5" />Marquer ecart</AppButton>
+                </div>
+                <p className="rounded-lg bg-gray-50 p-2 text-[11px] text-gray-500">
+                  Pour <strong>enregistrer un vrai colis</strong> avec tous les details
+                  (client, destinataire, route, fragile/dangereux, valeur declaree...),
+                  utilisez le bouton ci-dessous. Le colis cree apparaitra dans tous les
+                  listings (magasin, historique conteneur, etc.).
+                </p>
+                <div className="flex justify-end">
+                  <AppButton size="sm" variant="outline" onClick={() => setShowRegisterExtra(true)}>
+                    <Plus className="h-3.5 w-3.5" />
+                    Enregistrer un colis complet
+                  </AppButton>
                 </div>
                 <AppInput placeholder="Commentaire (optionnel)" value={extraComment} onChange={(e) => setExtraComment(e.target.value)} />
 
@@ -229,6 +285,13 @@ export function ComparisonDialog({ open, onClose, containerId, containerDesignat
         message="Cet ecart sera retire du bordereau de comparaison."
         confirmLabel="Supprimer"
         variant="destructive"
+      />
+
+      <RegisterExtraParcelDialog
+        open={showRegisterExtra}
+        onClose={() => setShowRegisterExtra(false)}
+        containerId={containerId}
+        containerDesignation={containerDesignation}
       />
     </>
   );

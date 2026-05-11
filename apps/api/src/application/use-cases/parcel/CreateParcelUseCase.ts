@@ -61,19 +61,16 @@ export class CreateParcelUseCase {
       orderBy: { transitRouteId: 'desc' }, // priorise la regle specifique au route
     });
 
-    const effectiveRoute = partnerPricing
-      ? {
-          ...transitRoute,
-          pricePerKg: partnerPricing.pricePerKg,
-          pricePerVolume: partnerPricing.pricePerVolume,
-        }
-      : transitRoute;
-
+    // On passe le PartnerPricing brut au service pour qu'il enregistre la
+    // source du tarif dans le breakdown (au lieu de masquer l'override en
+    // remplacant les champs du transitRoute -- comme avant -- ce qui rendait
+    // le breakdown opaque).
     const pricing = PricingService.calculate(
       hasWeight ? Number(input.weight) : 0,
       hasVolume ? Number(input.volume) : undefined,
-      effectiveRoute,
+      transitRoute,
       client,
+      partnerPricing,
     );
 
     const trackingNumber = generateTrackingNumber();
@@ -139,6 +136,10 @@ export class CreateParcelUseCase {
       observation: input.observation || null,
       originalObservation: input.observation || null,
       price: pricing.finalPrice,
+      // Snapshot du calcul (transparence + audit). Reproduit la formule UI :
+      // "120 kg x 12000 FCFA/kg = 1 440 000 FCFA" sans avoir besoin de
+      // recalculer cote serveur a chaque consultation.
+      pricingBreakdown: pricing.breakdown as never,
       status: 'IN_STOCK',
       isPresent: true,
       warehouseEnteredAt: new Date(),

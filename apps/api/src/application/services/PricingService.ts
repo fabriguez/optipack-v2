@@ -1,39 +1,105 @@
-import type { TransitRoute, Client } from '@prisma/client';
-import { LOYALTY_TIER_DISCOUNTS } from '@transitsoftservices/shared';
+import type { TransitRoute, Client, PartnerPricing } from '@prisma/client';
 
-interface PriceCalculation {
+/**
+ * Resultat detaille du calcul de prix d'un colis.
+ *
+ * IMPORTANT : la fidelite n'applique PLUS de remise automatique. Les points
+ * de fidelite sont desormais convertis manuellement par l'utilisateur en
+ * remise (taux configure par l'admin via SystemConfig 'loyalty_points_per_fcfa').
+ * Ce service ne retourne donc que le prix de transport pur, base sur la
+ * route et l'eventuel tarif partenaire.
+ */
+export interface PriceBreakdown {
+  /** Mode de tarification effectif : on facture par poids, par volume, ou le max des deux. */
+  mode: 'weight' | 'volume' | 'max';
+  weight: number;
+  volume: number | null;
+  /** Tarif au kilo applique (FCFA/kg). */
+  ratePerKg: number;
+  /** Tarif au m3 applique (FCFA/m3). */
+  ratePerVolume: number;
+  /** Source du tarif : route par defaut ou tarif partenaire client. */
+  rateSource: 'route' | 'partner';
+  /** ID du PartnerPricing matche, si applicable. */
+  partnerPricingId: string | null;
+  /** Sous-totaux par axe (utile pour expliquer le mode 'max'). */
+  priceByWeight: number;
+  priceByVolume: number;
+  /** Prix retenu = max des deux quand applicable. */
   basePrice: number;
-  discountPercent: number;
-  discountAmount: number;
+}
+
+export interface PriceCalculation {
+  basePrice: number;
+  /** Conserve a 0 : la fidelite ne fait plus de remise auto. Conservation pour
+   *  retro-compat des appelants (Invoice.discount, etc.) qui addressent ce champ. */
+  discountPercent: 0;
+  discountAmount: 0;
   finalPrice: number;
+  /** Detail complet de la formule pour la transparence UI / audit. */
+  breakdown: PriceBreakdown;
+}
+
+interface PartnerPricingLite {
+  id: string;
+  pricePerKg: PartnerPricing['pricePerKg'];
+  pricePerVolume: PartnerPricing['pricePerVolume'];
 }
 
 export class PricingService {
+  /**
+   * Calcule le prix d'un colis. Si un PartnerPricing est fourni, il est applique
+   * en priorite sur le tarif route. Aucune remise fidelite n'est appliquee ici
+   * (la conversion points -> FCFA passe par un flux distinct).
+   */
   static calculate(
     weight: number,
     volume: number | undefined,
     transitRoute: TransitRoute,
-    client: Client,
+    _client: Client,
+    partnerPricing?: PartnerPricingLite | null,
   ): PriceCalculation {
-    const pricePerKg = Number(transitRoute.pricePerKg);
-    const pricePerVolume = Number(transitRoute.pricePerVolume);
+    void _client; // conserve la signature ; client servira pour la conversion points (manuel).
 
-    // Prix = max(prix par poids, prix par volume)
-    const priceByWeight = weight * pricePerKg;
-    const priceByVolume = volume ? volume * pricePerVolume : 0;
-    const basePrice = Math.max(priceByWeight, priceByVolume);
+    const ratePerKg = Number(partnerPricing?.pricePerKg ?? transitRoute.pricePerKg);
+    const ratePerVolume = Number(partnerPricing?.pricePerVolume ?? transitRoute.pricePerVolume);
 
-    // Reduction fidelite
-    const tier = client.loyaltyTier as keyof typeof LOYALTY_TIER_DISCOUNTS;
-    const discountPercent = LOYALTY_TIER_DISCOUNTS[tier] || 0;
-    const discountAmount = Math.round(basePrice * discountPercent / 100);
-    const finalPrice = basePrice - discountAmount;
+    const priceByWeight = Math.round(weight * ratePerKg);
+    const priceByVolume = volume ? Math.round(volume * ratePerVolume) : 0;
+
+    // Mode effectif : si on a les 2 mesures, on prend le max ; sinon l'axe disponible.
+    let mode: PriceBreakdown['mode'];
+    let basePrice: number;
+    if (weight > 0 && volume && volume > 0) {
+      mode = 'max';
+      basePrice = Math.max(priceByWeight, priceByVolume);
+    } else if (volume && volume > 0 && weight === 0) {
+      mode = 'volume';
+      basePrice = priceByVolume;
+    } else {
+      mode = 'weight';
+      basePrice = priceByWeight;
+    }
+
+    const breakdown: PriceBreakdown = {
+      mode,
+      weight,
+      volume: volume ?? null,
+      ratePerKg,
+      ratePerVolume,
+      rateSource: partnerPricing ? 'partner' : 'route',
+      partnerPricingId: partnerPricing?.id ?? null,
+      priceByWeight,
+      priceByVolume,
+      basePrice,
+    };
 
     return {
-      basePrice: Math.round(basePrice),
-      discountPercent,
-      discountAmount,
-      finalPrice: Math.round(finalPrice),
+      basePrice,
+      discountPercent: 0,
+      discountAmount: 0,
+      finalPrice: basePrice,
+      breakdown,
     };
   }
 }

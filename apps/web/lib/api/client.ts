@@ -1,6 +1,12 @@
 import axios, { AxiosError, AxiosRequestConfig } from 'axios';
 import { getSession, signOut } from 'next-auth/react';
 import { authLog } from './authDebug';
+import {
+  isQueueableMethod,
+  offlineQueue,
+  OfflineQueuedError,
+  shouldQueueOnError,
+} from './offlineQueue';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
 
@@ -121,7 +127,41 @@ apiClient.interceptors.response.use(
   },
   async (error: AxiosError) => {
     const status = error.response?.status;
-    const original = error.config as (AxiosRequestConfig & { _retry?: boolean }) | undefined;
+    const original = error.config as (AxiosRequestConfig & { _retry?: boolean; _queued?: boolean }) | undefined;
+
+    // -----------------------------------------------------------------
+    // Mode hors-ligne : on intercepte les mutations qui echouent sans
+    // reponse (vrai offline / dns / timeout) et on les met en queue pour
+    // rejouer plus tard. Les GET ne sont pas concernes (pas de donnees
+    // a "produire" hors-ligne -- React Query gere le cache local).
+    // FormData (uploads) non queueable : trop gros pour localStorage,
+    // on laisse l'erreur remonter pour signaler le probleme a l'utilisateur.
+    // -----------------------------------------------------------------
+    if (
+      original &&
+      !original._queued &&
+      typeof window !== 'undefined' &&
+      shouldQueueOnError(error) &&
+      isQueueableMethod(original.method)
+    ) {
+      const isFormData =
+        typeof FormData !== 'undefined' && original.data instanceof FormData;
+      if (!isFormData) {
+        original._queued = true;
+        const entry = offlineQueue.enqueue({
+          method: original.method!.toUpperCase() as never,
+          url: original.url ?? '',
+          data: original.data,
+          params: original.params,
+        });
+        authLog('offline.queued', {
+          method: entry.method,
+          url: entry.url,
+          pending: offlineQueue.count(),
+        });
+        return Promise.reject(new OfflineQueuedError(entry));
+      }
+    }
 
     if (status !== 401 || !original || original._retry || typeof window === 'undefined') {
       return Promise.reject(error);

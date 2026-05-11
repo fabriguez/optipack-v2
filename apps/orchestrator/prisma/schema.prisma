@@ -120,7 +120,13 @@ model Tenant {
   vps             VPS          @relation(fields: [vpsId], references: [id])
   apiPort         Int?
   webPort         Int?
+  webClientPort   Int?         // Public client-facing site (web-client app) - subdomain www.{slug}.{base}
   dbName          String?      // ex: "tenant_acme_db"
+
+  // Theming du site public (web-client) : peau preset + overrides
+  // Si null/vide, on retombe sur les valeurs par defaut du SkinProvider.
+  skinId             String?   // 'forest' | 'sapphire' | 'sunset' | 'midnight' | 'pastel'
+  skinCustomization  Json?     // { primary?, accent?, radius?, fontBody?, fontHeading? }
 
   // Etat actuel
   status          TenantStatus @default(PROVISIONING)

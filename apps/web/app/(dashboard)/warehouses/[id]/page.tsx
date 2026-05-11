@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Package, Plus, Eye, Edit, Trash2, ArrowRightLeft, ClipboardCheck, PlayCircle, QrCode, HandCoins, MapPin, Camera, ScanLine } from 'lucide-react';
 import { BatchScanCollector } from '@/components/shared/BatchScanCollector';
+import { ParcelPickerList } from '@/components/shared/ParcelPickerList';
 import { scanSound } from '@/lib/utils/scanSound';
 import { ParcelQRDialog } from '@/components/shared/ParcelQRDialog';
 import { ParcelHandoverDialog } from '@/components/shared/ParcelHandoverDialog';
@@ -50,9 +51,12 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
   const [batchAddOpen, setBatchAddOpen] = useState(false);
   const [batchAddCodes, setBatchAddCodes] = useState<string[]>([]);
   const [batchAddBusy, setBatchAddBusy] = useState(false);
+  // IDs selectionnes manuellement via la liste paginee (cas etiquettes defectueuses).
+  const [batchAddManualIds, setBatchAddManualIds] = useState<string[]>([]);
   const [batchRemoveOpen, setBatchRemoveOpen] = useState(false);
   const [batchRemoveCodes, setBatchRemoveCodes] = useState<string[]>([]);
   const [batchRemoveBusy, setBatchRemoveBusy] = useState(false);
+  const [batchRemoveManualIds, setBatchRemoveManualIds] = useState<string[]>([]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['warehouses', id],
@@ -190,6 +194,65 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
     if (failed.length > 0) toast.error(`${failed.length} echec(s) : ${failed[0]}`);
     invalidateAll();
     if (failed.length === 0) setBatchAddOpen(false);
+  };
+
+  // Variantes "by IDs" : utilisees quand l'operateur selectionne dans la liste
+  // paginee (etiquettes defectueuses) plutot que de scanner.
+  const handleBatchAddByIds = async (ids: string[]) => {
+    if (ids.length === 0) return;
+    setBatchAddBusy(true);
+    let ok = 0;
+    const failed: { id: string; reason: string }[] = [];
+    for (const pid of ids) {
+      try {
+        await apiClient.patch(`/parcels/${pid}/status`, {
+          status: 'IN_STOCK',
+          warehouseId: id,
+        });
+        ok++;
+      } catch (e: any) {
+        failed.push({ id: pid, reason: e?.response?.data?.message || 'echec' });
+      }
+    }
+    setBatchAddBusy(false);
+    if (ok > 0) toast.success(`${ok} colis ajoute${ok > 1 ? 's' : ''} au magasin`);
+    if (failed.length > 0) toast.error(`${failed.length} echec(s) : ${failed[0].reason}`);
+    invalidateAll();
+    if (failed.length === 0) {
+      setBatchAddOpen(false);
+      setBatchAddManualIds([]);
+    } else {
+      // Garde uniquement les echecs en selection pour relance / debug.
+      setBatchAddManualIds(failed.map((f) => f.id));
+    }
+  };
+
+  const handleBatchRemoveByIds = async (ids: string[]) => {
+    if (ids.length === 0) return;
+    setBatchRemoveBusy(true);
+    let ok = 0;
+    const failed: { id: string; reason: string }[] = [];
+    for (const pid of ids) {
+      try {
+        await apiClient.patch(`/parcels/${pid}/status`, {
+          status: 'IN_STOCK',
+          warehouseId: null,
+        });
+        ok++;
+      } catch (e: any) {
+        failed.push({ id: pid, reason: e?.response?.data?.message || 'echec' });
+      }
+    }
+    setBatchRemoveBusy(false);
+    if (ok > 0) toast.success(`${ok} colis retire${ok > 1 ? 's' : ''} du magasin`);
+    if (failed.length > 0) toast.error(`${failed.length} echec(s) : ${failed[0].reason}`);
+    invalidateAll();
+    if (failed.length === 0) {
+      setBatchRemoveOpen(false);
+      setBatchRemoveManualIds([]);
+    } else {
+      setBatchRemoveManualIds(failed.map((f) => f.id));
+    }
   };
 
   const handleBatchRemove = async (codes: string[]) => {
@@ -645,51 +708,131 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
         parcel={moveSpaceParcel}
       />
 
-      {/* Batch ajouter par scan : transfere les colis existants vers ce magasin. */}
+      {/* Batch ajouter : scan + selection manuelle dans la liste paginee. */}
       <AppDialog
         open={batchAddOpen}
-        onClose={() => { setBatchAddOpen(false); setBatchAddCodes([]); }}
-        title="Ajouter des colis par scan"
-        size="lg"
+        onClose={() => {
+          setBatchAddOpen(false);
+          setBatchAddCodes([]);
+          setBatchAddManualIds([]);
+        }}
+        title="Ajouter des colis"
+        size="xl"
+        footer={
+          batchAddManualIds.length > 0 ? (
+            <>
+              <AppButton variant="ghost" onClick={() => setBatchAddManualIds([])}>
+                Vider la selection
+              </AppButton>
+              <AppButton
+                onClick={() => handleBatchAddByIds(batchAddManualIds)}
+                loading={batchAddBusy}
+              >
+                <Package className="h-4 w-4" />
+                Ajouter {batchAddManualIds.length} colis selectionnes
+              </AppButton>
+            </>
+          ) : undefined
+        }
       >
-        <div className="space-y-3">
+        <div className="space-y-4">
           <p className="text-xs text-gray-500">
-            Scannez les colis existants a transferer vers <span className="font-semibold">{warehouse.name}</span>.
-            Le colis doit deja exister dans le systeme.
+            Transferez les colis existants vers <span className="font-semibold">{warehouse.name}</span>.
+            Scan QR pour aller vite, ou selection manuelle dans la liste si l&apos;etiquette est defectueuse.
           </p>
-          <BatchScanCollector
-            codes={batchAddCodes}
-            onChange={setBatchAddCodes}
-            submitLabel={`Transferer ${batchAddCodes.length || ''} colis ici`}
-            onSubmit={handleBatchAdd}
-            submitting={batchAddBusy}
-            placeholder="Scanner ou coller un tracking existant..."
-            cameraTitle="Scanner pour ajouter"
-          />
+
+          <div className="rounded-xl border border-primary-100 bg-primary-50/40 p-3">
+            <p className="mb-2 text-xs font-semibold text-primary-900">Par scan QR / code-barres</p>
+            <BatchScanCollector
+              codes={batchAddCodes}
+              onChange={setBatchAddCodes}
+              submitLabel={`Transferer ${batchAddCodes.length || ''} colis ici`}
+              onSubmit={handleBatchAdd}
+              submitting={batchAddBusy}
+              placeholder="Scanner ou coller un tracking existant..."
+              cameraTitle="Scanner pour ajouter"
+            />
+          </div>
+
+          <div className="border-t border-gray-100 pt-3">
+            <p className="mb-2 text-xs font-semibold text-gray-700">
+              Ou selection manuelle (etiquette illisible)
+            </p>
+            <ParcelPickerList
+              endpoint="/parcels"
+              // Tous les colis IN_STOCK sauf ceux deja dans ce magasin.
+              baseFilters={{ status: 'IN_STOCK', onlyPresent: 'true' }}
+              queryKey={['parcels', 'pickable-for-warehouse-add', id]}
+              selectedIds={batchAddManualIds}
+              onSelectedChange={setBatchAddManualIds}
+              emptyText="Aucun colis disponible."
+            />
+          </div>
         </div>
       </AppDialog>
 
-      {/* Batch retirer par scan : detache les colis de ce magasin. */}
+      {/* Batch retirer : scan + selection manuelle dans la liste paginee. */}
       <AppDialog
         open={batchRemoveOpen}
-        onClose={() => { setBatchRemoveOpen(false); setBatchRemoveCodes([]); }}
-        title="Retirer des colis par scan"
-        size="lg"
+        onClose={() => {
+          setBatchRemoveOpen(false);
+          setBatchRemoveCodes([]);
+          setBatchRemoveManualIds([]);
+        }}
+        title="Retirer des colis"
+        size="xl"
+        footer={
+          batchRemoveManualIds.length > 0 ? (
+            <>
+              <AppButton variant="ghost" onClick={() => setBatchRemoveManualIds([])}>
+                Vider la selection
+              </AppButton>
+              <AppButton
+                onClick={() => handleBatchRemoveByIds(batchRemoveManualIds)}
+                loading={batchRemoveBusy}
+                variant="outline"
+              >
+                <Package className="h-4 w-4" />
+                Retirer {batchRemoveManualIds.length} colis selectionnes
+              </AppButton>
+            </>
+          ) : undefined
+        }
       >
-        <div className="space-y-3">
+        <div className="space-y-4">
           <p className="text-xs text-gray-500">
-            Scannez les colis a retirer de <span className="font-semibold">{warehouse.name}</span>.
-            Seuls les colis presents dans ce magasin sont acceptes.
+            Retirez des colis presents dans <span className="font-semibold">{warehouse.name}</span>.
+            Scan QR ou selection manuelle dans la liste.
           </p>
-          <BatchScanCollector
-            codes={batchRemoveCodes}
-            onChange={setBatchRemoveCodes}
-            submitLabel={`Retirer ${batchRemoveCodes.length || ''} colis`}
-            onSubmit={handleBatchRemove}
-            submitting={batchRemoveBusy}
-            placeholder="Scanner ou coller un tracking..."
-            cameraTitle="Scanner pour retirer"
-          />
+
+          <div className="rounded-xl border border-amber-100 bg-amber-50/40 p-3">
+            <p className="mb-2 text-xs font-semibold text-amber-900">Par scan QR / code-barres</p>
+            <BatchScanCollector
+              codes={batchRemoveCodes}
+              onChange={setBatchRemoveCodes}
+              submitLabel={`Retirer ${batchRemoveCodes.length || ''} colis`}
+              onSubmit={handleBatchRemove}
+              submitting={batchRemoveBusy}
+              placeholder="Scanner ou coller un tracking..."
+              cameraTitle="Scanner pour retirer"
+            />
+          </div>
+
+          <div className="border-t border-gray-100 pt-3">
+            <p className="mb-2 text-xs font-semibold text-gray-700">
+              Ou selection manuelle (etiquette illisible)
+            </p>
+            <ParcelPickerList
+              endpoint="/parcels"
+              // Colis presents dans CE magasin uniquement.
+              baseFilters={{ warehouseId: id, onlyPresent: 'true' }}
+              queryKey={['parcels', 'pickable-for-warehouse-remove', id]}
+              selectedIds={batchRemoveManualIds}
+              onSelectedChange={setBatchRemoveManualIds}
+              emptyText="Aucun colis present dans ce magasin."
+              hideWarehouseColumn
+            />
+          </div>
         </div>
       </AppDialog>
 

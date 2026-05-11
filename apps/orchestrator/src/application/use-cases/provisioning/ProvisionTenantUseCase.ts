@@ -56,31 +56,37 @@ export class ProvisionTenantUseCase {
     await this.capacity.assertCanAllocate(tenant.vpsId, limits, { excludeTenantId: tenantId });
 
     // 1. Allocation des ports (idempotent : on garde ceux deja attribues)
-    let { apiPort, webPort } = { apiPort: tenant.apiPort ?? 0, webPort: tenant.webPort ?? 0 };
-    if (!apiPort || !webPort) {
+    let apiPort = tenant.apiPort ?? 0;
+    let webPort = tenant.webPort ?? 0;
+    let webClientPort = tenant.webClientPort ?? 0;
+    if (!apiPort || !webPort || !webClientPort) {
       const allocated = await this.portAllocator.allocate(tenant.vpsId);
-      apiPort = allocated.apiPort;
-      webPort = allocated.webPort;
+      apiPort = apiPort || allocated.apiPort;
+      webPort = webPort || allocated.webPort;
+      webClientPort = webClientPort || allocated.webClientPort;
       await prisma.tenant.update({
         where: { id: tenantId },
-        data: { apiPort, webPort },
+        data: { apiPort, webPort, webClientPort },
       });
-      await log(`[provision] ports alloues api=${apiPort} web=${webPort}`);
+      await log(`[provision] ports alloues api=${apiPort} web=${webPort} web-client=${webClientPort}`);
     } else {
-      await log(`[provision] ports existants reutilises api=${apiPort} web=${webPort}`);
+      await log(`[provision] ports existants reutilises api=${apiPort} web=${webPort} web-client=${webClientPort}`);
     }
 
-    // 2. Pull des images depuis GHCR
+    // 2. Pull des images depuis GHCR (api + web staff + web-client public)
     if (config.ghcr.pullToken) {
       await log('[provision] docker login ghcr.io');
       await this.docker.loginGhcr(creds, config.ghcr.namespace, config.ghcr.pullToken);
     }
     const apiImage = `ghcr.io/${config.ghcr.namespace}/optipack-api:latest`;
     const webImage = `ghcr.io/${config.ghcr.namespace}/optipack-web:latest`;
+    const webClientImage = `ghcr.io/${config.ghcr.namespace}/optipack-web-client:latest`;
     await log(`[provision] docker pull ${apiImage}`);
     await this.docker.pull(creds, apiImage);
     await log(`[provision] docker pull ${webImage}`);
     await this.docker.pull(creds, webImage);
+    await log(`[provision] docker pull ${webClientImage}`);
+    await this.docker.pull(creds, webClientImage);
 
     // 3. Creer la BDD tenant si elle n'existe pas (commande psql via postgres container ou socket)
     //    On part du principe qu'un container `postgres` tourne sur le VPS (cf. setup VPS doc).
@@ -126,16 +132,21 @@ export class ProvisionTenantUseCase {
     // 5. Stop + remove les anciens containers s'ils existent (rejouabilite)
     const apiName = `tenant-${tenant.slug}-api`;
     const webName = `tenant-${tenant.slug}-web`;
+    const webClientName = `tenant-${tenant.slug}-web-client`;
     await log(`[provision] cleanup anciens containers (rejouabilite)`);
     await this.docker.remove(creds, apiName, true);
     await this.docker.remove(creds, webName, true);
+    await this.docker.remove(creds, webClientName, true);
 
     // 6. Run le container API avec limites de ressources (Phase 4)
-    // On split la RAM 60/40 entre API et web. CPU partage egalitairement.
-    const apiMemoryMb = Math.floor(limits.memoryMb * 0.6);
-    const webMemoryMb = limits.memoryMb - apiMemoryMb;
-    const halfCpu = limits.cpuLimit / 2;
-    await log(`[provision] docker run ${apiName} (cpus=${halfCpu} mem=${apiMemoryMb}MB)`);
+    // Split RAM 50/25/25 entre api, web staff et web-client public. CPU partage.
+    const apiMemoryMb = Math.floor(limits.memoryMb * 0.5);
+    const webMemoryMb = Math.floor(limits.memoryMb * 0.25);
+    const webClientMemoryMb = limits.memoryMb - apiMemoryMb - webMemoryMb;
+    const thirdCpu = limits.cpuLimit / 3;
+    const halfCpu = limits.cpuLimit / 2; // conserve la variable pour minimiser le diff sur d'autres references eventuelles
+    void halfCpu;
+    await log(`[provision] docker run ${apiName} (cpus=${thirdCpu} mem=${apiMemoryMb}MB)`);
     await this.docker.run(creds, {
       name: apiName,
       image: apiImage,
@@ -143,7 +154,7 @@ export class ProvisionTenantUseCase {
       envFile,
       restart: 'unless-stopped',
       network: 'optipack-shared',
-      cpuLimit: halfCpu,
+      cpuLimit: thirdCpu,
       memoryMb: apiMemoryMb,
     });
 
@@ -201,8 +212,8 @@ export class ProvisionTenantUseCase {
       await log(`[provision] WARN seed : ${seedResult.stderr}`);
     }
 
-    // 9. Run le container Web avec sa part de ressources
-    await log(`[provision] docker run ${webName} (cpus=${halfCpu} mem=${webMemoryMb}MB)`);
+    // 9. Run le container Web staff avec sa part de ressources
+    await log(`[provision] docker run ${webName} (cpus=${thirdCpu} mem=${webMemoryMb}MB)`);
     await this.docker.run(creds, {
       name: webName,
       image: webImage,
@@ -213,8 +224,25 @@ export class ProvisionTenantUseCase {
       },
       restart: 'unless-stopped',
       network: 'optipack-shared',
-      cpuLimit: halfCpu,
+      cpuLimit: thirdCpu,
       memoryMb: webMemoryMb,
+    });
+
+    // 9.bis. Run le container Web-Client (site public + portail client)
+    await log(`[provision] docker run ${webClientName} (cpus=${thirdCpu} mem=${webClientMemoryMb}MB)`);
+    await this.docker.run(creds, {
+      name: webClientName,
+      image: webClientImage,
+      ports: { [webClientPort]: 3001 },
+      env: {
+        TENANT_SLUG: tenant.slug,
+        NEXT_PUBLIC_API_URL: `https://api.${tenant.slug}.${BASE_DOMAIN}/api/v1`,
+        NEXT_PUBLIC_TENANT_SLUG: tenant.slug,
+      },
+      restart: 'unless-stopped',
+      network: 'optipack-shared',
+      cpuLimit: thirdCpu,
+      memoryMb: webClientMemoryMb,
     });
 
     // 10. Update Caddy config (full replace) avec tous les tenants ACTIVE/PROVISIONING de ce VPS
@@ -229,6 +257,7 @@ export class ProvisionTenantUseCase {
         customDomain: t.customDomain,
         apiPort: t.apiPort!,
         webPort: t.webPort!,
+        webClientPort: t.webClientPort ?? undefined,
         isFrozen: false,
       }));
     // Inclure le tenant courant meme s'il n'est pas encore ACTIVE
@@ -238,6 +267,7 @@ export class ProvisionTenantUseCase {
         customDomain: tenant.customDomain,
         apiPort,
         webPort,
+        webClientPort,
         isFrozen: false,
       });
     }

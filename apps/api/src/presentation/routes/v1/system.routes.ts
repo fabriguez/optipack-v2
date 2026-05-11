@@ -1,6 +1,8 @@
 import { Router } from 'express';
+import { container } from '../../../container';
 import { authenticate, authorize } from '../../middleware/authMiddleware';
 import { tenantGuard, getOrgId } from '../../middleware/tenantGuard';
+import { LoyaltyConfigService } from '../../../application/services/LoyaltyConfigService';
 
 /**
  * Phase 4.5 — endpoints "system" exposes au frontend tenant pour gerer les updates.
@@ -70,6 +72,30 @@ router.post('/updates/:jobId/rollback', async (req, res, next) => {
     });
     const data = await r.json();
     res.status(r.status).json(data);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ============================================================
+// Politique de fidelite (admin uniquement)
+// ============================================================
+
+router.get('/loyalty-config', async (req, res, next) => {
+  try {
+    const svc = container.resolve(LoyaltyConfigService);
+    const cfg = await svc.get(getOrgId(req));
+    res.json({ success: true, data: cfg });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put('/loyalty-config', async (req, res, next) => {
+  try {
+    const svc = container.resolve(LoyaltyConfigService);
+    const cfg = await svc.update(getOrgId(req), req.body ?? {});
+    res.json({ success: true, data: cfg });
   } catch (err) {
     next(err);
   }

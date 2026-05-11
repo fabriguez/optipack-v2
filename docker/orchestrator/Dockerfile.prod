@@ -9,6 +9,7 @@ WORKDIR /app
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
 COPY apps/orchestrator/package.json ./apps/orchestrator/
 COPY packages/shared/package.json ./packages/shared/
+COPY packages/skins/package.json ./packages/skins/
 COPY packages/config/package.json ./packages/config/
 COPY packages/config/tsconfig/package.json ./packages/config/tsconfig/
 
@@ -48,6 +49,11 @@ COPY --from=builder /app/packages ./packages
 # Outils requis : openssh-client (pour rsync/scp eventuels), postgresql-client (pour pg_dump des tenants)
 RUN apk add --no-cache openssh-client postgresql-client
 
+# Entrypoint : attend la BDD, applique les migrations, demarre le serveur
+COPY docker/orchestrator/entrypoint.sh /usr/local/bin/orchestrator-entrypoint.sh
+RUN chmod +x /usr/local/bin/orchestrator-entrypoint.sh
+
 EXPOSE 4020
 
-CMD ["node", "dist/index.js"]
+ENTRYPOINT ["/usr/local/bin/orchestrator-entrypoint.sh"]
+CMD []

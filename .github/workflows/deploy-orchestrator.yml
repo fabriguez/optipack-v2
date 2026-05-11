@@ -1,0 +1,60 @@
+name: Deploy Orchestrator
+
+# Deploie l'orchestrator (control plane) sur le VPS principal.
+# Le VPS principal heberge a la fois l'orchestrator + le tenant principal
+# (instance OptiPack du proprietaire du systeme). Les deux stacks coexistent :
+#   - docker-compose.prod.yml         -> api + web + web-client (tenant principal)
+#   - docker-compose.control-plane.yml -> orchestrator + ops-postgres + ops-redis
+#
+# Meme VPS, memes secrets SSH. Les autres tenants (clients SaaS) seront
+# provisionnes par l'orchestrator sur ce VPS ou d'autres, via SSH.
+#
+# Les migrations Prisma sont jouees par l'entrypoint au boot du conteneur.
+
+# DESACTIVE : declenchement automatique sur push retire.
+# Ne se lance plus que manuellement via "Run workflow" depuis l'onglet Actions.
+# Pour reactiver, restaurer le bloc `push:` ci-dessous :
+#
+#   push:
+#     branches: [main]
+#     paths:
+#       - 'apps/orchestrator/**'
+#       - 'packages/shared/**'
+#       - 'packages/skins/**'
+#       - 'packages/config/**'
+#       - 'docker/orchestrator/**'
+#       - 'docker-compose.control-plane.yml'
+#       - '.github/workflows/deploy-orchestrator.yml'
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy orchestrator to main VPS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            set -e
+            cd ~/optipack-v2
+            git pull origin main
+
+            # S'assurer que la BDD ops + redis tournent (entrypoint orchestrator les attend)
+            docker compose -f docker-compose.control-plane.yml up -d ops-postgres ops-redis
+
+            # Build de l'image orchestrator
+            docker compose -f docker-compose.control-plane.yml build orchestrator
+
+            # (Re)demarrage : l'entrypoint joue prisma migrate deploy avant de booter
+            docker compose -f docker-compose.control-plane.yml up -d orchestrator
+
+            # Nettoyage des images orphelines
+            docker image prune -f

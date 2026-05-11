@@ -76,6 +76,12 @@ const adminNav: NavItem[] = [
     icon: ShieldCheck,
     permissions: ['position.manage', 'permission.manage', 'schedule.manage', 'holiday.manage'],
   },
+  {
+    label: 'Politique fidelite',
+    href: '/admin/loyalty',
+    icon: Star,
+    permissions: ['system.config'],
+  },
 ];
 
 const systemNav: NavItem[] = [

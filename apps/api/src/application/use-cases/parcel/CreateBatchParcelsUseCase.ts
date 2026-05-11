@@ -65,15 +65,8 @@ export class CreateBatchParcelsUseCase {
       orderBy: { transitRouteId: 'desc' },
     });
 
-    const effectiveRoute = partnerPricing
-      ? {
-          ...transitRoute,
-          pricePerKg: partnerPricing.pricePerKg,
-          pricePerVolume: partnerPricing.pricePerVolume,
-        }
-      : transitRoute;
-
-    // Calcul du prix par colis
+    // Calcul du prix par colis (le partnerPricing est passe au service pour
+    // qu'il soit trace dans le breakdown du colis).
     const computed = input.parcels.map((p) => {
       const hasWeight = p.weight !== undefined && p.weight !== null && Number(p.weight) > 0;
       const hasVolume = p.volume !== undefined && p.volume !== null && Number(p.volume) > 0;
@@ -83,8 +76,9 @@ export class CreateBatchParcelsUseCase {
       const pricing = PricingService.calculate(
         hasWeight ? Number(p.weight) : 0,
         hasVolume ? Number(p.volume) : undefined,
-        effectiveRoute,
+        transitRoute,
         client,
+        partnerPricing,
       );
       return { ...p, hasWeight, hasVolume, pricing };
     });
@@ -132,6 +126,7 @@ export class CreateBatchParcelsUseCase {
         observation: p.observation || null,
         originalObservation: p.observation || null,
         price: p.pricing.finalPrice,
+        pricingBreakdown: p.pricing.breakdown as never,
         status: 'IN_STOCK',
         isPresent: true,
         warehouseEnteredAt: new Date(),

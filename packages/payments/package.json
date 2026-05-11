@@ -1,0 +1,24 @@
+{
+  "name": "@transitsoftservices/payments",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Multi-aggregator payment abstraction: mobile money providers (MTN MoMo, Orange Money, Wave, Airtel, ...) with priority-ordered fallback chain, plus Stripe for cards. Used by API (server-side checkout) and web-client (UI/types).",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./types": "./src/types/index.ts",
+    "./providers": "./src/providers/index.ts"
+  },
+  "scripts": {
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist .turbo"
+  },
+  "devDependencies": {
+    "@transitsoftservices/tsconfig": "workspace:*",
+    "typescript": "^5.7.3"
+  },
+  "peerDependencies": {
+    "zod": "^3.20.0"
+  }
+}

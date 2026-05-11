@@ -17,6 +17,10 @@ import { errorHandler } from './presentation/middleware/errorHandler';
 import v1Routes from './presentation/routes/v1';
 import { startCronJobs } from './infrastructure/cron/CronService';
 import { registerHandlers as registerNotificationHandlers } from './infrastructure/events/handlers/NotificationHandler';
+import { registerNotificationProviders } from './infrastructure/notifications/providers';
+import jwt from 'jsonwebtoken';
+import type { JwtPayload } from '@transitsoftservices/shared';
+import { realtimeService } from './infrastructure/realtime/RealtimeService';
 
 const app = express();
 const httpServer = createServer(app);
@@ -59,14 +63,48 @@ app.use((_req, res) => {
 // Error handler
 app.use(errorHandler);
 
-// Socket.io connection
+// ============================================================
+// Socket.io : auth JWT au handshake + join automatique des rooms
+// ============================================================
+// Le client doit passer le JWT au handshake : io(url, { auth: { token } }).
+// Sans token valide, le socket reste connecte mais ne joint aucune room ;
+// il ne recevra donc aucun message cible. Pas de rejet "dur" pour permettre
+// des canaux publics si besoin (chat support pre-auth, etc).
+io.use((socket, next) => {
+  const token = (socket.handshake.auth?.token as string | undefined) ?? '';
+  if (!token) {
+    socket.data.auth = null;
+    return next();
+  }
+  try {
+    const payload = jwt.verify(token, config.jwt.secret) as JwtPayload & { clientId?: string };
+    socket.data.auth = payload;
+  } catch {
+    socket.data.auth = null;
+  }
+  next();
+});
+
 io.on('connection', (socket) => {
-  logger.debug({ socketId: socket.id }, 'Client connected');
+  const auth = socket.data.auth as (JwtPayload & { clientId?: string }) | null;
+  logger.debug({ socketId: socket.id, userId: auth?.userId, clientId: auth?.clientId }, 'Client connected');
+
+  // Join automatique des rooms en fonction du JWT.
+  if (auth?.userId) socket.join(`user:${auth.userId}`);
+  if (auth?.clientId) socket.join(`client:${auth.clientId}`);
+  if (auth?.organizationId) socket.join(`org:${auth.organizationId}`);
+  if (auth?.agencyIds?.length) {
+    for (const aid of auth.agencyIds) socket.join(`agency:${aid}`);
+  }
 
   socket.on('disconnect', () => {
     logger.debug({ socketId: socket.id }, 'Client disconnected');
   });
 });
+
+// Attache le service realtime pour que les emetteurs (NotificationService...)
+// puissent diffuser sans dependre de l'export du `io` directement.
+realtimeService.attach(io);
 
 // Start server
 async function start(): Promise<void> {
@@ -80,6 +118,7 @@ async function start(): Promise<void> {
 
     // Register event handlers
     registerNotificationHandlers();
+    registerNotificationProviders();
 
     // Start cron jobs
     startCronJobs();

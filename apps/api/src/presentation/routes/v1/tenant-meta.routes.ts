@@ -2,6 +2,31 @@ import { Router } from 'express';
 import { prisma } from '../../../config/database';
 import { authenticate, authorize } from '../../middleware/authMiddleware';
 import { tenantGuard, getOrgId } from '../../middleware/tenantGuard';
+import { isKnownSkinId, listSkins } from '@transitsoftservices/skins';
+import {
+  emailConfigSchema,
+  mobileAppConfigSchema,
+  type EmailConfig,
+  type EmailConfigPublic,
+  type MobileAppConfig,
+} from '@transitsoftservices/shared';
+import { tenantEmailDispatcher } from '../../../infrastructure/email/TenantEmailDispatcher';
+
+/** Strip secrets before returning email config to clients. */
+function publicEmailConfig(cfg: EmailConfig | null | undefined): EmailConfigPublic | null {
+  if (!cfg) return null;
+  const apiKey = cfg.credentials?.apiKey;
+  return {
+    provider: cfg.provider,
+    senderEmail: cfg.senderEmail,
+    senderName: cfg.senderName,
+    replyTo: cfg.replyTo,
+    verifiedAt: cfg.verifiedAt,
+    dkimStatus: cfg.dkimStatus,
+    dnsRecords: cfg.dnsRecords,
+    apiKeyHint: apiKey ? `****${apiKey.slice(-4)}` : undefined,
+  };
+}
 
 const router = Router();
 
@@ -59,6 +84,14 @@ router.get('/', async (req, res, next) => {
         supportEmail: org.supportEmail,
         defaultCurrency: org.defaultCurrency,
         defaultLanguage: org.defaultLanguage,
+        // Theme du site public (web-client). Si null, le frontend retombe
+        // sur le defaut du SkinProvider.
+        skin: (org as any).skinId ?? null,
+        skinCustomization: (org as any).skinCustomization ?? null,
+        // Email config (secrets stripped).
+        emailConfig: publicEmailConfig((org as any).emailConfig as EmailConfig | null),
+        // Mobile app config (white-label).
+        mobileAppConfig: (org as any).mobileAppConfig as MobileAppConfig | null,
       },
     });
   } catch (err) {
@@ -125,6 +158,230 @@ router.patch(
           secondaryColor: updated.secondaryColor,
           accentColor: updated.accentColor,
           supportEmail: updated.supportEmail,
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * GET /api/v1/tenant-meta/skins
+ * PUBLIC : liste des peaux disponibles (catalogue) pour le Studio cote tenant.
+ * Utilise le registre central de @transitsoftservices/skins, donc ajouter une
+ * nouvelle peau ne requiert qu'une modif du package partage.
+ */
+router.get('/skins', (_req, res) => {
+  res.json({ success: true, data: listSkins() });
+});
+
+/**
+ * PATCH /api/v1/tenant-meta/skin
+ * AUTH admin du tenant. Persiste la peau choisie + overrides depuis le Studio.
+ * Le `skinId` est valide cote serveur via isKnownSkinId().
+ */
+router.patch(
+  '/skin',
+  authenticate,
+  tenantGuard,
+  authorize('SUPER_ADMIN', 'ADMIN'),
+  async (req, res, next) => {
+    try {
+      const orgId = getOrgId(req);
+      const body = req.body as {
+        skinId?: string | null;
+        skinCustomization?: unknown;
+      };
+
+      if (body.skinId && !isKnownSkinId(body.skinId)) {
+        return res
+          .status(400)
+          .json({ success: false, message: `skinId inconnu : ${body.skinId}` });
+      }
+
+      const updated = await prisma.organization.update({
+        where: { id: orgId },
+        data: {
+          ...(body.skinId !== undefined && { skinId: body.skinId } as any),
+          ...(body.skinCustomization !== undefined && {
+            skinCustomization: body.skinCustomization,
+          } as any),
+        },
+      });
+
+      res.json({
+        success: true,
+        data: {
+          id: updated.id,
+          skin: (updated as any).skinId ?? null,
+          skinCustomization: (updated as any).skinCustomization ?? null,
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * PATCH /api/v1/tenant-meta/email-config
+ * AUTH admin. Met a jour le provider + sender + credentials.
+ * Le secret (apiKey) est conserve en BDD ; le GET ne renvoie que les 4
+ * derniers caracteres via `apiKeyHint`.
+ */
+router.patch(
+  '/email-config',
+  authenticate,
+  tenantGuard,
+  authorize('SUPER_ADMIN', 'ADMIN'),
+  async (req, res, next) => {
+    try {
+      const orgId = getOrgId(req);
+      const parsed = emailConfigSchema.partial().safeParse(req.body);
+      if (!parsed.success) {
+        return res
+          .status(400)
+          .json({ success: false, message: 'Payload invalide', issues: parsed.error.issues });
+      }
+
+      // Merge with existing config so partial updates don't wipe credentials.
+      const existing = (await prisma.organization.findUnique({
+        where: { id: orgId },
+        select: { emailConfig: true },
+      })) as { emailConfig: EmailConfig | null } | null;
+
+      const merged: EmailConfig = {
+        provider: 'shared',
+        ...(existing?.emailConfig ?? {}),
+        ...parsed.data,
+        credentials: {
+          ...(existing?.emailConfig?.credentials ?? {}),
+          ...(parsed.data.credentials ?? {}),
+        },
+      };
+
+      const updated = await prisma.organization.update({
+        where: { id: orgId },
+        data: { emailConfig: merged } as any,
+        select: { id: true, emailConfig: true },
+      });
+
+      res.json({
+        success: true,
+        data: {
+          id: updated.id,
+          emailConfig: publicEmailConfig((updated as any).emailConfig as EmailConfig | null),
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * POST /api/v1/tenant-meta/email-config/verify
+ * AUTH admin. Demarre ou rejoue la verification DKIM/SPF du domaine d'envoi.
+ * Necessite provider=resend pour l'instant.
+ */
+router.post(
+  '/email-config/verify',
+  authenticate,
+  tenantGuard,
+  authorize('SUPER_ADMIN', 'ADMIN'),
+  async (req, res, next) => {
+    try {
+      const orgId = getOrgId(req);
+      const org = (await prisma.organization.findUnique({
+        where: { id: orgId },
+        select: { emailConfig: true },
+      })) as { emailConfig: EmailConfig | null } | null;
+
+      const senderEmail = org?.emailConfig?.senderEmail;
+      if (!senderEmail) {
+        return res
+          .status(400)
+          .json({ success: false, message: 'Configurez senderEmail avant de verifier.' });
+      }
+      const domain = senderEmail.split('@')[1];
+      if (!domain) {
+        return res.status(400).json({ success: false, message: 'senderEmail malforme.' });
+      }
+
+      const outcome = await tenantEmailDispatcher.registerOrVerifyDomain(orgId, domain);
+
+      const updated: EmailConfig = {
+        ...(org?.emailConfig ?? { provider: 'shared' }),
+        dkimStatus: outcome.status,
+        dnsRecords: outcome.dnsRecords,
+        verifiedAt: outcome.status === 'verified' ? new Date().toISOString() : org?.emailConfig?.verifiedAt,
+      };
+
+      await prisma.organization.update({
+        where: { id: orgId },
+        data: { emailConfig: updated } as any,
+      });
+
+      res.json({
+        success: true,
+        data: {
+          status: outcome.status,
+          dnsRecords: outcome.dnsRecords,
+          message: outcome.message,
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * PATCH /api/v1/tenant-meta/mobile-app-config
+ * AUTH admin. Met a jour la config white-label de l'app mobile (nom, icone, ...).
+ * Le mode 'white_label' declenche un build dedie (a cabler dans la CI quand
+ * l'infrastructure EAS sera prete - cf. notes mobile dans /docs).
+ */
+router.patch(
+  '/mobile-app-config',
+  authenticate,
+  tenantGuard,
+  authorize('SUPER_ADMIN', 'ADMIN'),
+  async (req, res, next) => {
+    try {
+      const orgId = getOrgId(req);
+      const parsed = mobileAppConfigSchema.partial().safeParse(req.body);
+      if (!parsed.success) {
+        return res
+          .status(400)
+          .json({ success: false, message: 'Payload invalide', issues: parsed.error.issues });
+      }
+
+      const existing = (await prisma.organization.findUnique({
+        where: { id: orgId },
+        select: { mobileAppConfig: true },
+      })) as { mobileAppConfig: MobileAppConfig | null } | null;
+
+      const merged: MobileAppConfig = {
+        mode: 'shared',
+        appName: 'OptiPack',
+        buildStatus: 'idle',
+        ...(existing?.mobileAppConfig ?? {}),
+        ...parsed.data,
+      };
+
+      const updated = await prisma.organization.update({
+        where: { id: orgId },
+        data: { mobileAppConfig: merged } as any,
+        select: { id: true, mobileAppConfig: true },
+      });
+
+      res.json({
+        success: true,
+        data: {
+          id: updated.id,
+          mobileAppConfig: (updated as any).mobileAppConfig as MobileAppConfig,
         },
       });
     } catch (err) {

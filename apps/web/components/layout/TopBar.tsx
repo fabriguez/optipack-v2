@@ -14,6 +14,7 @@ import { apiClient } from '@/lib/api/client';
 import { notificationsApi } from '@/lib/api/notifications';
 import { useQuery } from '@tanstack/react-query';
 import { cn } from '@/lib/utils/cn';
+import { OfflineIndicator } from '@/components/shared/OfflineIndicator';
 
 export function TopBar() {
   const { data: session } = useSession();
@@ -37,6 +38,7 @@ export function TopBar() {
       <GlobalSearch />
 
       <div className="flex items-center gap-2">
+        <OfflineIndicator />
         <LanguageSwitcherInline />
         <NotificationBell />
 

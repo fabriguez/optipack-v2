@@ -29,7 +29,7 @@ services:
     networks:
       - transitsoftservices
 
-  # ---------- Web Next.js ----------
+  # ---------- Web Next.js (staff dashboard) ----------
   web:
     build:
       context: .
@@ -49,6 +49,29 @@ services:
           memory: 512M
         reservations:
           memory: 256M
+    networks:
+      - transitsoftservices
+
+  # ---------- Web-Client Next.js (public marketing site + client portal) ----------
+  # Sous-domaine www.<slug>.<base> + customDomain (cf. CaddyService).
+  web-client:
+    build:
+      context: .
+      dockerfile: docker/web-client/Dockerfile.prod
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    ports:
+      - "3010:3001"
+    env_file: .env
+    environment:
+      INTERNAL_API_URL: http://api:4000/api/v1
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+        reservations:
+          memory: 192M
     networks:
       - transitsoftservices
 

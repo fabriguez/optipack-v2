@@ -22,6 +22,13 @@ router.delete(
   authorize('SUPER_ADMIN', 'ADMIN'),
   ManifestController.removeDiscrepancy,
 );
+// Enregistrement complet d'un colis trouve physiquement (EXTRA_PHYSICAL).
+// Cree un vrai Parcel + lie une discrepancy au container pour audit.
+router.post(
+  '/discrepancies/:containerId/register-extra',
+  authorize('SUPER_ADMIN', 'ADMIN', 'AGENT', 'MAGASINIER'),
+  ManifestController.registerExtraParcel,
+);
 router.get('/:id', ManifestController.getById);
 router.get('/:id/pdf', ManifestController.getPDF);
 router.post(

@@ -19,6 +19,9 @@ export interface TenantCaddyEntry {
   customDomain?: string | null;
   apiPort: number;
   webPort: number;
+  /** Port du conteneur web-client (site public + portail). Optionnel pour
+   *  retrocompatibilite avec les tenants pre-Phase web-client. */
+  webClientPort?: number;
   isFrozen: boolean;
 }
 
@@ -45,24 +48,50 @@ export class CaddyService {
     };
 
     for (const t of tenants) {
-      const hosts: string[] = [`${t.slug}.${opts.baseDomain}`];
+      // staff dashboard : {slug}.{base} (retrocompat)
+      // public site (web-client) : www.{slug}.{base} + custom domain
+      // api : api.{slug}.{base}
+      const staffHosts: string[] = [`${t.slug}.${opts.baseDomain}`];
+      const publicHosts: string[] = [`www.${t.slug}.${opts.baseDomain}`];
+      if (t.customDomain) publicHosts.push(t.customDomain);
       const apiHost = `api.${t.slug}.${opts.baseDomain}`;
-      const customHosts: string[] = t.customDomain ? [t.customDomain] : [];
 
       const webBackend = t.isFrozen ? FROZEN_RESPONSE : {
         handler: 'reverse_proxy',
         upstreams: [{ dial: `localhost:${t.webPort}` }],
       };
 
+      const webClientBackend = t.isFrozen
+        ? FROZEN_RESPONSE
+        : t.webClientPort
+        ? {
+            handler: 'reverse_proxy',
+            upstreams: [{ dial: `localhost:${t.webClientPort}` }],
+          }
+        : null;
+
       const apiBackend = t.isFrozen ? FROZEN_RESPONSE : {
         handler: 'reverse_proxy',
         upstreams: [{ dial: `localhost:${t.apiPort}` }],
       };
 
-      // Web (sous-domaine + custom domain si fourni)
+      // Staff dashboard (slug.base)
       routes.push({
-        match: [{ host: [...hosts, ...customHosts] }],
+        match: [{ host: staffHosts }],
         handle: [{ handler: 'subroute', routes: [{ handle: [webBackend] }] }],
+        terminal: true,
+      });
+
+      // Public website + portal (www.slug.base + customDomain)
+      // Si le tenant n'a pas encore de web-client (legacy), on fallback sur le web staff.
+      routes.push({
+        match: [{ host: publicHosts }],
+        handle: [
+          {
+            handler: 'subroute',
+            routes: [{ handle: [webClientBackend ?? webBackend] }],
+          },
+        ],
         terminal: true,
       });
 

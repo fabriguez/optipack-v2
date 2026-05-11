@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Check, ChevronDown, Loader2, Plus, X } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { Popover, PopoverContent, PopoverTrigger } from './popover';
 import { Input } from './input';
 import { Label } from './label';
@@ -43,6 +44,19 @@ export interface AppSearchSelectProps {
    */
   selectedOption?: SearchOption | null;
   clearable?: boolean;
+  /**
+   * Cle de cache React Query pour mutualiser les recherches entre instances
+   * (ex: 'searcher.agencies', 'searcher.clients'). Quand fournie, les resultats
+   * sont mis en cache et instantanement disponibles a la reouverture du
+   * popover. Sans cette cle, le composant garde l'ancien comportement
+   * (state local + debounce manuel) -- conserve pour retro-compat.
+   */
+  searchKey?: string;
+  /**
+   * Duree de fraicheur du cache en ms (defaut 60s). Pendant cette periode,
+   * la recherche ne refait pas d'appel reseau.
+   */
+  staleTimeMs?: number;
 }
 
 export function AppSearchSelect({
@@ -63,15 +77,23 @@ export function AppSearchSelect({
   required,
   selectedOption,
   clearable = true,
+  searchKey,
+  staleTimeMs = 60_000,
 }: AppSearchSelectProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<SearchOption[]>(options ?? []);
-  const [loading, setLoading] = useState(false);
+  // Query debounce : on bufferise les frappes pendant 250ms avant d'invoquer
+  // useQuery (sinon on cle-cache une recherche par caractere tape).
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [legacyResults, setLegacyResults] = useState<SearchOption[]>(options ?? []);
+  const [legacyLoading, setLegacyLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [triggerWidth, setTriggerWidth] = useState<number | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
+  // ID stable utilise comme fallback de cache key quand searchKey n'est pas
+  // fourni : evite de melanger les caches entre instances heterogenes.
+  const fallbackKeyId = useId();
 
   // Mesure la largeur du trigger pour aligner la largeur du popover (Base UI
   // n'expose pas de CSS var trigger-width comme Radix).
@@ -85,49 +107,70 @@ export function AppSearchSelect({
     return () => ro.disconnect();
   }, []);
 
+  // Debounce de la query pour eviter d'invoquer useQuery a chaque frappe.
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setDebouncedQuery(query), 250);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [query]);
+
+  // ============================================================
+  // Mode "search" (asynchrone API) avec cache React Query.
+  // ============================================================
+  // Cle de cache : (1) prop explicite searchKey > (2) attribut .searchKey pose
+  // par les helpers searchers.* > (3) fallback sur l'ID stable de l'instance
+  // (pas de partage de cache mais pas de conflit non plus).
+  const cacheKey =
+    searchKey ?? ((search as unknown as { searchKey?: string })?.searchKey) ?? `__local-${fallbackKeyId}`;
+  const queryEnabled = !!search && open;
+
+  const queryResult = useQuery({
+    queryKey: ['search-select', cacheKey, debouncedQuery, limit],
+    queryFn: () => search!(debouncedQuery, limit),
+    enabled: queryEnabled,
+    staleTime: staleTimeMs,
+    // Sur reouverture, on garde l'ancien resultat affiche pendant le refetch
+    // (pas de flash "Chargement..." si la donnee est encore valide).
+    placeholderData: (prev) => prev,
+  });
+
+  // ============================================================
+  // Mode "options" (statique) : filtrage local immediat.
+  // ============================================================
+  useEffect(() => {
+    if (search) return;
+    if (!options) {
+      setLegacyResults([]);
+      return;
+    }
+    const q = debouncedQuery.trim().toLowerCase();
+    const filtered = q
+      ? options.filter(
+          (o) => o.label.toLowerCase().includes(q) || o.sublabel?.toLowerCase().includes(q),
+        )
+      : options;
+    setLegacyResults(filtered.slice(0, limit));
+  }, [debouncedQuery, search, options, limit]);
+
+  // Resultats unifies : on consomme indifferemment le mode search ou options.
+  const results: SearchOption[] = search
+    ? ((queryResult.data ?? []) as SearchOption[]).slice(0, limit)
+    : legacyResults;
+  const loading = search ? queryResult.isFetching : legacyLoading;
+  void setLegacyLoading; // conserve pour compat / hooks de dev
+
   const selected = useMemo(() => {
     if (!value) return null;
     if (selectedOption && selectedOption.value === value) return selectedOption;
     return results.find((r) => r.value === value) ?? null;
   }, [value, selectedOption, results]);
 
-  // Recherche debounced
+  // Reset query a l'ouverture (UX : nouvelle recherche, pas heritee).
   useEffect(() => {
-    if (!open) return;
-
-    if (search) {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(async () => {
-        setLoading(true);
-        try {
-          const found = await search(query, limit);
-          setResults(found.slice(0, limit));
-        } catch {
-          setResults([]);
-        } finally {
-          setLoading(false);
-        }
-      }, 250);
-      return () => {
-        if (debounceRef.current) clearTimeout(debounceRef.current);
-      };
-    }
-
-    if (options) {
-      const q = query.trim().toLowerCase();
-      const filtered = q
-        ? options.filter((o) => o.label.toLowerCase().includes(q) || o.sublabel?.toLowerCase().includes(q))
-        : options;
-      setResults(filtered.slice(0, limit));
-    }
-  }, [query, open, search, options, limit]);
-
-  // Charger initialement quand on ouvre
-  useEffect(() => {
-    if (open && results.length === 0 && !loading) {
-      setQuery('');
-    }
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (open) setQuery('');
+  }, [open]);
 
   const handleSelect = (opt: SearchOption) => {
     onChange?.(opt.value);

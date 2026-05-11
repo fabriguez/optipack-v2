@@ -1,0 +1,45 @@
+name: Deploy Web-Client
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/web-client/**'
+      - 'packages/shared/**'
+      - 'packages/skins/**'
+      - 'packages/config/**'
+      - 'docker/web-client/**'
+      - 'docker-compose.prod.yml'
+
+jobs:
+  deploy:
+    name: Deploy Web-Client to VPS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Push code to VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            cd ~/optipack-v2
+            git pull origin main
+
+      - name: Build & restart container
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            cd ~/optipack-v2
+            docker compose -f docker-compose.prod.yml build --no-cache web-client
+            docker compose -f docker-compose.prod.yml up -d web-client
+            docker image prune -f

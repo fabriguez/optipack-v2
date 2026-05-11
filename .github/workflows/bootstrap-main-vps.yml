@@ -1,0 +1,200 @@
+name: Bootstrap main VPS
+
+# One-shot installation du VPS principal : clone du repo + installation des
+# prereqs + premier demarrage de toute la stack (tenant principal +
+# orchestrator). A executer manuellement depuis l'onglet Actions, normalement
+# une seule fois apres provisioning du VPS.
+#
+# Idempotent : peut etre rejoue sans casser ce qui existe.
+#
+# Prerequis sur le VPS avant d'executer (one-shot manuel, cf. docs/main-vps-setup.md) :
+#  - Utilisateur 'deploy' cree avec acces sudo NOPASSWD pour `apt`, `systemctl`,
+#    `usermod`, ou alors les secrets pointent sur 'root'
+#  - Cle publique CI dans /home/deploy/.ssh/authorized_keys (cf. doc)
+#
+# Apres ce bootstrap, les deploys auto se feront via :
+#  - deploy-api.yml          -> push touchant apps/api/**
+#  - deploy-web.yml          -> push touchant apps/web/**
+#  - deploy-web-client.yml   -> push touchant apps/web-client/**
+#  - deploy-orchestrator.yml -> push touchant apps/orchestrator/**
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_seed:
+        description: 'Lancer le seed initial (super-admin orchestrator + premier tenant)'
+        type: boolean
+        default: false
+      skip_system_install:
+        description: 'Sauter l installation Docker/UFW (utile si deja installes)'
+        type: boolean
+        default: false
+
+jobs:
+  bootstrap:
+    name: Install everything on the main VPS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install Docker + UFW + git (skip if already done)
+        if: ${{ !inputs.skip_system_install }}
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            set -e
+            # Tout est idempotent : apt install ne casse rien si deja installe.
+            sudo apt update
+            sudo apt install -y ca-certificates curl gnupg ufw fail2ban git
+
+            if ! command -v docker >/dev/null 2>&1; then
+              sudo install -m 0755 -d /etc/apt/keyrings
+              curl -fsSL https://download.docker.com/linux/ubuntu/gpg | \
+                sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+              sudo chmod a+r /etc/apt/keyrings/docker.gpg
+              echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+                https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" | \
+                sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
+              sudo apt update
+              sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+              sudo usermod -aG docker $USER || true
+            fi
+
+            # Firewall : SSH + HTTPS + HTTP (Caddy)
+            sudo ufw allow OpenSSH || true
+            sudo ufw allow 80/tcp || true
+            sudo ufw allow 443/tcp || true
+            sudo ufw --force enable || true
+
+      - name: Clone or update repo
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            set -e
+            if [ ! -d ~/optipack-v2 ]; then
+              git clone https://github.com/${{ github.repository }}.git ~/optipack-v2
+            fi
+            cd ~/optipack-v2
+            git fetch --all
+            git checkout main
+            git pull origin main
+
+      - name: Write .env if missing
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          envs: ENV_FILE
+          script: |
+            set -e
+            cd ~/optipack-v2
+            if [ ! -f .env ]; then
+              echo "[bootstrap] .env absent, generation d'un .env initial avec secrets random..."
+              cat > .env <<EOF
+            # ---- Tenant principal (api + web + web-client) ----
+            NODE_ENV=production
+            POSTGRES_DB=transitsoftservices
+            POSTGRES_USER=transitsoftservices
+            POSTGRES_PASSWORD=$(openssl rand -hex 24)
+            REDIS_PASSWORD=$(openssl rand -hex 24)
+            MINIO_ROOT_USER=transitsoftservices
+            MINIO_ROOT_PASSWORD=$(openssl rand -hex 24)
+            JWT_SECRET=$(openssl rand -hex 32)
+            AUTH_SECRET=$(openssl rand -hex 32)
+            JWT_ACCESS_EXPIRY=15m
+            JWT_REFRESH_EXPIRY=7d
+            NEXT_PUBLIC_API_URL=/api/v1
+            NEXT_PUBLIC_SOCKET_URL=
+            # ---- Orchestrator (control plane) ----
+            OPS_POSTGRES_USER=opsadmin
+            OPS_POSTGRES_PASSWORD=$(openssl rand -hex 24)
+            OPS_POSTGRES_DB=ops_admin
+            OPS_JWT_SECRET=$(openssl rand -hex 32)
+            OPS_MASTER_KEY=$(openssl rand -hex 32)
+            OPS_TOTP_ISSUER=OptiPack Ops
+            OPS_GHCR_NAMESPACE=${{ github.repository_owner }}
+            OPS_GHCR_TOKEN=${{ secrets.OPS_GHCR_TOKEN }}
+            OPS_PUBLIC_WEB_URL=https://ops.optipack.app
+            EOF
+              chmod 600 .env
+              echo "[bootstrap] .env genere. SAUVEGARDER hors VPS (OPS_MASTER_KEY irrecuperable)."
+            else
+              echo "[bootstrap] .env existe deja, conserve."
+            fi
+
+      - name: Start main tenant stack (api + web + web-client + postgres + redis + minio)
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            set -e
+            cd ~/optipack-v2
+            docker compose -f docker-compose.prod.yml up -d postgres redis minio
+            docker compose -f docker-compose.prod.yml build api web web-client
+            docker compose -f docker-compose.prod.yml up -d api web web-client
+            docker image prune -f
+
+      - name: Start orchestrator stack (control plane)
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            set -e
+            cd ~/optipack-v2
+            docker compose -f docker-compose.control-plane.yml up -d ops-postgres ops-redis
+            docker compose -f docker-compose.control-plane.yml build orchestrator
+            docker compose -f docker-compose.control-plane.yml up -d orchestrator
+            docker image prune -f
+
+      - name: Seed initial super-admin (if requested)
+        if: ${{ inputs.run_seed }}
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            set -e
+            cd ~/optipack-v2
+            # Genere un mot de passe temporaire, hash bcrypt et insere si absent.
+            TEMP_PWD=$(openssl rand -hex 12)
+            HASH=$(docker compose -f docker-compose.control-plane.yml exec -T orchestrator \
+              node -e "process.stdout.write(require('bcryptjs').hashSync('$TEMP_PWD', 10))")
+            docker compose -f docker-compose.control-plane.yml exec -T ops-postgres \
+              psql -U opsadmin -d ops_admin -c "
+                INSERT INTO ops_admins (id, email, \"passwordHash\", \"fullName\", \"isActive\", \"isSuperAdmin\", \"createdAt\", \"updatedAt\")
+                SELECT gen_random_uuid(), 'admin@optipack.app', '$HASH', 'Bootstrap Admin', true, true, now(), now()
+                WHERE NOT EXISTS (SELECT 1 FROM ops_admins WHERE email = 'admin@optipack.app');
+              "
+            echo "::warning::Super-admin cree -> admin@optipack.app / mot de passe temporaire = $TEMP_PWD"
+            echo "::warning::Connectez-vous, configurez le 2FA, puis changez ce mot de passe."
+
+      - name: Show status
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            cd ~/optipack-v2
+            echo "===== Tenant principal ====="
+            docker compose -f docker-compose.prod.yml ps
+            echo "===== Control plane ====="
+            docker compose -f docker-compose.control-plane.yml ps

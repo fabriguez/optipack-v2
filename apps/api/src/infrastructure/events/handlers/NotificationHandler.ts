@@ -4,9 +4,51 @@ import type { Prisma } from '@prisma/client';
 import { prisma } from '../../../config/database';
 import { emailService } from '../../email/EmailService';
 import { createChildLogger } from '../../../config/logger';
+import { realtimeService } from '../../realtime/RealtimeService';
+import { notificationService } from '../../../application/services/notifications/NotificationService';
+import type { NotificationChannel } from '../../../application/services/notifications/types';
+import { filterChannelsByPrefs } from '../../../application/services/notifications/preferences';
+
+/**
+ * Pousse une notification multi-canal hors IN_APP/EMAIL (deja geres
+ * separement par cette unite pour conserver les templates riches d'email).
+ * Inclut par defaut SMS + WHATSAPP : les providers SKIPPED retournent
+ * simplement, donc aucun cout si non configures.
+ */
+async function dispatchExternal(
+  target: { clientId?: string | null; userId?: string | null; agencyId?: string | null },
+  payload: { title: string; message: string; metadata?: Record<string, unknown>; kind?: string },
+): Promise<void> {
+  const requested: NotificationChannel[] = ['SMS', 'WHATSAPP'];
+  const allowed = await filterChannelsByPrefs(
+    target,
+    payload.kind ?? (payload.metadata?.kind as string | undefined),
+    requested,
+  );
+  if (allowed.length === 0) return;
+  try {
+    await notificationService.notify(target, {
+      title: payload.title,
+      message: payload.message,
+      metadata: payload.metadata,
+      channels: allowed,
+    });
+  } catch (err) {
+    logger.warn({ err, title: payload.title }, 'Echec dispatch externe (non bloquant)');
+  }
+}
 
 const logger = createChildLogger('NotificationHandler');
 
+/**
+ * Cree la notification IN_APP et la pousse en temps-reel via socket.io.
+ * Les notifications EMAIL/SMS/WHATSAPP sont envoyees separement par les
+ * handlers d'evenements pour conserver les templates riches existants.
+ *
+ * Pour un envoi multi-canal complet (recommande pour les nouveaux events),
+ * passer par `notificationService.notify(...)` dans
+ * `application/services/notifications/NotificationService`.
+ */
 async function createNotification(data: {
   clientId?: string;
   userId?: string;
@@ -17,7 +59,7 @@ async function createNotification(data: {
   metadata?: Prisma.InputJsonValue;
 }) {
   try {
-    await prisma.notification.create({
+    const row = await prisma.notification.create({
       data: {
         clientId: data.clientId,
         userId: data.userId,
@@ -30,6 +72,21 @@ async function createNotification(data: {
         metadata: data.metadata || undefined,
       },
     });
+    // Push realtime : vers le user concerne (agent) et/ou le client (portail).
+    const event = {
+      id: row.id,
+      title: row.title,
+      message: row.message,
+      metadata: row.metadata,
+      createdAt: row.createdAt,
+    };
+    if (data.userId) realtimeService.toUser(data.userId, 'notification:new', event);
+    if (data.clientId) realtimeService.toClient(data.clientId, 'notification:new', event);
+    if (data.agencyId && !data.userId && !data.clientId) {
+      // Diffusion a tous les utilisateurs de l'agence (cas notif d'agence
+      // ex: nouveau colis enregistre dans l'agence).
+      realtimeService.toAgency(data.agencyId, 'notification:new', event);
+    }
   } catch (err) {
     logger.error({ err, title: data.title }, 'Echec creation notification');
   }
@@ -77,6 +134,16 @@ function registerHandlers() {
         );
       }
     }
+
+    // SMS / WhatsApp (skipped si providers non configures).
+    await dispatchExternal(
+      { clientId, agencyId: agencyId || event.agencyId },
+      {
+        title: 'Colis enregistre',
+        message: `Bonjour, votre colis "${designation || ''}" est enregistre. Suivi : ${trackingNumber || ''}.`,
+        metadata: { trackingNumber, parcelId: event.payload.parcelId, kind: 'PARCEL_CREATED' },
+      },
+    );
   });
 
   // PARCEL_STATUS_CHANGED (ARRIVED) -> notify client "Colis arrive"
@@ -117,6 +184,27 @@ function registerHandlers() {
         );
       }
     }
+
+    // SMS / WhatsApp pour les changements significatifs.
+    if (newStatus === 'ARRIVED') {
+      await dispatchExternal(
+        { clientId, agencyId: agencyId || event.agencyId },
+        {
+          title: 'Colis arrive',
+          message: `Votre colis "${designation || ''}" (${trackingNumber || ''}) est arrive a destination. Vous pouvez venir le retirer.`,
+          metadata: { trackingNumber, newStatus, kind: 'PARCEL_ARRIVED' },
+        },
+      );
+    } else if (newStatus === 'DELIVERED') {
+      await dispatchExternal(
+        { clientId, agencyId: agencyId || event.agencyId },
+        {
+          title: 'Colis livre',
+          message: `Votre colis "${designation || ''}" (${trackingNumber || ''}) a ete livre. Merci de votre confiance.`,
+          metadata: { trackingNumber, newStatus, kind: 'PARCEL_DELIVERED' },
+        },
+      );
+    }
   });
 
   // PAYMENT_RECEIVED -> notify client "Paiement recu"
@@ -146,6 +234,16 @@ function registerHandlers() {
         String(remainingBalance || '0'),
       );
     }
+
+    // SMS / WhatsApp pour reglement.
+    await dispatchExternal(
+      { clientId, agencyId: agencyId || event.agencyId },
+      {
+        title: 'Paiement recu',
+        message: `Paiement de ${amount || ''} FCFA recu pour la facture ${invoiceRef || ''}. Solde restant : ${remainingBalance || '0'} FCFA.`,
+        metadata: { invoiceRef, amount, paymentMethod, kind: 'PAYMENT_RECEIVED' },
+      },
+    );
   });
 
   // PENALTY_APPLIED -> notify client "Penalite appliquee"
@@ -176,6 +274,16 @@ function registerHandlers() {
         agencyName || '',
       );
     }
+
+    // SMS / WhatsApp pour penalite (critique : impact financier).
+    await dispatchExternal(
+      { clientId, agencyId: agencyId || event.agencyId },
+      {
+        title: 'Penalite de stockage',
+        message: `Penalite de ${totalAmount || ''} FCFA appliquee sur "${designation || ''}" (${trackingNumber || ''}) -- ${days || 0} jour(s) de stockage depasses.`,
+        metadata: { trackingNumber, totalAmount, days, kind: 'PENALTY_APPLIED' },
+      },
+    );
   });
 
   logger.info('Notification event handlers registered');

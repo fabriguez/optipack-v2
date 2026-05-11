@@ -420,7 +420,16 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
             type="number"
             step="100"
             placeholder="Pour assurance"
-            {...register('declaredValue', { valueAsNumber: true })}
+            // valueAsNumber genere NaN sur input vide => casse la validation zod
+            // (z.number().optional().nullable()). On gere le cast manuellement
+            // pour renvoyer null quand le champ est vide.
+            {...register('declaredValue', {
+              setValueAs: (v: string) => {
+                if (v === '' || v === null || v === undefined) return null;
+                const n = Number(v);
+                return Number.isFinite(n) ? n : null;
+              },
+            })}
           />
 
           <Controller

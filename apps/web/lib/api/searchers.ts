@@ -26,8 +26,20 @@ async function searchPaginated<T>(
   return res.data.data ?? [];
 }
 
+// Type SearcherFn : signature standard d'un searcher avec un attribut
+// `searchKey` stable utilise par AppSearchSelect pour mutualiser le cache
+// React Query entre toutes les instances qui partagent le meme searcher.
+export type SearcherFn = ((q: string, limit?: number, extra?: Record<string, unknown>) => Promise<SearchOption[]>) & {
+  searchKey?: string;
+};
+
+function tag(fn: (q: string, limit?: number, extra?: Record<string, unknown>) => Promise<SearchOption[]>, key: string): SearcherFn {
+  (fn as SearcherFn).searchKey = key;
+  return fn as SearcherFn;
+}
+
 export const searchers = {
-  clients: async (q: string, limit = DEFAULT_LIMIT, extra?: Record<string, unknown>): Promise<SearchOption[]> => {
+  clients: tag(async (q: string, limit = DEFAULT_LIMIT, extra?: Record<string, unknown>): Promise<SearchOption[]> => {
     const items = await searchPaginated<{ id: string; fullName: string; phone: string; clientType?: string }>(
       '/clients',
       q,
@@ -39,10 +51,10 @@ export const searchers = {
       label: c.fullName,
       sublabel: `${c.phone}${c.clientType && c.clientType !== 'INDIVIDUAL' ? ` - ${c.clientType}` : ''}`,
     }));
-  },
+  }, 'searchers.clients'),
 
   // Recipients ont fusionne avec clients : on cherche dans la meme table.
-  recipients: async (q: string, limit = DEFAULT_LIMIT): Promise<SearchOption[]> => {
+  recipients: tag(async (q: string, limit = DEFAULT_LIMIT): Promise<SearchOption[]> => {
     const items = await searchPaginated<{ id: string; fullName: string; phone: string; clientType?: string }>(
       '/clients',
       q,
@@ -53,9 +65,9 @@ export const searchers = {
       label: c.fullName,
       sublabel: `${c.phone}${c.clientType && c.clientType !== 'INDIVIDUAL' ? ` - ${c.clientType}` : ''}`,
     }));
-  },
+  }, 'searchers.recipients'),
 
-  warehouses: async (q: string, limit = DEFAULT_LIMIT): Promise<SearchOption[]> => {
+  warehouses: tag(async (q: string, limit = DEFAULT_LIMIT): Promise<SearchOption[]> => {
     const items = await searchPaginated<{ id: string; name: string; agency?: { name: string } }>(
       '/warehouses',
       q,
@@ -66,14 +78,14 @@ export const searchers = {
       label: w.name,
       sublabel: w.agency?.name ?? null,
     }));
-  },
+  }, 'searchers.warehouses'),
 
-  agencies: async (q: string, limit = DEFAULT_LIMIT): Promise<SearchOption[]> => {
+  agencies: tag(async (q: string, limit = DEFAULT_LIMIT): Promise<SearchOption[]> => {
     const items = await searchPaginated<{ id: string; name: string; city: string }>('/agencies', q, limit);
     return items.map((a) => ({ value: a.id, label: a.name, sublabel: a.city }));
-  },
+  }, 'searchers.agencies'),
 
-  employees: async (q: string, limit = DEFAULT_LIMIT, extra?: Record<string, unknown>): Promise<SearchOption[]> => {
+  employees: tag(async (q: string, limit = DEFAULT_LIMIT, extra?: Record<string, unknown>): Promise<SearchOption[]> => {
     // Recherche dans le scope de l'utilisateur (toutes ses agences). Si extra.agencyId
     // est fourni, on filtre cote API via l'endpoint scope par agence.
     const endpoint = extra?.agencyId
@@ -90,9 +102,9 @@ export const searchers = {
       label: e.fullName,
       sublabel: [e.position, e.agency?.name].filter(Boolean).join(' - '),
     }));
-  },
+  }, 'searchers.employees'),
 
-  transitRoutes: async (q: string, limit = DEFAULT_LIMIT, extra?: Record<string, unknown>): Promise<SearchOption[]> => {
+  transitRoutes: tag(async (q: string, limit = DEFAULT_LIMIT, extra?: Record<string, unknown>): Promise<SearchOption[]> => {
     const items = await searchPaginated<{
       id: string;
       name: string;
@@ -106,9 +118,9 @@ export const searchers = {
       label: r.name,
       sublabel: `${r.type} - ${r.departureCity ?? ''} → ${r.arrivalCity ?? ''}`,
     }));
-  },
+  }, 'searchers.transitRoutes'),
 
-  containers: async (q: string, limit = DEFAULT_LIMIT, extra?: Record<string, unknown>): Promise<SearchOption[]> => {
+  containers: tag(async (q: string, limit = DEFAULT_LIMIT, extra?: Record<string, unknown>): Promise<SearchOption[]> => {
     const items = await searchPaginated<{
       id: string;
       designation: string;
@@ -121,9 +133,9 @@ export const searchers = {
       label: c.designation,
       sublabel: `${c.type}${c.isForwarding ? ' (acheminement)' : ''} - ${c.status}`,
     }));
-  },
+  }, 'searchers.containers'),
 
-  parcels: async (q: string, limit = DEFAULT_LIMIT, extra?: Record<string, unknown>): Promise<SearchOption[]> => {
+  parcels: tag(async (q: string, limit = DEFAULT_LIMIT, extra?: Record<string, unknown>): Promise<SearchOption[]> => {
     const items = await searchPaginated<{
       id: string;
       trackingNumber: string;
@@ -135,7 +147,7 @@ export const searchers = {
       label: `${p.trackingNumber} - ${p.designation}`,
       sublabel: p.status,
     }));
-  },
+  }, 'searchers.parcels'),
 };
 
 /**
