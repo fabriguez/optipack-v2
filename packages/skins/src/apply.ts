@@ -3,15 +3,17 @@
  * and serialize a skin to a CSS string (used for scoped previews/iframes).
  *
  * This module is imported by server runtimes too (api, orchestrator) through
- * the package barrel, so we declare `document` ambiently to compile under
- * non-DOM `lib` configurations. Runtime guard below prevents server execution.
+ * the package barrel, so we declare `document` ambiently below to compile
+ * under non-DOM `lib` configurations. Runtime guards prevent server execution.
  */
-
-declare const document: any;
 
 import { generatePalette } from './palette';
 import { resolveSkin } from './registry';
 import type { ResolvedSkin, SkinCustomization, ShadowFlavor, SkinId } from './types';
+
+// Ambient declaration so packages targeting node (api, orchestrator) compile
+// without the DOM lib. Real DOM is available in the browser at runtime.
+declare const document: any;
 
 const SHADOW_PRESETS: Record<ShadowFlavor, string> = {
   soft: '0 10px 30px -12px rgba(0,0,0,0.18), 0 4px 12px -4px rgba(0,0,0,0.08)',
