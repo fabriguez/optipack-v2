@@ -1,14 +1,19 @@
 name: Build & push Docker images to GHCR
 
-# Phase 0.5 : build des images optipack-api et optipack-web et push vers GHCR prive
-# Trigger : sur push de tag vX.Y.Z (releases) ET sur main (tag latest pour dev)
+# Phase 0.5 : build des images optipack-api, optipack-web et optipack-web-client
+# et push vers GHCR prive.
+#
+# Versioning : toute image poussee est taguee `beta-1.0.<n>` ou <n> provient
+# de `apps/all/version`. Le job `bump-version` incremente ce compteur avant
+# chaque build, puis committe le nouveau numero (avec `[skip ci]` pour eviter
+# une boucle de workflow).
 
 on:
   push:
     branches: [main]
     tags:
       - 'v*'
-  workflow_dispatch:  # build manuel possible depuis l'UI GitHub
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
@@ -17,8 +22,64 @@ env:
   WEB_CLIENT_IMAGE: ghcr.io/${{ github.repository_owner }}/optipack-web-client
 
 jobs:
+  bump-version:
+    name: Bump image version tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.bump.outputs.version }}
+      tag: ${{ steps.bump.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: Bump beta version
+        id: bump
+        run: |
+          set -e
+          VERSION_FILE=apps/all/version
+          if [ ! -f "$VERSION_FILE" ]; then
+            echo "0" > "$VERSION_FILE"
+          fi
+          CURRENT=$(tr -d '[:space:]' < "$VERSION_FILE")
+          if ! [[ "$CURRENT" =~ ^[0-9]+$ ]]; then
+            echo "Invalid version content: '$CURRENT'" >&2
+            exit 1
+          fi
+          NEXT=$((CURRENT + 1))
+          printf '%s\n' "$NEXT" > "$VERSION_FILE"
+          TAG="beta-1.0.$NEXT"
+          echo "version=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Bumped image version: $CURRENT -> $NEXT (tag $TAG)"
+
+      - name: Commit & push bumped version
+        if: github.event_name != 'pull_request'
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/all/version
+          if git diff --cached --quiet; then
+            echo "No version change to commit"
+            exit 0
+          fi
+          git commit -m "chore(release): bump image tag to ${{ steps.bump.outputs.tag }} [skip ci]"
+          # Push only when on a branch (skip on tag refs to avoid detached HEAD push failure).
+          if [[ "${GITHUB_REF}" == refs/heads/* ]]; then
+            git push origin "HEAD:${GITHUB_REF#refs/heads/}"
+          else
+            echo "Ref ${GITHUB_REF} is not a branch; skipping push of version bump."
+          fi
+
   build-api:
     name: Build & push optipack-api
+    needs: bump-version
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -26,6 +87,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Pull bumped version commit
+        run: git pull --ff-only origin "${GITHUB_REF#refs/heads/}" || true
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -46,6 +112,7 @@ jobs:
             type=ref,event=branch
             type=ref,event=tag
             type=sha,prefix=sha-
+            type=raw,value=${{ needs.bump-version.outputs.tag }}
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: Build & push API image
@@ -61,6 +128,7 @@ jobs:
 
   build-web:
     name: Build & push optipack-web
+    needs: bump-version
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -68,6 +136,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Pull bumped version commit
+        run: git pull --ff-only origin "${GITHUB_REF#refs/heads/}" || true
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -105,6 +178,7 @@ jobs:
             type=ref,event=branch
             type=ref,event=tag
             type=sha,prefix=sha-
+            type=raw,value=${{ needs.bump-version.outputs.tag }}
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: Build & push Web image
@@ -127,6 +201,7 @@ jobs:
 
   build-web-client:
     name: Build & push optipack-web-client
+    needs: bump-version
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -134,6 +209,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Pull bumped version commit
+        run: git pull --ff-only origin "${GITHUB_REF#refs/heads/}" || true
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -154,6 +234,7 @@ jobs:
             type=ref,event=branch
             type=ref,event=tag
             type=sha,prefix=sha-
+            type=raw,value=${{ needs.bump-version.outputs.tag }}
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: Build & push Web-Client image
