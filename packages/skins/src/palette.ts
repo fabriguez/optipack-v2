@@ -73,12 +73,17 @@ const TARGET_LIGHTNESS: Record<keyof ColorPalette, number> = {
   900: 14,
 };
 
+// Liste des shades explicite pour eviter les casts string[] -> keyof ColorPalette[]
+// que `tsc` strict refuse.
+const SHADE_KEYS: Array<keyof ColorPalette> = [
+  50, 100, 200, 300, 400, 500, 600, 700, 800, 900,
+];
+
 export function generatePalette(baseHex: string): ColorPalette {
   const [r, g, b] = hexToRgb(baseHex);
   const [h, s] = rgbToHsl(r, g, b);
   const palette = {} as ColorPalette;
-  const keys = Object.keys(TARGET_LIGHTNESS) as Array<keyof ColorPalette>;
-  for (const key of keys) {
+  for (const key of SHADE_KEYS) {
     const lightness = TARGET_LIGHTNESS[key];
     const [pr, pg, pb] = hslToRgb(h, Math.min(s, 70), lightness);
     palette[key] = rgbToHex(pr, pg, pb);

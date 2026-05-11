@@ -1,7 +1,7 @@
 'use client';
 
-import { motion, useInView, useMotionValue, useTransform, animate } from 'framer-motion';
-import { useEffect, useRef } from 'react';
+import { motion, useInView, useMotionValue, animate } from 'framer-motion';
+import { useEffect, useRef, useState } from 'react';
 
 const STATS = [
   { value: 1200000, suffix: '+', label: 'colis livres', round: 1000 },
@@ -81,15 +81,21 @@ function StatItem({
   const ref = useRef<HTMLDivElement>(null);
   const inView = useInView(ref, { once: true, margin: '-60px' });
   const motion_ = useMotionValue(0);
-  const display = useTransform(motion_, (v) => {
-    return decimals
-      ? v.toFixed(decimals)
-      : v >= 1_000_000
-      ? `${(v / 1_000_000).toFixed(1)}M`
-      : v >= 1_000
-      ? `${Math.round(v / 1000)}k`
-      : Math.round(v).toString();
-  });
+  const [display, setDisplay] = useState('0');
+
+  useEffect(() => {
+    const fmt = (v: number) =>
+      decimals
+        ? v.toFixed(decimals)
+        : v >= 1_000_000
+        ? `${(v / 1_000_000).toFixed(1)}M`
+        : v >= 1_000
+        ? `${Math.round(v / 1000)}k`
+        : Math.round(v).toString();
+    const unsub = motion_.on('change', (v) => setDisplay(fmt(v)));
+    setDisplay(fmt(motion_.get()));
+    return unsub;
+  }, [motion_, decimals]);
 
   useEffect(() => {
     if (!inView) return;
@@ -109,12 +115,10 @@ function StatItem({
       transition={{ duration: 0.4, delay: index * 0.08 }}
       className="text-center"
     >
-      <motion.div
-        className="text-4xl font-extrabold tracking-tight sm:text-5xl skin-font-heading skin-gradient-text"
-      >
+      <div className="text-4xl font-extrabold tracking-tight sm:text-5xl skin-font-heading skin-gradient-text">
         {display}
         <span>{suffix}</span>
-      </motion.div>
+      </div>
       <p
         className="mt-2 text-sm font-medium"
         style={{ color: 'var(--skin-muted)' }}
