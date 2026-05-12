@@ -4,12 +4,35 @@ import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { ShieldCheck } from 'lucide-react';
 
+/**
+ * Decode le payload JWT du challengeToken pour savoir si c'est un setup
+ * initial (kind='setup_required') ou une verification ulterieure ('totp_required').
+ * Pas de signature check ici : on a juste besoin du `kind` pour router vers
+ * le bon endpoint backend.
+ */
+function jwtKind(token: string): 'setup_required' | 'totp_required' | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length < 2) return null;
+    let payload = parts[1]!.replace(/-/g, '+').replace(/_/g, '/');
+    while (payload.length % 4) payload += '=';
+    const decoded = JSON.parse(atob(payload)) as { kind?: string };
+    if (decoded.kind === 'setup_required' || decoded.kind === 'totp_required') {
+      return decoded.kind;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [step, setStep] = useState<'creds' | '2fa'>('creds');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [twoFaToken, setTwoFaToken] = useState('');
+  const [twoFaKind, setTwoFaKind] = useState<'setup_required' | 'totp_required' | null>(null);
   const [code, setCode] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -23,7 +46,9 @@ export default function LoginPage() {
       const data = r.data?.data ?? r.data;
       // Backend renvoie soit { challengeToken, requires2FA } soit { accessToken, opsAdmin }
       if (data?.requires2FA || data?.challengeToken) {
-        setTwoFaToken(data.challengeToken ?? data.twoFaToken);
+        const token = data.challengeToken ?? data.twoFaToken;
+        setTwoFaToken(token);
+        setTwoFaKind(jwtKind(token));
         setStep('2fa');
       } else if (data?.accessToken || data?.opsAdmin) {
         // Cookie httpOnly deja pose par le backend
@@ -46,10 +71,16 @@ export default function LoginPage() {
     setErr(null);
     setLoading(true);
     try {
-      const r = await api.post('/auth/2fa/confirm', {
-        challengeToken: twoFaToken,
-        totpCode: code,
-      });
+      // 2 endpoints selon le contexte :
+      //  - setup_required : 1er login, on confirme le setup TOTP via /2fa/confirm
+      //  - totp_required  : 2FA deja active, on rejoue /auth/login avec totpCode
+      const r =
+        twoFaKind === 'totp_required'
+          ? await api.post('/auth/login', { email, password, totpCode: code })
+          : await api.post('/auth/2fa/confirm', {
+              challengeToken: twoFaToken,
+              totpCode: code,
+            });
       const data = r.data?.data ?? r.data;
       if (data?.accessToken || data?.opsAdmin) {
         router.replace('/dashboard');
