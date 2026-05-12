@@ -39,13 +39,28 @@ export class VpsQueryService {
     return { ...rest, sshKeyFingerprint: SshKeyEncryption.fingerprint(v.sshKeyEncrypted) };
   }
 
-  async list(filters: { status?: string }) {
-    const items = await prisma.vPS.findMany({
-      where: { ...(filters.status && { status: filters.status as never }) },
-      orderBy: { createdAt: 'desc' },
-      include: { _count: { select: { tenants: true } } },
-    });
-    return items.map((v) => this.toPublic(v as never));
+  async list(filters: { status?: string; q?: string; page: number; pageSize: number }) {
+    const where = {
+      ...(filters.status && { status: filters.status as never }),
+      ...(filters.q && {
+        OR: [
+          { name: { contains: filters.q, mode: 'insensitive' as const } },
+          { host: { contains: filters.q, mode: 'insensitive' as const } },
+          { region: { contains: filters.q, mode: 'insensitive' as const } },
+        ],
+      }),
+    };
+    const [items, total] = await Promise.all([
+      prisma.vPS.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        include: { _count: { select: { tenants: true } } },
+        skip: (filters.page - 1) * filters.pageSize,
+        take: filters.pageSize,
+      }),
+      prisma.vPS.count({ where }),
+    ]);
+    return { items: items.map((v) => this.toPublic(v as never)), total };
   }
 
   async getById(id: string) {

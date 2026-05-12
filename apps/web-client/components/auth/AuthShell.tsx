@@ -77,9 +77,22 @@ export function AuthShell({
             </p>
           </div>
 
-          <div className="flex items-center gap-3 text-xs text-white/70">
-            <span>"L'app la plus claire que j'ai vue en logistique."</span>
-            <span>- Lucie M., Pro</span>
+          {/* Review : posee au-dessus de la photo donc le contraste est
+              insuffisant avec juste text-white/70. On lui pose un fond
+              sombre semi-opaque + leger blur derriere pour que le texte
+              ressorte quelle que soit l'image hero. */}
+          <div className="flex items-start gap-3 rounded-2xl bg-black/55 px-4 py-3 backdrop-blur-sm ring-1 ring-white/10">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/15 text-sm font-bold text-white">
+              L
+            </div>
+            <div>
+              <p className="text-sm italic text-white">
+                &laquo; L&apos;app la plus claire que j&apos;ai vue en logistique. &raquo;
+              </p>
+              <p className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-white/80">
+                Lucie M. &middot; Cliente Pro
+              </p>
+            </div>
           </div>
         </div>
       </motion.aside>

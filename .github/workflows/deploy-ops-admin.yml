@@ -1,19 +1,15 @@
 name: Build & deploy ops-admin
 
 # Phase 5 — image ops-admin pour le control plane SaaS.
-# DESACTIVE pour l'instant : ne tourne qu'au workflow_dispatch manuel.
-# Activer en remplacant la liste `on:` par :
-#   on:
-#     push:
-#       branches: [main]
-#       paths:
-#         - 'apps/ops-admin/**'
-#         - 'packages/**'
-#         - 'docker/ops-admin/**'
-#         - '.github/workflows/deploy-ops-admin.yml'
-#     workflow_dispatch:
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/ops-admin/**'
+      - 'packages/**'
+      - 'docker/ops-admin/**'
+      - '.github/workflows/deploy-ops-admin.yml'
   workflow_dispatch:
 
 env:

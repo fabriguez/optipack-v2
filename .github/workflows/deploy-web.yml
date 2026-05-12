@@ -1,21 +1,17 @@
 name: Deploy Web
 
-# DESACTIVE : declenchement automatique sur push retire.
-# Ne se lance plus que manuellement via "Run workflow" depuis l'onglet Actions.
-# Pour reactiver, restaurer le bloc `push:` ci-dessous :
-#
-#   push:
-#     branches: [main]
-#     paths:
-#       - 'apps/web/**'
-#       - 'apps/all/**'
-#       - 'packages/shared/**'
-#       - 'packages/ui/**'
-#       - 'packages/config/**'
-#       - 'docker/web/**'
-#       - 'docker-compose.prod.yml'
-
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/web/**'
+      - 'apps/all/**'
+      - 'packages/shared/**'
+      - 'packages/ui/**'
+      - 'packages/config/**'
+      - 'docker/web/**'
+      - 'docker-compose.prod.yml'
+      - '.github/workflows/deploy-web.yml'
   workflow_dispatch:
 
 jobs:

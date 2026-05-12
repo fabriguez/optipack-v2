@@ -2,7 +2,8 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { RefreshCw, Loader2, Shield } from 'lucide-react';
+import { RefreshCw, Loader2, Shield, Search } from 'lucide-react';
+import { Pagination } from '@/components/Pagination';
 import { api } from '@/lib/api';
 import { StatusBadge } from '@/components/StatusBadge';
 import { formatDate } from '@/lib/utils';
@@ -30,10 +31,17 @@ export default function VpsListPage() {
   const qc = useQueryClient();
   const [toast, setToast] = useState<{ kind: 'ok' | 'err'; msg: string } | null>(null);
 
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [q, setQ] = useState('');
+
   const { data, isLoading } = useQuery({
-    queryKey: ['vps'],
-    queryFn: async (): Promise<Vps[]> => (await api.get('/vps')).data?.data ?? [],
+    queryKey: ['vps', { page, pageSize, q }],
+    queryFn: async (): Promise<{ data: Vps[]; meta: { total: number } }> =>
+      (await api.get('/vps', { params: { page, pageSize, q } })).data,
+    placeholderData: (prev) => prev,
   });
+  const items: Vps[] = data?.data ?? [];
 
   const reconcile = useMutation({
     mutationFn: async (vpsId?: string) => {
@@ -104,7 +112,21 @@ export default function VpsListPage() {
         </div>
       )}
 
-      <div className="rounded-lg border bg-white shadow-sm">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+        <input
+          type="search"
+          placeholder="Rechercher par nom, host, region..."
+          value={q}
+          onChange={(e) => {
+            setQ(e.target.value);
+            setPage(1);
+          }}
+          className="w-full rounded-md border bg-white pl-9 pr-3 py-2 text-sm shadow-sm"
+        />
+      </div>
+
+      <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="border-b bg-gray-50 text-xs text-gray-500">
             <tr>
@@ -126,7 +148,7 @@ export default function VpsListPage() {
                 </td>
               </tr>
             )}
-            {(data ?? []).map((v) => (
+            {items.map((v) => (
               <tr key={v.id} className="border-t hover:bg-gray-50">
                 <td className="px-4 py-2">
                   <Link href={`/vps/${v.id}`} className="hover:underline">
@@ -179,6 +201,16 @@ export default function VpsListPage() {
             ))}
           </tbody>
         </table>
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={data?.meta?.total ?? 0}
+          onPageChange={setPage}
+          onPageSizeChange={(s) => {
+            setPageSize(s);
+            setPage(1);
+          }}
+        />
       </div>
     </div>
   );

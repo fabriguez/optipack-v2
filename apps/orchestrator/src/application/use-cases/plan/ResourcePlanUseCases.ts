@@ -1,39 +1,46 @@
 import { injectable } from 'tsyringe';
-import { z } from 'zod';
 import { prisma } from '../../../config/database';
 import { BusinessError, ConflictError, NotFoundError } from '../../../domain/errors/BusinessError';
 
-export const createPlanSchema = z.object({
-  code: z.string().min(2).max(40).regex(/^[a-z0-9-]+$/, 'minuscules, chiffres, tirets'),
-  name: z.string().min(2),
-  description: z.string().optional(),
-  pricePerMonth: z.number().nonnegative(),
-  currency: z.string().default('XAF'),
-  cpuLimit: z.number().positive(),
-  memoryMb: z.number().int().positive(),
-  diskQuotaGb: z.number().int().positive(),
-  maxParcelsPerMonth: z.number().int().nonnegative().optional(),
-  maxUsers: z.number().int().nonnegative().optional(),
-  defaultModules: z.array(z.string()).optional().default([]),
-  isPublic: z.boolean().optional().default(true),
-  sortOrder: z.number().int().optional().default(0),
-});
-
-export const updatePlanSchema = createPlanSchema.partial().omit({ code: true });
-
-export type CreatePlanInput = z.infer<typeof createPlanSchema>;
-export type UpdatePlanInput = z.infer<typeof updatePlanSchema>;
+// Schemas migres dans @transitsoftservices/ops-schemas.
+import {
+  createPlanSchema,
+  updatePlanSchema,
+  type CreatePlanInput,
+  type UpdatePlanInput,
+} from '@transitsoftservices/ops-schemas';
+export { createPlanSchema, updatePlanSchema };
+export type { CreatePlanInput, UpdatePlanInput };
 
 @injectable()
 export class ResourcePlanUseCases {
-  async list(filters: { isPublic?: boolean; isActive?: boolean }) {
-    return prisma.resourcePlan.findMany({
-      where: {
-        ...(filters.isPublic !== undefined && { isPublic: filters.isPublic }),
-        ...(filters.isActive !== undefined && { isActive: filters.isActive }),
-      },
-      orderBy: [{ sortOrder: 'asc' }, { pricePerMonth: 'asc' }],
-    });
+  async list(filters: {
+    isPublic?: boolean;
+    isActive?: boolean;
+    q?: string;
+    page: number;
+    pageSize: number;
+  }) {
+    const where = {
+      ...(filters.isPublic !== undefined && { isPublic: filters.isPublic }),
+      ...(filters.isActive !== undefined && { isActive: filters.isActive }),
+      ...(filters.q && {
+        OR: [
+          { code: { contains: filters.q, mode: 'insensitive' as const } },
+          { name: { contains: filters.q, mode: 'insensitive' as const } },
+        ],
+      }),
+    };
+    const [items, total] = await Promise.all([
+      prisma.resourcePlan.findMany({
+        where,
+        orderBy: [{ sortOrder: 'asc' }, { pricePerMonth: 'asc' }],
+        skip: (filters.page - 1) * filters.pageSize,
+        take: filters.pageSize,
+      }),
+      prisma.resourcePlan.count({ where }),
+    ]);
+    return { items, total };
   }
 
   async getById(id: string) {

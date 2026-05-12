@@ -12,6 +12,7 @@ import {
   Database,
   ScrollText,
   LogOut,
+  UserCircle,
 } from 'lucide-react';
 import { logout } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -25,6 +26,7 @@ const items = [
   { href: '/backups', label: 'Backups', icon: Database },
   { href: '/ops-admins', label: 'Ops Admins', icon: Users },
   { href: '/audit-logs', label: 'Audit', icon: ScrollText },
+  { href: '/me', label: 'Mon compte', icon: UserCircle },
 ];
 
 export function Sidebar() {

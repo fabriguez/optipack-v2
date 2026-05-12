@@ -11,15 +11,23 @@ import {
 } from '../../application/use-cases/release/RequestUpdateUseCase';
 import { AuditLogger } from '../../application/services/AuditLogger';
 import { AuthenticationError } from '../../domain/errors/BusinessError';
+import { parsePagination, paginated } from '../../application/utils/pagination';
 
 export class ReleaseController {
   // ---------- Releases (super-admin) ----------
 
   static async list(req: Request, res: Response, next: NextFunction) {
     try {
-      const isPublished = req.query.published === 'true' ? true : req.query.published === 'false' ? false : undefined;
-      const items = await container.resolve(ReleaseUseCases).list({ isPublished });
-      res.json({ success: true, data: items });
+      const p = parsePagination(req);
+      const isPublished =
+        req.query.published === 'true' ? true : req.query.published === 'false' ? false : undefined;
+      const { items, total } = await container.resolve(ReleaseUseCases).list({
+        isPublished,
+        q: p.q,
+        page: p.page,
+        pageSize: p.pageSize,
+      });
+      res.json({ success: true, ...paginated(items, total, p.page, p.pageSize) });
     } catch (err) {
       next(err);
     }

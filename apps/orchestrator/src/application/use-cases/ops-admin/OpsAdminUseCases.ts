@@ -1,6 +1,5 @@
 import { injectable } from 'tsyringe';
 import bcrypt from 'bcryptjs';
-import { z } from 'zod';
 import { prisma } from '../../../config/database';
 import { config } from '../../../config';
 import {
@@ -9,22 +8,15 @@ import {
   NotFoundError,
 } from '../../../domain/errors/BusinessError';
 
-export const inviteOpsAdminSchema = z.object({
-  email: z.string().email(),
-  fullName: z.string().min(2),
-  // Mot de passe initial (a changer au 1er login). Si non fourni, on en genere un.
-  initialPassword: z.string().min(8).optional(),
-  isSuperAdmin: z.boolean().optional().default(false),
-});
-
-export const updateOpsAdminSchema = z.object({
-  fullName: z.string().min(2).optional(),
-  isActive: z.boolean().optional(),
-  isSuperAdmin: z.boolean().optional(),
-});
-
-export type InviteOpsAdminInput = z.infer<typeof inviteOpsAdminSchema>;
-export type UpdateOpsAdminInput = z.infer<typeof updateOpsAdminSchema>;
+// Schemas migres dans @transitsoftservices/ops-schemas.
+import {
+  inviteOpsAdminSchema,
+  updateOpsAdminSchema,
+  type InviteOpsAdminInput,
+  type UpdateOpsAdminInput,
+} from '@transitsoftservices/ops-schemas';
+export { inviteOpsAdminSchema, updateOpsAdminSchema };
+export type { InviteOpsAdminInput, UpdateOpsAdminInput };
 
 function safeRandomPassword(): string {
   // Random password lisible : 16 chars hex
@@ -40,11 +32,25 @@ function toPublic<T extends { passwordHash: string; twoFactorSecret: string | nu
 
 @injectable()
 export class OpsAdminUseCases {
-  async list() {
-    const items = await prisma.opsAdmin.findMany({
-      orderBy: { createdAt: 'desc' },
-    });
-    return items.map(toPublic);
+  async list(filters: { q?: string; page: number; pageSize: number }) {
+    const where = filters.q
+      ? {
+          OR: [
+            { email: { contains: filters.q, mode: 'insensitive' as const } },
+            { fullName: { contains: filters.q, mode: 'insensitive' as const } },
+          ],
+        }
+      : {};
+    const [items, total] = await Promise.all([
+      prisma.opsAdmin.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (filters.page - 1) * filters.pageSize,
+        take: filters.pageSize,
+      }),
+      prisma.opsAdmin.count({ where }),
+    ]);
+    return { items: items.map(toPublic), total };
   }
 
   async getById(id: string) {

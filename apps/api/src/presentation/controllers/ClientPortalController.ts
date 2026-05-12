@@ -107,45 +107,99 @@ export class ClientPortalController {
     }
   }
 
+  /**
+   * Inscription portail client public.
+   *
+   * Comportement :
+   *  - Si aucun client n'a ce telephone, on en CREE un nouveau (cas auto-
+   *    inscription depuis le site public). Le client n'est rattache a aucune
+   *    agence specifique (agencyId null), et son organisationId est determine
+   *    plus tard (au 1er envoi de colis), OU on assigne l'organisation par
+   *    defaut (premiere active) pour pouvoir loger le compte tout de suite.
+   *  - Si un client existe deja avec ce telephone et SANS portail actif,
+   *    on active son portail (set passwordHash + isPortalActive). Cas typique :
+   *    le client a deja envoye un colis via une agence, l'agence a cree sa
+   *    fiche, il vient maintenant creer son compte web.
+   *  - Si un client existe avec un portail deja actif, on refuse (il doit se
+   *    connecter).
+   */
   static async register(req: Request, res: Response, next: NextFunction) {
     try {
-      const { phone, password } = req.body;
+      const { fullName, phone, email, password } = req.body as {
+        fullName?: string;
+        phone?: string;
+        email?: string;
+        password?: string;
+      };
 
       if (!phone || !password) {
         throw new BusinessError('Telephone et mot de passe requis');
       }
-
       if (password.length < 6) {
         throw new BusinessError(
           'Le mot de passe doit contenir au moins 6 caracteres',
         );
       }
 
-      const client = await prisma.client.findUnique({ where: { phone } });
+      const existing = await prisma.client.findUnique({ where: { phone } });
 
-      if (!client) {
-        throw new NotFoundError(
-          'Client',
-          `Aucun client trouve avec le telephone ${phone}`,
-        );
-      }
-
-      if (client.isPortalActive && client.passwordHash) {
+      if (existing && existing.isPortalActive && existing.passwordHash) {
         throw new BusinessError(
-          'Ce client a deja un compte portail actif. Utilisez la connexion.',
+          'Ce numero est deja associe a un compte portail. Connectez-vous.',
         );
       }
 
       const passwordHash = await bcrypt.hash(password, 10);
 
-      await prisma.client.update({
-        where: { id: client.id },
-        data: { passwordHash, isPortalActive: true },
-      });
+      let client = existing;
+      if (existing) {
+        // Activation du portail sur un client existant (deja cree par une
+        // agence). On enrichit avec fullName/email si fournis et absents.
+        client = await prisma.client.update({
+          where: { id: existing.id },
+          data: {
+            passwordHash,
+            isPortalActive: true,
+            ...(fullName && !existing.fullName ? { fullName } : {}),
+            ...(email && !existing.email ? { email } : {}),
+          },
+        });
+      } else {
+        // Cas auto-inscription : aucun client existant. On en cree un.
+        // fullName devient requis dans ce cas (sinon impossible de creer une fiche).
+        if (!fullName || fullName.trim().length < 2) {
+          throw new BusinessError(
+            'Nom complet requis (au moins 2 caracteres) pour creer un nouveau compte.',
+          );
+        }
+        // Recupere une organisation par defaut (premiere active). Dans un
+        // setup multi-tenant strict, il faudrait pouvoir choisir l'org cote
+        // public via skin/domaine -- TODO Phase 2 portail public.
+        const defaultOrg = await prisma.organization.findFirst({
+          orderBy: { createdAt: 'asc' },
+        });
+        if (!defaultOrg) {
+          throw new BusinessError(
+            'Aucune organisation configuree. Contactez le support.',
+          );
+        }
+        client = await prisma.client.create({
+          data: {
+            organizationId: defaultOrg.id,
+            fullName: fullName.trim(),
+            phone,
+            email: email?.trim() || null,
+            passwordHash,
+            isPortalActive: true,
+            clientType: 'INDIVIDUAL',
+            agencyId: null,
+          },
+        });
+      }
 
       const tokenPayload: ClientJwtPayload = {
-        clientId: client.id,
-        phone: client.phone,
+        clientId: client!.id,
+        phone: client!.phone,
         type: 'client',
       };
 
@@ -158,11 +212,11 @@ export class ClientPortalController {
         data: {
           accessToken,
           client: {
-            id: client.id,
-            fullName: client.fullName,
-            phone: client.phone,
-            email: client.email,
-            agencyId: client.agencyId,
+            id: client!.id,
+            fullName: client!.fullName,
+            phone: client!.phone,
+            email: client!.email,
+            agencyId: client!.agencyId,
           },
         },
       });

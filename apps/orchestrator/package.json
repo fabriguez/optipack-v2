@@ -23,6 +23,7 @@
     "@prisma/client": "^6.4.1",
     "@transitsoftservices/shared": "workspace:*",
     "@transitsoftservices/skins": "workspace:*",
+    "@transitsoftservices/ops-schemas": "workspace:*",
     "@types/nodemailer": "^6.4.17",
     "bcryptjs": "^2.4.3",
     "bullmq": "^5.34.8",

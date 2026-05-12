@@ -7,12 +7,18 @@ import {
 } from '../../application/use-cases/ops-admin/OpsAdminUseCases';
 import { AuditLogger } from '../../application/services/AuditLogger';
 import { AuthenticationError } from '../../domain/errors/BusinessError';
+import { parsePagination, paginated } from '../../application/utils/pagination';
 
 export class OpsAdminController {
-  static async list(_req: Request, res: Response, next: NextFunction) {
+  static async list(req: Request, res: Response, next: NextFunction) {
     try {
-      const items = await container.resolve(OpsAdminUseCases).list();
-      res.json({ success: true, data: items });
+      const p = parsePagination(req);
+      const { items, total } = await container.resolve(OpsAdminUseCases).list({
+        q: p.q,
+        page: p.page,
+        pageSize: p.pageSize,
+      });
+      res.json({ success: true, ...paginated(items, total, p.page, p.pageSize) });
     } catch (err) {
       next(err);
     }

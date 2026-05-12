@@ -3,6 +3,10 @@ import { container } from '../../container';
 import { LoginOpsAdminUseCase } from '../../application/use-cases/auth/LoginOpsAdminUseCase';
 import { SetupTwoFactorUseCase } from '../../application/use-cases/auth/SetupTwoFactorUseCase';
 import { GetMeUseCase } from '../../application/use-cases/auth/GetMeUseCase';
+import {
+  ChangePasswordUseCase,
+  changePasswordSchema,
+} from '../../application/use-cases/auth/ChangePasswordUseCase';
 import { AuditLogger } from '../../application/services/AuditLogger';
 import { AuthenticationError } from '../../domain/errors/BusinessError';
 import { OPS_AUTH_COOKIE } from '../middleware/authOpsMiddleware';
@@ -148,6 +152,23 @@ export class AuthController {
         entityId: req.opsAdmin.sub,
       });
       res.json({ success: true, data: { recoveryCodes: codes } });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** Change le mot de passe de l'admin courant. */
+  static async changePassword(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.opsAdmin) throw new AuthenticationError();
+      const parsed = changePasswordSchema.parse(req.body);
+      await container.resolve(ChangePasswordUseCase).execute(req.opsAdmin.sub, parsed);
+      await container.resolve(AuditLogger).log(req, {
+        action: 'OPS_PASSWORD_CHANGED',
+        entityType: 'OpsAdmin',
+        entityId: req.opsAdmin.sub,
+      });
+      res.json({ success: true });
     } catch (err) {
       next(err);
     }

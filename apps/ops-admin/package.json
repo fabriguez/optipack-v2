@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@transitsoftservices/ui": "workspace:*",
+    "@transitsoftservices/ops-schemas": "workspace:*",
     "@tanstack/react-query": "^5.66.8",
     "axios": "^1.7.9",
     "clsx": "^2.1.1",

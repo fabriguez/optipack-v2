@@ -6,6 +6,7 @@ import {
   updateTenantSchema,
 } from '../../application/use-cases/tenant/TenantUseCases';
 import { AuditLogger } from '../../application/services/AuditLogger';
+import { parsePagination, paginated } from '../../application/utils/pagination';
 
 export class TenantController {
   static async create(req: Request, res: Response, next: NextFunction) {
@@ -26,11 +27,15 @@ export class TenantController {
 
   static async list(req: Request, res: Response, next: NextFunction) {
     try {
-      const items = await container.resolve(TenantUseCases).list({
+      const p = parsePagination(req);
+      const { items, total } = await container.resolve(TenantUseCases).list({
         status: req.query.status as string | undefined,
         vpsId: req.query.vpsId as string | undefined,
+        q: p.q,
+        page: p.page,
+        pageSize: p.pageSize,
       });
-      res.json({ success: true, data: items });
+      res.json({ success: true, ...paginated(items, total, p.page, p.pageSize) });
     } catch (err) {
       next(err);
     }
@@ -128,6 +133,18 @@ export class TenantController {
       const limit = req.query.limit ? Number(req.query.limit) : 50;
       const items = await container.resolve(TenantUseCases).listJobs(req.params.id, limit);
       res.json({ success: true, data: items });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** Detail d'un job + logs complets (pour streaming temps reel via polling). */
+  static async getJob(req: Request, res: Response, next: NextFunction) {
+    try {
+      const job = await container
+        .resolve(TenantUseCases)
+        .getJob(req.params.id!, req.params.jobId!);
+      res.json({ success: true, data: job });
     } catch (err) {
       next(err);
     }

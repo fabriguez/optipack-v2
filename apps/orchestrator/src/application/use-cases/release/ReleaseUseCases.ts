@@ -1,36 +1,45 @@
 import { injectable } from 'tsyringe';
-import { z } from 'zod';
 import { prisma } from '../../../config/database';
 import { config } from '../../../config';
 import { BusinessError, ConflictError, NotFoundError } from '../../../domain/errors/BusinessError';
 
-export const createReleaseSchema = z.object({
-  version: z.string().regex(/^\d+\.\d+\.\d+(-\w+)?$/, 'semver requis (ex: 1.4.2)'),
-  apiImageTag: z.string().optional(), // si vide, on construit depuis namespace + version
-  webImageTag: z.string().optional(),
-  changelog: z.string().optional(),
-  isStable: z.boolean().optional().default(false),
-  isCritical: z.boolean().optional().default(false),
-});
-
-export const updateReleaseSchema = z.object({
-  changelog: z.string().optional(),
-  isStable: z.boolean().optional(),
-  isCritical: z.boolean().optional(),
-});
-
-export type CreateReleaseInput = z.infer<typeof createReleaseSchema>;
-export type UpdateReleaseInput = z.infer<typeof updateReleaseSchema>;
+// Schemas migres dans @transitsoftservices/ops-schemas.
+import {
+  createReleaseSchema,
+  updateReleaseSchema,
+  type CreateReleaseInput,
+  type UpdateReleaseInput,
+} from '@transitsoftservices/ops-schemas';
+export { createReleaseSchema, updateReleaseSchema };
+export type { CreateReleaseInput, UpdateReleaseInput };
 
 @injectable()
 export class ReleaseUseCases {
-  async list(filters: { isPublished?: boolean }) {
-    return prisma.release.findMany({
-      where: {
-        ...(filters.isPublished !== undefined && { isPublished: filters.isPublished }),
-      },
-      orderBy: { publishedAt: 'desc' },
-    });
+  async list(filters: {
+    isPublished?: boolean;
+    q?: string;
+    page: number;
+    pageSize: number;
+  }) {
+    const where = {
+      ...(filters.isPublished !== undefined && { isPublished: filters.isPublished }),
+      ...(filters.q && {
+        OR: [
+          { version: { contains: filters.q, mode: 'insensitive' as const } },
+          { changelog: { contains: filters.q, mode: 'insensitive' as const } },
+        ],
+      }),
+    };
+    const [items, total] = await Promise.all([
+      prisma.release.findMany({
+        where,
+        orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
+        skip: (filters.page - 1) * filters.pageSize,
+        take: filters.pageSize,
+      }),
+      prisma.release.count({ where }),
+    ]);
+    return { items, total };
   }
 
   async getByVersion(version: string) {

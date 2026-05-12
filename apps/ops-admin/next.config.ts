@@ -36,6 +36,7 @@ const nextConfig: NextConfig = {
     '@transitsoftservices/shared',
     '@transitsoftservices/skins',
     '@transitsoftservices/payments',
+    '@transitsoftservices/ops-schemas',
   ],
   env: {
     NEXT_PUBLIC_ORCHESTRATOR_URL: orchestratorUrl,

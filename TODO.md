@@ -240,7 +240,33 @@ re-vérifier sur la list page).
   cniRectoUrl, cniVersoUrl, photoUrl, notes, ... (idem schema création).
   Réutiliser `ExcelService.generate/.parse` avec images embarquées.
 
-## 9. Décisions design en attente
+## 9. Portail public — OAuth Google / Apple / Facebook
+
+UI déjà en place : [SocialAuthButtons](apps/web-client/components/auth/SocialAuthButtons.tsx)
+sur les pages login + register, avec un toast "bientôt disponible" sur clic.
+
+**À faire backend pour passer en vraie auth :**
+
+- Endpoint `GET /api/v1/client-portal/oauth/<provider>/start?intent=login|register`
+  qui redirige vers la consent screen du provider avec le bon `client_id` et
+  `redirect_uri`. Conserver l'`intent` dans le state OAuth.
+- Endpoint `GET /api/v1/client-portal/oauth/<provider>/callback` qui :
+  - échange le code contre un token chez le provider ;
+  - récupère l'identité (email, sub, nom complet, photo) ;
+  - cherche un `Client` existant via `oauthAccounts` (nouveau modèle) ;
+  - si trouvé → login ; sinon → crée le client + lie l'OAuth account ;
+  - émet un JWT portail (`type: 'client'`) et redirige vers `/`.
+- Nouveau modèle Prisma `ClientOAuthAccount` : `clientId`, `provider` (enum
+  GOOGLE | APPLE | FACEBOOK), `providerUserId`, `email`, `accessToken?`,
+  `refreshToken?`, `expiresAt?`, `linkedAt`.
+- Env vars : `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`,
+  `APPLE_OAUTH_*`, `FACEBOOK_OAUTH_*`, `OAUTH_REDIRECT_BASE_URL`.
+- Côté frontend : remplacer `handleClick` dans `SocialAuthButtons` par
+  `window.location.href = '/api/v1/client-portal/oauth/<provider>/start'`.
+- Account linking : si un client connecté ajoute un provider OAuth, lier au
+  compte existant (UI `/account/security`).
+
+## 10. Décisions design en attente
 
 - **Inventaire : que faire des colis "extra physique" trouvés au scan ?**
   Création silencieuse en stock OU obligation de passer par un workflow

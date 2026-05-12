@@ -1,9 +1,12 @@
 'use client';
 import Link from 'next/link';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { Search, ExternalLink } from 'lucide-react';
 import { api } from '@/lib/api';
 import { StatusBadge } from '@/components/StatusBadge';
 import { formatDate } from '@/lib/utils';
+import { Pagination } from '@/components/Pagination';
 
 interface Tenant {
   id: string;
@@ -12,14 +15,24 @@ interface Tenant {
   status: string;
   currentVersion: string | null;
   createdAt: string;
-  vps: { host: string } | null;
+  vps: { host: string; name: string } | null;
+  isMain?: boolean;
+}
+interface Listing {
+  data: Tenant[];
+  meta: { total: number; page: number; pageSize: number };
 }
 
 export default function TenantsPage() {
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [q, setQ] = useState('');
+
   const { data, isLoading } = useQuery({
-    queryKey: ['tenants'],
-    queryFn: async (): Promise<Tenant[]> =>
-      (await api.get('/tenants')).data?.data ?? [],
+    queryKey: ['tenants', { page, pageSize, q }],
+    queryFn: async (): Promise<Listing> =>
+      (await api.get('/tenants', { params: { page, pageSize, q } })).data,
+    placeholderData: (prev) => prev,
   });
 
   return (
@@ -34,7 +47,21 @@ export default function TenantsPage() {
         </Link>
       </div>
 
-      <div className="rounded-lg border bg-white shadow-sm">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+        <input
+          type="search"
+          placeholder="Rechercher par slug, nom ou email du proprietaire..."
+          value={q}
+          onChange={(e) => {
+            setQ(e.target.value);
+            setPage(1);
+          }}
+          className="w-full rounded-md border bg-white pl-9 pr-3 py-2 text-sm shadow-sm"
+        />
+      </div>
+
+      <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="border-b bg-gray-50 text-xs text-gray-500">
             <tr>
@@ -44,45 +71,68 @@ export default function TenantsPage() {
               <th className="px-4 py-2 text-left font-normal">Version</th>
               <th className="px-4 py-2 text-left font-normal">Status</th>
               <th className="px-4 py-2 text-left font-normal">Cree le</th>
+              <th className="px-4 py-2 text-right font-normal">Actions</th>
             </tr>
           </thead>
           <tbody>
             {isLoading && (
               <tr>
-                <td colSpan={6} className="p-4 text-center text-gray-400">
+                <td colSpan={7} className="p-4 text-center text-gray-400">
                   Chargement...
                 </td>
               </tr>
             )}
-            {(data ?? []).map((t) => (
+            {!isLoading && (data?.data ?? []).length === 0 && (
+              <tr>
+                <td colSpan={7} className="p-4 text-center text-gray-400">
+                  Aucun tenant.
+                </td>
+              </tr>
+            )}
+            {(data?.data ?? []).map((t) => (
               <tr key={t.id} className="border-t hover:bg-gray-50">
                 <td className="px-4 py-2 font-mono text-xs">
                   <Link href={`/tenants/${t.id}`} className="hover:underline">
                     {t.slug}
                   </Link>
+                  {t.isMain && (
+                    <span className="ml-1 rounded bg-amber-100 px-1 text-[10px] font-bold text-amber-700">
+                      MAIN
+                    </span>
+                  )}
                 </td>
                 <td className="px-4 py-2">{t.name}</td>
-                <td className="px-4 py-2 text-gray-600">{t.vps?.host ?? '-'}</td>
-                <td className="px-4 py-2 font-mono text-xs">
-                  {t.currentVersion ?? '-'}
+                <td className="px-4 py-2 text-gray-600">
+                  {t.vps?.name ?? t.vps?.host ?? '-'}
                 </td>
+                <td className="px-4 py-2 font-mono text-xs">{t.currentVersion ?? '-'}</td>
                 <td className="px-4 py-2">
                   <StatusBadge status={t.status} />
                 </td>
-                <td className="px-4 py-2 text-xs text-gray-500">
-                  {formatDate(t.createdAt)}
+                <td className="px-4 py-2 text-xs text-gray-500">{formatDate(t.createdAt)}</td>
+                <td className="px-4 py-2 text-right">
+                  <Link
+                    href={`/tenants/${t.id}`}
+                    className="inline-flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    Ouvrir
+                  </Link>
                 </td>
               </tr>
             ))}
-            {data && data.length === 0 && (
-              <tr>
-                <td colSpan={6} className="p-4 text-center text-gray-400">
-                  Aucun tenant
-                </td>
-              </tr>
-            )}
           </tbody>
         </table>
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={data?.meta?.total ?? 0}
+          onPageChange={setPage}
+          onPageSizeChange={(s) => {
+            setPageSize(s);
+            setPage(1);
+          }}
+        />
       </div>
     </div>
   );

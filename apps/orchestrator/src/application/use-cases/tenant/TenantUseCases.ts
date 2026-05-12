@@ -1,5 +1,4 @@
 import { inject, injectable } from 'tsyringe';
-import { z } from 'zod';
 import { prisma } from '../../../config/database';
 import { BusinessError, ConflictError, NotFoundError } from '../../../domain/errors/BusinessError';
 import { SSHService, SSH_SERVICE } from '../../../infrastructure/ssh/SSHService';
@@ -11,46 +10,17 @@ import {
   migrateQueue,
 } from '../../../infrastructure/queue/queues';
 
-const slugSchema = z
-  .string()
-  .min(2)
-  .max(50)
-  .regex(/^[a-z0-9-]+$/, 'slug : minuscules, chiffres, tirets uniquement');
-
-const hexColor = z.string().regex(/^#[0-9A-Fa-f]{6}$/);
-
-export const createTenantSchema = z.object({
-  slug: slugSchema,
-  name: z.string().min(2),
-  ownerEmail: z.string().email(),
-  ownerUsername: z.string().min(2),
-  vpsId: z.string().uuid(),
-  customDomain: z.string().optional().nullable(),
-  primaryColor: hexColor.optional(),
-  secondaryColor: hexColor.optional(),
-  accentColor: hexColor.optional(),
-  enabledModules: z.array(z.string()).optional(),
-  logoUrl: z.string().url().optional().nullable(),
-  plan: z.enum(['starter', 'pro', 'enterprise']).optional().default('starter'),
-  pricePerMonth: z.number().nonnegative().optional().default(0),
-  trialDays: z.number().int().nonnegative().optional().default(14),
-});
-
-export type CreateTenantInput = z.infer<typeof createTenantSchema>;
-
-export const updateTenantSchema = z.object({
-  name: z.string().min(2).optional(),
-  customDomain: z.string().optional().nullable(),
-  enabledModules: z.array(z.string()).optional(),
-  logoUrl: z.string().url().optional().nullable(),
-  primaryColor: hexColor.optional(),
-  secondaryColor: hexColor.optional(),
-  accentColor: hexColor.optional(),
-  pinnedVersion: z.string().optional().nullable(),
-  autoUpdatePolicy: z.enum(['MANUAL', 'AUTO_STABLE', 'AUTO_CRITICAL_ONLY']).optional(),
-});
-
-export type UpdateTenantInput = z.infer<typeof updateTenantSchema>;
+// Schemas + types migres dans @transitsoftservices/ops-schemas (partages
+// avec le frontend ops-admin pour validation rhf+zodResolver coherente).
+// Re-exportes ici pour ne pas casser les imports existants.
+export {
+  createTenantSchema,
+  updateTenantSchema,
+  migrateTenantSchema,
+  type CreateTenantInput,
+  type UpdateTenantInput,
+  type MigrateTenantInput,
+} from '@transitsoftservices/ops-schemas';
 
 @injectable()
 export class TenantUseCases {
@@ -132,18 +102,38 @@ export class TenantUseCases {
     return tenant;
   }
 
-  async list(filters: { status?: string; vpsId?: string }) {
-    return prisma.tenant.findMany({
-      where: {
-        ...(filters.status && { status: filters.status as never }),
-        ...(filters.vpsId && { vpsId: filters.vpsId }),
-      },
-      include: {
-        vps: { select: { id: true, name: true, host: true, status: true } },
-        subscription: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+  async list(filters: {
+    status?: string;
+    vpsId?: string;
+    q?: string;
+    page: number;
+    pageSize: number;
+  }) {
+    const where = {
+      ...(filters.status && { status: filters.status as never }),
+      ...(filters.vpsId && { vpsId: filters.vpsId }),
+      ...(filters.q && {
+        OR: [
+          { slug: { contains: filters.q, mode: 'insensitive' as const } },
+          { name: { contains: filters.q, mode: 'insensitive' as const } },
+          { ownerEmail: { contains: filters.q, mode: 'insensitive' as const } },
+        ],
+      }),
+    };
+    const [items, total] = await Promise.all([
+      prisma.tenant.findMany({
+        where,
+        include: {
+          vps: { select: { id: true, name: true, host: true, status: true } },
+          subscription: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (filters.page - 1) * filters.pageSize,
+        take: filters.pageSize,
+      }),
+      prisma.tenant.count({ where }),
+    ]);
+    return { items, total };
   }
 
   async getById(id: string) {
@@ -235,6 +225,19 @@ export class TenantUseCases {
       orderBy: { createdAt: 'desc' },
       take: Math.min(limit, 200),
     });
+  }
+
+  /**
+   * Recupere un job de provisioning unique avec ses logs complets.
+   * Le frontend peut poll cet endpoint toutes les 1-2s pour afficher les
+   * logs en temps reel pendant qu'un job tourne.
+   */
+  async getJob(tenantId: string, jobId: string) {
+    const job = await prisma.provisioningJob.findFirst({
+      where: { id: jobId, tenantId },
+    });
+    if (!job) throw new NotFoundError('ProvisioningJob', jobId);
+    return job;
   }
 
   /**

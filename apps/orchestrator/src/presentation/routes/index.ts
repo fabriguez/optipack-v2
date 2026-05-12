@@ -28,6 +28,7 @@ router.post('/auth/2fa/setup', AuthController.setupTwoFactor);
 router.post('/auth/2fa/confirm', AuthController.confirmTwoFactor);
 router.post('/auth/2fa/recovery', AuthController.useRecoveryCode);
 router.post('/auth/2fa/recovery/regenerate', authenticateOps, AuthController.regenerateRecoveryCodes);
+router.post('/auth/change-password', authenticateOps, AuthController.changePassword);
 router.get('/auth/me', authenticateOps, AuthController.me);
 router.post('/auth/logout', authenticateOps, AuthController.logout);
 
@@ -56,6 +57,7 @@ router.post('/tenants/:id/archive', authenticateOps, requireSuperAdmin, TenantCo
 router.post('/tenants/:id/migrate', authenticateOps, requireSuperAdmin, TenantController.migrate);
 router.post('/tenants/:id/upgrade', authenticateOps, BillingController.requestUpgrade);
 router.get('/tenants/:id/jobs', authenticateOps, TenantController.listJobs);
+router.get('/tenants/:id/jobs/:jobId', authenticateOps, TenantController.getJob);
 router.get('/tenants/:id/logs', authenticateOps, TenantController.getLogs);
 
 // ============================================================

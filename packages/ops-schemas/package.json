@@ -1,0 +1,27 @@
+{
+  "name": "@transitsoftservices/ops-schemas",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Zod schemas + types partages entre l'orchestrator (validation backend) et l'ops-admin (validation rhf cote frontend).",
+  "main": "./dist/index.js",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist .turbo"
+  },
+  "peerDependencies": {
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@transitsoftservices/tsconfig": "workspace:*",
+    "typescript": "^5.7.3",
+    "zod": "^3.24.2"
+  }
+}

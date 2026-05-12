@@ -6,16 +6,21 @@ import {
   updatePlanSchema,
 } from '../../application/use-cases/plan/ResourcePlanUseCases';
 import { AuditLogger } from '../../application/services/AuditLogger';
+import { parsePagination, paginated } from '../../application/utils/pagination';
 
 export class PlanController {
   /** Public-ish : tous les ops admins peuvent lister, et les tenants verront aussi via leur API. */
   static async list(req: Request, res: Response, next: NextFunction) {
     try {
-      const items = await container.resolve(ResourcePlanUseCases).list({
+      const p = parsePagination(req);
+      const { items, total } = await container.resolve(ResourcePlanUseCases).list({
         isPublic: req.query.public === 'true' ? true : undefined,
         isActive: req.query.active === 'false' ? false : true,
+        q: p.q,
+        page: p.page,
+        pageSize: p.pageSize,
       });
-      res.json({ success: true, data: items });
+      res.json({ success: true, ...paginated(items, total, p.page, p.pageSize) });
     } catch (err) {
       next(err);
     }

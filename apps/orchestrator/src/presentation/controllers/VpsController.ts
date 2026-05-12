@@ -3,6 +3,7 @@ import { container } from '../../container';
 import { CreateVpsUseCase, createVpsSchema } from '../../application/use-cases/vps/CreateVpsUseCase';
 import { VpsQueryService, updateVpsSchema } from '../../application/use-cases/vps/VpsQueryService';
 import { AuditLogger } from '../../application/services/AuditLogger';
+import { parsePagination, paginated } from '../../application/utils/pagination';
 
 export class VpsController {
   static async create(req: Request, res: Response, next: NextFunction) {
@@ -25,8 +26,14 @@ export class VpsController {
   static async list(req: Request, res: Response, next: NextFunction) {
     try {
       const svc = container.resolve(VpsQueryService);
-      const items = await svc.list({ status: req.query.status as string | undefined });
-      res.json({ success: true, data: items });
+      const p = parsePagination(req);
+      const { items, total } = await svc.list({
+        status: req.query.status as string | undefined,
+        q: p.q,
+        page: p.page,
+        pageSize: p.pageSize,
+      });
+      res.json({ success: true, ...paginated(items, total, p.page, p.pageSize) });
     } catch (err) {
       next(err);
     }

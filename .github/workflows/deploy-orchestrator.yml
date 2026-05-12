@@ -11,22 +11,17 @@ name: Deploy Orchestrator
 #
 # Les migrations Prisma sont jouees par l'entrypoint au boot du conteneur.
 
-# DESACTIVE : declenchement automatique sur push retire.
-# Ne se lance plus que manuellement via "Run workflow" depuis l'onglet Actions.
-# Pour reactiver, restaurer le bloc `push:` ci-dessous :
-#
-#   push:
-#     branches: [main]
-#     paths:
-#       - 'apps/orchestrator/**'
-#       - 'packages/shared/**'
-#       - 'packages/skins/**'
-#       - 'packages/config/**'
-#       - 'docker/orchestrator/**'
-#       - 'docker-compose.control-plane.yml'
-#       - '.github/workflows/deploy-orchestrator.yml'
-
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/orchestrator/**'
+      - 'packages/shared/**'
+      - 'packages/skins/**'
+      - 'packages/config/**'
+      - 'docker/orchestrator/**'
+      - 'docker-compose.control-plane.yml'
+      - '.github/workflows/deploy-orchestrator.yml'
   workflow_dispatch:
 
 jobs:

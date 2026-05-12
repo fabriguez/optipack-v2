@@ -1,24 +1,12 @@
 import { inject, injectable } from 'tsyringe';
-import { z } from 'zod';
 import { prisma } from '../../../config/database';
 import { SshKeyEncryption } from '../../../infrastructure/crypto/SshKeyEncryption';
 import { SSHService, SSH_SERVICE } from '../../../infrastructure/ssh/SSHService';
 import { BusinessError, ConflictError } from '../../../domain/errors/BusinessError';
 
-export const createVpsSchema = z.object({
-  name: z.string().min(2),
-  host: z.string().min(2),
-  port: z.number().int().min(1).max(65535).default(22),
-  username: z.string().min(1),
-  sshPrivateKey: z.string().min(20),
-  region: z.string().optional(),
-  notes: z.string().optional(),
-  totalCpu: z.number().int().positive().optional(),
-  totalRamMb: z.number().int().positive().optional(),
-  totalDiskGb: z.number().int().positive().optional(),
-});
-
-export type CreateVpsInput = z.infer<typeof createVpsSchema>;
+// Schemas migres dans @transitsoftservices/ops-schemas (partages avec ops-admin).
+import { createVpsSchema, type CreateVpsInput } from '@transitsoftservices/ops-schemas';
+export { createVpsSchema, type CreateVpsInput };
 
 @injectable()
 export class CreateVpsUseCase {

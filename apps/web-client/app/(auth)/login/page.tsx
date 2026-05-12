@@ -9,6 +9,7 @@ import { ArrowRight, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useLogin } from '@/lib/hooks/useAuth';
 import { AuthShell } from '@/components/auth/AuthShell';
 import { Field } from '@/components/auth/Field';
+import { SocialAuthButtons } from '@/components/auth/SocialAuthButtons';
 
 const schema = z.object({
   phone: z.string().min(8, 'Numero invalide'),
@@ -33,9 +34,11 @@ export default function LoginPage() {
       title="Bon retour parmi nous."
       subtitle="Entrez votre numero et votre mot de passe pour reprendre la ou vous en etiez."
     >
+      <SocialAuthButtons intent="login" />
+
       <form
         onSubmit={handleSubmit((v) => login.mutate(v))}
-        className="space-y-5"
+        className="mt-6 space-y-5"
         noValidate
       >
         <Field label="Telephone" error={errors.phone?.message}>

@@ -9,6 +9,7 @@ import { ArrowRight, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useRegister } from '@/lib/hooks/useAuth';
 import { AuthShell } from '@/components/auth/AuthShell';
 import { Field } from '@/components/auth/Field';
+import { SocialAuthButtons } from '@/components/auth/SocialAuthButtons';
 
 const schema = z.object({
   fullName: z.string().min(2, 'Nom requis'),
@@ -37,6 +38,8 @@ export default function RegisterPage() {
       title="Creez votre compte en 30 secondes."
       subtitle="Aucune carte bancaire requise. Vous pouvez commencer a suivre vos colis immediatement."
     >
+      <SocialAuthButtons intent="register" />
+
       <form
         onSubmit={handleSubmit((v) =>
           reg.mutate({
@@ -46,7 +49,7 @@ export default function RegisterPage() {
             password: v.password,
           }),
         )}
-        className="space-y-5"
+        className="mt-6 space-y-5"
         noValidate
       >
         <Field label="Nom complet" error={errors.fullName?.message}>
@@ -119,15 +122,25 @@ export default function RegisterPage() {
             {...register('acceptTerms')}
           />
           <span>
-            J'accepte les{' '}
+            J&apos;accepte les{' '}
             <Link
               href="/cgv"
+              target="_blank"
               className="font-semibold underline"
               style={{ color: 'var(--skin-primary)' }}
             >
               conditions generales
             </Link>{' '}
-            et la politique de confidentialite.
+            et la{' '}
+            <Link
+              href="/privacy"
+              target="_blank"
+              className="font-semibold underline"
+              style={{ color: 'var(--skin-primary)' }}
+            >
+              politique de confidentialite
+            </Link>
+            .
           </span>
         </label>
         {errors.acceptTerms && (
