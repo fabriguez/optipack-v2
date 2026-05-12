@@ -52,6 +52,11 @@ services:
         condition: service_healthy
       ops-redis:
         condition: service_healthy
+    # Resolve `host.docker.internal` vers l'IP de l'host depuis ce conteneur.
+    # Indispensable pour atteindre Caddy (admin API sur l'host:2019) depuis
+    # un network Docker custom (172.19.x.x ici, pas le bridge par defaut).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       NODE_ENV: production
       OPS_PORT: 4020
@@ -63,6 +68,10 @@ services:
       OPS_GHCR_NAMESPACE: ${OPS_GHCR_NAMESPACE:-transitsoftservices}
       OPS_GHCR_TOKEN: ${OPS_GHCR_TOKEN}
       OPS_PUBLIC_WEB_URL: ${OPS_PUBLIC_WEB_URL:-https://ops-admin.transitsoftservices.com}
+      CADDY_ADMIN_URL: ${CADDY_ADMIN_URL:-http://host.docker.internal:2019}
+      OPS_SELF_VPS_NAME: ${OPS_SELF_VPS_NAME:-self}
+      OPS_BASE_DOMAIN: ${OPS_BASE_DOMAIN:-transitsoftservices.com}
+      OPS_CADDY_EMAIL: ${OPS_CADDY_EMAIL:-admin@transitsoftservices.com}
     ports:
       - "127.0.0.1:4020:4020"
     networks:

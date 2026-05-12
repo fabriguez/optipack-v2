@@ -48,17 +48,38 @@ ACCESS=$(extract "$LOGIN_RES" "accessToken")
 CHALLENGE=$(extract "$LOGIN_RES" "challengeToken")
 REQ2FA=$(printf '%s' "$LOGIN_RES" | jq -r '.data.requires2FA // false')
 
+# Decoder le payload JWT du challenge pour savoir si c'est un setup ou un verify.
+# Le payload encode `kind: 'setup_required'` pour le premier login, sinon c'est
+# un simple challenge de verification.
+jwt_kind() {
+  local token="$1"
+  local payload="${token#*.}"   # strip header.
+  payload="${payload%%.*}"      # strip .signature
+  # pad base64url
+  case $((${#payload} % 4)) in
+    2) payload="${payload}==" ;;
+    3) payload="${payload}=" ;;
+  esac
+  printf '%s' "$payload" | tr '_-' '/+' | base64 -d 2>/dev/null | jq -r '.kind // empty'
+}
+
 # --- 2. Gestion 2FA ---
 if [ -z "$ACCESS" ] && [ -n "$CHALLENGE" ]; then
-  echo "[2FA] Second facteur requis." >&2
+  KIND=$(jwt_kind "$CHALLENGE")
+  echo "[2FA] Second facteur requis (kind=${KIND:-unknown})." >&2
 
-  # Code TOTP fourni en env -> on confirme directement.
-  if [ -n "${OPS_TOTP:-}" ]; then
+  do_confirm() {
+    # $1 = totp code
     TFA=$(curl -fsSL -X POST "$OPS_URL/ops/auth/2fa/confirm" \
       -H 'Content-Type: application/json' \
-      -d "$(jq -n --arg c "$CHALLENGE" --arg t "$OPS_TOTP" \
+      -d "$(jq -n --arg c "$CHALLENGE" --arg t "$1" \
             '{challengeToken:$c, totpCode:$t}')")
     ACCESS=$(extract "$TFA" "accessToken")
+  }
+
+  # Code TOTP fourni en env -> on tente confirm direct.
+  if [ -n "${OPS_TOTP:-}" ]; then
+    do_confirm "$OPS_TOTP"
 
   elif [ -n "${OPS_RECOVERY:-}" ]; then
     TFA=$(curl -fsSL -X POST "$OPS_URL/ops/auth/2fa/recovery" \
@@ -67,7 +88,7 @@ if [ -z "$ACCESS" ] && [ -n "$CHALLENGE" ]; then
             '{challengeToken:$c, recoveryCode:$r}')")
     ACCESS=$(extract "$TFA" "accessToken")
 
-  else
+  elif [ "$KIND" = "setup_required" ]; then
     # Premier login -> setup interactif
     echo "" >&2
     echo "[2FA-setup] Le 2FA n'est pas encore configure pour ce compte." >&2
@@ -127,6 +148,16 @@ if [ -z "$ACCESS" ] && [ -n "$CHALLENGE" ]; then
       echo "  $RECOVERY" >&2
       echo "========================================================" >&2
     fi
+
+  else
+    # 2FA deja active : juste demander le code TOTP courant.
+    while true; do
+      printf "[2FA] Entre les 6 chiffres affiches par ton app : " >&2
+      IFS= read -r TOTP
+      TOTP=$(printf '%s' "$TOTP" | tr -d ' \r\n')
+      [ -n "$TOTP" ] && break
+    done
+    do_confirm "$TOTP"
   fi
 fi
 
