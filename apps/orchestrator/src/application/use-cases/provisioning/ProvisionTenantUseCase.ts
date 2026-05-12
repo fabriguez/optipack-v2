@@ -40,6 +40,14 @@ export class ProvisionTenantUseCase {
     });
     if (!tenant) throw new NotFoundError('Tenant', tenantId);
     if (!tenant.vps) throw new BusinessError('Tenant sans VPS associe');
+    // Le tenant principal est deja deploye via docker-compose.prod.yml sur le
+    // VPS d'orchestration. On ne le (re-)provisionne pas, on l'inclut juste
+    // dans la config Caddy via reconcileCaddy().
+    if ((tenant as { isMain?: boolean }).isMain) {
+      throw new BusinessError(
+        'Tenant principal (isMain=true) : pas de provisioning. Utilisez /ops/caddy/reconcile pour rafraichir la config Caddy.',
+      );
+    }
 
     await log(`[provision] start tenant=${tenant.slug} vps=${tenant.vps.host}`);
 
@@ -259,6 +267,7 @@ export class ProvisionTenantUseCase {
         webPort: t.webPort!,
         webClientPort: t.webClientPort ?? undefined,
         isFrozen: false,
+        isMain: (t as { isMain?: boolean }).isMain ?? false,
       }));
     // Inclure le tenant courant meme s'il n'est pas encore ACTIVE
     if (!caddyEntries.find((e) => e.slug === tenant.slug)) {

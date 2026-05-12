@@ -66,6 +66,17 @@ export function QRScannerDialog({
   const aliveRef = useRef(false);
   const stoppingRef = useRef<Promise<void> | null>(null);
   const detectedOnceRef = useRef(false);
+  // Refs aux props "vivantes" : sans elles, le callback de scan capture la
+  // version FIGEE du premier rendu (les deps du useEffect demarrant la
+  // camera sont [open, facing], donc handleDetected gele a t=0). Resultat :
+  // 2eme scan ecrase le 1er car onDetected appelle addCode avec un `codes`
+  // perime. Solution : lire toujours la prop courante via une ref.
+  const onDetectedRef = useRef(onDetected);
+  const closeOnDetectRef = useRef(closeOnDetect);
+  useEffect(() => {
+    onDetectedRef.current = onDetected;
+    closeOnDetectRef.current = closeOnDetect;
+  });
 
   const [facing, setFacing] = useState<'environment' | 'user'>('environment');
   const [error, setError] = useState<string | null>(null);
@@ -147,13 +158,19 @@ export function QRScannerDialog({
     // scanne / inconnu) est joue par l'appelant via scanSound.success/error.
     scanSound.info();
     detectedOnceRef.current = true;
-    onDetected(cleaned);
-    if (closeOnDetect) {
+    // Lire via la ref pour avoir TOUJOURS le callback du dernier rendu --
+    // sinon le 2eme scan utilise la version figee du 1er rendu et ecrase
+    // l'accumulation cote parent (cf. commentaire onDetectedRef).
+    onDetectedRef.current(cleaned);
+    if (closeOnDetectRef.current) {
       onClose();
     } else {
+      // 700ms de debounce entre deux acceptations : assez court pour scanner
+      // en chaine sans interruption, assez long pour eviter de capter deux
+      // fois la meme image en mode rapide.
       setTimeout(() => {
         detectedOnceRef.current = false;
-      }, 1500);
+      }, 700);
     }
   };
 
@@ -415,42 +432,24 @@ export function QRScannerDialog({
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <div className="rounded-lg border-2 border-primary-400/80" style={{ width: '70%', height: '40%' }} />
           </div>
+          {/* Badge live : count + dernier code scanne, surimprime sur la
+              camera pour rester visible sans avoir a scroller. Apparait
+              uniquement en mode accumulation (closeOnDetect=false). */}
+          {accumulatedCodes && accumulatedCodes.length > 0 && (
+            <div className="pointer-events-none absolute top-2 left-2 right-2 flex items-center gap-2 rounded-lg bg-black/70 px-3 py-1.5 text-white">
+              <span className="rounded-full bg-primary-500 px-2 py-0.5 text-xs font-bold">
+                {accumulatedCodes.length}
+              </span>
+              <span className="truncate font-mono text-[11px] text-primary-100">
+                dernier : {accumulatedCodes[accumulatedCodes.length - 1]}
+              </span>
+            </div>
+          )}
         </div>
 
-        <div className="flex items-center justify-between">
-          <button
-            type="button"
-            onClick={() => setFacing((f) => (f === 'environment' ? 'user' : 'environment'))}
-            className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs hover:bg-gray-50"
-          >
-            <RotateCw className="h-3.5 w-3.5" />
-            {facing === 'environment' ? 'Camera avant' : 'Camera arriere'}
-          </button>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                const next = !muted;
-                setMuted(next);
-                scanSound.setMuted(next);
-                if (!next) scanSound.info();
-              }}
-              className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 text-[11px] hover:bg-gray-50"
-              title={muted ? 'Activer le son' : 'Couper le son'}
-            >
-              {muted ? <VolumeX className="h-3 w-3" /> : <Volume2 className="h-3 w-3" />}
-              {muted ? 'Son OFF' : 'Son ON'}
-            </button>
-            <span className="text-[11px] text-gray-400">
-              {usingFallback ? 'Mode compat (ZXing)' : 'Mode natif (BarcodeDetector)'}
-            </span>
-          </div>
-        </div>
-
-        {!error && !running && (
-          <p className="text-xs text-gray-400">Demarrage de la camera...</p>
-        )}
-
+        {/* Liste live accumulee : placee JUSTE apres la camera pour que
+            l'utilisateur n'ait rien a scroller. Reste visible en continu
+            pendant qu'il scanne en chaine. */}
         {accumulatedCodes && (
           <div className="rounded-xl border border-primary-100 bg-primary-50/40">
             <div className="flex items-center justify-between border-b border-primary-100/60 px-3 py-2">
@@ -510,6 +509,40 @@ export function QRScannerDialog({
               </ul>
             )}
           </div>
+        )}
+
+        <div className="flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => setFacing((f) => (f === 'environment' ? 'user' : 'environment'))}
+            className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs hover:bg-gray-50"
+          >
+            <RotateCw className="h-3.5 w-3.5" />
+            {facing === 'environment' ? 'Camera avant' : 'Camera arriere'}
+          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                const next = !muted;
+                setMuted(next);
+                scanSound.setMuted(next);
+                if (!next) scanSound.info();
+              }}
+              className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 text-[11px] hover:bg-gray-50"
+              title={muted ? 'Activer le son' : 'Couper le son'}
+            >
+              {muted ? <VolumeX className="h-3 w-3" /> : <Volume2 className="h-3 w-3" />}
+              {muted ? 'Son OFF' : 'Son ON'}
+            </button>
+            <span className="text-[11px] text-gray-400">
+              {usingFallback ? 'Mode compat (ZXing)' : 'Mode natif (BarcodeDetector)'}
+            </span>
+          </div>
+        </div>
+
+        {!error && !running && (
+          <p className="text-xs text-gray-400">Demarrage de la camera...</p>
         )}
 
         <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">

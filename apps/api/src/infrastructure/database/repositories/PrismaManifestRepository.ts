@@ -78,8 +78,13 @@ export class PrismaManifestRepository implements IManifestRepository {
       );
     }
 
+    // Cherche les colis lies a ce conteneur soit comme actuels (containerId)
+    // soit comme provenance (lastContainerId, set au dechargement). Permet
+    // de regenerer un bordereau d'envoi apres reception/dechargement,
+    // sinon il n'y a plus de colis "currentContainerId" et la requete
+    // retourne vide.
     const parcels = await this.loadParcelsWithFinancials(
-      { containerId },
+      { OR: [{ containerId }, { lastContainerId: containerId }] },
       container.departureAgency.city,
       container.arrivalAgency.city,
     );

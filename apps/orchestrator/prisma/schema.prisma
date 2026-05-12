@@ -105,6 +105,11 @@ model Tenant {
   ownerEmail      String
   ownerUsername   String
 
+  // Tenant principal du proprietaire du systeme. Heberge sur le meme VPS
+  // que l'orchestrator, NON provisionne (deja deploye via docker-compose.prod.yml).
+  // Schema d'URL special : app.{base}, www.{base} + apex, api.{base} (sans slug).
+  isMain          Boolean      @default(false)
+
   // Branding initial. Le tenant peut le modifier ensuite via son propre dashboard.
   logoUrl         String?
   primaryColor    String       @default("#1B5E20")

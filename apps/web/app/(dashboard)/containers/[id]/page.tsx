@@ -525,30 +525,34 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
       <AppCard>
         <AppCardHeader title="Bordereaux" description="Generation des bordereaux PDF" />
         <div className="flex flex-wrap gap-3">
-          {(container.status === 'LOADING' || container.status === 'IN_TRANSIT' || container.status === 'ARRIVED' || container.status === 'UNLOADING' || container.status === 'UNLOADED') && (
+          {/* Audit fix #3 : ARRIVED + UNLOADING legacy ont ete migres vers
+              RECEIVED. Les conditions incluent RECEIVED pour que les
+              bordereaux restent generables apres reception (et donc apres
+              dechargement, car le backend cherche les colis via
+              lastContainerId aussi -- voir PrismaManifestRepository). */}
+          {(['LOADING', 'IN_TRANSIT', 'RECEIVED', 'UNLOADED'].includes(container.status)) && (
             <AppButton
               variant="outline"
               size="sm"
               onClick={handleGenerateDispatch}
               loading={busyManifest === 'dispatch'}
-              // Le backend refuse de generer un bordereau pour 0 colis ;
-              // on previent l'erreur cote UI et on explique pourquoi via title.
-              disabled={parcels.length === 0}
-              title={parcels.length === 0 ? 'Aucun colis dans ce conteneur' : undefined}
+              // Le backend cherche les parcels via containerId OR
+              // lastContainerId, donc generer un dispatch post-unload est OK
+              // si le conteneur a deja eu des colis. On n'inactive pas le
+              // bouton -- on laisse le backend juger (cas conteneur
+              // vraiment vide -> error claire).
             >
               <FileText className="h-4 w-4" />
               Bordereau d&apos;envoi
             </AppButton>
           )}
-          {(container.status === 'ARRIVED' || container.status === 'UNLOADING' || container.status === 'UNLOADED') && (
+          {(['RECEIVED', 'UNLOADED'].includes(container.status)) && (
             <>
               <AppButton
                 variant="outline"
                 size="sm"
                 onClick={handleGenerateReception}
                 loading={busyManifest === 'reception'}
-                disabled={parcels.length === 0}
-                title={parcels.length === 0 ? 'Aucun colis dans ce conteneur' : undefined}
               >
                 <FileCheck className="h-4 w-4" />
                 Bordereau de reception
@@ -559,9 +563,9 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
               </AppButton>
             </>
           )}
-          {parcels.length === 0 && (
+          {parcels.length === 0 && container.status === 'EMPTY' && (
             <p className="w-full text-xs text-amber-700">
-              Aucun colis charge dans ce conteneur : les bordereaux d&apos;envoi et de reception sont indisponibles.
+              Aucun colis charge dans ce conteneur : les bordereaux sont indisponibles tant qu&apos;aucun colis n&apos;a ete charge.
             </p>
           )}
         </div>

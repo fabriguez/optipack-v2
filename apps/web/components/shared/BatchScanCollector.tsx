@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Camera, Trash2, X, ScanLine } from 'lucide-react';
 import { AppInput } from '@/components/ui/AppInput';
 import { AppButton } from '@/components/ui/AppButton';
@@ -45,20 +45,35 @@ export function BatchScanCollector({
   const [cameraOpen, setCameraOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  // Refs aux donnees "vivantes" pour eviter les closures perimees quand le
+  // QRScannerDialog tient une reference figee a `onDetected` (cf. commentaire
+  // dans QRScannerDialog). Sans ca, deux scans rapides voient codes=[] dans
+  // les deux et le 2eme ecrase le 1er.
+  const codesRef = useRef(codes);
+  const onChangeRef = useRef(onChange);
+  const validateRef = useRef(validate);
+  useEffect(() => {
+    codesRef.current = codes;
+    onChangeRef.current = onChange;
+    validateRef.current = validate;
+  });
+
   const addCode = async (raw: string) => {
     const v = raw.trim();
     if (!v) return;
-    if (codes.includes(v)) {
+    const current = codesRef.current;
+    if (current.includes(v)) {
       // Doublon : son d'avertissement (deja scanne) plutot qu'un succes ou
       // une erreur franche.
       scanSound.warning();
       toast.info(`Deja dans la liste : ${v}`);
       return;
     }
-    if (validate) {
+    const v2 = validateRef.current;
+    if (v2) {
       try {
         setBusy(true);
-        await validate(v);
+        await v2(v);
       } catch (e: any) {
         scanSound.error();
         toast.error(e?.message || `Code invalide : ${v}`);
@@ -69,15 +84,19 @@ export function BatchScanCollector({
       }
     }
     scanSound.success();
-    onChange([...codes, v]);
+    // On lit a nouveau la ref au moment du commit (le validate async a pu
+    // permettre d'autres scans dans l'intervalle).
+    onChangeRef.current([...codesRef.current, v]);
     setInput('');
   };
 
-  const removeCode = (c: string) => onChange(codes.filter((x) => x !== c));
+  const removeCode = (c: string) =>
+    onChangeRef.current(codesRef.current.filter((x) => x !== c));
 
   const handleSubmit = async () => {
-    if (codes.length === 0) return;
-    await onSubmit(codes);
+    const current = codesRef.current;
+    if (current.length === 0) return;
+    await onSubmit(current);
   };
 
   return (

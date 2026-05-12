@@ -8,6 +8,7 @@ import { PlanController } from '../controllers/PlanController';
 import { BillingController } from '../controllers/BillingController';
 import { ReleaseController } from '../controllers/ReleaseController';
 import { BackupController } from '../controllers/BackupController';
+import { CaddyController } from '../controllers/CaddyController';
 import { authenticateOps, requireSuperAdmin } from '../middleware/authOpsMiddleware';
 import { requireServiceToken } from '../middleware/serviceTokenMiddleware';
 
@@ -111,6 +112,11 @@ router.get('/tenants/:id/backups', authenticateOps, BackupController.list);
 router.post('/tenants/:id/backups', authenticateOps, requireSuperAdmin, BackupController.create);
 router.post('/backups/:backupId/restore', authenticateOps, requireSuperAdmin, BackupController.restore);
 router.post('/backups/run-nightly', authenticateOps, requireSuperAdmin, BackupController.runNightly);
+
+// ============================================================
+// CADDY (reconciliation manuelle, super-admin)
+// ============================================================
+router.post('/caddy/reconcile', authenticateOps, requireSuperAdmin, CaddyController.reconcile);
 
 // ============================================================
 // AUDIT LOG (lecture seule, super-admin)

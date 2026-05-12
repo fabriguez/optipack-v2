@@ -23,6 +23,9 @@ export interface TenantCaddyEntry {
    *  retrocompatibilite avec les tenants pre-Phase web-client. */
   webClientPort?: number;
   isFrozen: boolean;
+  /** Tenant principal du proprietaire : schema d'URL plat (app.{base}, www.{base},
+   *  api.{base} + apex) au lieu du pattern slug habituel. */
+  isMain?: boolean;
 }
 
 interface BuildOptions {
@@ -48,13 +51,18 @@ export class CaddyService {
     };
 
     for (const t of tenants) {
-      // staff dashboard : {slug}.{base} (retrocompat)
-      // public site (web-client) : www.{slug}.{base} + custom domain
-      // api : api.{slug}.{base}
-      const staffHosts: string[] = [`${t.slug}.${opts.baseDomain}`];
-      const publicHosts: string[] = [`www.${t.slug}.${opts.baseDomain}`];
+      // Tenant principal -> URLs sans slug : app.{base}, www.{base} + apex, api.{base}
+      // Autres tenants     -> URLs slug   : {slug}.{base}, www.{slug}.{base}, api.{slug}.{base}
+      const staffHosts: string[] = t.isMain
+        ? [`app.${opts.baseDomain}`]
+        : [`${t.slug}.${opts.baseDomain}`];
+      const publicHosts: string[] = t.isMain
+        ? [`www.${opts.baseDomain}`, opts.baseDomain]
+        : [`www.${t.slug}.${opts.baseDomain}`];
       if (t.customDomain) publicHosts.push(t.customDomain);
-      const apiHost = `api.${t.slug}.${opts.baseDomain}`;
+      const apiHost = t.isMain
+        ? `api.${opts.baseDomain}`
+        : `api.${t.slug}.${opts.baseDomain}`;
 
       const webBackend = t.isFrozen ? FROZEN_RESPONSE : {
         handler: 'reverse_proxy',
@@ -141,7 +149,7 @@ export class CaddyService {
   }
 
   /**
-   * Push la config Caddy sur un VPS.
+   * Push la config Caddy sur un VPS distant via SSH.
    * Strategie : ecrit dans /tmp/caddy-tenants.json puis curl POST localhost:2019/load
    */
   async push(creds: SshConnection, configJson: unknown): Promise<void> {
@@ -152,6 +160,34 @@ export class CaddyService {
     const r = await this.ssh.exec(creds, cmd);
     if (r.code !== 0) {
       throw new Error(`Caddy /load a echoue : ${r.stderr || r.stdout}`);
+    }
+  }
+
+  /**
+   * Push la config Caddy sur le VPS *local* (le meme que celui qui heberge
+   * l'orchestrator). Utilise quand vps.name === 'self' / vps.host est en
+   * loopback : pas besoin de SSH, on hit directement l'admin API depuis le
+   * conteneur orchestrator.
+   *
+   * Note : l'admin API Caddy ecoute sur localhost:2019 cote HOST. Pour que le
+   * conteneur orchestrator y accede, il faut soit :
+   *  - utiliser `host.docker.internal` (Docker Desktop) ou `172.17.0.1` (Linux,
+   *    IP par defaut du bridge gateway), configurable via env CADDY_ADMIN_URL.
+   *  - ou faire tourner le conteneur orchestrator avec `network_mode: host`
+   *    (plus simple sur un VPS Linux mono-machine).
+   */
+  async pushLocal(configJson: unknown): Promise<void> {
+    const adminUrl = process.env.CADDY_ADMIN_URL ?? 'http://172.17.0.1:2019';
+    const res = await fetch(`${adminUrl}/load`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(configJson),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(
+        `Caddy local /load a echoue (${res.status}) : ${body.slice(0, 300)}`,
+      );
     }
   }
 }

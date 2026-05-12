@@ -22,7 +22,10 @@ const baseParcelFields = {
   //   (ville) est derive automatiquement cote backend depuis agency.city.
   // - destinationAddress : complement d'adresse libre (rue, quartier).
   destinationAgencyId: z.string().uuid("Selectionnez l'agence de destination"),
-  destinationAddress: z.string().optional().or(z.literal('')),
+  // Adresse precise : totalement optionnelle (peut etre vide, null, undefined,
+  // ou absente du payload). Aucune contrainte de longueur. La transformation
+  // en null se fait cote use case backend.
+  destinationAddress: z.string().nullish().or(z.literal('')),
   category: z.enum(ParcelCategoryValues).optional().default('STANDARD'),
   isFragile: z.boolean().optional().default(false),
   isHazardous: z.boolean().optional().default(false),
@@ -55,7 +58,7 @@ export const createBatchParcelsSchema = z.object({
         weight: z.number().positive().optional(),
         volume: z.number().positive().optional(),
         destinationAgencyId: z.string().uuid(),
-        destinationAddress: z.string().optional(),
+        destinationAddress: z.string().nullish(),
         category: z.enum(ParcelCategoryValues).optional().default('STANDARD'),
         isFragile: z.boolean().optional().default(false),
         isHazardous: z.boolean().optional().default(false),

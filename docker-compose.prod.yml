@@ -5,7 +5,9 @@ services:
       context: .
       dockerfile: docker/api/Dockerfile.prod
     ports:
-      - "3009:4000"
+      # Bind localhost only -> Caddy (host) reverse-proxy via 127.0.0.1:3009.
+      # Pas d'exposition directe sur internet : tout passe par Caddy + Let's Encrypt.
+      - "127.0.0.1:3009:4000"
     env_file: .env
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-transitsoftservices}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-transitsoftservices}?schema=public
@@ -38,7 +40,7 @@ services:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
         NEXT_PUBLIC_SOCKET_URL: ${NEXT_PUBLIC_SOCKET_URL}
     ports:
-      - "3008:3000"
+      - "127.0.0.1:3008:3000"
     env_file: .env
     environment:
       INTERNAL_API_URL: http://api:4000/api/v1
@@ -61,7 +63,7 @@ services:
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
     ports:
-      - "3010:3001"
+      - "127.0.0.1:3010:3001"
     env_file: .env
     environment:
       INTERNAL_API_URL: http://api:4000/api/v1
