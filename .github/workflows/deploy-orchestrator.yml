@@ -16,10 +16,13 @@ on:
     branches: [main]
     paths:
       - 'apps/orchestrator/**'
+      - 'apps/ops-admin/**'
       - 'packages/shared/**'
       - 'packages/skins/**'
+      - 'packages/ops-schemas/**'
       - 'packages/config/**'
       - 'docker/orchestrator/**'
+      - 'docker/ops-admin/**'
       - 'docker-compose.control-plane.yml'
       - '.github/workflows/deploy-orchestrator.yml'
   workflow_dispatch:
@@ -45,11 +48,13 @@ jobs:
             # S'assurer que la BDD ops + redis tournent (entrypoint orchestrator les attend)
             docker compose -f docker-compose.control-plane.yml up -d ops-postgres ops-redis
 
-            # Build de l'image orchestrator
-            docker compose -f docker-compose.control-plane.yml build orchestrator
+            # Build des images orchestrator + ops-admin (les deux vivent sur ce VPS
+            # et sont definis dans la meme stack control-plane).
+            docker compose -f docker-compose.control-plane.yml build orchestrator ops-admin
 
-            # (Re)demarrage : l'entrypoint joue prisma migrate deploy avant de booter
-            docker compose -f docker-compose.control-plane.yml up -d orchestrator
+            # (Re)demarrage : l'entrypoint orchestrator joue prisma migrate deploy
+            # avant de booter. ops-admin est un Next.js standalone -> demarrage direct.
+            docker compose -f docker-compose.control-plane.yml up -d orchestrator ops-admin
 
             # Nettoyage des images orphelines
             docker image prune -f
