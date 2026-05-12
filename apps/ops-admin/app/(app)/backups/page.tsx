@@ -1,9 +1,10 @@
 'use client';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
 import { StatusBadge } from '@/components/StatusBadge';
+import { Pagination } from '@/components/Pagination';
 
 interface Tenant {
   id: string;
@@ -23,11 +24,13 @@ interface Backup {
 export default function BackupsPage() {
   const qc = useQueryClient();
   const [tenantId, setTenantId] = useState<string>('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   const tenants = useQuery({
-    queryKey: ['tenants'],
+    queryKey: ['tenants', 'all'],
     queryFn: async (): Promise<Tenant[]> =>
-      (await api.get('/tenants')).data?.data ?? [],
+      (await api.get('/tenants', { params: { pageSize: 200 } })).data?.data ?? [],
   });
   const backups = useQuery({
     queryKey: ['backups', tenantId],
@@ -44,6 +47,15 @@ export default function BackupsPage() {
   const runNightly = useMutation({
     mutationFn: () => api.post('/backups/run-nightly'),
   });
+
+  // Pagination cote client : le backend ne supporte pas encore offset/cursor
+  // sur GET /tenants/:id/backups. La liste est triee par date desc cote
+  // serveur, on slice juste pour l'UX.
+  const pagedBackups = useMemo(() => {
+    const all = backups.data ?? [];
+    const start = (page - 1) * pageSize;
+    return all.slice(start, start + pageSize);
+  }, [backups.data, page, pageSize]);
 
   return (
     <div className="space-y-4">
@@ -92,7 +104,7 @@ export default function BackupsPage() {
                 </tr>
               </thead>
               <tbody>
-                {(backups.data ?? []).map((b) => (
+                {pagedBackups.map((b) => (
                   <tr key={b.id} className="border-t">
                     <td className="px-4 py-2 text-xs text-gray-500">
                       {formatDate(b.createdAt)}
@@ -113,6 +125,16 @@ export default function BackupsPage() {
                 ))}
               </tbody>
             </table>
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={(backups.data ?? []).length}
+              onPageChange={setPage}
+              onPageSizeChange={(s) => {
+                setPageSize(s);
+                setPage(1);
+              }}
+            />
           </div>
         </div>
       )}

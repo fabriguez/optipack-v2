@@ -100,6 +100,46 @@ export class AuthController {
     }
   }
 
+  /**
+   * Self-setup 2FA depuis /me (authentifie). Genere le secret + QR.
+   */
+  static async selfSetupTwoFactor(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.opsAdmin) throw new AuthenticationError();
+      const result = await container
+        .resolve(SetupTwoFactorUseCase)
+        .selfGenerateSecret(req.opsAdmin.sub);
+      res.json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * Self-confirm 2FA depuis /me (authentifie). Active la 2FA et retourne les recovery codes.
+   */
+  static async selfConfirmTwoFactor(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.opsAdmin) throw new AuthenticationError();
+      const { totpCode } = req.body as { totpCode?: string };
+      if (!totpCode) {
+        res.status(400).json({ success: false, message: 'totpCode requis' });
+        return;
+      }
+      const result = await container
+        .resolve(SetupTwoFactorUseCase)
+        .selfConfirm(req.opsAdmin.sub, totpCode);
+      await container.resolve(AuditLogger).log(req, {
+        action: 'OPS_2FA_SELF_ENABLED',
+        entityType: 'OpsAdmin',
+        entityId: req.opsAdmin.sub,
+      });
+      res.json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   static async me(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.opsAdmin) throw new AuthenticationError();

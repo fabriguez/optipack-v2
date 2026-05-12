@@ -15,6 +15,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { formatDate } from '@/lib/utils';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { JobLogsViewer } from '@/components/JobLogsViewer';
+import { TenantStudio } from './TenantStudio';
 
 interface TenantDetail {
   id: string;
@@ -30,6 +31,12 @@ interface TenantDetail {
   customDomain: string | null;
   enabledModules: string[];
   isMain?: boolean;
+  primaryColor: string | null;
+  secondaryColor: string | null;
+  accentColor: string | null;
+  logoUrl: string | null;
+  pinnedVersion: string | null;
+  autoUpdatePolicy: string | null;
 }
 
 interface Job {
@@ -226,6 +233,22 @@ export default function TenantDetailPage({
         <Info label="Custom domain">{t.customDomain ?? '-'}</Info>
       </div>
 
+      <Section title="Studio (theme et configuration)">
+        <TenantStudio
+          tenantId={t.id}
+          initial={{
+            primaryColor: t.primaryColor,
+            secondaryColor: t.secondaryColor,
+            accentColor: t.accentColor,
+            logoUrl: t.logoUrl,
+            enabledModules: t.enabledModules ?? [],
+            pinnedVersion: t.pinnedVersion,
+            autoUpdatePolicy: t.autoUpdatePolicy,
+            customDomain: t.customDomain,
+          }}
+        />
+      </Section>
+
       {activeJobId && (
         <Section
           title="Job en cours"
@@ -266,14 +289,23 @@ export default function TenantDetailPage({
                   {j.finishedAt ? formatDate(j.finishedAt) : '-'}
                 </td>
                 <td className="py-2 text-right">
-                  <button
-                    type="button"
-                    onClick={() => setActiveJobId(j.id)}
-                    className="inline-flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-gray-50"
-                    title="Voir les logs"
-                  >
-                    <Eye className="h-3 w-3" /> Logs
-                  </button>
+                  <div className="inline-flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setActiveJobId(j.id)}
+                      className="inline-flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                      title="Apercu rapide des logs"
+                    >
+                      <Eye className="h-3 w-3" /> Logs
+                    </button>
+                    <Link
+                      href={`/tenants/${id}/jobs/${j.id}`}
+                      className="inline-flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                      title="Page complete du job"
+                    >
+                      Ouvrir
+                    </Link>
+                  </div>
                 </td>
               </tr>
             ))}

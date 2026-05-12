@@ -109,6 +109,57 @@ export class SetupTwoFactorUseCase {
   }
 
   /**
+   * Self-setup 2FA depuis /me (deja authentifie). Genere un secret en attente
+   * et un QR. Le 2FA n'est PAS encore active : il faut un appel a
+   * `selfConfirm` avec un totp valide pour finaliser.
+   * On accepte uniquement si twoFactorEnabled = false, sinon il faut un
+   * disable explicite avant de re-setup.
+   */
+  async selfGenerateSecret(opsAdminId: string) {
+    const opsAdmin = await prisma.opsAdmin.findUnique({ where: { id: opsAdminId } });
+    if (!opsAdmin) throw new AuthenticationError();
+    if (opsAdmin.twoFactorEnabled) {
+      throw new BusinessError('2FA deja activee. Desactivez-la avant de la re-configurer.');
+    }
+
+    const secret = authenticator.generateSecret();
+    const otpAuthUrl = authenticator.keyuri(opsAdmin.email, config.totpIssuer, secret);
+    const qrCodeDataUrl = await QRCode.toDataURL(otpAuthUrl);
+
+    await prisma.opsAdmin.update({
+      where: { id: opsAdmin.id },
+      data: { twoFactorSecret: secret },
+    });
+
+    return { secret, otpAuthUrl, qrCodeDataUrl };
+  }
+
+  async selfConfirm(opsAdminId: string, totpCode: string) {
+    const opsAdmin = await prisma.opsAdmin.findUnique({ where: { id: opsAdminId } });
+    if (!opsAdmin) throw new AuthenticationError();
+    if (opsAdmin.twoFactorEnabled) {
+      throw new BusinessError('2FA deja activee.');
+    }
+    if (!opsAdmin.twoFactorSecret) {
+      throw new BusinessError('Aucun secret 2FA en attente. Relancez le setup.');
+    }
+    const valid = authenticator.verify({ token: totpCode, secret: opsAdmin.twoFactorSecret });
+    if (!valid) throw new AuthenticationError('Code 2FA invalide');
+
+    const recoveryCodes = Array.from({ length: RECOVERY_CODES_COUNT }, generateRecoveryCode);
+    const recoveryHashes = await Promise.all(
+      recoveryCodes.map((c) => bcrypt.hash(c, config.bcryptRounds)),
+    );
+
+    await prisma.opsAdmin.update({
+      where: { id: opsAdmin.id },
+      data: { twoFactorEnabled: true, twoFactorRecoveryCodes: recoveryHashes },
+    });
+
+    return { recoveryCodes };
+  }
+
+  /**
    * Login via un code de recuperation. Consomme le code (retire son hash de la liste).
    * Retourne un accessToken si match.
    */

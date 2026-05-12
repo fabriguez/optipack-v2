@@ -27,6 +27,8 @@ router.post('/auth/login', AuthController.login);
 router.post('/auth/2fa/setup', AuthController.setupTwoFactor);
 router.post('/auth/2fa/confirm', AuthController.confirmTwoFactor);
 router.post('/auth/2fa/recovery', AuthController.useRecoveryCode);
+router.post('/auth/2fa/self-setup', authenticateOps, AuthController.selfSetupTwoFactor);
+router.post('/auth/2fa/self-confirm', authenticateOps, AuthController.selfConfirmTwoFactor);
 router.post('/auth/2fa/recovery/regenerate', authenticateOps, AuthController.regenerateRecoveryCodes);
 router.post('/auth/change-password', authenticateOps, AuthController.changePassword);
 router.get('/auth/me', authenticateOps, AuthController.me);
@@ -72,6 +74,7 @@ router.post('/plans/:id/deactivate', authenticateOps, requireSuperAdmin, PlanCon
 // ============================================================
 // BILLING (checkout + webhooks publics + actions ops)
 // ============================================================
+router.get('/billing/overview', authenticateOps, BillingController.overview);
 router.post('/billing/checkout', authenticateOps, BillingController.startCheckout);
 router.post('/billing/confirm-manual', authenticateOps, requireSuperAdmin, BillingController.confirmManualPayment);
 router.post('/billing/run-autofreeze', authenticateOps, requireSuperAdmin, BillingController.runAutoFreeze);
@@ -98,6 +101,12 @@ router.post('/tenants/:id/updates/:jobId/rollback', authenticateOps, ReleaseCont
 // L'API tenant appelle ceci depuis son backend pour repondre a /api/v1/system/updates
 // dans le frontend tenant.
 router.get('/tenant-system/updates', requireServiceToken, ReleaseController.tenantSystemSummary);
+
+// Tenant-self studio (proxy depuis l'API tenant via service token).
+// Le tenant owner peut editer le theme et la config visible de son propre
+// tenant sans avoir de compte ops-admin.
+router.get('/tenant-self/studio', requireServiceToken, TenantController.getSelfStudio);
+router.patch('/tenant-self/studio', requireServiceToken, TenantController.patchSelfStudio);
 
 // ============================================================
 // OPS ADMINS (super-admin uniquement)

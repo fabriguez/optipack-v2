@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
+import { z } from 'zod';
 import { container } from '../../container';
 import {
   TenantUseCases,
@@ -7,6 +8,25 @@ import {
 } from '../../application/use-cases/tenant/TenantUseCases';
 import { AuditLogger } from '../../application/services/AuditLogger';
 import { parsePagination, paginated } from '../../application/utils/pagination';
+import { prisma } from '../../config/database';
+import { BusinessError } from '../../domain/errors/BusinessError';
+
+/**
+ * Studio "tenant-self" : champs que le proprietaire d'un tenant peut editer
+ * via son propre frontend (proxy depuis l'API tenant avec service token).
+ * Exclut tout ce qui touche au status, vps, slug, ports, ownerEmail.
+ */
+const tenantSelfStudioSchema = z.object({
+  primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  secondaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  accentColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  logoUrl: z.string().url().optional().nullable(),
+  enabledModules: z.array(z.string()).optional(),
+  customDomain: z.string().optional().nullable(),
+  autoUpdatePolicy: z.enum(['MANUAL', 'AUTO_STABLE', 'AUTO_CRITICAL_ONLY']).optional(),
+  pinnedVersion: z.string().optional().nullable(),
+  name: z.string().min(2).optional(),
+});
 
 export class TenantController {
   static async create(req: Request, res: Response, next: NextFunction) {
@@ -45,6 +65,63 @@ export class TenantController {
     try {
       const tenant = await container.resolve(TenantUseCases).getById(req.params.id);
       res.json({ success: true, data: tenant });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * GET /ops/tenant-self/studio?tenantId=...
+   * Lit la config "Studio" pour le tenant donne. Auth : service token (proxy
+   * depuis l'API tenant qui passe son propre orgId).
+   * Champs : theming + modules + domain + update policy + pinned version + name.
+   */
+  static async getSelfStudio(req: Request, res: Response, next: NextFunction) {
+    try {
+      const tenantId = (req.query.tenantId ?? req.headers['x-tenant-id']) as string | undefined;
+      if (!tenantId) throw new BusinessError('tenantId requis (query ou header X-Tenant-Id)');
+      const t = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: {
+          id: true,
+          slug: true,
+          name: true,
+          customDomain: true,
+          enabledModules: true,
+          logoUrl: true,
+          primaryColor: true,
+          secondaryColor: true,
+          accentColor: true,
+          autoUpdatePolicy: true,
+          pinnedVersion: true,
+          status: true,
+        },
+      });
+      if (!t) throw new BusinessError('Tenant introuvable');
+      res.json({ success: true, data: t });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * PATCH /ops/tenant-self/studio?tenantId=...
+   * Met a jour les champs "Studio" autorises au proprietaire (pas de status,
+   * pas de vps, pas de ports). Audit avec acteur "tenant_owner".
+   */
+  static async patchSelfStudio(req: Request, res: Response, next: NextFunction) {
+    try {
+      const tenantId = (req.query.tenantId ?? req.headers['x-tenant-id']) as string | undefined;
+      if (!tenantId) throw new BusinessError('tenantId requis');
+      const parsed = tenantSelfStudioSchema.parse(req.body);
+      const updated = await container.resolve(TenantUseCases).update(tenantId, parsed);
+      await container.resolve(AuditLogger).log(req, {
+        action: 'TENANT_STUDIO_UPDATED_BY_OWNER',
+        entityType: 'Tenant',
+        entityId: tenantId,
+        payload: { fields: Object.keys(parsed) },
+      });
+      res.json({ success: true, data: updated });
     } catch (err) {
       next(err);
     }

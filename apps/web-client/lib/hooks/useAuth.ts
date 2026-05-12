@@ -11,7 +11,7 @@ export function useLogin() {
     mutationFn: (vars: { phone: string; password: string }) =>
       portalApi.login(vars.phone, vars.password),
     onSuccess: (data) => {
-      setToken(data.token);
+      setToken(data.accessToken);
       toast.success(`Bienvenue ${data.client.fullName}`);
       router.replace('/app');
     },
@@ -28,7 +28,7 @@ export function useRegister() {
   return useMutation({
     mutationFn: (payload: RegisterPayload) => portalApi.register(payload),
     onSuccess: (data) => {
-      setToken(data.token);
+      setToken(data.accessToken);
       toast.success(`Compte cree. Bienvenue ${data.client.fullName}`);
       router.replace('/app');
     },

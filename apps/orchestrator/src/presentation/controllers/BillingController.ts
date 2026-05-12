@@ -10,8 +10,72 @@ import { StripeProvider } from '../../infrastructure/billing/StripeProvider';
 import { AuditLogger } from '../../application/services/AuditLogger';
 import { logger } from '../../infrastructure/logger';
 import { BusinessError } from '../../domain/errors/BusinessError';
+import { prisma } from '../../config/database';
 
 export class BillingController {
+  /**
+   * GET /ops/billing/overview — vue agregee pour la page billing.
+   * Retourne : MRR (sum des subs actives), encours impaye, prochaines
+   * expirations, derniers paiements, plan-changes en attente.
+   */
+  static async overview(_req: Request, res: Response, next: NextFunction) {
+    try {
+      const now = new Date();
+      const in14Days = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+
+      const [activeSubs, expiringSoon, pendingPayments, recentPayments, pendingPlanChanges] = await Promise.all([
+        prisma.subscription.findMany({
+          where: { isActive: true },
+          select: { id: true, pricePerMonth: true, currency: true, plan: true, expiresAt: true, tenantId: true },
+        }),
+        prisma.subscription.findMany({
+          where: { isActive: true, expiresAt: { lte: in14Days } },
+          include: { tenant: { select: { id: true, slug: true, name: true, status: true } } },
+          orderBy: { expiresAt: 'asc' },
+          take: 20,
+        }),
+        prisma.payment.findMany({
+          where: { status: 'pending' },
+          include: { subscription: { include: { tenant: { select: { id: true, slug: true, name: true } } } } },
+          orderBy: { createdAt: 'desc' },
+          take: 50,
+        }),
+        prisma.payment.findMany({
+          where: { status: 'succeeded' },
+          include: { subscription: { include: { tenant: { select: { id: true, slug: true, name: true } } } } },
+          orderBy: { paidAt: 'desc' },
+          take: 20,
+        }),
+        prisma.planChange.findMany({
+          where: { status: 'pending_payment' },
+          include: { toPlan: { select: { code: true, name: true } }, tenant: { select: { id: true, slug: true, name: true } } },
+          orderBy: { requestedAt: 'desc' },
+          take: 50,
+        }),
+      ]);
+
+      const mrrByCurrency: Record<string, number> = {};
+      for (const sub of activeSubs) {
+        const cur = sub.currency || 'XAF';
+        mrrByCurrency[cur] = (mrrByCurrency[cur] ?? 0) + Number(sub.pricePerMonth);
+      }
+
+      res.json({
+        success: true,
+        data: {
+          mrr: mrrByCurrency,
+          activeSubscriptionsCount: activeSubs.length,
+          expiringSoon,
+          pendingPayments,
+          recentPayments,
+          pendingPlanChanges,
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   /** GET /ops/vps/:id/capacity — etat de la capacite d'un VPS */
   static async vpsCapacity(req: Request, res: Response, next: NextFunction) {
     try {

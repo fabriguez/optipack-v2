@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   KeyRound,
   Loader2,
+  QrCode,
   RefreshCw,
   ShieldAlert,
   ShieldCheck,
@@ -182,6 +183,8 @@ export default function MePage() {
         </form>
       </section>
 
+      {!m.twoFactorEnabled && <TwoFactorSetupSection />}
+
       <section className="rounded-lg border bg-white p-5 shadow-sm">
         <h2 className="flex items-center gap-2 text-base font-semibold">
           <RefreshCw className="h-4 w-4" /> Codes de recuperation 2FA
@@ -233,6 +236,160 @@ export default function MePage() {
         onConfirm={() => regen.mutate()}
       />
     </div>
+  );
+}
+
+function TwoFactorSetupSection() {
+  const qc = useQueryClient();
+  const [step, setStep] = useState<'idle' | 'qr' | 'confirm' | 'done'>('idle');
+  const [qr, setQr] = useState<{ qrCodeDataUrl: string; secret: string } | null>(null);
+  const [code, setCode] = useState('');
+  const [codes, setCodes] = useState<string[] | null>(null);
+
+  const setup = useMutation({
+    mutationFn: () => api.post('/auth/2fa/self-setup'),
+    onSuccess: (r) => {
+      setQr({
+        qrCodeDataUrl: r.data?.data?.qrCodeDataUrl,
+        secret: r.data?.data?.secret,
+      });
+      setStep('qr');
+    },
+  });
+
+  const confirm = useMutation({
+    mutationFn: (totpCode: string) => api.post('/auth/2fa/self-confirm', { totpCode }),
+    onSuccess: (r) => {
+      setCodes(r.data?.data?.recoveryCodes ?? null);
+      setStep('done');
+      qc.invalidateQueries({ queryKey: ['me'] });
+    },
+  });
+
+  return (
+    <section className="rounded-lg border border-amber-200 bg-amber-50 p-5 shadow-sm">
+      <h2 className="flex items-center gap-2 text-base font-semibold text-amber-900">
+        <ShieldAlert className="h-4 w-4" /> Activer la double authentification (2FA)
+      </h2>
+      <p className="mt-1 text-xs text-amber-800">
+        Recommande pour tout super admin. Scanne le QR code avec Google Authenticator,
+        Authy ou 1Password, puis valide avec un code a 6 chiffres.
+      </p>
+
+      {step === 'idle' && (
+        <button
+          type="button"
+          onClick={() => setup.mutate()}
+          disabled={setup.isPending}
+          className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-amber-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-800 disabled:opacity-50"
+        >
+          {setup.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <QrCode className="h-4 w-4" />
+          )}
+          Configurer maintenant
+        </button>
+      )}
+
+      {step === 'qr' && qr && (
+        <div className="mt-4 space-y-3">
+          <div className="flex flex-col items-center gap-3 rounded-md border border-amber-200 bg-white p-4 sm:flex-row sm:items-start">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={qr.qrCodeDataUrl}
+              alt="QR code 2FA"
+              className="h-48 w-48 rounded border"
+            />
+            <div className="flex-1 space-y-2">
+              <p className="text-xs text-amber-800">
+                Si tu ne peux pas scanner, saisis ce secret manuellement :
+              </p>
+              <code className="block break-all rounded bg-amber-50 px-2 py-1 font-mono text-xs">
+                {qr.secret}
+              </code>
+              <button
+                type="button"
+                onClick={() => setStep('confirm')}
+                className="inline-flex items-center gap-1.5 rounded-md bg-amber-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-800"
+              >
+                J&apos;ai scanne, etape suivante
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {step === 'confirm' && (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            confirm.mutate(code);
+          }}
+          className="mt-3 space-y-3"
+        >
+          <Field label="Code a 6 chiffres affiche par l'application">
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]{6}"
+              maxLength={6}
+              autoComplete="one-time-code"
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              className="w-32 rounded-md border px-3 py-2 text-center font-mono text-lg"
+              placeholder="123456"
+            />
+          </Field>
+          {confirm.isError && (
+            <p className="text-xs text-red-600">
+              {(confirm.error as { response?: { data?: { message?: string } } })?.response?.data
+                ?.message ?? 'Code invalide.'}
+            </p>
+          )}
+          <div className="flex items-center gap-2">
+            <button
+              type="submit"
+              disabled={confirm.isPending || code.length !== 6}
+              className="inline-flex items-center gap-1.5 rounded-md bg-amber-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-800 disabled:opacity-50"
+            >
+              {confirm.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+              Activer la 2FA
+            </button>
+            <button
+              type="button"
+              onClick={() => setStep('qr')}
+              className="text-xs text-amber-700 underline hover:text-amber-900"
+            >
+              Retour au QR
+            </button>
+          </div>
+        </form>
+      )}
+
+      {step === 'done' && codes && (
+        <div className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 p-3">
+          <p className="flex items-center gap-1 text-sm font-semibold text-emerald-900">
+            <ShieldCheck className="h-4 w-4" /> 2FA activee !
+          </p>
+          <p className="mt-1 text-xs font-semibold text-emerald-800">
+            Sauvegarde ces codes de recuperation maintenant (ils ne seront plus affiches) :
+          </p>
+          <ul className="mt-2 grid grid-cols-2 gap-1 font-mono text-xs text-emerald-900">
+            {codes.map((c) => (
+              <li key={c} className="rounded bg-white px-2 py-1">{c}</li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            onClick={() => navigator.clipboard.writeText(codes.join('\n'))}
+            className="mt-3 text-xs text-emerald-800 underline hover:text-emerald-900"
+          >
+            Copier dans le presse-papier
+          </button>
+        </div>
+      )}
+    </section>
   );
 }
 

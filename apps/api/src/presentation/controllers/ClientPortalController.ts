@@ -9,6 +9,18 @@ import {
   BusinessError,
 } from '../../domain/errors/BusinessError';
 
+/**
+ * Normalise un numero de telephone pour le stockage / la comparaison.
+ * Strip tout whitespace + caracteres de mise en forme (espaces, tirets,
+ * parentheses, points). Conserve le `+` initial.
+ * Sans ca, "+237 6XX XXX XXX" (avec espaces) et "+2376XXXXXXX" (sans)
+ * sont vus comme deux numeros distincts et la connexion echoue apres
+ * une inscription qui auto-formatait l'input.
+ */
+function normalizePhone(phone: string): string {
+  return phone.replace(/[\s\-().]/g, '');
+}
+
 interface ClientJwtPayload {
   clientId: string;
   phone: string;
@@ -53,12 +65,13 @@ export function authenticateClient(
 export class ClientPortalController {
   static async login(req: Request, res: Response, next: NextFunction) {
     try {
-      const { phone, password } = req.body;
+      const { phone: rawPhone, password } = req.body;
 
-      if (!phone || !password) {
+      if (!rawPhone || !password) {
         throw new BusinessError('Telephone et mot de passe requis');
       }
 
+      const phone = normalizePhone(String(rawPhone));
       const client = await prisma.client.findUnique({ where: { phone } });
 
       if (!client) {
@@ -125,16 +138,17 @@ export class ClientPortalController {
    */
   static async register(req: Request, res: Response, next: NextFunction) {
     try {
-      const { fullName, phone, email, password } = req.body as {
+      const { fullName, phone: rawPhone, email, password } = req.body as {
         fullName?: string;
         phone?: string;
         email?: string;
         password?: string;
       };
 
-      if (!phone || !password) {
+      if (!rawPhone || !password) {
         throw new BusinessError('Telephone et mot de passe requis');
       }
+      const phone = normalizePhone(rawPhone);
       if (password.length < 6) {
         throw new BusinessError(
           'Le mot de passe doit contenir au moins 6 caracteres',

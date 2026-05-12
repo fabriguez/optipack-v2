@@ -48,7 +48,7 @@ export function isAuthenticated(): boolean {
 }
 
 export interface LoginResponse {
-  token: string;
+  accessToken: string;
   client: {
     id: string;
     fullName: string;
