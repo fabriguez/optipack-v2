@@ -51,15 +51,29 @@ export class CaddyService {
     };
 
     for (const t of tenants) {
-      // Tenant principal -> URLs sans slug : app.{base}, www.{base} + apex, api.{base}
-      // Autres tenants     -> URLs slug   : {slug}.{base}, www.{slug}.{base}, api.{slug}.{base}
+      // Schema symetrique entre tenant principal et les autres :
+      //   public (web-client) -> bare apex/slug + www. + customDomain
+      //   staff  (dashboard)  -> app.{base | slug.base}
+      //   api                 -> api.{base | slug.base}
+      //
+      // Tenant principal :
+      //   transitsoftservices.com / www.transitsoftservices.com  -> public
+      //   app.transitsoftservices.com                            -> staff
+      //   api.transitsoftservices.com                            -> api
+      //
+      // Tenant `acme` :
+      //   acme.transitsoftservices.com / www.acme.transitsoftservices.com / customDomain -> public
+      //   app.acme.transitsoftservices.com  -> staff
+      //   api.acme.transitsoftservices.com  -> api
+      const publicHosts: string[] = t.isMain
+        ? [opts.baseDomain, `www.${opts.baseDomain}`]
+        : [`${t.slug}.${opts.baseDomain}`, `www.${t.slug}.${opts.baseDomain}`];
+      if (t.customDomain) publicHosts.push(t.customDomain);
+
       const staffHosts: string[] = t.isMain
         ? [`app.${opts.baseDomain}`]
-        : [`${t.slug}.${opts.baseDomain}`];
-      const publicHosts: string[] = t.isMain
-        ? [`www.${opts.baseDomain}`, opts.baseDomain]
-        : [`www.${t.slug}.${opts.baseDomain}`];
-      if (t.customDomain) publicHosts.push(t.customDomain);
+        : [`app.${t.slug}.${opts.baseDomain}`];
+
       const apiHost = t.isMain
         ? `api.${opts.baseDomain}`
         : `api.${t.slug}.${opts.baseDomain}`;
@@ -227,27 +241,59 @@ export class CaddyService {
    *    (plus simple sur un VPS Linux mono-machine).
    */
   async pushLocal(configJson: unknown): Promise<void> {
-    const adminUrl = process.env.CADDY_ADMIN_URL ?? 'http://host.docker.internal:2019';
     // Caddy admin API valide l'header Origin (pas Host). Notre fetch Node.js
     // n'envoie pas d'Origin par defaut -> Caddy voit '' et rejette avec
     //   {"error":"client is not allowed to access from origin ''"}.
     // On force une valeur connue ; la meme valeur doit etre listee dans
     // `admin <addr> { origins ... }` du Caddyfile sur l'host.
     const origin = process.env.CADDY_ADMIN_ORIGIN ?? 'http://orchestrator';
-    const res = await fetch(`${adminUrl}/load`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Origin: origin,
-      },
-      body: JSON.stringify(configJson),
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(
-        `Caddy local /load a echoue (${res.status}) : ${body.slice(0, 300)}`,
-      );
+    const body = JSON.stringify(configJson);
+
+    // L'IP de la host gateway depend du Docker network (default bridge =
+    // 172.17.0.1, custom networks = 172.18+ etc). On essaie plusieurs URLs
+    // jusqu'a la premiere qui repond. Necessaire car en pratique un container
+    // sur un network compose custom (172.19.x.x ici) ne peut pas joindre
+    // 172.17.0.1 (qui appartient a docker0).
+    const candidates: string[] = [];
+    if (process.env.CADDY_ADMIN_URL) candidates.push(process.env.CADDY_ADMIN_URL);
+    candidates.push(
+      'http://host.docker.internal:2019',
+      'http://172.17.0.1:2019',
+      'http://172.18.0.1:2019',
+      'http://172.19.0.1:2019',
+      'http://172.20.0.1:2019',
+    );
+    const seen = new Set<string>();
+    const urls = candidates.filter((u) => (seen.has(u) ? false : seen.add(u)));
+
+    const errors: string[] = [];
+    for (const url of urls) {
+      try {
+        const res = await fetch(`${url}/load`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Origin: origin },
+          body,
+          // 5s timeout par tentative pour ne pas bloquer 30s sur une IP hors-route
+          signal: AbortSignal.timeout(5000),
+        });
+        if (res.ok) return;
+        const t = await res.text().catch(() => '');
+        // Reponse HTTP (meme erreur) = on est sur le bon host mais probleme
+        // de config (origin / payload). On s'arrete pour faire remonter
+        // l'erreur reelle, sans masquer par les autres URLs.
+        throw new Error(`(${res.status}) ${t.slice(0, 200)}`);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        errors.push(`${url} -> ${msg}`);
+        if (/^\(\d{3}\)/.test(msg)) {
+          throw new Error(`Caddy local /load a echoue : ${msg}`);
+        }
+        // ECONNREFUSED / timeout / DNS -> on tente l'URL suivante
+      }
     }
+    throw new Error(
+      `Caddy local /load injoignable. Tentatives :\n  ${errors.join('\n  ')}`,
+    );
   }
 }
 

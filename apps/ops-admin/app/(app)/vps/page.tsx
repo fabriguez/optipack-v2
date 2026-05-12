@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { RefreshCw, Loader2 } from 'lucide-react';
+import { RefreshCw, Loader2, Shield } from 'lucide-react';
 import { api } from '@/lib/api';
 import { StatusBadge } from '@/components/StatusBadge';
 import { formatDate } from '@/lib/utils';
@@ -150,20 +150,30 @@ export default function VpsListPage() {
                   {formatDate(v.lastSeenAt)}
                 </td>
                 <td className="px-4 py-2 text-right">
-                  <button
-                    type="button"
-                    onClick={() => reconcile.mutate(v.id)}
-                    disabled={reconcile.isPending && reconcile.variables === v.id}
-                    className="inline-flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-gray-100 disabled:opacity-50"
-                    title="Pousser la config Caddy uniquement sur ce VPS"
-                  >
-                    {reconcile.isPending && reconcile.variables === v.id ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <RefreshCw className="h-3 w-3" />
-                    )}
-                    Reconcilier Caddy
-                  </button>
+                  <div className="flex items-center justify-end gap-1.5">
+                    <Link
+                      href={`/vps/${v.id}/ufw`}
+                      className="inline-flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-gray-100"
+                      title="Gerer le firewall UFW de ce VPS"
+                    >
+                      <Shield className="h-3 w-3" />
+                      UFW
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => reconcile.mutate(v.id)}
+                      disabled={reconcile.isPending && reconcile.variables === v.id}
+                      className="inline-flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-gray-100 disabled:opacity-50"
+                      title="Pousser la config Caddy uniquement sur ce VPS"
+                    >
+                      {reconcile.isPending && reconcile.variables === v.id ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <RefreshCw className="h-3 w-3" />
+                      )}
+                      Reconcilier Caddy
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}

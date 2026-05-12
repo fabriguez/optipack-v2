@@ -5,6 +5,7 @@ import { config } from '../../../config';
 import { logger } from '../../../infrastructure/logger';
 import { DockerService, DOCKER_SERVICE } from '../../../infrastructure/docker/DockerService';
 import { CaddyService, CADDY_SERVICE, type TenantCaddyEntry } from '../../../infrastructure/caddy/CaddyService';
+import { UFWService, UFW_SERVICE } from '../../../infrastructure/ufw/UFWService';
 import { PortAllocator } from '../../../infrastructure/provisioning/PortAllocator';
 import { SSHService, SSH_SERVICE, type SshConnection } from '../../../infrastructure/ssh/SSHService';
 import { ProvisioningJobLogger } from './ProvisioningJobLogger';
@@ -26,6 +27,7 @@ export class ProvisionTenantUseCase {
     @inject(SSH_SERVICE) private ssh: SSHService,
     @inject(DOCKER_SERVICE) private docker: DockerService,
     @inject(CADDY_SERVICE) private caddy: CaddyService,
+    @inject(UFW_SERVICE) private ufw: UFWService,
     private portAllocator: PortAllocator,
     private jobLogger: ProvisioningJobLogger,
     private capacity: CapacityService,
@@ -62,6 +64,31 @@ export class ProvisionTenantUseCase {
     const limits = await this.capacity.getTenantLimits(tenantId);
     await log(`[provision] limits : ${limits.cpuLimit} CPU, ${limits.memoryMb}MB RAM, ${limits.diskQuotaGb}GB disk (source=${limits.source})`);
     await this.capacity.assertCanAllocate(tenant.vpsId, limits, { excludeTenantId: tenantId });
+
+    // 0.bis. Baseline UFW (idempotent) : 22/80/443 + enable.
+    //
+    // Pourquoi ici et pas a la creation du VPS :
+    //  - le user "POST /ops/vps" ne fait pas tourner d'install scripts ; il
+    //    enregistre juste les credentials SSH. Le 1er provisioning est le bon
+    //    moment pour configurer le firewall.
+    //  - idempotent : si la baseline est deja la, ufw allow re-pose les memes
+    //    regles sans effet.
+    //  - non-bloquant si echec (option : on log mais on continue) -- les
+    //    admins peuvent rattraper depuis le dashboard ops-admin > UFW.
+    if (process.env.OPS_SKIP_UFW_BASELINE !== 'true') {
+      try {
+        await log('[provision] applyBaseline UFW (allow 22/80/443 + enable)');
+        const r = await this.ufw.applyBaseline(creds);
+        if (!r.ok) {
+          await log(`[provision] WARN UFW baseline partielle : ${r.messages.join(' | ')}`);
+        }
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        await log(`[provision] WARN UFW baseline ignoree : ${msg}`);
+      }
+    } else {
+      await log('[provision] UFW baseline skippee (OPS_SKIP_UFW_BASELINE=true)');
+    }
 
     // 1. Allocation des ports (idempotent : on garde ceux deja attribues)
     let apiPort = tenant.apiPort ?? 0;

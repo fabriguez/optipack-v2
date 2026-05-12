@@ -9,6 +9,7 @@ import { BillingController } from '../controllers/BillingController';
 import { ReleaseController } from '../controllers/ReleaseController';
 import { BackupController } from '../controllers/BackupController';
 import { CaddyController } from '../controllers/CaddyController';
+import { UfwController } from '../controllers/UfwController';
 import { authenticateOps, requireSuperAdmin } from '../middleware/authOpsMiddleware';
 import { requireServiceToken } from '../middleware/serviceTokenMiddleware';
 
@@ -117,6 +118,16 @@ router.post('/backups/run-nightly', authenticateOps, requireSuperAdmin, BackupCo
 // CADDY (reconciliation manuelle, super-admin)
 // ============================================================
 router.post('/caddy/reconcile', authenticateOps, requireSuperAdmin, CaddyController.reconcile);
+
+// ============================================================
+// UFW (firewall par VPS, super-admin)
+// ============================================================
+router.get('/vps/:id/ufw', authenticateOps, requireSuperAdmin, UfwController.status);
+router.post('/vps/:id/ufw/enable', authenticateOps, requireSuperAdmin, UfwController.enable);
+router.post('/vps/:id/ufw/disable', authenticateOps, requireSuperAdmin, UfwController.disable);
+router.post('/vps/:id/ufw/rules', authenticateOps, requireSuperAdmin, UfwController.addRule);
+router.delete('/vps/:id/ufw/rules/:index', authenticateOps, requireSuperAdmin, UfwController.deleteRule);
+router.post('/vps/:id/ufw/baseline', authenticateOps, requireSuperAdmin, UfwController.applyBaseline);
 
 // ============================================================
 // AUDIT LOG (lecture seule, super-admin)
