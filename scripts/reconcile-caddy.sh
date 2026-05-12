@@ -19,6 +19,7 @@ set -eu
 
 OPS_URL="${OPS_URL:-http://127.0.0.1:4020}"
 OPS_EMAIL="${OPS_EMAIL:-admin@transitsoftservices.com}"
+OPS_DEBUG="${OPS_DEBUG:-0}"
 VPS_ID="${1:-}"
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "[err] '$1' requis." >&2; exit 1; }; }
@@ -27,6 +28,76 @@ need jq
 
 # Parse la reponse {success, data:{...}} -> renvoie la valeur sous data.<key>
 extract() { printf '%s' "$1" | jq -r --arg k "$2" '.data[$k] // empty'; }
+
+# --- Helper HTTP avec logs formates ---
+# Usage : do_request METHOD PATH JSON_BODY
+# Imprime requete + reponse sur stderr quand OPS_DEBUG=1, ou sur erreur HTTP.
+# Renvoie le BODY de la reponse sur stdout. Sort 0 si tout va bien, code HTTP sinon.
+do_request() {
+  _method="$1"
+  _path="$2"
+  _body="${3:-}"
+  _url="$OPS_URL$_path"
+  _tmp_body=$(mktemp)
+  _tmp_hdr=$(mktemp)
+
+  if [ "$OPS_DEBUG" = "1" ]; then
+    echo "----- HTTP $_method $_url -----" >&2
+    if [ -n "$_body" ]; then
+      # Masque les champs sensibles dans le log
+      _sanitized=$(printf '%s' "$_body" | jq -c '
+        if has("password") then .password = "***" else . end
+        | if has("totpCode") then .totpCode = "***" else . end
+        | if has("recoveryCode") then .recoveryCode = "***" else . end
+      ' 2>/dev/null || printf '%s' "$_body")
+      echo "Body  : $_sanitized" >&2
+    fi
+  fi
+
+  _start=$(date +%s%3N 2>/dev/null || date +%s)
+
+  if [ -n "$_body" ]; then
+    _code=$(curl -sS -o "$_tmp_body" -D "$_tmp_hdr" -w '%{http_code}' \
+      --max-time 30 \
+      -X "$_method" "$_url" \
+      ${_auth_header:+-H "Authorization: Bearer $_auth_header"} \
+      -H 'Content-Type: application/json' \
+      -d "$_body" \
+      2>/dev/null) || _code="000"
+  else
+    _code=$(curl -sS -o "$_tmp_body" -D "$_tmp_hdr" -w '%{http_code}' \
+      --max-time 30 \
+      -X "$_method" "$_url" \
+      ${_auth_header:+-H "Authorization: Bearer $_auth_header"} \
+      2>/dev/null) || _code="000"
+  fi
+
+  _end=$(date +%s%3N 2>/dev/null || date +%s)
+  _ms=$((_end - _start))
+
+  _resp=$(cat "$_tmp_body")
+  rm -f "$_tmp_body" "$_tmp_hdr"
+
+  if [ "$OPS_DEBUG" = "1" ] || [ "${_code:0:1}" != "2" ]; then
+    echo "Status: $_code (${_ms} ms)" >&2
+    if [ -n "$_resp" ]; then
+      _pretty=$(printf '%s' "$_resp" | jq '.' 2>/dev/null || printf '%s' "$_resp")
+      echo "Resp  : $_pretty" >&2
+    else
+      echo "Resp  : (empty body -- backend a probablement crashe)" >&2
+    fi
+    [ "$OPS_DEBUG" = "1" ] && echo "----------------------" >&2
+  fi
+
+  printf '%s' "$_resp"
+  case "$_code" in
+    2*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Authorization header (initialise apres le login)
+_auth_header=""
 
 # --- Password ---
 if [ -z "${OPS_PASSWORD:-}" ]; then
@@ -39,10 +110,11 @@ fi
 
 # --- 1. Login ---
 echo "[1] Login en tant que $OPS_EMAIL sur $OPS_URL..." >&2
-LOGIN_RES=$(curl -fsSL -X POST "$OPS_URL/ops/auth/login" \
-  -H 'Content-Type: application/json' \
-  -d "$(jq -n --arg e "$OPS_EMAIL" --arg p "$OPS_PASSWORD" \
-        '{email:$e, password:$p}')")
+LOGIN_BODY=$(jq -n --arg e "$OPS_EMAIL" --arg p "$OPS_PASSWORD" '{email:$e, password:$p}')
+LOGIN_RES=$(do_request POST /ops/auth/login "$LOGIN_BODY") || {
+  echo "[err] Login HTTP a echoue (cf. logs ci-dessus)." >&2
+  exit 1
+}
 
 ACCESS=$(extract "$LOGIN_RES" "accessToken")
 CHALLENGE=$(extract "$LOGIN_RES" "challengeToken")
@@ -74,31 +146,26 @@ if [ -z "$ACCESS" ] && [ -n "$CHALLENGE" ]; then
   #  - totp_required  -> POST /auth/login {email, password, totpCode}
   #    (2FA deja active, le serveur re-verifie tout en une etape)
   do_totp() {
-    # $1 = totp code
     if [ "$KIND" = "totp_required" ]; then
-      TFA=$(curl -fsSL -X POST "$OPS_URL/ops/auth/login" \
-        -H 'Content-Type: application/json' \
-        -d "$(jq -n --arg e "$OPS_EMAIL" --arg p "$OPS_PASSWORD" --arg t "$1" \
-              '{email:$e, password:$p, totpCode:$t}')")
+      _body=$(jq -n --arg e "$OPS_EMAIL" --arg p "$OPS_PASSWORD" --arg t "$1" \
+              '{email:$e, password:$p, totpCode:$t}')
+      TFA=$(do_request POST /ops/auth/login "$_body") || true
     else
-      TFA=$(curl -fsSL -X POST "$OPS_URL/ops/auth/2fa/confirm" \
-        -H 'Content-Type: application/json' \
-        -d "$(jq -n --arg c "$CHALLENGE" --arg t "$1" \
-              '{challengeToken:$c, totpCode:$t}')")
+      _body=$(jq -n --arg c "$CHALLENGE" --arg t "$1" \
+              '{challengeToken:$c, totpCode:$t}')
+      TFA=$(do_request POST /ops/auth/2fa/confirm "$_body") || true
     fi
     ACCESS=$(extract "$TFA" "accessToken")
   }
-  do_confirm() { do_totp "$1"; }   # alias retro-compatible
+  do_confirm() { do_totp "$1"; }
 
-  # Code TOTP fourni en env -> on tente direct.
   if [ -n "${OPS_TOTP:-}" ]; then
     do_totp "$OPS_TOTP"
 
   elif [ -n "${OPS_RECOVERY:-}" ]; then
-    TFA=$(curl -fsSL -X POST "$OPS_URL/ops/auth/2fa/recovery" \
-      -H 'Content-Type: application/json' \
-      -d "$(jq -n --arg c "$CHALLENGE" --arg r "$OPS_RECOVERY" \
-            '{challengeToken:$c, recoveryCode:$r}')")
+    _body=$(jq -n --arg c "$CHALLENGE" --arg r "$OPS_RECOVERY" \
+            '{challengeToken:$c, recoveryCode:$r}')
+    TFA=$(do_request POST /ops/auth/2fa/recovery "$_body") || true
     ACCESS=$(extract "$TFA" "accessToken")
 
   elif [ "$KIND" = "setup_required" ]; then
@@ -107,9 +174,11 @@ if [ -z "$ACCESS" ] && [ -n "$CHALLENGE" ]; then
     echo "[2FA-setup] Le 2FA n'est pas encore configure pour ce compte." >&2
     echo "            Je demande au serveur le secret TOTP..." >&2
 
-    SETUP=$(curl -fsSL -X POST "$OPS_URL/ops/auth/2fa/setup" \
-      -H 'Content-Type: application/json' \
-      -d "$(jq -n --arg c "$CHALLENGE" '{challengeToken:$c}')")
+    _body=$(jq -n --arg c "$CHALLENGE" '{challengeToken:$c}')
+    SETUP=$(do_request POST /ops/auth/2fa/setup "$_body") || {
+      echo "[err] /auth/2fa/setup a echoue." >&2
+      exit 1
+    }
 
     SECRET=$(extract "$SETUP" "secret")
     OTP_AUTH_URL=$(extract "$SETUP" "otpAuthUrl")
@@ -147,10 +216,8 @@ if [ -z "$ACCESS" ] && [ -n "$CHALLENGE" ]; then
       [ -n "$TOTP" ] && break
     done
 
-    TFA=$(curl -fsSL -X POST "$OPS_URL/ops/auth/2fa/confirm" \
-      -H 'Content-Type: application/json' \
-      -d "$(jq -n --arg c "$CHALLENGE" --arg t "$TOTP" \
-            '{challengeToken:$c, totpCode:$t}')")
+    _body=$(jq -n --arg c "$CHALLENGE" --arg t "$TOTP" '{challengeToken:$c, totpCode:$t}')
+    TFA=$(do_request POST /ops/auth/2fa/confirm "$_body") || true
     ACCESS=$(extract "$TFA" "accessToken")
 
     # Codes de recuperation eventuellement renvoyes
@@ -183,6 +250,8 @@ fi
 echo "[ok] Token obtenu." >&2
 
 # --- 3. Reconcile ---
+_auth_header="$ACCESS"   # do_request envoie maintenant Authorization: Bearer ...
+
 if [ -n "$VPS_ID" ]; then
   echo "[3] Reconciliation Caddy pour VPS $VPS_ID..." >&2
   BODY=$(jq -n --arg v "$VPS_ID" '{vpsId:$v}')
@@ -191,10 +260,34 @@ else
   BODY='{}'
 fi
 
-REC=$(curl -fsSL -X POST "$OPS_URL/ops/caddy/reconcile" \
-  -H "Authorization: Bearer $ACCESS" \
-  -H 'Content-Type: application/json' \
-  -d "$BODY")
+# On capture meme en cas d'echec pour pouvoir afficher le diagnostic.
+set +e
+REC=$(do_request POST /ops/caddy/reconcile "$BODY")
+REC_STATUS=$?
+set -e
+
+if [ "$REC_STATUS" -ne 0 ]; then
+  echo "" >&2
+  cat >&2 <<EOF
+[err] La reconciliation a echoue. Si la reponse est vide ('Empty reply from server'),
+      le backend a probablement crashe pendant la requete. Verifie :
+
+  1. Logs de l'orchestrator :
+       docker compose -f docker-compose.control-plane.yml logs --tail=50 orchestrator
+
+  2. Schema BDD a jour (si tu as fait un 'db push' avant d'ajouter isMain) :
+       docker compose -f docker-compose.control-plane.yml exec orchestrator \\
+         prisma db push --schema=./prisma/schema.prisma --accept-data-loss
+
+  3. Caddy admin joignable depuis le conteneur :
+       docker compose -f docker-compose.control-plane.yml exec orchestrator \\
+         wget -qO- http://host.docker.internal:2019/config/ | head -c 200
+
+  4. Relance avec OPS_DEBUG=1 pour voir toutes les requetes :
+       OPS_DEBUG=1 OPS_PASSWORD='...' OPS_TOTP='...' ./scripts/reconcile-caddy.sh
+EOF
+  exit 1
+fi
 
 echo "" >&2
 echo "==== Resultat ====" >&2
