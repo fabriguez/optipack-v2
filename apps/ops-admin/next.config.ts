@@ -28,7 +28,15 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   output: 'standalone',
-  transpilePackages: ['@transitsoftservices/ui'],
+  // Tous les packages workspace TS-source que ops-admin (ou ses deps) peut
+  // importer. Indispensable pour Turbopack/Next qui sinon refuse de
+  // transpiler du TS depuis node_modules.
+  transpilePackages: [
+    '@transitsoftservices/ui',
+    '@transitsoftservices/shared',
+    '@transitsoftservices/skins',
+    '@transitsoftservices/payments',
+  ],
   env: {
     NEXT_PUBLIC_ORCHESTRATOR_URL: orchestratorUrl,
   },

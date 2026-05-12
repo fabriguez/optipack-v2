@@ -5,11 +5,21 @@ RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
 
 WORKDIR /app
 
-# Copy workspace config
+# Copy workspace config + tous les package.json (workspace packages).
+# Indispensable AVANT `pnpm install` pour que pnpm symlink les deps de chaque
+# package : sinon `import 'clsx'` depuis packages/ui echoue parce que
+# packages/ui/node_modules/clsx n'a pas ete cree (pnpm n'a pas vu ce package
+# au moment de l'install).
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
 COPY apps/ops-admin/package.json ./apps/ops-admin/
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/ui/package.json ./packages/ui/
+COPY packages/skins/package.json ./packages/skins/
+COPY packages/payments/package.json ./packages/payments/
 COPY packages/config/package.json ./packages/config/
 COPY packages/config/tsconfig/package.json ./packages/config/tsconfig/
+COPY packages/config/eslint/package.json ./packages/config/eslint/
+COPY packages/config/tailwind/package.json ./packages/config/tailwind/
 
 RUN pnpm install --frozen-lockfile || pnpm install
 
