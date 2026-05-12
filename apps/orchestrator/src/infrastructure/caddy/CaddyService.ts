@@ -177,10 +177,19 @@ export class CaddyService {
    *    (plus simple sur un VPS Linux mono-machine).
    */
   async pushLocal(configJson: unknown): Promise<void> {
-    const adminUrl = process.env.CADDY_ADMIN_URL ?? 'http://172.17.0.1:2019';
+    const adminUrl = process.env.CADDY_ADMIN_URL ?? 'http://host.docker.internal:2019';
+    // Caddy admin API valide l'header Origin (pas Host). Notre fetch Node.js
+    // n'envoie pas d'Origin par defaut -> Caddy voit '' et rejette avec
+    //   {"error":"client is not allowed to access from origin ''"}.
+    // On force une valeur connue ; la meme valeur doit etre listee dans
+    // `admin <addr> { origins ... }` du Caddyfile sur l'host.
+    const origin = process.env.CADDY_ADMIN_ORIGIN ?? 'http://orchestrator';
     const res = await fetch(`${adminUrl}/load`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: origin,
+      },
       body: JSON.stringify(configJson),
     });
     if (!res.ok) {
