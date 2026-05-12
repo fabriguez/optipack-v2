@@ -361,18 +361,46 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
           <Controller
             control={control}
             name="transitRouteId"
-            render={({ field }) => (
-              <AppSearchSelect
-                label={defaultTransitType ? `Route de transit (${typeLabel(defaultTransitType)})` : 'Route de transit'}
-                value={field.value}
-                onChange={(v) => field.onChange(v ?? '')}
-                search={(q, l) => searchers.transitRoutes(q, l, defaultTransitType ? { type: defaultTransitType } : undefined)}
-                selectedOption={selectedRoute}
-                error={errors.transitRouteId?.message}
-                required
-                placeholder="Selectionner une route"
-              />
-            )}
+            render={({ field }) => {
+              // Le mode de quantification limite les routes eligibles :
+              //   weight  -> AIR + LAND (pas de SEA en kg)
+              //   volume  -> SEA + LAND
+              //   both    -> toutes
+              // Le `defaultTransitType` (depuis un conteneur d'origine) reste
+              // prioritaire si fourni : il epingle un seul type.
+              const allowedTypes = defaultTransitType
+                ? defaultTransitType
+                : mode === 'weight'
+                  ? 'AIR,LAND'
+                  : mode === 'volume'
+                    ? 'SEA,LAND'
+                    : undefined;
+              return (
+                <AppSearchSelect
+                  label={
+                    defaultTransitType
+                      ? `Route de transit (${typeLabel(defaultTransitType)})`
+                      : mode === 'weight'
+                        ? 'Route de transit (Aerien ou Terrestre)'
+                        : mode === 'volume'
+                          ? 'Route de transit (Maritime ou Terrestre)'
+                          : 'Route de transit'
+                  }
+                  // Cle de cache incluant le filtre courant : sinon React
+                  // Query rejoue le meme cache pour deux filtres differents.
+                  searchKey={`searchers.transitRoutes.${allowedTypes ?? 'all'}`}
+                  value={field.value}
+                  onChange={(v) => field.onChange(v ?? '')}
+                  search={(q, l) =>
+                    searchers.transitRoutes(q, l, allowedTypes ? { type: allowedTypes } : undefined)
+                  }
+                  selectedOption={selectedRoute}
+                  error={errors.transitRouteId?.message}
+                  required
+                  placeholder="Selectionner une route"
+                />
+              );
+            }}
           />
 
           {/* Agence de destination : obligatoire. La ville d'arrivee (champ
