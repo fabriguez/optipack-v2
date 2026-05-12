@@ -22,8 +22,10 @@ RUN pnpm install --frozen-lockfile || pnpm install
 COPY packages/ ./packages/
 COPY apps/api/ ./apps/api/
 
-# Build shared package first
+# Build workspace packages d'abord (l'API les require au runtime via Node CJS,
+# donc il leur faut un dist/ compile -- pas seulement les sources TS).
 RUN pnpm --filter @transitsoftservices/shared build
+RUN pnpm --filter @transitsoftservices/skins build
 
 # Generate Prisma client
 RUN pnpm --filter api exec prisma generate

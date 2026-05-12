@@ -3,14 +3,24 @@
   "version": "0.1.0",
   "private": true,
   "description": "Shared skin system (themes/palettes) used by the web-client public site, staff web, and validated by the orchestrator.",
-  "main": "./src/index.ts",
+  "main": "./dist/index.js",
   "types": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./palette": "./src/palette.ts",
-    "./apply": "./src/apply.ts"
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./palette": {
+      "types": "./src/palette.ts",
+      "default": "./dist/palette.js"
+    },
+    "./apply": {
+      "types": "./src/apply.ts",
+      "default": "./dist/apply.js"
+    }
   },
   "scripts": {
+    "build": "tsc",
     "type-check": "tsc --noEmit",
     "clean": "rm -rf dist .turbo"
   },
