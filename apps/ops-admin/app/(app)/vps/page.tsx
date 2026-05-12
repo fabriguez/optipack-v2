@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { RefreshCw, Loader2, Shield, Search } from 'lucide-react';
+import { RefreshCw, Loader2, Shield, Search, ExternalLink } from 'lucide-react';
 import { Pagination } from '@/components/Pagination';
 import { api } from '@/lib/api';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -173,6 +173,14 @@ export default function VpsListPage() {
                 </td>
                 <td className="px-4 py-2 text-right">
                   <div className="flex items-center justify-end gap-1.5">
+                    <Link
+                      href={`/vps/${v.id}`}
+                      className="inline-flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-gray-100"
+                      title="Voir le detail (CPU/RAM/Disque, tenants, capacite)"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      Ouvrir
+                    </Link>
                     <Link
                       href={`/vps/${v.id}/ufw`}
                       className="inline-flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-gray-100"
