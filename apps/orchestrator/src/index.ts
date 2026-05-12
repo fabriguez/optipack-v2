@@ -52,18 +52,13 @@ app.use(
   }),
 );
 
-// CORS : whitelist via OPS_CORS_ORIGINS si fournie, sinon dev = all, prod = bloque.
-app.use(
-  cors({
-    origin:
-      config.corsOrigins.length > 0
-        ? config.corsOrigins
-        : config.env === 'production'
-          ? false
-          : true,
-    credentials: true,
-  }),
-);
+// CORS centralise : allowlist par regex sur les sous-domaines de OPS_BASE_DOMAIN
+// + OPS_CORS_ORIGINS / OPS_CORS_ORIGIN_PATTERNS pour les exceptions. Cf. ./config/cors.ts
+import { corsOptions } from './config/cors';
+app.use(cors(corsOptions));
+// Reponse explicite aux preflight OPTIONS, pour couvrir les cas ou un autre
+// middleware terminerait la requete avant cors() (rate-limit, 404 catch-all, etc).
+app.options('*', cors(corsOptions));
 
 app.use(express.json({ limit: '2mb' }));
 app.use(cookieParser());
@@ -87,7 +82,9 @@ app.get('/metrics', async (_req, res, next) => {
   }
 });
 
-// Rate limit serre sur l'auth (10 tentatives login / 15 min / IP)
+// Rate limit serre sur l'auth (10 tentatives login / 15 min / IP).
+// On skip les preflight OPTIONS pour ne pas consommer le quota -- le cors()
+// middleware en amont les a deja gerees et y reponds avec les headers ACAO.
 app.use(
   '/ops/auth/login',
   rateLimit({
@@ -95,6 +92,7 @@ app.use(
     max: 10,
     standardHeaders: true,
     legacyHeaders: false,
+    skip: (req) => req.method === 'OPTIONS',
   }),
 );
 app.use(
@@ -104,6 +102,7 @@ app.use(
     max: 20,
     standardHeaders: true,
     legacyHeaders: false,
+    skip: (req) => req.method === 'OPTIONS',
   }),
 );
 
@@ -112,6 +111,7 @@ app.use(
 const writeLimit = rateLimit({
   windowMs: 60 * 1000,
   max: 30, // 30 ecritures / min / IP
+  skip: (req) => req.method === 'OPTIONS',
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req) => {

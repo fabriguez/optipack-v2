@@ -25,23 +25,22 @@ import { realtimeService } from './infrastructure/realtime/RealtimeService';
 const app = express();
 const httpServer = createServer(app);
 
+// CORS centralise : config partagee avec Socket.io. Allowlist par regex
+// (tous les sous-domaines de BASE_DOMAIN + ALLOWED_ORIGINS / PATTERNS env).
+// Cf. ./config/cors.ts.
+import { corsOptions, socketCorsOptions } from './config/cors';
+
 // Socket.io
 const io = new SocketServer(httpServer, {
-  cors: {
-    origin: config.socket.corsOrigin,
-    methods: ['GET', 'POST'],
-    credentials: true,
-  },
+  cors: socketCorsOptions,
 });
 
 // Global middleware
 app.use(helmet());
-app.use(
-  cors({
-    origin: [config.webUrl, config.socket.corsOrigin],
-    credentials: true,
-  }),
-);
+app.use(cors(corsOptions));
+// Repond aux preflight OPTIONS pour toutes les routes (cors() le fait deja
+// implicitement, on l'ajoute explicitement pour les cas litigieux).
+app.options('*', cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
