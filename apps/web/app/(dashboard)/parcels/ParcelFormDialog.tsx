@@ -265,7 +265,21 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
                 <button
                   key={m}
                   type="button"
-                  onClick={() => setMode(m)}
+                  onClick={() => {
+                    setMode(m);
+                    // Si la route courante n'est plus compatible avec le
+                    // nouveau mode, on la deselectionne pour forcer un
+                    // nouveau choix. AIR incompatible avec volume, SEA
+                    // incompatible avec weight.
+                    const t = selectedRoute?.sublabel;
+                    if (
+                      (m === 'weight' && t === 'SEA') ||
+                      (m === 'volume' && t === 'AIR')
+                    ) {
+                      setSelectedRoute(null);
+                      setValue('transitRouteId', '' as never);
+                    }
+                  }}
                   className={`rounded-lg px-3 py-1.5 ${mode === m ? 'bg-primary-500 text-white' : 'text-gray-500'}`}
                 >
                   {m === 'weight' ? 'Par masse' : m === 'volume' ? 'Par volume' : 'Les deux'}

@@ -63,6 +63,8 @@ export class ReleaseUseCases {
         version: input.version,
         apiImageTag: input.apiImageTag ?? `ghcr.io/${ns}/optipack-api:${input.version}`,
         webImageTag: input.webImageTag ?? `ghcr.io/${ns}/optipack-web:${input.version}`,
+        webClientImageTag:
+          input.webClientImageTag ?? `ghcr.io/${ns}/optipack-web-client:${input.version}`,
         changelog: input.changelog ?? null,
         isStable: input.isStable ?? false,
         isCritical: input.isCritical ?? false,

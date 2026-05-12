@@ -1,17 +1,19 @@
 'use client';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
 import { ArrowLeft, Loader2, Rocket } from 'lucide-react';
 import { createReleaseSchema, type CreateReleaseInput } from '@transitsoftservices/ops-schemas';
 import { api } from '@/lib/api';
+import { GhcrTagSelect } from '@/components/GhcrTagSelect';
 
 export default function NewReleasePage() {
   const router = useRouter();
   const {
     register,
+    control,
     handleSubmit,
     formState: { errors },
     setError,
@@ -48,37 +50,67 @@ export default function NewReleasePage() {
         onSubmit={handleSubmit((v) => mutation.mutate(v))}
         className="space-y-4 rounded-lg border bg-white p-5 shadow-sm"
       >
-        <Field label="Version" hint="Semver requis : 1.4.2 ou 1.4.2-beta" error={errors.version?.message}>
-          <input
-            type="text"
-            placeholder="1.4.2"
-            className="w-full rounded-md border px-3 py-2 font-mono text-sm"
-            {...register('version')}
+        <Field
+          label="Version"
+          hint="Selectionnez un tag publie sur GHCR (ex: beta-1.0.34). Saisie libre possible."
+          error={errors.version?.message}
+        >
+          <Controller
+            name="version"
+            control={control}
+            render={({ field }) => (
+              <GhcrTagSelect
+                image="optipack-api"
+                value={field.value ?? ''}
+                onChange={field.onChange}
+                placeholder="Choisir une version..."
+                showLatest={false}
+              />
+            )}
           />
         </Field>
 
-        <div className="grid grid-cols-2 gap-3">
-          <Field
-            label="Tag image API (optionnel)"
-            hint="Si vide, on construit ghcr.io/<ns>/optipack-api:<version>"
-            error={errors.apiImageTag?.message}
-          >
-            <input
-              type="text"
-              placeholder="optipack-api:1.4.2"
-              className="w-full rounded-md border px-3 py-2 font-mono text-sm"
-              {...register('apiImageTag')}
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <Field label="Tag image API (optionnel)" error={errors.apiImageTag?.message}>
+            <Controller
+              name="apiImageTag"
+              control={control}
+              render={({ field }) => (
+                <GhcrTagSelect
+                  image="optipack-api"
+                  value={field.value ?? ''}
+                  onChange={field.onChange}
+                  placeholder="Auto = version"
+                />
+              )}
             />
           </Field>
-          <Field
-            label="Tag image Web (optionnel)"
-            error={errors.webImageTag?.message}
-          >
-            <input
-              type="text"
-              placeholder="optipack-web:1.4.2"
-              className="w-full rounded-md border px-3 py-2 font-mono text-sm"
-              {...register('webImageTag')}
+          <Field label="Tag image Web (optionnel)" error={errors.webImageTag?.message}>
+            <Controller
+              name="webImageTag"
+              control={control}
+              render={({ field }) => (
+                <GhcrTagSelect
+                  image="optipack-web"
+                  value={field.value ?? ''}
+                  onChange={field.onChange}
+                  placeholder="Auto = version"
+                />
+              )}
+            />
+          </Field>
+          <Field label="Tag image Web-client (optionnel)" error={errors.webClientImageTag?.message}>
+            <Controller
+              name="webClientImageTag"
+              control={control}
+              render={({ field }) => (
+                <GhcrTagSelect
+                  image="optipack-web-client"
+                  value={field.value ?? ''}
+                  onChange={field.onChange}
+                  placeholder="Auto = version"
+                />
+              )}
             />
           </Field>
         </div>

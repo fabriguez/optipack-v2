@@ -18,6 +18,47 @@ export class ReleaseController {
   // ---------- Releases (super-admin) ----------
 
   /**
+   * GET /ops/ghcr/tags?image=optipack-api
+   * Liste les tags GHCR pour une image donnee. Utilise cote frontend pour
+   * proposer un select au lieu d'un input texte sur les champs "tag image".
+   * Filtre semver + tri descendant (le plus recent en premier).
+   */
+  static async listGhcrTags(req: Request, res: Response, next: NextFunction) {
+    try {
+      const image = String(req.query.image ?? 'optipack-api');
+      const allowed = new Set(['optipack-api', 'optipack-web', 'optipack-web-client']);
+      if (!allowed.has(image)) {
+        res.status(400).json({ success: false, message: `image invalide : ${image}` });
+        return;
+      }
+      const { GHCRClient } = await import('../../infrastructure/ghcr/GHCRClient');
+      const ghcr = container.resolve(GHCRClient);
+      if (!ghcr.isConfigured()) {
+        res.json({ success: true, data: { tags: [], configured: false } });
+        return;
+      }
+      const raw = await ghcr.listTags(image);
+      const semver = ghcr.filterSemverTags(raw);
+      // Tri descendant : on extrait la version semver du tag (ex: beta-1.0.34 -> [1,0,34])
+      const extract = (t: string): number[] => {
+        const m = t.match(/(\d+)\.(\d+)\.(\d+)/);
+        return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : [0, 0, 0];
+      };
+      const sorted = [...semver].sort((a, b) => {
+        const va = extract(a);
+        const vb = extract(b);
+        for (let i = 0; i < 3; i++) {
+          if (vb[i] !== va[i]) return vb[i] - va[i];
+        }
+        return b.localeCompare(a);
+      });
+      res.json({ success: true, data: { tags: sorted, configured: true, total: raw.length } });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
    * POST /ops/releases/sync — declenche manuellement la sync GHCR.
    * Permet d'eviter d'attendre le cron (toutes les RELEASE_SYNC_INTERVAL_MS).
    * Retourne le rapport pour qu'on puisse voir cote UI ce qui a ete cree

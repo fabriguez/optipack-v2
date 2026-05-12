@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Pagination } from '@/components/Pagination';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { GhcrTagSelect } from '@/components/GhcrTagSelect';
 
 interface TenantRow {
   id: string;
@@ -228,9 +229,26 @@ export default function UpdatesFleetPage() {
         onCancel={() => setConfirmTenant(null)}
         title={`Lancer la mise a jour de ${confirmTenant?.slug ?? ''} ?`}
         description={
-          confirmTenant
-            ? `Cible: ${targetVersion}. La mise a jour va creer un job (pull + redeploy). Les logs sont visibles sur la page detail du tenant.`
-            : ''
+          <div className="space-y-3 text-sm">
+            <p>
+              Version courante : <code className="font-mono">{confirmTenant?.currentVersion ?? '-'}</code>
+            </p>
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Version cible
+              </label>
+              <GhcrTagSelect
+                image="optipack-api"
+                value={targetVersion}
+                onChange={setTargetVersion}
+                showLatest={false}
+                placeholder="Selectionner une version GHCR..."
+              />
+            </div>
+            <p className="text-xs text-gray-500">
+              La mise a jour cree un job (pull + redeploy). Les logs en direct sont visibles sur la page detail du tenant.
+            </p>
+          </div>
         }
         confirmLabel="Lancer"
         loading={requestUpdate.isPending}

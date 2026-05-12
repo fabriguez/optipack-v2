@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Loader2, Palette, Save } from 'lucide-react';
 import { api } from '@/lib/api';
+import { GhcrTagSelect } from '@/components/GhcrTagSelect';
 
 interface StudioInput {
   primaryColor: string | null;
@@ -193,12 +194,12 @@ export function TenantStudio({ tenantId, initial }: Props) {
           label="Version epinglee"
           hint="Empeche les auto-update au-dessus de cette version. Vide = pas de pin."
         >
-          <input
-            type="text"
+          <GhcrTagSelect
+            image="optipack-api"
             value={form.pinnedVersion ?? ''}
-            onChange={(e) => update('pinnedVersion', e.target.value || null)}
-            placeholder="ex: beta-1.0.34"
-            className="w-full rounded-md border px-3 py-2 text-sm font-mono"
+            onChange={(v) => update('pinnedVersion', v || null)}
+            placeholder="Aucune version epinglee"
+            showLatest={false}
           />
         </Field>
       </div>

@@ -306,9 +306,10 @@ model ProvisioningJob {
 model Release {
   id            String   @id @default(uuid())
   version       String   @unique  // ex: "1.4.2"
-  apiImageTag   String              // ex: "ghcr.io/.../optipack-api:1.4.2"
-  webImageTag   String
-  changelog     String?  @db.Text
+  apiImageTag        String              // ex: "ghcr.io/.../optipack-api:1.4.2"
+  webImageTag        String
+  webClientImageTag  String?             // ex: "ghcr.io/.../optipack-web-client:1.4.2"
+  changelog          String?  @db.Text
   isStable      Boolean  @default(false)
   isCritical    Boolean  @default(false)
   isPublished   Boolean  @default(false)

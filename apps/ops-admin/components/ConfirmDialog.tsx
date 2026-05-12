@@ -5,7 +5,7 @@ import { AlertTriangle, Loader2 } from 'lucide-react';
 interface Props {
   open: boolean;
   title: string;
-  description?: string;
+  description?: React.ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
   destructive?: boolean;
@@ -66,7 +66,11 @@ export function ConfirmDialog({
           <div className="flex-1">
             <h2 className="text-base font-semibold text-gray-900">{title}</h2>
             {description && (
-              <p className="mt-1 text-sm text-gray-600 whitespace-pre-line">{description}</p>
+              typeof description === 'string' ? (
+                <p className="mt-1 text-sm text-gray-600 whitespace-pre-line">{description}</p>
+              ) : (
+                <div className="mt-1 text-sm text-gray-600">{description}</div>
+              )
             )}
           </div>
         </div>

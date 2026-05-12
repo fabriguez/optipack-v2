@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { apiClient } from '@/lib/api/client';
 import { AppDialog } from '@/components/ui/AppDialog';
@@ -121,6 +121,76 @@ export function ParcelGroupFormDialog({ open, onClose, defaultAgency }: Props) {
   const [parcels, setParcels] = useState<ParcelInGroup[]>([emptyParcel()]);
   // Scan QR : on memorise quel index de colis est en cours de scan.
   const [scanTarget, setScanTarget] = useState<number | null>(null);
+
+  // Charge la route de transit selectionnee pour deriver :
+  //  - le `groupMassMode` : AIR -> weight, SEA -> volume, LAND -> both ;
+  //  - le tarif (pricePerKg / pricePerVolume) pour calcul auto du prix.
+  // L'utilisateur n'a plus a choisir un mode par colis ni a saisir un prix.
+  const { data: routeData } = useQuery({
+    queryKey: ['transit-route', transitRouteId],
+    queryFn: () => apiClient.get(`/transit-routes/${transitRouteId}`).then((r) => r.data?.data),
+    enabled: !!transitRouteId,
+  });
+  const route = routeData as
+    | { type: 'AIR' | 'SEA' | 'LAND'; pricePerKg: number | string; pricePerVolume: number | string }
+    | undefined;
+  const groupMassMode: MassMode | null = useMemo(() => {
+    if (!route) return null;
+    if (route.type === 'AIR') return 'weight';
+    if (route.type === 'SEA') return 'volume';
+    return 'both'; // LAND -> les deux acceptes
+  }, [route]);
+
+  // Calcule le prix d'un colis selon le mode du groupe et les tarifs route.
+  // Si LAND (both), on prend MAX(weight*kg, volume*m3) pour la transparence
+  // -- aligne sur la logique de PricingService cote backend (audit fix).
+  function computePrice(p: ParcelInGroup): number {
+    if (!route) return 0;
+    const w = Number(p.weight || 0);
+    const v = Number(p.volume || 0);
+    const ppk = Number(route.pricePerKg || 0);
+    const ppv = Number(route.pricePerVolume || 0);
+    if (route.type === 'AIR') return Math.round(w * ppk);
+    if (route.type === 'SEA') return Math.round(v * ppv);
+    // LAND : on prend le plus grand des deux montants (les deux sont
+    // acceptes, le client paie le mode le plus rentable pour l'agence).
+    return Math.round(Math.max(w * ppk, v * ppv));
+  }
+
+  // Quand la route change, on force le mode de chaque colis pour rester
+  // coherent (AIR -> weight, SEA -> volume, LAND -> both). On clear aussi
+  // les valeurs incompatibles : si on passe en AIR, le volume est vide.
+  useEffect(() => {
+    if (!groupMassMode) return;
+    setParcels((prev) =>
+      prev.map((p) => ({
+        ...p,
+        massMode: groupMassMode,
+        ...(groupMassMode === 'weight' && { volume: '' }),
+        ...(groupMassMode === 'volume' && { weight: '' }),
+      })),
+    );
+  }, [groupMassMode]);
+
+  // Recalcule le prix de chaque colis quand la masse/volume ou la route
+  // changent. Le prix est en lecture seule pour l'utilisateur.
+  useEffect(() => {
+    if (!route) return;
+    setParcels((prev) =>
+      prev.map((p) => {
+        const price = computePrice(p);
+        return price === Number(p.price) ? p : { ...p, price: String(price) };
+      }),
+    );
+    // computePrice depend de `route` (capturee via closure).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    route?.type,
+    route?.pricePerKg,
+    route?.pricePerVolume,
+    // Recalcul sur chaque changement masse/volume.
+    parcels.map((p) => `${p.weight}|${p.volume}`).join(';'),
+  ]);
 
   useEffect(() => {
     if (!open) {
@@ -476,20 +546,16 @@ function ParcelCard({
             </div>
           </div>
 
-          {/* Mode de pesee */}
+          {/* Mode de pesee force par la route du groupe (AIR -> kg seul,
+              SEA -> m3 seul, LAND -> les deux). Plus de selecteur par colis. */}
           <div>
-            <div className="mb-2 inline-flex rounded-xl border border-gray-200 p-0.5 text-xs">
-              {(['weight', 'volume', 'both'] as MassMode[]).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => onChange({ massMode: m })}
-                  className={`rounded-lg px-3 py-1.5 ${parcel.massMode === m ? 'bg-primary-500 text-white' : 'text-gray-500'}`}
-                >
-                  {m === 'weight' ? 'Par masse' : m === 'volume' ? 'Par volume' : 'Les deux'}
-                </button>
-              ))}
-            </div>
+            <p className="mb-2 text-xs text-gray-500">
+              {parcel.massMode === 'weight'
+                ? 'Quantification : masse (la route impose des kg).'
+                : parcel.massMode === 'volume'
+                  ? 'Quantification : volume (la route impose des m3).'
+                  : 'Quantification libre : masse et/ou volume (route terrestre).'}
+            </p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {(parcel.massMode === 'weight' || parcel.massMode === 'both') && (
                 <AppInput
@@ -529,12 +595,15 @@ function ParcelCard({
               value={parcel.declaredValue}
               onChange={(e) => onChange({ declaredValue: e.target.value })}
             />
+            {/* Prix calcule automatiquement depuis (masse|volume) x route.
+                Affiche en lecture seule. La valeur est synchronisee dans
+                `parcel.price` par un useEffect au niveau du parent. */}
             <AppInput
-              label="Prix (XAF)"
-              type="number"
-              step="100"
-              value={parcel.price}
-              onChange={(e) => onChange({ price: e.target.value })}
+              label="Prix calcule (XAF)"
+              type="text"
+              readOnly
+              value={Number(parcel.price || 0).toLocaleString('fr-FR')}
+              title="Calcule automatiquement depuis la masse / le volume et le tarif de la route"
             />
           </div>
 
