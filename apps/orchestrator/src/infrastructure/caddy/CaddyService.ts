@@ -111,14 +111,25 @@ export class CaddyService {
       });
     }
 
+    // Bloc admin = doit rester atteignable apres ce push, sinon les push
+    // suivants depuis le conteneur orchestrator echouent (admin replace =
+    // tout est remplace, pas merge). Configurable via env :
+    //   CADDY_ADMIN_LISTEN  (defaut 0.0.0.0:2019 -- UFW + filtrage origin protege)
+    //   CADDY_ADMIN_ORIGINS (defaut couvre les bridges Docker + host.docker.internal
+    //                        + l'origin que pushLocal() envoie)
+    const adminListen = process.env.CADDY_ADMIN_LISTEN ?? '0.0.0.0:2019';
+    const adminOriginsRaw =
+      process.env.CADDY_ADMIN_ORIGINS ??
+      'orchestrator,host.docker.internal,localhost,127.0.0.1,172.17.0.1,172.18.0.1,172.19.0.1,172.20.0.1';
+    const adminOrigins = adminOriginsRaw
+      .split(',')
+      .map((o) => o.trim())
+      .filter((o) => o.length > 0);
+
     return {
-      // Phase 5 #10 — Caddy admin API durcie :
-      //   - bind localhost:2019 uniquement (jamais expose hors VPS)
-      //   - origins allowlist : seul `localhost` est tolere comme Host header
-      //   - enforce_origin : refuse les requetes avec un Host non-whitelist (anti DNS-rebinding)
       admin: {
-        listen: 'localhost:2019',
-        origins: ['localhost', '127.0.0.1', '[::1]'],
+        listen: adminListen,
+        origins: adminOrigins,
         enforce_origin: true,
       },
       apps: {
