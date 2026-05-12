@@ -37,6 +37,30 @@ export class CreateVpsUseCase {
 
     const sshKeyEncrypted = SshKeyEncryption.encrypt(input.sshPrivateKey);
 
+    // Probe automatique des specs hardware via SSH (nproc, /proc/meminfo, df).
+    // Best-effort : si echec, on retombe sur les valeurs eventuellement
+    // saisies en input. Evite a l'admin de remplir des champs qu'on peut
+    // lire directement sur le serveur.
+    let probed: { totalCpu?: number; totalRamMb?: number; totalDiskGb?: number } = {};
+    let usage: { cpuUsagePct?: number; ramUsagePct?: number; diskUsagePct?: number } = {};
+    try {
+      const creds = {
+        host: input.host,
+        port: input.port,
+        username: input.username,
+        sshKeyEncrypted,
+      };
+      const [specs, u] = await Promise.all([this.ssh.getSpecs(creds), this.ssh.getUsage(creds)]);
+      probed = {
+        totalCpu: specs.totalCpu || undefined,
+        totalRamMb: specs.totalRamMb || undefined,
+        totalDiskGb: specs.totalDiskGb || undefined,
+      };
+      usage = u;
+    } catch {
+      // probe optionnel : on ne fail pas la creation si la sonde echoue
+    }
+
     const vps = await prisma.vPS.create({
       data: {
         name: input.name,
@@ -46,9 +70,12 @@ export class CreateVpsUseCase {
         sshKeyEncrypted,
         region: input.region ?? null,
         notes: input.notes ?? null,
-        totalCpu: input.totalCpu ?? null,
-        totalRamMb: input.totalRamMb ?? null,
-        totalDiskGb: input.totalDiskGb ?? null,
+        totalCpu: probed.totalCpu ?? input.totalCpu ?? null,
+        totalRamMb: probed.totalRamMb ?? input.totalRamMb ?? null,
+        totalDiskGb: probed.totalDiskGb ?? input.totalDiskGb ?? null,
+        cpuUsagePct: usage.cpuUsagePct ?? null,
+        ramUsagePct: usage.ramUsagePct ?? null,
+        diskUsagePct: usage.diskUsagePct ?? null,
         lastSeenAt: new Date(),
       },
     });

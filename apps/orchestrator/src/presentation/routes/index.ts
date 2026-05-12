@@ -44,6 +44,7 @@ router.patch('/vps/:id', authenticateOps, requireSuperAdmin, VpsController.updat
 router.delete('/vps/:id', authenticateOps, requireSuperAdmin, VpsController.delete);
 router.post('/vps/:id/test-connection', authenticateOps, requireSuperAdmin, VpsController.testConnection);
 router.get('/vps/:id/usage', authenticateOps, requireSuperAdmin, VpsController.getUsage);
+router.post('/vps/refresh-usage', authenticateOps, requireSuperAdmin, VpsController.refreshAllUsage);
 router.get('/vps/:id/capacity', authenticateOps, requireSuperAdmin, BillingController.vpsCapacity);
 
 // ============================================================

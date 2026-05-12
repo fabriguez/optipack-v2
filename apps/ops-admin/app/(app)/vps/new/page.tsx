@@ -14,9 +14,8 @@ const schema = z.object({
   username: z.string().min(1),
   sshPrivateKey: z.string().min(20),
   region: z.string().optional(),
-  totalCpu: z.coerce.number().int().min(1),
-  totalRamMb: z.coerce.number().int().min(512),
-  totalDiskGb: z.coerce.number().int().min(10),
+  // CPU/RAM/Disque sont auto-probed via SSH (nproc + /proc/meminfo + df)
+  // au moment de la creation. Plus besoin de les saisir manuellement.
 });
 
 type FormData = z.infer<typeof schema>;
@@ -78,16 +77,10 @@ export default function NewVpsPage() {
             className="font-mono text-xs"
           />
         </Field>
-        <div className="grid grid-cols-3 gap-3">
-          <Field label="CPU (cores)" error={errors.totalCpu?.message}>
-            <TextInput type="number" {...register('totalCpu')} placeholder="4" />
-          </Field>
-          <Field label="RAM totale (MB)" error={errors.totalRamMb?.message}>
-            <TextInput type="number" {...register('totalRamMb')} placeholder="8192" />
-          </Field>
-          <Field label="Disque (GB)" error={errors.totalDiskGb?.message}>
-            <TextInput type="number" {...register('totalDiskGb')} placeholder="80" />
-          </Field>
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">
+          Les specs hardware (CPU, RAM, disque) sont detectees automatiquement
+          via SSH a la creation (<code>nproc</code>, <code>/proc/meminfo</code>,
+          <code>df</code>). Aucune saisie manuelle requise.
         </div>
         {serverErr && <p className="text-sm text-red-600">{serverErr}</p>}
         <div className="flex justify-end gap-2">

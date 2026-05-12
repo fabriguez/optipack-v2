@@ -22,6 +22,14 @@ export interface VpsUsage {
   diskUsagePct: number;
 }
 
+export interface VpsSpecs {
+  totalCpu: number;
+  totalRamMb: number;
+  totalDiskGb: number;
+  kernel?: string;
+  os?: string;
+}
+
 /**
  * Wrapper SSH pour les operations sur les VPS tenants.
  * Toujours fermer la connexion via `try/finally`.
@@ -92,6 +100,39 @@ export class SSHService {
         cpuUsagePct: this.parsePct(cpu.stdout),
         ramUsagePct: this.parsePct(mem.stdout),
         diskUsagePct: this.parsePct(disk.stdout),
+      };
+    } finally {
+      ssh.dispose();
+    }
+  }
+
+  /**
+   * Probe les specs hardware du VPS (cpu cores, RAM totale, disque racine).
+   * Lance sur testConnection + creation, pour eviter de demander a l'admin
+   * de les saisir manuellement.
+   */
+  async getSpecs(creds: SshConnection): Promise<VpsSpecs> {
+    const ssh = await this.connect(creds);
+    try {
+      const [cpu, ramKb, diskKb, kernel, os] = await Promise.all([
+        ssh.execCommand('nproc'),
+        ssh.execCommand("grep MemTotal /proc/meminfo | awk '{print $2}'"),
+        // Total du systeme de fichiers racine, en Ko.
+        ssh.execCommand("df -k / | tail -1 | awk '{print $2}'"),
+        ssh.execCommand('uname -r'),
+        ssh.execCommand(
+          "sh -c '. /etc/os-release 2>/dev/null && printf %s \"$PRETTY_NAME\" || uname -s'",
+        ),
+      ]);
+      const totalCpu = parseInt(cpu.stdout.trim(), 10);
+      const ramKbN = parseInt(ramKb.stdout.trim(), 10);
+      const diskKbN = parseInt(diskKb.stdout.trim(), 10);
+      return {
+        totalCpu: Number.isFinite(totalCpu) ? totalCpu : 0,
+        totalRamMb: Number.isFinite(ramKbN) ? Math.round(ramKbN / 1024) : 0,
+        totalDiskGb: Number.isFinite(diskKbN) ? Math.round(diskKbN / 1024 / 1024) : 0,
+        kernel: kernel.stdout.trim() || undefined,
+        os: os.stdout.trim() || undefined,
       };
     } finally {
       ssh.dispose();

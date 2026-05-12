@@ -87,6 +87,21 @@ export class VpsController {
     }
   }
 
+  /**
+   * POST /ops/vps/refresh-usage — declenche un probe usage+specs sur tous
+   * les VPS actifs en parallele. Appele par le dashboard pour rafraichir
+   * les metriques sans demander a l'admin de cliquer VPS par VPS.
+   */
+  static async refreshAllUsage(_req: Request, res: Response, next: NextFunction) {
+    try {
+      const svc = container.resolve(VpsQueryService);
+      const results = await svc.refreshAllUsage();
+      res.json({ success: true, data: results });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   static async delete(req: Request, res: Response, next: NextFunction) {
     try {
       const svc = container.resolve(VpsQueryService);

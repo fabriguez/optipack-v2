@@ -75,24 +75,90 @@ export class VpsQueryService {
   async testConnection(id: string) {
     const vps = await prisma.vPS.findUnique({ where: { id } });
     if (!vps) throw new NotFoundError('VPS', id);
-    return this.ssh.testConnection({
+    const creds = {
       host: vps.host,
       port: vps.port,
       username: vps.username,
       sshKeyEncrypted: vps.sshKeyEncrypted,
-    });
+    };
+    const test = await this.ssh.testConnection(creds);
+    if (!test.ok) return test;
+
+    // Re-probe specs + usage a chaque test, pour garder la BDD a jour
+    // sans demander a l'admin de cliquer sur "Refresh".
+    try {
+      const [specs, usage] = await Promise.all([
+        this.ssh.getSpecs(creds),
+        this.ssh.getUsage(creds),
+      ]);
+      await prisma.vPS.update({
+        where: { id },
+        data: {
+          ...(specs.totalCpu > 0 && { totalCpu: specs.totalCpu }),
+          ...(specs.totalRamMb > 0 && { totalRamMb: specs.totalRamMb }),
+          ...(specs.totalDiskGb > 0 && { totalDiskGb: specs.totalDiskGb }),
+          cpuUsagePct: usage.cpuUsagePct,
+          ramUsagePct: usage.ramUsagePct,
+          diskUsagePct: usage.diskUsagePct,
+          lastSeenAt: new Date(),
+        },
+      });
+    } catch {
+      // sonde non bloquante : on garde le succes du testConnection initial
+    }
+    return test;
+  }
+
+  /**
+   * Probe l'usage de TOUS les VPS actifs en parallele. Best-effort : les
+   * VPS injoignables sont simplement marques en erreur dans le retour mais
+   * n'interrompent pas la sonde globale. Utilise par le dashboard pour
+   * rafraichir les metriques affichees a chaque chargement.
+   */
+  async refreshAllUsage(): Promise<{ id: string; ok: boolean; error?: string }[]> {
+    const vpsList = await prisma.vPS.findMany({ where: { status: 'ACTIVE' } });
+    return Promise.all(
+      vpsList.map(async (vps) => {
+        try {
+          await this.getUsage(vps.id);
+          return { id: vps.id, ok: true };
+        } catch (e) {
+          return {
+            id: vps.id,
+            ok: false,
+            error: e instanceof Error ? e.message : String(e),
+          };
+        }
+      }),
+    );
   }
 
   async getUsage(id: string) {
     const vps = await prisma.vPS.findUnique({ where: { id } });
     if (!vps) throw new NotFoundError('VPS', id);
-    const usage = await this.ssh.getUsage({
+    const creds = {
       host: vps.host,
       port: vps.port,
       username: vps.username,
       sshKeyEncrypted: vps.sshKeyEncrypted,
-    });
-    // Mise a jour des dernieres metriques snapshot
+    };
+    const usage = await this.ssh.getUsage(creds);
+
+    // Si les specs hardware sont absentes (probe initial echoue ou VPS
+    // ancien cree manuellement), on tente une re-detection sans demander a
+    // l'admin de les saisir.
+    let specsPatch: { totalCpu?: number; totalRamMb?: number; totalDiskGb?: number } = {};
+    if (vps.totalCpu == null || vps.totalRamMb == null || vps.totalDiskGb == null) {
+      try {
+        const specs = await this.ssh.getSpecs(creds);
+        if (specs.totalCpu > 0) specsPatch.totalCpu = specs.totalCpu;
+        if (specs.totalRamMb > 0) specsPatch.totalRamMb = specs.totalRamMb;
+        if (specs.totalDiskGb > 0) specsPatch.totalDiskGb = specs.totalDiskGb;
+      } catch {
+        // best-effort
+      }
+    }
+
     await prisma.vPS.update({
       where: { id },
       data: {
@@ -100,6 +166,7 @@ export class VpsQueryService {
         ramUsagePct: usage.ramUsagePct,
         diskUsagePct: usage.diskUsagePct,
         lastSeenAt: new Date(),
+        ...specsPatch,
       },
     });
     return usage;
