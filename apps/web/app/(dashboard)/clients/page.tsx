@@ -12,16 +12,14 @@ import { AppDataTable } from '@/components/ui/AppDataTable';
 import { SearchBar } from '@/components/shared/SearchBar';
 import { FilterDialog } from '@/components/shared/FilterDialog';
 import { XlsxExportButton } from '@/components/shared/XlsxExportButton';
-import { CsvImportDialog } from '@/components/shared/CsvImportDialog';
+import { XlsxImportDialog } from '@/components/shared/XlsxImportDialog';
 import { RowActions } from '@/components/shared/RowActions';
 import { useServerPagination } from '@/lib/hooks/useServerPagination';
 import { useClients, useDeleteClient } from '@/lib/hooks/useClients';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { searchers } from '@/lib/api/searchers';
 import { ClientFormDialog } from './ClientFormDialog';
-import { apiClient } from '@/lib/api/client';
 import { formatAmount } from '@transitsoftservices/shared';
-import { toast } from 'sonner';
 
 const TIER_VARIANT: Record<string, 'default' | 'info' | 'warning' | 'success'> = {
   STANDARD: 'default', SILVER: 'info', GOLD: 'warning', VIP: 'success',
@@ -47,21 +45,13 @@ function ClientsContent() {
     loyaltyTier: loyaltyTierFilter || undefined,
   } as any);
 
-  const handleImport = async (rows: Record<string, string>[]) => {
-    let success = 0;
-    for (const row of rows) {
-      try {
-        await apiClient.post('/clients', {
-          fullName: row.fullName || row.nom,
-          phone: row.phone || row.telephone,
-          email: row.email || '',
-          address: row.address || row.adresse || '',
-          agencyId: agencyFilter || undefined,
-        });
-        success++;
-      } catch { /* skip */ }
-    }
-    toast.success(`${success}/${rows.length} clients importes`);
+  // Import XLSX desormais entierement gere cote backend via /imports/clients.
+  // Le dialog gere lui-meme l'upload + le rapport. On invalide juste la liste.
+  const handleImportDone = () => {
+    // Force un refetch de la liste apres import.
+    // useClients utilise react-query, qui le reprendra au prochain mount via queryParams.
+    // En attendant : reload soft.
+    router.refresh();
   };
 
   const exportColumns = [
@@ -211,13 +201,13 @@ function ClientsContent() {
             });
           }}
         />
-        <CsvImportDialog
+        <XlsxImportDialog
           open={showImport}
           onClose={() => setShowImport(false)}
-          onImport={handleImport}
-          title="Importer des clients"
-          requiredColumns={['fullName', 'phone']}
-          columnLabels={{ fullName: 'Nom complet', phone: 'Telephone', email: 'Email', address: 'Adresse' }}
+          endpoint="clients"
+          title="Importer des clients (XLSX)"
+          hint="Utilise le template export comme base. Colonnes obligatoires : Nom complet + Telephone. Une ligne par client. Les doublons (meme telephone) sont ignores."
+          onDone={handleImportDone}
         />
       </div>
     </PageTransition>
