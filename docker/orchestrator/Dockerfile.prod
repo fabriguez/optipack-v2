@@ -28,9 +28,12 @@ RUN cd apps/orchestrator && OPS_DATABASE_URL=postgresql://x:y@z/db npx prisma ge
 # Build TS
 RUN pnpm --filter @transitsoftservices/orchestrator build
 
-# Prune devDependencies pour reduire la taille de l'image runtime
-RUN pnpm --filter @transitsoftservices/orchestrator deploy --prod /app/runtime || \
-    (cd apps/orchestrator && pnpm prune --prod)
+# ---- Pruner stage (prod-only deps) ----
+# Conserve les symlinks pnpm intactes : on garde la layout workspace
+# (/app/node_modules + /app/apps/orchestrator/node_modules) au lieu de
+# `pnpm deploy` qui aplatit dans /app/runtime.
+FROM builder AS pruner
+RUN pnpm prune --prod
 
 # ---- Runtime stage ----
 FROM node:20-alpine AS runner
@@ -39,19 +42,29 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
-# Copy built artifacts
-COPY --from=builder /app/apps/orchestrator/dist ./dist
-COPY --from=builder /app/apps/orchestrator/prisma ./prisma
-COPY --from=builder /app/apps/orchestrator/node_modules ./node_modules
-COPY --from=builder /app/apps/orchestrator/package.json ./
+# Copy pruned workspace + built artifacts
+COPY --from=pruner /app/node_modules ./node_modules
+COPY --from=pruner /app/apps/orchestrator/node_modules ./apps/orchestrator/node_modules
+COPY --from=builder /app/apps/orchestrator/dist ./apps/orchestrator/dist
+COPY --from=builder /app/apps/orchestrator/prisma ./apps/orchestrator/prisma
+COPY --from=builder /app/apps/orchestrator/package.json ./apps/orchestrator/package.json
 COPY --from=builder /app/packages ./packages
 
-# Outils requis : openssh-client (pour rsync/scp eventuels), postgresql-client (pour pg_dump des tenants)
+# Outils runtime : SSH (push Caddy via SSH sur VPS distants), pg_isready/pg_dump (BDD)
 RUN apk add --no-cache openssh-client postgresql-client
+
+# Install Prisma CLI + tsx globally so the entrypoint can run `prisma migrate
+# deploy` et le seed (devDeps prunes, et pnpm symlinks vers .pnpm fragiles
+# entre layers Docker -> on ne s'y fie pas).
+RUN npm install -g prisma@^6.4.1 tsx@^4.19.2 && npm cache clean --force
 
 # Entrypoint : attend la BDD, applique les migrations, demarre le serveur
 COPY docker/orchestrator/entrypoint.sh /usr/local/bin/orchestrator-entrypoint.sh
 RUN chmod +x /usr/local/bin/orchestrator-entrypoint.sh
+
+# Le code et le prisma schema sont sous apps/orchestrator/ pour rester
+# coherent avec le layout workspace que pnpm a installe.
+WORKDIR /app/apps/orchestrator
 
 EXPOSE 4020
 
