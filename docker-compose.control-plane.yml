@@ -52,30 +52,30 @@ services:
         condition: service_healthy
       ops-redis:
         condition: service_healthy
-    # Resolve `host.docker.internal` vers l'IP de l'host depuis ce conteneur.
-    # Indispensable pour atteindre Caddy (admin API sur l'host:2019) depuis
-    # un network Docker custom (172.19.x.x ici, pas le bridge par defaut).
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    # network_mode: host -> le conteneur partage la stack reseau de l'host.
+    # Avantages : Caddy admin sur localhost:2019 est joignable directement,
+    # plus de gymnastique extra_hosts/origins/bridge IPs.
+    # Inconvenient : on ne peut plus joindre `ops-postgres`/`ops-redis` par
+    # nom de service (DNS Docker pas dispo en host mode), on doit utiliser
+    # leurs ports host-mappes : 127.0.0.1:5433 et 127.0.0.1:6380.
+    # NB : Aucun bloc `ports:` ni `networks:` en host mode (incompatibles).
+    network_mode: host
     environment:
       NODE_ENV: production
       OPS_PORT: 4020
-      OPS_DATABASE_URL: postgresql://${OPS_POSTGRES_USER:-opsadmin}:${OPS_POSTGRES_PASSWORD}@ops-postgres:5432/${OPS_POSTGRES_DB:-ops_admin}
-      OPS_REDIS_URL: redis://ops-redis:6379
+      OPS_DATABASE_URL: postgresql://${OPS_POSTGRES_USER:-opsadmin}:${OPS_POSTGRES_PASSWORD}@127.0.0.1:5433/${OPS_POSTGRES_DB:-ops_admin}
+      OPS_REDIS_URL: redis://127.0.0.1:6380
       OPS_JWT_SECRET: ${OPS_JWT_SECRET:?required}
       OPS_MASTER_KEY: ${OPS_MASTER_KEY:?required}
       OPS_TOTP_ISSUER: ${OPS_TOTP_ISSUER:-TransitSoftServices Ops}
       OPS_GHCR_NAMESPACE: ${OPS_GHCR_NAMESPACE:-transitsoftservices}
       OPS_GHCR_TOKEN: ${OPS_GHCR_TOKEN}
       OPS_PUBLIC_WEB_URL: ${OPS_PUBLIC_WEB_URL:-https://ops-admin.transitsoftservices.com}
-      CADDY_ADMIN_URL: ${CADDY_ADMIN_URL:-http://host.docker.internal:2019}
+      # Caddy admin sur localhost (meme host) -> URL trivial.
+      CADDY_ADMIN_URL: ${CADDY_ADMIN_URL:-http://127.0.0.1:2019}
       OPS_SELF_VPS_NAME: ${OPS_SELF_VPS_NAME:-self}
       OPS_BASE_DOMAIN: ${OPS_BASE_DOMAIN:-transitsoftservices.com}
       OPS_CADDY_EMAIL: ${OPS_CADDY_EMAIL:-admin@transitsoftservices.com}
-    ports:
-      - "127.0.0.1:4020:4020"
-    networks:
-      - control-plane
 
   ops-admin:
     build:

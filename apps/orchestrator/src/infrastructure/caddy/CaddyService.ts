@@ -165,15 +165,15 @@ export class CaddyService {
     }
 
     // Bloc admin = doit rester atteignable apres ce push, sinon les push
-    // suivants depuis le conteneur orchestrator echouent (admin replace =
-    // tout est remplace, pas merge). Configurable via env :
-    //   CADDY_ADMIN_LISTEN  (defaut 0.0.0.0:2019 -- UFW + filtrage origin protege)
-    //   CADDY_ADMIN_ORIGINS (defaut couvre les bridges Docker + host.docker.internal
-    //                        + l'origin que pushLocal() envoie)
-    const adminListen = process.env.CADDY_ADMIN_LISTEN ?? '0.0.0.0:2019';
+    // suivants depuis l'orchestrator echouent (admin = full replace, pas merge).
+    // Defauts adaptes au mode network_mode: host du conteneur orchestrator :
+    //   - listen localhost:2019 : pas d'exposition externe (host loopback)
+    //   - origins = orchestrator + localhost (l'orchestrator envoie
+    //     Origin: http://orchestrator dans pushLocal())
+    // Overridable via CADDY_ADMIN_LISTEN / CADDY_ADMIN_ORIGINS.
+    const adminListen = process.env.CADDY_ADMIN_LISTEN ?? 'localhost:2019';
     const adminOriginsRaw =
-      process.env.CADDY_ADMIN_ORIGINS ??
-      'orchestrator,host.docker.internal,localhost,127.0.0.1,172.17.0.1,172.18.0.1,172.19.0.1,172.20.0.1';
+      process.env.CADDY_ADMIN_ORIGINS ?? 'orchestrator,localhost,127.0.0.1';
     const adminOrigins = adminOriginsRaw
       .split(',')
       .map((o) => o.trim())
@@ -249,19 +249,17 @@ export class CaddyService {
     const origin = process.env.CADDY_ADMIN_ORIGIN ?? 'http://orchestrator';
     const body = JSON.stringify(configJson);
 
-    // L'IP de la host gateway depend du Docker network (default bridge =
-    // 172.17.0.1, custom networks = 172.18+ etc). On essaie plusieurs URLs
-    // jusqu'a la premiere qui repond. Necessaire car en pratique un container
-    // sur un network compose custom (172.19.x.x ici) ne peut pas joindre
-    // 172.17.0.1 (qui appartient a docker0).
+    // En mode network_mode: host (cf. docker-compose.control-plane.yml),
+    // localhost = host. C'est la cible "vraie" et tu n'as a configurer que
+    // CADDY_ADMIN_URL si tu changes de schema.
+    // On garde un fallback sur les IPs de bridges Docker pour rester compatible
+    // si jamais le conteneur tourne en bridge (rebascule possible).
     const candidates: string[] = [];
     if (process.env.CADDY_ADMIN_URL) candidates.push(process.env.CADDY_ADMIN_URL);
     candidates.push(
+      'http://127.0.0.1:2019',
       'http://host.docker.internal:2019',
       'http://172.17.0.1:2019',
-      'http://172.18.0.1:2019',
-      'http://172.19.0.1:2019',
-      'http://172.20.0.1:2019',
     );
     const seen = new Set<string>();
     const urls = candidates.filter((u) => (seen.has(u) ? false : seen.add(u)));
