@@ -11,6 +11,8 @@ const JOURNAL_INCLUDE = {
       creditAccount: { select: { id: true, code: true, name: true } },
     },
   },
+  // Auteur de l'ecriture (visible dans la liste + detail).
+  createdBy: { select: { id: true, fullName: true, email: true } },
 };
 
 @injectable()

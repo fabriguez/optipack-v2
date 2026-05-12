@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppDataTable } from '@/components/ui/AppDataTable';
@@ -19,6 +20,7 @@ const SOURCE_LABELS: Record<string, string> = {
 };
 
 export default function AccountingPage() {
+  const router = useRouter();
   const [page, setPage] = useState(1);
 
   const { data, isLoading } = useQuery({
@@ -58,6 +60,16 @@ export default function AccountingPage() {
         ) : '-';
       },
     },
+    {
+      key: 'createdBy',
+      label: 'Par',
+      render: (row: any) =>
+        row.createdBy?.fullName ? (
+          <span className="text-xs text-gray-600">{row.createdBy.fullName}</span>
+        ) : (
+          <span className="text-xs text-gray-400">-</span>
+        ),
+    },
     { key: 'date', label: 'Date', render: (row: any) => formatDateTime(row.date) },
   ];
 
@@ -78,6 +90,7 @@ export default function AccountingPage() {
             totalPages={data?.meta?.totalPages || 1}
             total={data?.meta?.total}
             onPageChange={setPage}
+            onRowClick={(row: any) => router.push(`/accounting/journal/${row.id}`)}
           />
         </AppCard>
       </div>

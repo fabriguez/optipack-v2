@@ -1,7 +1,6 @@
 'use client';
 import { use, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -28,7 +27,6 @@ export default function EditReleasePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const router = useRouter();
   const qc = useQueryClient();
 
   const release = useQuery<Release>({

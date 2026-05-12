@@ -12,8 +12,7 @@ import {
 
 // Schemas + types migres dans @transitsoftservices/ops-schemas (partages
 // avec le frontend ops-admin pour validation rhf+zodResolver coherente).
-// Re-exportes ici pour ne pas casser les imports existants.
-export {
+import {
   createTenantSchema,
   updateTenantSchema,
   migrateTenantSchema,
@@ -21,6 +20,8 @@ export {
   type UpdateTenantInput,
   type MigrateTenantInput,
 } from '@transitsoftservices/ops-schemas';
+export { createTenantSchema, updateTenantSchema, migrateTenantSchema };
+export type { CreateTenantInput, UpdateTenantInput, MigrateTenantInput };
 
 @injectable()
 export class TenantUseCases {

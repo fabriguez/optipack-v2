@@ -44,7 +44,12 @@ export class FundTransferController {
   static async confirm(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(ConfirmFundTransferUseCase);
-      const result = await useCase.execute(req.params.id, req.user!.userId);
+      // Option bypassFourEyes : SUPER_ADMIN peut confirmer un transfert qu'il
+      // a lui-meme initie (utile pour les agences a 1 admin).
+      const result = await useCase.execute(req.params.id, req.user!.userId, {
+        bypassFourEyes: req.body?.bypassFourEyes === true,
+        userRole: req.user!.role,
+      });
       res.json({ success: true, data: result });
     } catch (err) {
       next(err);

@@ -37,11 +37,15 @@ export class GetWarehouseSummaryUseCase {
     const parcels = await prisma.parcel.findMany({
       where: {
         warehouseId,
+        // Filtre aligne MOT POUR MOT avec :
+        //  1) `_count` du PrismaWarehouseRepository (page liste warehouses)
+        //  2) `onlyPresent=true` + `archived=false` du PrismaParcelRepository
+        //     (table affichee sur cette page detail magasin)
+        // Sans `isArchived: false`, on comptait des colis archives mais
+        // toujours IN_STOCK + isPresent, ce qui faisait diverger le total
+        // affiche en haut (summary) et la table du dessous (liste filtree).
         isDeleted: false,
-        // "Physiquement present dans ce magasin" = IN_STOCK (cree ici) OU
-        // RECEIVED (decharge ici depuis un conteneur). Doit rester aligne avec
-        // le filtre `onlyPresent` du repository (PrismaParcelRepository), sinon
-        // le compteur du summary diverge de la liste affichee sur la page.
+        isArchived: false,
         status: { in: ['IN_STOCK', 'RECEIVED'] },
         isPresent: true,
       },

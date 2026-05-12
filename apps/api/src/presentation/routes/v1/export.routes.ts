@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { ExportController } from '../../controllers/ExportController';
 import { ImportController, xlsxImportMiddleware } from '../../controllers/ImportController';
-import { ImportClientsXlsxUseCase } from '../../application/use-cases/client/ClientXlsxUseCases';
+import { ImportClientsXlsxUseCase } from '../../../application/use-cases/client/ClientXlsxUseCases';
 import { container } from '../../../container';
 import { getOrgId } from '../../middleware/tenantGuard';
 import { BusinessError } from '../../../domain/errors/BusinessError';

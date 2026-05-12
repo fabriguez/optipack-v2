@@ -8,7 +8,6 @@ import {
   PauseCircle,
   PlayCircle,
   Archive,
-  ShipWheel,
   Loader2,
 } from 'lucide-react';
 import { api } from '@/lib/api';

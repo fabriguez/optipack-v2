@@ -22,11 +22,10 @@ const COLUMNS = [
   { key: 'agencyName', header: 'Agence (nom)', width: 22 }, // info read-only
   { key: 'clientType', header: 'Type (INDIVIDUAL/COMPANY/PARTNER)', width: 22 },
   { key: 'loyaltyTier', header: 'Niveau (STANDARD/SILVER/GOLD/PLATINUM)', width: 22 },
-  { key: 'idDocumentNumber', header: 'CNI numero', width: 18 },
+  { key: 'idNumber', header: 'CNI numero', width: 18 },
   { key: 'imageUrl', header: 'URL photo profil', width: 30 },
   { key: 'idDocumentUrl', header: 'URL CNI recto', width: 30 },
   { key: 'idDocumentBackUrl', header: 'URL CNI verso', width: 30 },
-  { key: 'notes', header: 'Notes', width: 32 },
 ];
 
 @injectable()
@@ -66,11 +65,10 @@ export class ExportClientsXlsxUseCase {
         agencyName: c.agency?.name ?? '',
         clientType: c.clientType,
         loyaltyTier: c.loyaltyTier,
-        idDocumentNumber: c.idDocumentNumber ?? '',
+        idNumber: c.idNumber ?? '',
         imageUrl: c.imageUrl ?? '',
         idDocumentUrl: c.idDocumentUrl ?? '',
         idDocumentBackUrl: c.idDocumentBackUrl ?? '',
-        notes: c.notes ?? '',
       });
     }
 
@@ -180,11 +178,10 @@ export class ImportClientsXlsxUseCase {
         loyaltyTier: ['STANDARD', 'SILVER', 'GOLD', 'PLATINUM'].includes(loyaltyTier)
           ? loyaltyTier
           : 'STANDARD',
-        idDocumentNumber: get(row, 'idDocumentNumber') || null,
+        idNumber: get(row, 'idNumber') || null,
         imageUrl: get(row, 'imageUrl') || null,
         idDocumentUrl: get(row, 'idDocumentUrl') || null,
         idDocumentBackUrl: get(row, 'idDocumentBackUrl') || null,
-        notes: get(row, 'notes') || null,
       });
     }
 
