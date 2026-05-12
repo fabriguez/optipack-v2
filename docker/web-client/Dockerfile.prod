@@ -22,8 +22,14 @@ RUN pnpm install --frozen-lockfile || pnpm install
 COPY packages/ ./packages/
 COPY apps/web-client/ ./apps/web-client/
 
-# Build shared package first (others are TS-only and consumed via transpilePackages)
+# Build workspace packages que Next.js doit resoudre :
+#  - shared : code Node CJS (utilitaires)
+#  - skins  : exports[".".default] pointe sur ./dist/index.js, donc meme avec
+#             `transpilePackages` Next.js a besoin du dist/ compile pour
+#             la resolution Node (sinon "Module not found").
+#  - payments est TS-only (exports pointent sur src/), pas besoin de build.
 RUN pnpm --filter @transitsoftservices/shared build
+RUN pnpm --filter @transitsoftservices/skins build
 
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL

@@ -8,3 +8,6 @@ OPS_POSTGRES_PASSWORD=1c0cb9ab61f0a51bd1c444a0e13d47faf07d6ecfdbc2d0e1
 OPS_JWT_SECRET=a514ec4d67061e85219258aa89c40f22e7b5082d83ef8ced603f5cfec8b39b8b
 OPS_MASTER_KEY=bccef7a28b9ecdeafb5002f3b528c7249a86f1fe01a094a142b0f7969984a6e2
 ===== Specialement : OPS_MASTER_KEY est irrecuperable =====
+
+# Depuis ta machine
+scp -i ~/.ssh/optipack-ci brightky@opt-srv:~/optipack-v2/.env ~/optipack-env.backup
