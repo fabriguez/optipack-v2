@@ -83,12 +83,13 @@ export const corsOptions: CorsOptions = {
   optionsSuccessStatus: 204,
 };
 
-/** Reutilisable pour Socket.io (qui accepte un `cors: {origin: ...}` au meme format). */
+/** Reutilisable pour Socket.io (qui accepte un `cors: {origin: ...}` au meme format).
+ *  NB : pas de `as const` sur methods, engine.io exige un tableau mutable. */
 export const socketCorsOptions = {
   origin(origin: string | undefined, cb: (err: Error | null, ok?: boolean) => void) {
     if (isAllowedOrigin(origin)) cb(null, true);
     else cb(new Error(`Socket origin non autorisee : ${origin}`));
   },
-  methods: ['GET', 'POST'] as const,
+  methods: ['GET', 'POST'],
   credentials: true,
 };
