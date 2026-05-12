@@ -523,52 +523,65 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
       </div>
 
       <AppCard>
-        <AppCardHeader title="Bordereaux" description="Generation des bordereaux PDF" />
-        <div className="flex flex-wrap gap-3">
-          {/* Audit fix #3 : ARRIVED + UNLOADING legacy ont ete migres vers
-              RECEIVED. Les conditions incluent RECEIVED pour que les
-              bordereaux restent generables apres reception (et donc apres
-              dechargement, car le backend cherche les colis via
-              lastContainerId aussi -- voir PrismaManifestRepository). */}
-          {(['LOADING', 'IN_TRANSIT', 'RECEIVED', 'UNLOADED'].includes(container.status)) && (
+        <AppCardHeader
+          title="Bordereaux"
+          description={`Generation des bordereaux PDF (statut conteneur : ${container.status})`}
+        />
+        {/* Boutons toujours rendus (sauf si conteneur EMPTY = aucun colis
+            jamais charge). On desactive selon statut/historique au lieu de
+            cacher : c'est plus clair pour l'utilisateur et evite les bugs
+            "ou sont passes les boutons ?" post-dechargement.
+            Audit fix #3 : ARRIVED + UNLOADING legacy ont ete migres vers
+            RECEIVED. Le backend cherche les parcels via containerId OR
+            lastContainerId pour les deux types de bordereau (cf.
+            PrismaManifestRepository) -- on peut donc generer apres
+            dechargement complet. */}
+        {container.status !== 'EMPTY' ? (
+          <div className="flex flex-wrap gap-3">
             <AppButton
               variant="outline"
               size="sm"
               onClick={handleGenerateDispatch}
               loading={busyManifest === 'dispatch'}
-              // Le backend cherche les parcels via containerId OR
-              // lastContainerId, donc generer un dispatch post-unload est OK
-              // si le conteneur a deja eu des colis. On n'inactive pas le
-              // bouton -- on laisse le backend juger (cas conteneur
-              // vraiment vide -> error claire).
             >
               <FileText className="h-4 w-4" />
               Bordereau d&apos;envoi
             </AppButton>
-          )}
-          {(['RECEIVED', 'UNLOADED'].includes(container.status)) && (
-            <>
-              <AppButton
-                variant="outline"
-                size="sm"
-                onClick={handleGenerateReception}
-                loading={busyManifest === 'reception'}
-              >
-                <FileCheck className="h-4 w-4" />
-                Bordereau de reception
-              </AppButton>
-              <AppButton variant="outline" size="sm" onClick={() => setShowComparison(true)}>
-                <FileDiff className="h-4 w-4" />
-                Bordereau de comparaison
-              </AppButton>
-            </>
-          )}
-          {parcels.length === 0 && container.status === 'EMPTY' && (
-            <p className="w-full text-xs text-amber-700">
-              Aucun colis charge dans ce conteneur : les bordereaux sont indisponibles tant qu&apos;aucun colis n&apos;a ete charge.
-            </p>
-          )}
-        </div>
+            <AppButton
+              variant="outline"
+              size="sm"
+              onClick={handleGenerateReception}
+              loading={busyManifest === 'reception'}
+              disabled={!['RECEIVED', 'UNLOADED'].includes(container.status)}
+              title={
+                !['RECEIVED', 'UNLOADED'].includes(container.status)
+                  ? 'Le conteneur doit etre receptionne pour generer un bordereau de reception.'
+                  : undefined
+              }
+            >
+              <FileCheck className="h-4 w-4" />
+              Bordereau de reception
+            </AppButton>
+            <AppButton
+              variant="outline"
+              size="sm"
+              onClick={() => setShowComparison(true)}
+              disabled={!['RECEIVED', 'UNLOADED'].includes(container.status)}
+              title={
+                !['RECEIVED', 'UNLOADED'].includes(container.status)
+                  ? 'Disponible apres reception du conteneur.'
+                  : undefined
+              }
+            >
+              <FileDiff className="h-4 w-4" />
+              Bordereau de comparaison
+            </AppButton>
+          </div>
+        ) : (
+          <p className="text-xs text-amber-700">
+            Aucun colis charge dans ce conteneur : les bordereaux sont indisponibles tant qu&apos;aucun colis n&apos;a ete charge.
+          </p>
+        )}
 
         {/* Historique : chaque generation produit un nouveau bordereau. On les
             liste du plus recent au plus ancien, avec les ecarts (status) et un

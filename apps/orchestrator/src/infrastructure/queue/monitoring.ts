@@ -18,6 +18,15 @@ const AUTOFREEZE_INTERVAL_MS = 60 * 60 * 1000; // 1h
 const RELEASE_SYNC_INTERVAL_MS = 60 * 60 * 1000; // 1h - poll GHCR pour nouvelles versions
 const BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h - backups nightly
 
+/**
+ * VPS local (meme machine que l'orchestrator) : pas de SSH a faire. Le nom est
+ * configurable via OPS_SELF_VPS_NAME (defaut "self"). Le seed du tenant
+ * principal cree un enregistrement VPS avec ce nom et un sshKeyEncrypted
+ * placeholder qui ne pourra pas etre dechiffre -- donc on doit explicitement
+ * skip ce VPS dans les cron de monitoring SSH.
+ */
+const SELF_VPS_NAME = process.env.OPS_SELF_VPS_NAME ?? 'self';
+
 export const monitoringQueue = new Queue(MONITOR_QUEUE, { connection: redisConnection });
 
 interface VpsMonitorPayload {
@@ -61,6 +70,14 @@ async function runVpsHeartbeat() {
   const allVps = await prisma.vPS.findMany({ where: { status: 'ACTIVE' } });
 
   for (const vps of allVps) {
+    // VPS local : pas de SSH, on marque juste vivant a chaque cycle.
+    if (vps.name === SELF_VPS_NAME) {
+      await prisma.vPS.update({
+        where: { id: vps.id },
+        data: { lastSeenAt: new Date() },
+      });
+      continue;
+    }
     try {
       const usage = await ssh.getUsage({
         host: vps.host,
@@ -100,6 +117,12 @@ async function runTenantHealthCheck() {
 
   for (const t of tenants) {
     if (!t.apiPort || !t.vps) continue;
+    // Tenant principal (isMain) ou VPS local : pas de SSH a faire. Son
+    // healthcheck devrait passer par un canal local (a faire dans un second
+    // temps), pour l'instant on skip pour eviter de polluer les logs.
+    if ((t as { isMain?: boolean }).isMain || t.vps.name === SELF_VPS_NAME) {
+      continue;
+    }
     try {
       const ok = await docker.healthCheck(
         {

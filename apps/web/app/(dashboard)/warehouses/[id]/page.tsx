@@ -58,6 +58,13 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
   const [batchRemoveCodes, setBatchRemoveCodes] = useState<string[]>([]);
   const [batchRemoveBusy, setBatchRemoveBusy] = useState(false);
   const [batchRemoveManualIds, setBatchRemoveManualIds] = useState<string[]>([]);
+  // Transfert multiple : on scanne plusieurs colis et on les bascule tous
+  // vers le meme magasin destination. Suivi du meme pattern que add/remove
+  // mais avec une 2eme dimension (warehouse target).
+  const [batchTransferOpen, setBatchTransferOpen] = useState(false);
+  const [batchTransferCodes, setBatchTransferCodes] = useState<string[]>([]);
+  const [batchTransferTarget, setBatchTransferTarget] = useState<string | null>(null);
+  const [batchTransferBusy, setBatchTransferBusy] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['warehouses', id],
@@ -106,11 +113,11 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
     OTHER: 'Autres',
   };
 
-  // Load all warehouses for transfer dialog
+  // Load all warehouses for transfer dialog (single + batch).
   const { data: allWarehousesData } = useQuery({
     queryKey: ['all-warehouses-for-transfer'],
     queryFn: () => apiClient.get('/warehouses', { params: { limit: 200 } }).then((r) => r.data),
-    enabled: !!transferParcel,
+    enabled: !!transferParcel || batchTransferOpen,
   });
 
   const warehouse = data?.data;
@@ -228,6 +235,41 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
     } else {
       // Garde uniquement les echecs en selection pour relance / debug.
       setBatchAddManualIds(failed.map((f) => f.id));
+    }
+  };
+
+  const handleBatchTransfer = async (codes: string[]) => {
+    if (!batchTransferTarget) {
+      toast.error('Selectionnez un magasin destination.');
+      return;
+    }
+    setBatchTransferBusy(true);
+    let ok = 0;
+    const failed: string[] = [];
+    for (const code of codes) {
+      try {
+        const p = await findParcelByTracking(code);
+        await apiClient.patch(`/parcels/${p.id}/status`, {
+          status: 'IN_STOCK',
+          warehouseId: batchTransferTarget,
+        });
+        ok++;
+      } catch (e: any) {
+        failed.push(`${code}: ${e?.response?.data?.message || e?.message || 'echec'}`);
+      }
+    }
+    setBatchTransferBusy(false);
+    setBatchTransferCodes(
+      failed.length === 0 ? [] : codes.filter((c) => failed.some((f) => f.startsWith(`${c}:`))),
+    );
+    if (ok > 0 && failed.length === 0) scanSound.success();
+    else if (failed.length > 0) scanSound.error();
+    if (ok > 0) toast.success(`${ok} colis transfere${ok > 1 ? 's' : ''}`);
+    if (failed.length > 0) toast.error(`${failed.length} echec(s) : ${failed[0]}`);
+    invalidateAll();
+    if (failed.length === 0) {
+      setBatchTransferOpen(false);
+      setBatchTransferTarget(null);
     }
   };
 
@@ -615,6 +657,10 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
                 <ScanLine className="h-3.5 w-3.5" />
                 Retirer par scan
               </AppButton>
+              <AppButton variant="outline" size="sm" onClick={() => setBatchTransferOpen(true)}>
+                <Camera className="h-3.5 w-3.5" />
+                Transferer par scan
+              </AppButton>
               <AppButton size="sm" onClick={() => setShowCreateParcel(true)}>
                 <Plus className="h-3.5 w-3.5" />
                 Ajouter colis
@@ -835,6 +881,46 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
               onSelectedChange={setBatchRemoveManualIds}
               emptyText="Aucun colis present dans ce magasin."
               hideWarehouseColumn
+            />
+          </div>
+        </div>
+      </AppDialog>
+
+      {/* Transferer par scan : scan multiple + magasin destination commun.
+          Pas de selection manuelle ici (la liste est deja accessible via
+          add/remove). Reutilise BatchScanCollector pour la liste live. */}
+      <AppDialog
+        open={batchTransferOpen}
+        onClose={() => {
+          setBatchTransferOpen(false);
+          setBatchTransferCodes([]);
+          setBatchTransferTarget(null);
+        }}
+        title="Transferer des colis vers un autre magasin"
+        size="xl"
+      >
+        <div className="space-y-4">
+          <p className="text-xs text-gray-500">
+            Scannez les colis a transferer depuis <span className="font-semibold">{warehouse.name}</span>.
+            Tous seront deplaces vers le magasin choisi ci-dessous.
+          </p>
+          <AppSelect
+            label="Magasin destination"
+            value={batchTransferTarget ?? ''}
+            onValueChange={(v) => setBatchTransferTarget(v || null)}
+            options={warehouseOptions}
+            placeholder="Selectionner le magasin destination"
+          />
+          <div className="rounded-xl border border-primary-100 bg-primary-50/40 p-3">
+            <p className="mb-2 text-xs font-semibold text-primary-900">Par scan QR / code-barres</p>
+            <BatchScanCollector
+              codes={batchTransferCodes}
+              onChange={setBatchTransferCodes}
+              submitLabel={`Transferer ${batchTransferCodes.length || ''} colis`}
+              onSubmit={handleBatchTransfer}
+              submitting={batchTransferBusy}
+              placeholder="Scanner ou coller un tracking..."
+              cameraTitle="Scanner pour transferer"
             />
           </div>
         </div>
