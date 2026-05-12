@@ -78,7 +78,11 @@ do_request() {
   _resp=$(cat "$_tmp_body")
   rm -f "$_tmp_body" "$_tmp_hdr"
 
-  if [ "$OPS_DEBUG" = "1" ] || [ "${_code:0:1}" != "2" ]; then
+  # POSIX-only : pas de ${var:0:1}. Le 'case' qui suit fait aussi office de check 2xx.
+  _is_2xx=0
+  case "$_code" in 2*) _is_2xx=1 ;; esac
+
+  if [ "$OPS_DEBUG" = "1" ] || [ "$_is_2xx" -eq 0 ]; then
     echo "Status: $_code (${_ms} ms)" >&2
     if [ -n "$_resp" ]; then
       _pretty=$(printf '%s' "$_resp" | jq '.' 2>/dev/null || printf '%s' "$_resp")
@@ -90,10 +94,7 @@ do_request() {
   fi
 
   printf '%s' "$_resp"
-  case "$_code" in
-    2*) return 0 ;;
-    *) return 1 ;;
-  esac
+  [ "$_is_2xx" -eq 1 ] && return 0 || return 1
 }
 
 # Authorization header (initialise apres le login)
@@ -124,15 +125,16 @@ REQ2FA=$(printf '%s' "$LOGIN_RES" | jq -r '.data.requires2FA // false')
 # Le payload encode `kind: 'setup_required'` pour le premier login, sinon c'est
 # un simple challenge de verification.
 jwt_kind() {
-  local token="$1"
-  local payload="${token#*.}"   # strip header.
-  payload="${payload%%.*}"      # strip .signature
+  # `local` n'est pas POSIX. dash le supporte en pratique mais on s'en passe.
+  _token="$1"
+  _payload="${_token#*.}"        # strip header.
+  _payload="${_payload%%.*}"     # strip .signature
   # pad base64url
-  case $((${#payload} % 4)) in
-    2) payload="${payload}==" ;;
-    3) payload="${payload}=" ;;
+  case $((${#_payload} % 4)) in
+    2) _payload="${_payload}==" ;;
+    3) _payload="${_payload}=" ;;
   esac
-  printf '%s' "$payload" | tr '_-' '/+' | base64 -d 2>/dev/null | jq -r '.kind // empty'
+  printf '%s' "$_payload" | tr '_-' '/+' | base64 -d 2>/dev/null | jq -r '.kind // empty'
 }
 
 # --- 2. Gestion 2FA ---
