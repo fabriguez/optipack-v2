@@ -47,7 +47,7 @@ const PLANS = [
       'SLA 99.99%',
     ],
     cta: 'Nous contacter',
-    href: 'mailto:hello@optipack.app',
+    href: 'mailto:contact@transitsoftservices.com',
     featured: false,
   },
 ];

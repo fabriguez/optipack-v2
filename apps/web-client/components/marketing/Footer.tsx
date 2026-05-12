@@ -62,7 +62,7 @@ export function Footer() {
                 className="text-lg font-bold tracking-tight skin-font-heading"
                 style={{ color: 'var(--skin-foreground)' }}
               >
-                OptiPack
+                Transit Soft Services
               </span>
             </Link>
             <p
@@ -104,7 +104,7 @@ export function Footer() {
           style={{ borderColor: 'var(--skin-border)' }}
         >
           <p className="text-xs" style={{ color: 'var(--skin-muted)' }}>
-            (c) 2026 OptiPack. Tous droits reserves.
+            (c) 2026 Transit Soft Services. Tous droits reserves.
           </p>
           <p className="text-xs" style={{ color: 'var(--skin-muted)' }}>
             Construit avec amour depuis Yaounde.

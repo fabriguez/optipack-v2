@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import { LegalPage } from '@/components/marketing/LegalPage';
 
 export const metadata: Metadata = {
-  title: 'Mentions legales | OptiPack',
-  description: 'Editeur, hebergeur et informations legales du site OptiPack.',
+  title: 'Mentions legales | Transit Soft Services',
+  description: 'Editeur, hebergeur et informations legales du site Transit Soft Services.',
 };
 
 export default function LegalNoticePage() {

@@ -47,7 +47,7 @@ export function CTA() {
                 <ArrowRight className="h-4 w-4" />
               </Link>
               <a
-                href="mailto:hello@optipack.app"
+                href="mailto:contact@transitsoftservices.com"
                 className="inline-flex items-center gap-2 border border-white/40 bg-white/10 px-6 py-3 text-sm font-semibold text-white skin-radius backdrop-blur hover:bg-white/20 transition-colors"
               >
                 Parler a un humain

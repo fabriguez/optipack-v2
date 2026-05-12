@@ -353,33 +353,32 @@ export function ClientFormDialog({ open, onClose, defaultAgency, client }: Clien
           Le profil est optionnel. Le recto et verso de la CNI sont utilises lors du retrait
           d&apos;un colis pour confronter visuellement la personne en face.
         </p>
-        {!editableId ? (
-          <p className="rounded-xl bg-gray-50 p-3 text-xs text-gray-500">
-            Enregistrez d&apos;abord le client pour pouvoir ajouter ses photos.
+        {!editableId && (
+          <p className="mb-2 inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] text-blue-700">
+            Mode creation : les photos sont memorisees et uploadees a l&apos;enregistrement.
           </p>
-        ) : (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            {slotKeys.map((slot) => (
-              <ImageInput
-                key={slot}
-                label={SLOT_LABELS[slot]}
-                value={photoUrls[slot]}
-                onFile={(file) => uploadPhoto(slot, file)}
-                onClear={() => deletePhoto(slot)}
-                uploading={busy === slot}
-                cameraFacing={SLOT_FACING[slot]}
-                height={140}
-                hint={
-                  slot === 'profile'
-                    ? 'Photo selfie (optionnelle)'
-                    : slot === 'idDocument'
-                      ? 'Recto CNI / passeport'
-                      : 'Verso CNI / passeport'
-                }
-              />
-            ))}
-          </div>
         )}
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          {slotKeys.map((slot) => (
+            <ImageInput
+              key={slot}
+              label={SLOT_LABELS[slot]}
+              value={photoUrls[slot]}
+              onFile={(file) => uploadPhoto(slot, file)}
+              onClear={() => deletePhoto(slot)}
+              uploading={busy === slot}
+              cameraFacing={SLOT_FACING[slot]}
+              height={140}
+              hint={
+                slot === 'profile'
+                  ? 'Photo selfie (optionnelle)'
+                  : slot === 'idDocument'
+                    ? 'Recto CNI / passeport'
+                    : 'Verso CNI / passeport'
+              }
+            />
+          ))}
+        </div>
       </div>
     </AppDialog>
   );

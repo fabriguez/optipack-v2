@@ -60,7 +60,7 @@ export function AuthShell({
               <Package className="h-5 w-5 text-white" />
             </div>
             <span className="text-lg font-bold tracking-tight skin-font-heading">
-              OptiPack
+              Transit Soft Services
             </span>
           </Link>
 
@@ -73,7 +73,7 @@ export function AuthShell({
             </h2>
             <p className="mt-4 max-w-md text-white/80">
               Plus de 12 000 clients suivent leurs envois quotidiennement avec
-              OptiPack. Rejoignez-les en 2 minutes.
+              Transit Soft Services. Rejoignez-les en 2 minutes.
             </p>
           </div>
 
@@ -118,7 +118,7 @@ export function AuthShell({
               className="text-base font-bold tracking-tight skin-font-heading"
               style={{ color: 'var(--skin-foreground)' }}
             >
-              OptiPack
+              Transit Soft Services
             </span>
           </Link>
 

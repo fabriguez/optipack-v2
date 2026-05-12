@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { LegalPage } from '@/components/marketing/LegalPage';
 
 export const metadata: Metadata = {
-  title: 'Politique cookies | OptiPack',
+  title: 'Politique cookies | Transit Soft Services',
   description: 'Quels cookies utilisons-nous et pourquoi.',
 };
 
@@ -11,7 +11,7 @@ export default function CookiesPage() {
     <LegalPage title="Politique cookies" lastUpdated="12 mai 2026">
       <p>
         Cette page detaille les cookies et technologies similaires utilises
-        par OptiPack. Nous limitons l&apos;usage aux cookies strictement
+        par Transit Soft Services. Nous limitons l&apos;usage aux cookies strictement
         necessaires au fonctionnement du service.
       </p>
 
@@ -33,7 +33,7 @@ export default function CookiesPage() {
 
       <h2>2. Cookies analytiques</h2>
       <p>
-        OptiPack n&apos;utilise actuellement aucun cookie d&apos;analyse tiers
+        Transit Soft Services n&apos;utilise actuellement aucun cookie d&apos;analyse tiers
         (Google Analytics, Facebook Pixel, etc.). Si cela change, vous serez
         notifie et un bandeau de consentement apparaitra.
       </p>

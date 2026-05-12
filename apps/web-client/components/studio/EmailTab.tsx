@@ -16,8 +16,8 @@ import { Field } from '@/components/auth/Field';
 const PROVIDERS: { id: EmailProvider; label: string; desc: string }[] = [
   {
     id: 'shared',
-    label: 'OptiPack (partage)',
-    desc: 'Sender no-reply@notify.optipack.app - mention "via OptiPack". Aucun DNS, ready en 0 minute.',
+    label: 'Transit Soft Services (partage)',
+    desc: 'Sender no-reply@notify.transitsoftservices.com - mention "via Transit Soft Services". Aucun DNS, ready en 0 minute.',
   },
   {
     id: 'resend',
@@ -192,7 +192,7 @@ export function EmailTab() {
             label="Adresse d'expedition"
             hint={
               provider === 'shared'
-                ? 'En mode partage on utilise no-reply@notify.optipack.app.'
+                ? 'En mode partage on utilise no-reply@notify.transitsoftservices.com.'
                 : 'Doit etre sur un domaine que vous controlez.'
             }
           >

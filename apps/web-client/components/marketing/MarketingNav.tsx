@@ -47,7 +47,7 @@ export function MarketingNav() {
             className="text-lg font-bold tracking-tight skin-font-heading"
             style={{ color: 'var(--skin-foreground)' }}
           >
-            OptiPack
+            Transit Soft Services
           </span>
         </Link>
 

@@ -2,15 +2,15 @@ import type { Metadata } from 'next';
 import { LegalPage } from '@/components/marketing/LegalPage';
 
 export const metadata: Metadata = {
-  title: 'Politique de confidentialite | OptiPack',
-  description: 'Comment OptiPack collecte, utilise et protege vos donnees personnelles.',
+  title: 'Politique de confidentialite | Transit Soft Services',
+  description: 'Comment Transit Soft Services collecte, utilise et protege vos donnees personnelles.',
 };
 
 export default function PrivacyPage() {
   return (
     <LegalPage title="Politique de confidentialite" lastUpdated="12 mai 2026">
       <p>
-        OptiPack accorde la plus grande importance a la protection de vos
+        Transit Soft Services accorde la plus grande importance a la protection de vos
         donnees personnelles. La presente politique decrit quelles donnees
         nous collectons, comment nous les utilisons et quels sont vos droits.
       </p>

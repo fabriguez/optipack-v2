@@ -16,6 +16,7 @@ COPY packages/shared/package.json ./packages/shared/
 COPY packages/ui/package.json ./packages/ui/
 COPY packages/skins/package.json ./packages/skins/
 COPY packages/payments/package.json ./packages/payments/
+COPY packages/ops-schemas/package.json ./packages/ops-schemas/
 COPY packages/config/package.json ./packages/config/
 COPY packages/config/tsconfig/package.json ./packages/config/tsconfig/
 COPY packages/config/eslint/package.json ./packages/config/eslint/

@@ -35,7 +35,7 @@ const TenantMetaContext = createContext<Ctx>({ meta: null, loading: true });
 const FALLBACK: TenantMeta = {
   id: 'fallback',
   slug: null,
-  name: 'OptiPack',
+  name: 'Transit Soft Services',
   logoUrl: null,
   primaryColor: '#1B5E20',
   secondaryColor: '#4CAF50',

@@ -10,7 +10,11 @@ import {
   DeleteClientImageUseCase,
   GetClientImageUseCase,
 } from '../../application/use-cases/client/ClientImageUseCases';
-import { NotFoundError } from '../../domain/errors/BusinessError';
+import {
+  ExportClientsXlsxUseCase,
+  ImportClientsXlsxUseCase,
+} from '../../application/use-cases/client/ClientXlsxUseCases';
+import { BusinessError, NotFoundError } from '../../domain/errors/BusinessError';
 import { getOrgId } from '../middleware/tenantGuard';
 
 export class ClientController {
@@ -114,6 +118,41 @@ export class ClientController {
       res.setHeader('Cache-Control', 'private, max-age=86400');
       res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
       obj.stream.pipe(res);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** GET /clients/export.xlsx?agencyId=... */
+  static async exportXlsx(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(ExportClientsXlsxUseCase);
+      const agencyId = (req.query.agencyId as string | undefined) || undefined;
+      const { buffer, fileName } = await useCase.execute(getOrgId(req), agencyId);
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+      res.send(buffer);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** POST /clients/import (multipart, "file") -> rapport {created, skipped, errors[]} */
+  static async importXlsx(req: Request, res: Response, next: NextFunction) {
+    try {
+      const file = (req as Request & { file?: { buffer: Buffer; mimetype: string } }).file;
+      if (!file?.buffer) {
+        throw new BusinessError('Fichier XLSX manquant (champ "file")');
+      }
+      const useCase = container.resolve(ImportClientsXlsxUseCase);
+      const result = await useCase.execute(getOrgId(req), file.buffer, {
+        defaultAgencyId: (req.body?.defaultAgencyId as string | undefined) || undefined,
+        dryRun: req.body?.dryRun === 'true' || req.body?.dryRun === true,
+      });
+      res.json({ success: true, data: result });
     } catch (err) {
       next(err);
     }

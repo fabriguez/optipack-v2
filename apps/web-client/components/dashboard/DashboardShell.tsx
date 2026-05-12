@@ -57,7 +57,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                 className="text-base font-bold tracking-tight skin-font-heading"
                 style={{ color: 'var(--skin-foreground)' }}
               >
-                OptiPack
+                Transit Soft Services
               </span>
             </Link>
 

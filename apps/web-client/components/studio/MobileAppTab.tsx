@@ -35,7 +35,7 @@ const MODES: { id: MobileAppMode; label: string; desc: string }[] = [
 export function MobileAppTab() {
   const [cfg, setCfg] = useState<MobileAppConfig>({
     mode: 'shared',
-    appName: 'OptiPack',
+    appName: 'Transit Soft Services',
     buildStatus: 'idle',
   });
 
@@ -270,7 +270,7 @@ export function MobileAppTab() {
                 className="mt-1 text-xs"
                 style={{ color: 'var(--skin-muted)' }}
               >
-                Une fois enregistre, l'equipe OptiPack declenche le build EAS
+                Une fois enregistre, l'equipe Transit Soft Services declenche le build EAS
                 dedie et soumet aux stores. Vous recevrez un email a chaque etape
                 (queued -&gt; building -&gt; published).
               </p>

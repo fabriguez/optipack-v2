@@ -12,7 +12,7 @@ import './globals.css';
 const geist = Geist({ subsets: ['latin'], variable: '--font-sans' });
 
 export const metadata: Metadata = {
-  title: 'OptiPack - Vos colis, suivis en temps reel',
+  title: 'Transit Soft Services - Vos colis, suivis en temps reel',
   description:
     'Plateforme de suivi de colis multi-tenant. Suivez, declarez et recevez vos envois avec une experience pensee pour vous.',
 };

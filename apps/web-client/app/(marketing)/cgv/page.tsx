@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import { LegalPage } from '@/components/marketing/LegalPage';
 
 export const metadata: Metadata = {
-  title: 'Conditions Generales de Vente | OptiPack',
-  description: 'Conditions generales de vente et d\'utilisation du service OptiPack.',
+  title: 'Conditions Generales de Vente | Transit Soft Services',
+  description: 'Conditions generales de vente et d\'utilisation du service Transit Soft Services.',
 };
 
 export default function CgvPage() {
@@ -11,14 +11,14 @@ export default function CgvPage() {
     <LegalPage title="Conditions Generales de Vente" lastUpdated="12 mai 2026">
       <p>
         Les presentes conditions generales de vente (CGV) regissent l&apos;usage
-        de la plateforme OptiPack par les clients et les entreprises de
+        de la plateforme Transit Soft Services par les clients et les entreprises de
         transit qui en font usage. En creant un compte ou en utilisant
         nos services, vous acceptez sans reserve ces conditions.
       </p>
 
       <h2>1. Objet</h2>
       <p>
-        OptiPack fournit un service de suivi de colis et de gestion logistique
+        Transit Soft Services fournit un service de suivi de colis et de gestion logistique
         a destination des transitaires et de leurs clients en Afrique de
         l&apos;Ouest et Centrale. Le service inclut la creation, l&apos;expedition,
         la reception, la facturation et le suivi temps reel des colis.
@@ -35,14 +35,14 @@ export default function CgvPage() {
       <h2>3. Tarifs</h2>
       <p>
         Les tarifs de transit sont fixes par chaque agence partenaire au
-        moment de la creation du colis. OptiPack ne percoit pas de
+        moment de la creation du colis. Transit Soft Services ne percoit pas de
         commission directe sur l&apos;envoi ; le service de plateforme est
         facture aux transitaires partenaires.
       </p>
 
       <h2>4. Responsabilite</h2>
       <p>
-        OptiPack agit en qualite d&apos;intermediaire technique. La responsabilite
+        Transit Soft Services agit en qualite d&apos;intermediaire technique. La responsabilite
         materielle des colis incombe au transitaire emetteur. En cas de
         litige, le recours s&apos;effectue d&apos;abord aupres de l&apos;agence
         d&apos;envoi ou de reception indiquee sur le bordereau du colis.
@@ -64,7 +64,7 @@ export default function CgvPage() {
 
       <h2>6. Modifications</h2>
       <p>
-        OptiPack se reserve le droit de modifier les presentes conditions a
+        Transit Soft Services se reserve le droit de modifier les presentes conditions a
         tout moment. Toute modification substantielle vous sera notifiee
         par email et / ou par notification dans l&apos;application au moins
         30 jours avant son entree en vigueur.

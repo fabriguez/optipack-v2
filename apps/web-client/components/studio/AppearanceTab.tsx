@@ -171,7 +171,7 @@ export function AppearanceTab() {
             <span className="h-2 w-2 rounded-full bg-yellow-400" />
             <span className="h-2 w-2 rounded-full bg-green-400" />
             <span className="ml-2 truncate">
-              www.&lt;votre-tenant&gt;.optipack.app
+              www.&lt;votre-tenant&gt;.transitsoftservices.com
             </span>
           </div>
           <div

@@ -3,12 +3,22 @@ import { ClientController } from '../../controllers/ClientController';
 import { PartnerPricingController } from '../../controllers/PartnerPricingController';
 import { authenticate, authorize } from '../../middleware/authMiddleware';
 import { validate } from '../../middleware/validate';
-import { uploadImageMiddleware } from '../../middleware/upload';
+import { uploadImageMiddleware, uploadDocumentMiddleware } from '../../middleware/upload';
 import { createClientSchema, updateClientSchema, paginationSchema } from '@transitsoftservices/shared';
 
 const router = Router();
 
 router.use(authenticate);
+
+// IMPORTANT : les routes "statiques" (export, import) doivent etre declarees
+// AVANT `/:id` sinon Express interprete "export.xlsx" comme un id.
+router.get('/export.xlsx', authorize('SUPER_ADMIN', 'ADMIN'), ClientController.exportXlsx);
+router.post(
+  '/import',
+  authorize('SUPER_ADMIN', 'ADMIN'),
+  uploadDocumentMiddleware,
+  ClientController.importXlsx,
+);
 
 router.get('/', validate(paginationSchema, 'query'), ClientController.list);
 router.get('/:id', ClientController.getById);
