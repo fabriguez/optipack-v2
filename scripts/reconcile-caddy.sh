@@ -68,18 +68,31 @@ if [ -z "$ACCESS" ] && [ -n "$CHALLENGE" ]; then
   KIND=$(jwt_kind "$CHALLENGE")
   echo "[2FA] Second facteur requis (kind=${KIND:-unknown})." >&2
 
-  do_confirm() {
+  # Endpoint utilise selon kind :
+  #  - setup_required -> POST /auth/2fa/confirm {challengeToken, totpCode}
+  #    (premier setup, en plus du code on recoit les recovery codes)
+  #  - totp_required  -> POST /auth/login {email, password, totpCode}
+  #    (2FA deja active, le serveur re-verifie tout en une etape)
+  do_totp() {
     # $1 = totp code
-    TFA=$(curl -fsSL -X POST "$OPS_URL/ops/auth/2fa/confirm" \
-      -H 'Content-Type: application/json' \
-      -d "$(jq -n --arg c "$CHALLENGE" --arg t "$1" \
-            '{challengeToken:$c, totpCode:$t}')")
+    if [ "$KIND" = "totp_required" ]; then
+      TFA=$(curl -fsSL -X POST "$OPS_URL/ops/auth/login" \
+        -H 'Content-Type: application/json' \
+        -d "$(jq -n --arg e "$OPS_EMAIL" --arg p "$OPS_PASSWORD" --arg t "$1" \
+              '{email:$e, password:$p, totpCode:$t}')")
+    else
+      TFA=$(curl -fsSL -X POST "$OPS_URL/ops/auth/2fa/confirm" \
+        -H 'Content-Type: application/json' \
+        -d "$(jq -n --arg c "$CHALLENGE" --arg t "$1" \
+              '{challengeToken:$c, totpCode:$t}')")
+    fi
     ACCESS=$(extract "$TFA" "accessToken")
   }
+  do_confirm() { do_totp "$1"; }   # alias retro-compatible
 
-  # Code TOTP fourni en env -> on tente confirm direct.
+  # Code TOTP fourni en env -> on tente direct.
   if [ -n "${OPS_TOTP:-}" ]; then
-    do_confirm "$OPS_TOTP"
+    do_totp "$OPS_TOTP"
 
   elif [ -n "${OPS_RECOVERY:-}" ]; then
     TFA=$(curl -fsSL -X POST "$OPS_URL/ops/auth/2fa/recovery" \
@@ -150,14 +163,15 @@ if [ -z "$ACCESS" ] && [ -n "$CHALLENGE" ]; then
     fi
 
   else
-    # 2FA deja active : juste demander le code TOTP courant.
+    # 2FA deja active : juste demander le code TOTP courant et le renvoyer
+    # au /auth/login (cf. do_totp ci-dessus, branche totp_required).
     while true; do
       printf "[2FA] Entre les 6 chiffres affiches par ton app : " >&2
       IFS= read -r TOTP
       TOTP=$(printf '%s' "$TOTP" | tr -d ' \r\n')
       [ -n "$TOTP" ] && break
     done
-    do_confirm "$TOTP"
+    do_totp "$TOTP"
   fi
 fi
 
