@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Search, Package, MapPin, Clock, CheckCircle2, AlertCircle, Loader2, Building2 } from 'lucide-react';
 import axios from 'axios';
@@ -45,6 +45,24 @@ type Parcel = {
 };
 
 export default function TrackPage() {
+  // Next 16 + Turbopack : useSearchParams() doit etre dans une boundary
+  // Suspense, sinon le build prerender pour /track echoue.
+  return (
+    <Suspense fallback={<TrackFallback />}>
+      <TrackPageInner />
+    </Suspense>
+  );
+}
+
+function TrackFallback() {
+  return (
+    <div className="flex min-h-[60vh] items-center justify-center">
+      <Loader2 className="h-6 w-6 animate-spin" style={{ color: 'var(--skin-primary)' }} />
+    </div>
+  );
+}
+
+function TrackPageInner() {
   const params = useSearchParams();
   const router = useRouter();
   const initial = params.get('q') || '';

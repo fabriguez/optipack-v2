@@ -89,6 +89,7 @@ router.post('/billing/webhook/momo', BillingController.momoWebhook);
 // RELEASES + TENANT UPDATES (Phase 4.5)
 // ============================================================
 router.get('/releases', authenticateOps, ReleaseController.list);
+router.post('/releases/sync', authenticateOps, requireSuperAdmin, ReleaseController.sync);
 router.post('/releases', authenticateOps, requireSuperAdmin, ReleaseController.create);
 router.patch('/releases/:id', authenticateOps, requireSuperAdmin, ReleaseController.update);
 router.post('/releases/:id/publish', authenticateOps, requireSuperAdmin, ReleaseController.publish);

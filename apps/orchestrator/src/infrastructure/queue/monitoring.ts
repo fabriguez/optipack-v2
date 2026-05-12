@@ -162,17 +162,24 @@ async function runAutoFreeze() {
   }
 }
 
-async function runReleaseSync() {
+export async function runReleaseSync(): Promise<{
+  configured: boolean;
+  tagsFound: number;
+  semverTags: number;
+  created: number;
+  errors: { version: string; message: string }[];
+}> {
   const ghcr = container.resolve(GHCRClient);
   const releases = container.resolve(ReleaseUseCases);
   if (!ghcr.isConfigured()) {
     logger.debug('[release-sync] GHCR non configure, skip');
-    return;
+    return { configured: false, tagsFound: 0, semverTags: 0, created: 0, errors: [] };
   }
 
-  // On poll les tags de l'image API. La version d'un release = tag commun api+web.
-  const tags = ghcr.filterSemverTags(await ghcr.listTags('optipack-api'));
+  const rawTags = await ghcr.listTags('optipack-api');
+  const tags = ghcr.filterSemverTags(rawTags);
   let created = 0;
+  const errors: { version: string; message: string }[] = [];
   for (const version of tags) {
     const exists = await prisma.release.findUnique({ where: { version } });
     if (exists) continue;
@@ -181,15 +188,22 @@ async function runReleaseSync() {
       created++;
       logger.info({ version }, '[release-sync] new release detected (unpublished)');
     } catch (e: unknown) {
-      logger.warn(
-        { version, err: e instanceof Error ? e.message : String(e) },
-        '[release-sync] create failed',
-      );
+      const msg = e instanceof Error ? e.message : String(e);
+      errors.push({ version, message: msg });
+      logger.warn({ version, err: msg }, '[release-sync] create failed');
     }
   }
-  if (created > 0) {
-    logger.info({ created }, '[release-sync] sync complete');
-  }
+  logger.info(
+    { tagsFound: rawTags.length, semverTags: tags.length, created },
+    '[release-sync] sync complete',
+  );
+  return {
+    configured: true,
+    tagsFound: rawTags.length,
+    semverTags: tags.length,
+    created,
+    errors,
+  };
 }
 
 async function runBackupNightly() {

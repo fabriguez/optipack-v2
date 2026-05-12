@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Search, Pencil, Rocket, Loader2 } from 'lucide-react';
+import { Search, Pencil, Rocket, Loader2, RefreshCw } from 'lucide-react';
 import { api } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
 import { Pagination } from '@/components/Pagination';
@@ -41,6 +41,20 @@ export default function ReleasesPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['releases'] }),
   });
 
+  const sync = useMutation({
+    mutationFn: () => api.post('/releases/sync'),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['releases'] }),
+  });
+  const syncReport = sync.data?.data?.data as
+    | {
+        configured: boolean;
+        tagsFound: number;
+        semverTags: number;
+        created: number;
+        errors: { version: string; message: string }[];
+      }
+    | undefined;
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -51,13 +65,58 @@ export default function ReleasesPage() {
             pour la rendre disponible aux tenants.
           </p>
         </div>
-        <Link
-          href="/releases/new"
-          className="rounded-md bg-primary-700 px-3 py-1.5 text-sm text-white hover:bg-primary-900"
-        >
-          + Nouvelle release
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => sync.mutate()}
+            disabled={sync.isPending}
+            className="inline-flex items-center gap-1.5 rounded-md border bg-white px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-50"
+            title="Re-scanner les tags GHCR maintenant"
+          >
+            {sync.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+            Synchroniser GHCR
+          </button>
+          <Link
+            href="/releases/new"
+            className="rounded-md bg-primary-700 px-3 py-1.5 text-sm text-white hover:bg-primary-900"
+          >
+            + Nouvelle release
+          </Link>
+        </div>
       </div>
+
+      {syncReport && (
+        <div
+          className={
+            'rounded-md border px-3 py-2 text-sm ' +
+            (!syncReport.configured
+              ? 'border-amber-200 bg-amber-50 text-amber-800'
+              : syncReport.created > 0
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+              : 'border-gray-200 bg-gray-50 text-gray-700')
+          }
+        >
+          {!syncReport.configured ? (
+            <>
+              GHCR non configure. Definissez <code>OPS_GHCR_TOKEN</code> (PAT GitHub avec scope <code>read:packages</code>) et <code>OPS_GHCR_NAMESPACE</code> sur l&apos;orchestrateur.
+            </>
+          ) : (
+            <>
+              Sync OK : {syncReport.tagsFound} tag(s) trouve(s), {syncReport.semverTags} match(ent) le filtre semver,{' '}
+              <strong>{syncReport.created} nouvelle(s) release(s) creee(s)</strong>.
+              {syncReport.errors.length > 0 && (
+                <span className="ml-2 text-red-600">
+                  ({syncReport.errors.length} erreur(s))
+                </span>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />

@@ -12,9 +12,25 @@ import {
 import { AuditLogger } from '../../application/services/AuditLogger';
 import { AuthenticationError } from '../../domain/errors/BusinessError';
 import { parsePagination, paginated } from '../../application/utils/pagination';
+import { runReleaseSync } from '../../infrastructure/queue/monitoring';
 
 export class ReleaseController {
   // ---------- Releases (super-admin) ----------
+
+  /**
+   * POST /ops/releases/sync — declenche manuellement la sync GHCR.
+   * Permet d'eviter d'attendre le cron (toutes les RELEASE_SYNC_INTERVAL_MS).
+   * Retourne le rapport pour qu'on puisse voir cote UI ce qui a ete cree
+   * (et eventuellement les tags rejetes par le filtre semver).
+   */
+  static async sync(_req: Request, res: Response, next: NextFunction) {
+    try {
+      const report = await runReleaseSync();
+      res.json({ success: true, data: report });
+    } catch (err) {
+      next(err);
+    }
+  }
 
   static async list(req: Request, res: Response, next: NextFunction) {
     try {
