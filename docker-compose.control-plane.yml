@@ -77,6 +77,25 @@ services:
     networks:
       - control-plane
 
+  ops-admin:
+    build:
+      context: .
+      dockerfile: docker/ops-admin/Dockerfile.prod
+      args:
+        # URL publique de l'orchestrator API, inlinee dans le bundle JS au build.
+        NEXT_PUBLIC_ORCHESTRATOR_URL: ${OPS_PUBLIC_API_URL:-https://ops.transitsoftservices.com}
+    restart: unless-stopped
+    depends_on:
+      orchestrator:
+        condition: service_started
+    environment:
+      NODE_ENV: production
+      PORT: 3020
+    ports:
+      - "127.0.0.1:3020:3020"
+    networks:
+      - control-plane
+
 volumes:
   ops-postgres-data:
   ops-redis-data:

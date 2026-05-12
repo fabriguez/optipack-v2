@@ -111,6 +111,45 @@ export class CaddyService {
       });
     }
 
+    // Routes statiques additionnelles (ops-admin, orchestrator API, monitoring...).
+    // Format env :  CADDY_STATIC_ROUTES="host1=127.0.0.1:port1,host2=127.0.0.1:port2"
+    // Defauts :
+    //   ops.{base}       -> orchestrator API (port 4020 expose en 127.0.0.1)
+    //   ops-admin.{base} -> dashboard ops-admin Next.js (port 3020)
+    // Note : Caddy tourne sur l'host donc utilise 127.0.0.1, PAS host.docker.internal
+    // (qui n'a de sens que pour un client a l'interieur d'un conteneur).
+    const staticDefault = [
+      `ops.${opts.baseDomain}=127.0.0.1:4020`,
+      `ops-admin.${opts.baseDomain}=127.0.0.1:3020`,
+    ].join(',');
+    const staticRaw = process.env.CADDY_STATIC_ROUTES ?? staticDefault;
+    for (const entry of staticRaw.split(',').map((s) => s.trim()).filter(Boolean)) {
+      const eq = entry.indexOf('=');
+      if (eq < 0) continue;
+      const host = entry.slice(0, eq).trim();
+      const upstream = entry.slice(eq + 1).trim();
+      if (!host || !upstream) continue;
+      routes.push({
+        match: [{ host: [host] }],
+        handle: [
+          {
+            handler: 'subroute',
+            routes: [
+              {
+                handle: [
+                  {
+                    handler: 'reverse_proxy',
+                    upstreams: [{ dial: upstream }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        terminal: true,
+      });
+    }
+
     // Bloc admin = doit rester atteignable apres ce push, sinon les push
     // suivants depuis le conteneur orchestrator echouent (admin replace =
     // tout est remplace, pas merge). Configurable via env :
