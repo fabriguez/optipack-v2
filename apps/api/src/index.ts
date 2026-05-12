@@ -21,16 +21,14 @@ import { registerNotificationProviders } from './infrastructure/notifications/pr
 import jwt from 'jsonwebtoken';
 import type { JwtPayload } from '@transitsoftservices/shared';
 import { realtimeService } from './infrastructure/realtime/RealtimeService';
+import { corsOptions, socketCorsOptions } from './config/cors';
 
 const app = express();
 const httpServer = createServer(app);
 
-// CORS centralise : config partagee avec Socket.io. Allowlist par regex
-// (tous les sous-domaines de BASE_DOMAIN + ALLOWED_ORIGINS / PATTERNS env).
-// Cf. ./config/cors.ts.
-import { corsOptions, socketCorsOptions } from './config/cors';
-
 // Socket.io
+// CORS centralise via ./config/cors.ts (cf. import en haut). Allowlist par
+// regex sur tous les sous-domaines de BASE_DOMAIN + ALLOWED_ORIGINS env.
 const io = new SocketServer(httpServer, {
   cors: socketCorsOptions,
 });

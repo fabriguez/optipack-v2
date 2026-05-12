@@ -22,6 +22,7 @@ import {
   closeMonitoring,
 } from './infrastructure/queue/monitoring';
 import type { Worker } from 'bullmq';
+import { corsOptions } from './config/cors';
 
 const app = express();
 
@@ -54,7 +55,6 @@ app.use(
 
 // CORS centralise : allowlist par regex sur les sous-domaines de OPS_BASE_DOMAIN
 // + OPS_CORS_ORIGINS / OPS_CORS_ORIGIN_PATTERNS pour les exceptions. Cf. ./config/cors.ts
-import { corsOptions } from './config/cors';
 app.use(cors(corsOptions));
 // Reponse explicite aux preflight OPTIONS, pour couvrir les cas ou un autre
 // middleware terminerait la requete avant cors() (rate-limit, 404 catch-all, etc).
@@ -111,10 +111,10 @@ app.use(
 const writeLimit = rateLimit({
   windowMs: 60 * 1000,
   max: 30, // 30 ecritures / min / IP
-  skip: (req) => req.method === 'OPTIONS',
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req) => {
+    // OPTIONS = preflight CORS : jamais rate-limite (cors() y repond deja)
     if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return true;
     if (req.path.startsWith('/billing/webhook')) return true;
     if (req.path.startsWith('/auth/login') || req.path.startsWith('/auth/2fa')) return true;
