@@ -20,8 +20,21 @@ export class FundTransferController {
   static async list(req: Request, res: Response, next: NextFunction) {
     try {
       const repo = container.resolve<any>(FUND_TRANSFER_REPOSITORY);
+      const q = req.query as Record<string, string | undefined>;
       const result = await repo.findAll(
-        { agencyIds: req.user!.agencyIds },
+        {
+          agencyIds: req.user!.agencyIds,
+          sourceAgencyId: q.sourceAgencyId,
+          destinationAgencyId: q.destinationAgencyId,
+          reference: q.reference,
+          status: q.status as 'PENDING' | 'CONFIRMED' | 'VOIDED' | undefined,
+          dateFrom: q.dateFrom,
+          dateTo: q.dateTo,
+          sourcePaymentMethod: q.sourcePaymentMethod,
+          destinationPaymentMethod: q.destinationPaymentMethod,
+          minAmount: q.minAmount ? Number(q.minAmount) : undefined,
+          maxAmount: q.maxAmount ? Number(q.maxAmount) : undefined,
+        },
         req.query,
       );
       res.json({ success: true, ...result });

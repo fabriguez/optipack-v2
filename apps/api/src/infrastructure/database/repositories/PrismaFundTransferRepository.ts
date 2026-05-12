@@ -18,16 +18,44 @@ export class PrismaFundTransferRepository implements IFundTransferRepository {
   }
 
   async findAll(
-    filters: { sourceAgencyId?: string; agencyIds?: string[] },
+    filters: {
+      sourceAgencyId?: string;
+      destinationAgencyId?: string;
+      agencyIds?: string[];
+      reference?: string;
+      status?: 'PENDING' | 'CONFIRMED' | 'VOIDED';
+      dateFrom?: string;
+      dateTo?: string;
+      sourcePaymentMethod?: string;
+      destinationPaymentMethod?: string;
+      minAmount?: number;
+      maxAmount?: number;
+    },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<FundTransfer>> {
     const { page, limit, search } = pagination;
     const skip = (page - 1) * limit;
 
+    const createdAt: Prisma.DateTimeFilter = {};
+    if (filters.dateFrom) createdAt.gte = new Date(filters.dateFrom);
+    if (filters.dateTo) createdAt.lte = new Date(filters.dateTo);
+
+    const amount: Prisma.DecimalFilter = {};
+    if (filters.minAmount !== undefined) amount.gte = filters.minAmount;
+    if (filters.maxAmount !== undefined) amount.lte = filters.maxAmount;
+
     const where: Prisma.FundTransferWhereInput = {
       ...(filters.sourceAgencyId && { sourceAgencyId: filters.sourceAgencyId }),
-      ...(filters.agencyIds?.length && { sourceAgencyId: { in: filters.agencyIds } }),
-      ...(search && { reference: { contains: search, mode: 'insensitive' } }),
+      ...(filters.destinationAgencyId && { destinationAgencyId: filters.destinationAgencyId }),
+      ...(filters.agencyIds?.length && !filters.sourceAgencyId && { sourceAgencyId: { in: filters.agencyIds } }),
+      ...(filters.status && { status: filters.status }),
+      ...(filters.sourcePaymentMethod && { sourcePaymentMethod: filters.sourcePaymentMethod }),
+      ...(filters.destinationPaymentMethod && { destinationPaymentMethod: filters.destinationPaymentMethod }),
+      ...((filters.reference || search) && {
+        reference: { contains: filters.reference || search, mode: 'insensitive' },
+      }),
+      ...(Object.keys(createdAt).length && { createdAt }),
+      ...(Object.keys(amount).length && { amount }),
     };
 
     const [data, total] = await Promise.all([
@@ -36,7 +64,9 @@ export class PrismaFundTransferRepository implements IFundTransferRepository {
         orderBy: { createdAt: 'desc' },
         include: {
           sourceAgency: { select: { id: true, name: true, code: true } },
+          destinationAgency: { select: { id: true, name: true, code: true } },
           initiatedBy: { select: { id: true, firstName: true, lastName: true } },
+          confirmedBy: { select: { id: true, firstName: true, lastName: true } },
         },
       }),
       prisma.fundTransfer.count({ where }),

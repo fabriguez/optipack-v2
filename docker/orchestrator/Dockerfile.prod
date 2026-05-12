@@ -20,8 +20,11 @@ RUN pnpm install --frozen-lockfile || pnpm install
 COPY packages/ ./packages/
 COPY apps/orchestrator/ ./apps/orchestrator/
 
-# Build shared d'abord
+# Build workspace packages d'abord (le `main` pointe sur dist/*.js, requis a
+# runtime CJS quand l'orchestrator les require).
 RUN pnpm --filter @transitsoftservices/shared build
+RUN pnpm --filter @transitsoftservices/skins build
+RUN pnpm --filter @transitsoftservices/ops-schemas build
 
 # Generate Prisma client (orchestrator schema)
 RUN cd apps/orchestrator && OPS_DATABASE_URL=postgresql://x:y@z/db npx prisma generate

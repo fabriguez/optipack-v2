@@ -1712,6 +1712,10 @@ model FundTransfer {
   destinationLabel    String?
   amount              Decimal                 @db.Decimal(15, 2)
   transferMethod      String
+  // Methodes de paiement granulaires (canal cote source / cote destination)
+  // Optionnels : nullable pour conserver les transferts historiques.
+  sourcePaymentMethod      String?
+  destinationPaymentMethod String?
   proofImageUrl       String?
   initiatedByUserId   String
   confirmedByUserId   String?

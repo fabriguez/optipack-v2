@@ -136,6 +136,23 @@ export const searchers = {
     }));
   }, 'searchers.containers'),
 
+  // Employes habilites a une permission ABAC (ex: disbursement.order).
+  // Le composant appelant DOIT passer extra={ key: 'permission.key' }.
+  employeesByPermission: tag(async (q: string, limit = DEFAULT_LIMIT, extra?: Record<string, unknown>): Promise<SearchOption[]> => {
+    const key = extra?.key;
+    if (!key) return [];
+    const res = await apiClient.get<{ success: boolean; data: Array<{ id: string; fullName: string; positionName?: string | null; agencyName: string }> }>(
+      '/employees/by-permission',
+      { params: { key, search: q, limit } },
+    );
+    const items = res.data.data ?? [];
+    return items.map((e) => ({
+      value: e.id,
+      label: e.fullName,
+      sublabel: [e.positionName, e.agencyName].filter(Boolean).join(' - '),
+    }));
+  }, 'searchers.employeesByPermission'),
+
   parcels: tag(async (q: string, limit = DEFAULT_LIMIT, extra?: Record<string, unknown>): Promise<SearchOption[]> => {
     const items = await searchPaginated<{
       id: string;

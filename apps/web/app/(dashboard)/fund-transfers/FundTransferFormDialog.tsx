@@ -61,6 +61,10 @@ export function FundTransferFormDialog({ open, onClose }: Props) {
         <AppSelect label="Destination" {...register('destinationType')} error={errors.destinationType?.message}
           options={[{ value: 'HQ', label: 'Siege' }, { value: 'BANK', label: 'Banque' }, { value: 'AGENCY', label: 'Autre agence' }]} placeholder="Selectionner" />
         <AppInput label="Mode de transfert" {...register('transferMethod')} error={errors.transferMethod?.message} placeholder="Virement, especes..." />
+        <div className="grid grid-cols-2 gap-3">
+          <AppInput label="Methode source (canal)" {...register('sourcePaymentMethod')} error={errors.sourcePaymentMethod?.message} placeholder="Caisse, banque..." />
+          <AppInput label="Methode destination (canal)" {...register('destinationPaymentMethod')} error={errors.destinationPaymentMethod?.message} placeholder="Compte, especes..." />
+        </div>
         <AppInput label="Montant" type="number" step="0.01" {...register('amount', { valueAsNumber: true })} error={errors.amount?.message} />
       </form>
     </AppDialog>

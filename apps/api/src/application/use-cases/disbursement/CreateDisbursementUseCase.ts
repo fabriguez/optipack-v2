@@ -35,6 +35,17 @@ export class CreateDisbursementUseCase {
       orderer: input.orderer,
       amount: input.amount,
       amountInWords: input.amountInWords,
+      // Nouveaux champs (cf. Phase Disbursement) : ordonnateur lie, justifs,
+      // liens optionnels vers une entite metier (conteneur/colis/client).
+      proofUrl: input.proofUrl ?? null,
+      proofKey: input.proofKey ?? null,
+      justificationDescription: input.justificationDescription ?? null,
+      ...(input.ordererUserId
+        ? { ordererUser: { connect: { id: input.ordererUserId } } }
+        : {}),
+      ...(input.containerId ? { container: { connect: { id: input.containerId } } } : {}),
+      ...(input.parcelId ? { parcel: { connect: { id: input.parcelId } } } : {}),
+      ...(input.clientId ? { client: { connect: { id: input.clientId } } } : {}),
       agency: { connect: { id: input.agencyId } },
       cashRegister: { connect: { id: cashRegister.id } },
       issuedBy: { connect: { id: userId } },

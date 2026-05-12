@@ -28,6 +28,14 @@ RUN pnpm install --frozen-lockfile || pnpm install
 COPY packages/ ./packages/
 COPY apps/ops-admin/ ./apps/ops-admin/
 
+# Build workspace packages que Next.js doit resoudre par leur `main: dist/index.js`.
+# shared + skins exposaient deja le pattern ; ops-schemas a le meme contrat
+# (zod schemas partages backend/frontend). Sans build, le bundle Next echoue avec
+# "Module not found: '@transitsoftservices/ops-schemas'".
+RUN pnpm --filter @transitsoftservices/shared build
+RUN pnpm --filter @transitsoftservices/skins build
+RUN pnpm --filter @transitsoftservices/ops-schemas build
+
 # Accept NEXT_PUBLIC_* vars at build time
 ARG NEXT_PUBLIC_ORCHESTRATOR_URL
 ENV NEXT_PUBLIC_ORCHESTRATOR_URL=$NEXT_PUBLIC_ORCHESTRATOR_URL

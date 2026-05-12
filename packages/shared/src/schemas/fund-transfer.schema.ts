@@ -11,6 +11,21 @@ export const createFundTransferSchema = z.object({
   destinationId: z.string().optional(),
   amount: z.number().positive('Le montant doit etre positif'),
   transferMethod: z.string().min(2, 'Le mode de transfert est requis'),
+  sourcePaymentMethod: z.string().optional(),
+  destinationPaymentMethod: z.string().optional(),
+});
+
+export const listFundTransferFiltersSchema = z.object({
+  reference: z.string().optional(),
+  sourceAgencyId: z.string().uuid().optional(),
+  destinationAgencyId: z.string().uuid().optional(),
+  status: z.enum(['PENDING', 'CONFIRMED', 'VOIDED']).optional(),
+  dateFrom: z.string().optional(),
+  dateTo: z.string().optional(),
+  sourcePaymentMethod: z.string().optional(),
+  destinationPaymentMethod: z.string().optional(),
+  minAmount: z.coerce.number().nonnegative().optional(),
+  maxAmount: z.coerce.number().nonnegative().optional(),
 });
 
 export const confirmFundTransferSchema = z.object({
@@ -24,3 +39,4 @@ export const voidFundTransferSchema = z.object({
 export type CreateFundTransferInput = z.infer<typeof createFundTransferSchema>;
 export type ConfirmFundTransferInput = z.infer<typeof confirmFundTransferSchema>;
 export type VoidFundTransferInput = z.infer<typeof voidFundTransferSchema>;
+export type ListFundTransferFiltersInput = z.infer<typeof listFundTransferFiltersSchema>;

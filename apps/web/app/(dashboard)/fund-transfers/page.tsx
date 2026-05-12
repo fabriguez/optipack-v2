@@ -33,15 +33,32 @@ export default function FundTransfersPage() {
   const [search, setSearch] = useState('');
 
   const statusFilter = searchParams.get('status') || '';
-  const agencyFilter = searchParams.get('agencyId') || '';
+  const sourceAgencyId = searchParams.get('sourceAgencyId') || '';
+  const destinationAgencyId = searchParams.get('destinationAgencyId') || '';
+  const referenceFilter = searchParams.get('reference') || '';
+  const dateFrom = searchParams.get('dateFrom') || '';
+  const dateTo = searchParams.get('dateTo') || '';
+  const sourcePaymentMethod = searchParams.get('sourcePaymentMethod') || '';
+  const destinationPaymentMethod = searchParams.get('destinationPaymentMethod') || '';
+  const minAmount = searchParams.get('minAmount') || '';
+  const maxAmount = searchParams.get('maxAmount') || '';
 
   const { data, isLoading } = useQuery({
-    queryKey: ['fund-transfers', { page, status: statusFilter, agencyId: agencyFilter }],
+    queryKey: ['fund-transfers', { page, search, statusFilter, sourceAgencyId, destinationAgencyId, referenceFilter, dateFrom, dateTo, sourcePaymentMethod, destinationPaymentMethod, minAmount, maxAmount }],
     queryFn: () => fundTransfersApi.list({
       page,
       limit: 20,
+      search: search || undefined,
       status: statusFilter || undefined,
-      agencyId: agencyFilter || undefined,
+      sourceAgencyId: sourceAgencyId || undefined,
+      destinationAgencyId: destinationAgencyId || undefined,
+      reference: referenceFilter || undefined,
+      dateFrom: dateFrom || undefined,
+      dateTo: dateTo || undefined,
+      sourcePaymentMethod: sourcePaymentMethod || undefined,
+      destinationPaymentMethod: destinationPaymentMethod || undefined,
+      minAmount: minAmount || undefined,
+      maxAmount: maxAmount || undefined,
     } as any),
   });
 
@@ -54,6 +71,7 @@ export default function FundTransfersPage() {
   ];
 
   const filterFields = [
+    { key: 'reference', label: 'Reference', type: 'text' as const },
     {
       key: 'status',
       label: 'Statut',
@@ -64,12 +82,14 @@ export default function FundTransfersPage() {
         { value: 'VOIDED', label: 'Annule' },
       ],
     },
-    {
-      key: 'agencyId',
-      label: 'Agence',
-      type: 'search-select' as const,
-      searcher: searchers.agencies,
-    },
+    { key: 'sourceAgencyId', label: 'Agence source', type: 'search-select' as const, searcher: searchers.agencies },
+    { key: 'destinationAgencyId', label: 'Agence destination', type: 'search-select' as const, searcher: searchers.agencies },
+    { key: 'dateFrom', label: 'Date debut', type: 'date' as const },
+    { key: 'dateTo', label: 'Date fin', type: 'date' as const },
+    { key: 'sourcePaymentMethod', label: 'Methode source', type: 'text' as const },
+    { key: 'destinationPaymentMethod', label: 'Methode destination', type: 'text' as const },
+    { key: 'minAmount', label: 'Montant min', type: 'text' as const },
+    { key: 'maxAmount', label: 'Montant max', type: 'text' as const },
   ];
 
   const columns = [

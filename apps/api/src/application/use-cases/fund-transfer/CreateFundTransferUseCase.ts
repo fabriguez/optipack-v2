@@ -29,6 +29,8 @@ export class CreateFundTransferUseCase {
       reference,
       amount: input.amount,
       transferMethod: input.transferMethod,
+      ...(input.sourcePaymentMethod && { sourcePaymentMethod: input.sourcePaymentMethod }),
+      ...(input.destinationPaymentMethod && { destinationPaymentMethod: input.destinationPaymentMethod }),
       destinationType: input.destinationType,
       destinationLabel: input.destinationType === 'HQ' ? 'Siege' : undefined,
       sourceAgency: { connect: { id: input.sourceAgencyId } },

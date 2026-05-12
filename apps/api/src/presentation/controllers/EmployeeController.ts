@@ -7,6 +7,7 @@ import { UploadEmployeeImageUseCase } from '../../application/use-cases/employee
 import { DeleteEmployeeImageUseCase } from '../../application/use-cases/employee/DeleteEmployeeImageUseCase';
 import { GetEmployeeImageUseCase } from '../../application/use-cases/employee/GetEmployeeImageUseCase';
 import { PayEmployeeFromCashRegisterUseCase } from '../../application/use-cases/employee/PayEmployeeFromCashRegisterUseCase';
+import { ListEmployeesByPermissionUseCase } from '../../application/use-cases/employee/ListEmployeesByPermissionUseCase';
 import {
   CreateSalaryDeductionUseCase,
   CancelSalaryDeductionUseCase,
@@ -86,6 +87,31 @@ export class EmployeeController {
         agencyId as string | undefined,
       );
       res.json({ success: true, ...result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * GET /employees/by-permission?key=disbursement.order
+   * Liste reduite (id, fullName, position, agency) des employes ayant
+   * la permission ABAC demandee. Utilise par le form de decaissement pour
+   * proposer l'ordonnateur, mais reutilisable pour tout autre form.
+   */
+  static async byPermission(req: Request, res: Response, next: NextFunction) {
+    try {
+      const key = (req.query.key as string | undefined) || '';
+      if (!key) {
+        res.status(400).json({ success: false, message: 'param "key" requis' });
+        return;
+      }
+      const useCase = container.resolve(ListEmployeesByPermissionUseCase);
+      const items = await useCase.execute(
+        key,
+        req.user!.agencyIds,
+        req.user!.organizationId,
+      );
+      res.json({ success: true, data: items });
     } catch (err) {
       next(err);
     }

@@ -24,6 +24,15 @@ router.get(
   validate(paginationSchema, 'query'),
   EmployeeController.listAll,
 );
+
+// Liste reduite des employes ayant une permission ABAC (cle ?key=...).
+// IMPORTANT : declare avant /:id sinon "by-permission" est interprete comme id.
+router.get(
+  '/by-permission',
+  requirePermission('personnel.read'),
+  EmployeeController.byPermission,
+);
+
 router.get(
   '/agency/:agencyId',
   requirePermission('personnel.read'),

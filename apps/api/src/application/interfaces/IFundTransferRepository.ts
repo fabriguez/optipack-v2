@@ -4,7 +4,19 @@ import type { PaginationInput, PaginatedResponse } from '@transitsoftservices/sh
 export interface IFundTransferRepository {
   findById(id: string): Promise<FundTransfer | null>;
   findAll(
-    filters: { sourceAgencyId?: string; agencyIds?: string[] },
+    filters: {
+      sourceAgencyId?: string;
+      destinationAgencyId?: string;
+      agencyIds?: string[];
+      reference?: string;
+      status?: 'PENDING' | 'CONFIRMED' | 'VOIDED';
+      dateFrom?: string;
+      dateTo?: string;
+      sourcePaymentMethod?: string;
+      destinationPaymentMethod?: string;
+      minAmount?: number;
+      maxAmount?: number;
+    },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<FundTransfer>>;
   create(data: Prisma.FundTransferCreateInput): Promise<FundTransfer>;

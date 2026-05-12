@@ -4,7 +4,16 @@ import type { PaginationInput, PaginatedResponse } from '@transitsoftservices/sh
 export interface IDisbursementRepository {
   findById(id: string): Promise<DisbursementVoucher | null>;
   findAll(
-    filters: { agencyId?: string; agencyIds?: string[] },
+    filters: {
+      agencyId?: string;
+      agencyIds?: string[];
+      ordererUserId?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      containerId?: string;
+      parcelId?: string;
+      clientId?: string;
+    },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<DisbursementVoucher>>;
   create(data: Prisma.DisbursementVoucherCreateInput): Promise<DisbursementVoucher>;

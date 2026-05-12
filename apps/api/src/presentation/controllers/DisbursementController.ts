@@ -19,8 +19,18 @@ export class DisbursementController {
   static async list(req: Request, res: Response, next: NextFunction) {
     try {
       const repo = container.resolve<any>(DISBURSEMENT_REPOSITORY);
+      const q = req.query as Record<string, string | undefined>;
       const result = await repo.findAll(
-        { agencyIds: req.user!.agencyIds },
+        {
+          agencyIds: req.user!.agencyIds,
+          agencyId: q.agencyId,
+          ordererUserId: q.ordererUserId,
+          dateFrom: q.dateFrom,
+          dateTo: q.dateTo,
+          containerId: q.containerId,
+          parcelId: q.parcelId,
+          clientId: q.clientId,
+        },
         req.query,
       );
       res.json({ success: true, ...result });

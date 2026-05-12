@@ -27,6 +27,7 @@ COPY apps/api/ ./apps/api/
 # donc il leur faut un dist/ compile -- pas seulement les sources TS).
 RUN pnpm --filter @transitsoftservices/shared build
 RUN pnpm --filter @transitsoftservices/skins build
+RUN pnpm --filter @transitsoftservices/ops-schemas build
 
 # Generate Prisma client
 RUN pnpm --filter api exec prisma generate

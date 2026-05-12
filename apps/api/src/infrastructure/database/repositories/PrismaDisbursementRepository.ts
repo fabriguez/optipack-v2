@@ -18,16 +18,34 @@ export class PrismaDisbursementRepository implements IDisbursementRepository {
   }
 
   async findAll(
-    filters: { agencyId?: string; agencyIds?: string[] },
+    filters: {
+      agencyId?: string;
+      agencyIds?: string[];
+      ordererUserId?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      containerId?: string;
+      parcelId?: string;
+      clientId?: string;
+    },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<DisbursementVoucher>> {
     const { page, limit, search } = pagination;
     const skip = (page - 1) * limit;
 
+    const createdAt: Prisma.DateTimeFilter = {};
+    if (filters.dateFrom) createdAt.gte = new Date(filters.dateFrom);
+    if (filters.dateTo) createdAt.lte = new Date(filters.dateTo);
+
     const where: Prisma.DisbursementVoucherWhereInput = {
       ...(filters.agencyId && { agencyId: filters.agencyId }),
-      ...(filters.agencyIds?.length && { agencyId: { in: filters.agencyIds } }),
+      ...(filters.agencyIds?.length && !filters.agencyId && { agencyId: { in: filters.agencyIds } }),
+      ...(filters.ordererUserId && { ordererUserId: filters.ordererUserId }),
+      ...(filters.containerId && { containerId: filters.containerId }),
+      ...(filters.parcelId && { parcelId: filters.parcelId }),
+      ...(filters.clientId && { clientId: filters.clientId }),
       ...(search && { reference: { contains: search, mode: 'insensitive' } }),
+      ...(Object.keys(createdAt).length && { createdAt }),
     };
 
     const [data, total] = await Promise.all([
@@ -37,6 +55,10 @@ export class PrismaDisbursementRepository implements IDisbursementRepository {
         include: {
           agency: { select: { id: true, name: true, code: true } },
           issuedBy: { select: { id: true, firstName: true, lastName: true } },
+          ordererUser: { select: { id: true, firstName: true, lastName: true } },
+          container: { select: { id: true, designation: true } },
+          parcel: { select: { id: true, trackingNumber: true } },
+          client: { select: { id: true, fullName: true } },
         },
       }),
       prisma.disbursementVoucher.count({ where }),
