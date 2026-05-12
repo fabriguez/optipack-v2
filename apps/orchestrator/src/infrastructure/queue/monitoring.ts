@@ -162,25 +162,74 @@ async function runAutoFreeze() {
   }
 }
 
+/**
+ * Liste des images dont on poll les tags pour detecter les nouvelles releases.
+ * Une release est creee des qu'un tag semver apparait sur AU MOINS UNE de ces
+ * images. La CI tague typiquement les 4 ensemble avec la meme version, mais
+ * si l'une echoue, la release apparait quand meme (l'admin peut decider de
+ * la publier ou pas).
+ */
+// ops-admin n'est pas un livrable tenant : c'est le control plane SaaS,
+// deploye separement et invisible aux clients. On ne le track pas ici.
+const TRACKED_IMAGES = [
+  'optipack-api',
+  'optipack-web',
+  'optipack-web-client',
+] as const;
+
 export async function runReleaseSync(): Promise<{
   configured: boolean;
+  imagesPolled: number;
   tagsFound: number;
   semverTags: number;
   created: number;
+  perImage: { image: string; tagsFound: number; semverTags: number; error?: string }[];
   errors: { version: string; message: string }[];
 }> {
   const ghcr = container.resolve(GHCRClient);
   const releases = container.resolve(ReleaseUseCases);
   if (!ghcr.isConfigured()) {
     logger.debug('[release-sync] GHCR non configure, skip');
-    return { configured: false, tagsFound: 0, semverTags: 0, created: 0, errors: [] };
+    return {
+      configured: false,
+      imagesPolled: 0,
+      tagsFound: 0,
+      semverTags: 0,
+      created: 0,
+      perImage: [],
+      errors: [],
+    };
   }
 
-  const rawTags = await ghcr.listTags('optipack-api');
-  const tags = ghcr.filterSemverTags(rawTags);
+  // Poll chaque image en parallele, union des tags semver.
+  const perImage: {
+    image: string;
+    tagsFound: number;
+    semverTags: number;
+    error?: string;
+  }[] = [];
+  const unionSemver = new Set<string>();
+  let totalRawTags = 0;
+
+  await Promise.all(
+    TRACKED_IMAGES.map(async (image) => {
+      try {
+        const raw = await ghcr.listTags(image);
+        const semver = ghcr.filterSemverTags(raw);
+        for (const v of semver) unionSemver.add(v);
+        totalRawTags += raw.length;
+        perImage.push({ image, tagsFound: raw.length, semverTags: semver.length });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        perImage.push({ image, tagsFound: 0, semverTags: 0, error: msg });
+        logger.warn({ image, err: msg }, '[release-sync] image poll failed');
+      }
+    }),
+  );
+
   let created = 0;
   const errors: { version: string; message: string }[] = [];
-  for (const version of tags) {
+  for (const version of unionSemver) {
     const exists = await prisma.release.findUnique({ where: { version } });
     if (exists) continue;
     try {
@@ -193,15 +242,19 @@ export async function runReleaseSync(): Promise<{
       logger.warn({ version, err: msg }, '[release-sync] create failed');
     }
   }
+
   logger.info(
-    { tagsFound: rawTags.length, semverTags: tags.length, created },
+    { images: TRACKED_IMAGES.length, tagsFound: totalRawTags, semverTags: unionSemver.size, created },
     '[release-sync] sync complete',
   );
+
   return {
     configured: true,
-    tagsFound: rawTags.length,
-    semverTags: tags.length,
+    imagesPolled: TRACKED_IMAGES.length,
+    tagsFound: totalRawTags,
+    semverTags: unionSemver.size,
     created,
+    perImage,
     errors,
   };
 }

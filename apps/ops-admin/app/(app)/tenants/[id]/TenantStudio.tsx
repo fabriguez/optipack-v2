@@ -106,30 +106,12 @@ export function TenantStudio({ tenantId, initial }: Props) {
           />
         </div>
 
-        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-[1fr_auto]">
-          <Field label="URL du logo">
-            <input
-              type="url"
-              value={form.logoUrl ?? ''}
-              onChange={(e) => update('logoUrl', e.target.value || null)}
-              placeholder="https://cdn.exemple.com/logo.png"
-              className="w-full rounded-md border px-3 py-2 text-sm"
-            />
-          </Field>
-          {form.logoUrl && (
-            <div className="flex items-end">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={form.logoUrl}
-                alt="Logo"
-                className="h-12 w-auto rounded border bg-white p-1 shadow-sm"
-                onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).style.opacity = '0.3';
-                }}
-              />
-            </div>
-          )}
-        </div>
+        <Field label="Logo (PNG, JPG, SVG - max 1 MB)">
+          <LogoFileField
+            value={form.logoUrl}
+            onChange={(url) => update('logoUrl', url)}
+          />
+        </Field>
 
         <div className="mt-4 rounded-md border bg-gray-50 p-3">
           <p className="text-[11px] uppercase tracking-wide text-gray-500">Apercu</p>
@@ -296,6 +278,95 @@ function Field({
       </label>
       <div className="mt-1">{children}</div>
       {hint && <p className="mt-1 text-xs text-gray-500">{hint}</p>}
+    </div>
+  );
+}
+
+/**
+ * Champ d'upload de logo. Comme l'orchestrator n'a pas (encore) d'object
+ * storage, on encode l'image en data URL base64 pour eviter d'ajouter
+ * une infra. C'est viable pour un logo (typiquement <100 Ko).
+ *
+ * Limite stricte a 1 Mo pour eviter de gonfler la BDD.
+ */
+function LogoFileField({
+  value,
+  onChange,
+}: {
+  value: string | null;
+  onChange: (url: string | null) => void;
+}) {
+  const inputId = 'tenant-logo-upload';
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleFile(file: File) {
+    setError(null);
+    if (!/^image\//.test(file.type)) {
+      setError('Format non supporte (image attendue).');
+      return;
+    }
+    if (file.size > 1024 * 1024) {
+      setError('Fichier trop volumineux (max 1 Mo).');
+      return;
+    }
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+    onChange(dataUrl);
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-3">
+        {value ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={value}
+            alt="Logo"
+            className="h-16 w-16 rounded border bg-white object-contain p-1 shadow-sm"
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).style.opacity = '0.3';
+            }}
+          />
+        ) : (
+          <div className="flex h-16 w-16 items-center justify-center rounded border border-dashed bg-gray-50 text-[10px] text-gray-400">
+            Aucun
+          </div>
+        )}
+        <div className="flex flex-col gap-1.5">
+          <label
+            htmlFor={inputId}
+            className="inline-flex cursor-pointer items-center gap-1 rounded-md border bg-white px-3 py-1.5 text-sm shadow-sm hover:bg-gray-50"
+          >
+            {value ? 'Remplacer' : 'Choisir un fichier'}
+          </label>
+          {value && (
+            <button
+              type="button"
+              onClick={() => onChange(null)}
+              className="text-xs text-gray-500 underline hover:text-red-600"
+            >
+              Retirer
+            </button>
+          )}
+          <input
+            id={inputId}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/svg+xml"
+            className="sr-only"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleFile(f);
+              // permet de re-uploader le meme fichier apres erreur
+              e.currentTarget.value = '';
+            }}
+          />
+        </div>
+      </div>
+      {error && <p className="text-xs text-red-600">{error}</p>}
     </div>
   );
 }

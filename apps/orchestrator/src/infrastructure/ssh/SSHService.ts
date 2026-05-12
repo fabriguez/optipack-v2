@@ -84,26 +84,66 @@ export class SSHService {
   }
 
   /**
-   * Renvoie un snapshot d'usage CPU/RAM/disque via parsing top + df.
-   * Best-effort : si le parsing echoue, retourne 0.
+   * Renvoie un snapshot d'usage CPU/RAM/disque.
+   *
+   * CPU : on lit /proc/stat deux fois a 1s d'intervalle et on calcule
+   *       le pourcentage de temps non-idle. C'est la methode standard,
+   *       beaucoup plus fiable que `top -bn1` qui renvoie souvent 100%
+   *       sur la 1ere mesure (selon distro/locale).
+   * RAM : free -m -> used/total (exclut buffers/cache via /MemAvailable).
+   * Disque : df / .
    */
   async getUsage(creds: SshConnection): Promise<VpsUsage> {
     const ssh = await this.connect(creds);
     try {
-      // CPU + RAM via /proc/loadavg + free
-      const [cpu, mem, disk] = await Promise.all([
-        ssh.execCommand("top -bn1 | grep 'Cpu(s)' | awk '{print $2 + $4}'"),
-        ssh.execCommand("free | grep Mem | awk '{print ($3/$2) * 100}'"),
+      // Mesure CPU via delta /proc/stat sur 1s.
+      const cpuScript =
+        'a=$(grep "^cpu " /proc/stat); ' +
+        'sleep 1; ' +
+        'b=$(grep "^cpu " /proc/stat); ' +
+        'echo "$a"; echo "$b"';
+      const [cpuRaw, memRaw, diskRaw] = await Promise.all([
+        ssh.execCommand(cpuScript),
+        // MemAvailable / MemTotal = part libre ; on retourne (1 - free) * 100.
+        ssh.execCommand(
+          "awk '/MemTotal:/ {t=$2} /MemAvailable:/ {a=$2} END {if (t>0) print (1 - a/t) * 100; else print 0}' /proc/meminfo",
+        ),
         ssh.execCommand("df / | tail -1 | awk '{print $5}' | tr -d '%'"),
       ]);
+
       return {
-        cpuUsagePct: this.parsePct(cpu.stdout),
-        ramUsagePct: this.parsePct(mem.stdout),
-        diskUsagePct: this.parsePct(disk.stdout),
+        cpuUsagePct: this.parseCpuDelta(cpuRaw.stdout),
+        ramUsagePct: this.parsePct(memRaw.stdout),
+        diskUsagePct: this.parsePct(diskRaw.stdout),
       };
     } finally {
       ssh.dispose();
     }
+  }
+
+  /**
+   * Parse les deux snapshots de `/proc/stat` (separes par \n) et calcule
+   * le pourcentage d'utilisation CPU sur l'intervalle.
+   * Format attendu de chaque ligne: "cpu user nice system idle iowait irq softirq steal guest guest_nice"
+   */
+  private parseCpuDelta(raw: string): number {
+    const lines = raw.split(/\r?\n/).filter((l) => l.startsWith('cpu '));
+    if (lines.length < 2) return 0;
+    const parse = (l: string): number[] =>
+      l
+        .split(/\s+/)
+        .slice(1, 9) // user nice system idle iowait irq softirq steal
+        .map((n) => Number(n) || 0);
+    const a = parse(lines[0]);
+    const b = parse(lines[1]);
+    if (a.length < 4 || b.length < 4) return 0;
+    const total = (xs: number[]) => xs.reduce((s, x) => s + x, 0);
+    const idleA = a[3] + (a[4] ?? 0); // idle + iowait
+    const idleB = b[3] + (b[4] ?? 0);
+    const dTotal = total(b) - total(a);
+    const dIdle = idleB - idleA;
+    if (dTotal <= 0) return 0;
+    return Math.max(0, Math.min(100, ((dTotal - dIdle) / dTotal) * 100));
   }
 
   /**

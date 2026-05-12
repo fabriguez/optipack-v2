@@ -18,9 +18,20 @@ export class PrismaTransitRouteRepository implements ITransitRouteRepository {
     const { page, limit, sortBy, sortOrder, search } = pagination;
     const skip = (page - 1) * limit;
 
+    // `type` accepte un seul TransitType (ex: "AIR") ou plusieurs en CSV
+    // (ex: "AIR,LAND") pour filtrer par mode de pesee cote UI :
+    //   masse  -> AIR + LAND (pas de SEA en kg)
+    //   volume -> SEA + LAND
+    //   both   -> aucun filtre (toutes)
+    const typeFilter = filters?.type
+      ? filters.type.includes(',')
+        ? { in: filters.type.split(',').map((t) => t.trim()).filter(Boolean) as any[] }
+        : (filters.type as any)
+      : undefined;
+
     const where: Prisma.TransitRouteWhereInput = {
       organizationId,
-      ...(filters?.type && { type: filters.type as any }),
+      ...(typeFilter && { type: typeFilter }),
       ...(search && {
         OR: [
           { name: { contains: search, mode: 'insensitive' } },

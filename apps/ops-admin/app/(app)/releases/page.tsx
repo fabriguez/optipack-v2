@@ -48,9 +48,11 @@ export default function ReleasesPage() {
   const syncReport = sync.data?.data?.data as
     | {
         configured: boolean;
+        imagesPolled: number;
         tagsFound: number;
         semverTags: number;
         created: number;
+        perImage: { image: string; tagsFound: number; semverTags: number; error?: string }[];
         errors: { version: string; message: string }[];
       }
     | undefined;
@@ -105,15 +107,32 @@ export default function ReleasesPage() {
               GHCR non configure. Definissez <code>OPS_GHCR_TOKEN</code> (PAT GitHub avec scope <code>read:packages</code>) et <code>OPS_GHCR_NAMESPACE</code> sur l&apos;orchestrateur.
             </>
           ) : (
-            <>
-              Sync OK : {syncReport.tagsFound} tag(s) trouve(s), {syncReport.semverTags} match(ent) le filtre semver,{' '}
-              <strong>{syncReport.created} nouvelle(s) release(s) creee(s)</strong>.
-              {syncReport.errors.length > 0 && (
-                <span className="ml-2 text-red-600">
-                  ({syncReport.errors.length} erreur(s))
-                </span>
-              )}
-            </>
+            <div className="space-y-2">
+              <div>
+                Sync OK sur <strong>{syncReport.imagesPolled}</strong> image(s) :
+                {' '}{syncReport.tagsFound} tag(s) au total, {syncReport.semverTags} version(s) semver unique(s),{' '}
+                <strong>{syncReport.created} nouvelle(s) release(s) creee(s)</strong>.
+                {syncReport.errors.length > 0 && (
+                  <span className="ml-2 text-red-600">
+                    ({syncReport.errors.length} erreur(s) de creation)
+                  </span>
+                )}
+              </div>
+              <ul className="space-y-0.5 text-xs">
+                {syncReport.perImage.map((img) => (
+                  <li key={img.image} className="flex items-center gap-2">
+                    <code className="font-mono">{img.image}</code>
+                    {img.error ? (
+                      <span className="text-red-600">erreur : {img.error}</span>
+                    ) : (
+                      <span className="text-gray-600">
+                        {img.tagsFound} tag(s), {img.semverTags} semver
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </div>
       )}
