@@ -181,7 +181,7 @@ export class ProvisionTenantUseCase {
     const thirdCpu = limits.cpuLimit / 3;
     const halfCpu = limits.cpuLimit / 2; // conserve la variable pour minimiser le diff sur d'autres references eventuelles
     void halfCpu;
-    await log(`[provision] docker run ${apiName} (cpus=${thirdCpu} mem=${apiMemoryMb}MB)`);
+    await log(`[provision] docker run ${apiName} (cpus=${thirdCpu.toFixed(2)} mem=${Math.round(apiMemoryMb)}MB)`);
     await this.docker.run(creds, {
       name: apiName,
       image: apiImage,
@@ -189,8 +189,8 @@ export class ProvisionTenantUseCase {
       envFile,
       restart: 'unless-stopped',
       network: 'optipack-shared',
-      cpuLimit: thirdCpu,
-      memoryMb: apiMemoryMb,
+      cpuLimit: Number(thirdCpu.toFixed(2)),
+      memoryMb: Math.round(apiMemoryMb),
     });
 
     // 7. Run prisma migrate deploy dans le container
@@ -248,7 +248,7 @@ export class ProvisionTenantUseCase {
     }
 
     // 9. Run le container Web staff avec sa part de ressources
-    await log(`[provision] docker run ${webName} (cpus=${thirdCpu} mem=${webMemoryMb}MB)`);
+    await log(`[provision] docker run ${webName} (cpus=${thirdCpu.toFixed(2)} mem=${Math.round(webMemoryMb)}MB)`);
     await this.docker.run(creds, {
       name: webName,
       image: webImage,
@@ -259,12 +259,12 @@ export class ProvisionTenantUseCase {
       },
       restart: 'unless-stopped',
       network: 'optipack-shared',
-      cpuLimit: thirdCpu,
-      memoryMb: webMemoryMb,
+      cpuLimit: Number(thirdCpu.toFixed(2)),
+      memoryMb: Math.round(webMemoryMb),
     });
 
     // 9.bis. Run le container Web-Client (site public + portail client)
-    await log(`[provision] docker run ${webClientName} (cpus=${thirdCpu} mem=${webClientMemoryMb}MB)`);
+    await log(`[provision] docker run ${webClientName} (cpus=${thirdCpu.toFixed(2)} mem=${Math.round(webClientMemoryMb)}MB)`);
     await this.docker.run(creds, {
       name: webClientName,
       image: webClientImage,
@@ -276,8 +276,8 @@ export class ProvisionTenantUseCase {
       },
       restart: 'unless-stopped',
       network: 'optipack-shared',
-      cpuLimit: thirdCpu,
-      memoryMb: webClientMemoryMb,
+      cpuLimit: Number(thirdCpu.toFixed(2)),
+      memoryMb: Math.round(webClientMemoryMb),
     });
 
     // 10. Update Caddy config (full replace) avec tous les tenants ACTIVE/PROVISIONING de ce VPS

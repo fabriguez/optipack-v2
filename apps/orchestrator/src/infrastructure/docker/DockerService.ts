@@ -49,7 +49,8 @@ export class DockerService {
     if (opts.envFile) parts.push(`--env-file ${opts.envFile}`);
     // Limites de ressources (Phase 4)
     if (opts.cpuLimit && opts.cpuLimit > 0) {
-      parts.push(`--cpus=${opts.cpuLimit}`);
+      const cpuLimit = Number(opts.cpuLimit.toFixed(3));
+      parts.push(`--cpus=${cpuLimit}`);
     }
     if (opts.memoryMb && opts.memoryMb > 0) {
       parts.push(`--memory=${opts.memoryMb}m`);
