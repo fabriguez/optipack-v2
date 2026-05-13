@@ -109,8 +109,16 @@ export function AgencyFormDialog({ open, onClose, agency }: AgencyFormDialogProp
       if (newAgencyId && pendingImage) {
         try {
           await agenciesApi.uploadImage(newAgencyId, pendingImage);
-        } catch {
-          toast.error("L'agence a ete creee mais l'image n'a pas pu etre uploadee.");
+        } catch (e: any) {
+          // Surface le vrai message du backend (ex: erreur MinIO
+          // SignatureDoesNotMatch -> on dit explicitement quoi verifier).
+          // Sans ca on a juste "Une erreur est survenue" sans piste.
+          const detail =
+            e?.response?.data?.message ||
+            e?.response?.data?.detail ||
+            e?.message ||
+            'cause inconnue';
+          toast.error(`Agence creee, mais image non uploadee : ${detail}`);
         }
       }
     }

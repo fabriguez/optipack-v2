@@ -1,5 +1,6 @@
 import axios, { AxiosError, AxiosRequestConfig } from 'axios';
 import { getSession, signOut } from 'next-auth/react';
+import { toast } from 'sonner';
 import { authLog } from './authDebug';
 import {
   isQueueableMethod,
@@ -39,12 +40,15 @@ let refreshInFlight: Promise<string | null> | null = null;
 // Compteur de 401 consecutifs apres refresh reussi : si > seuil, on signOut
 // (cas reel ou le token est revoque cote serveur). Sinon on tolere des
 // requetes deja en vol qui arrivent apres une rotation.
+//
+// Seuil eleve a 5 (vs 3) et fenetre a 60s (vs 30s) : les incidents serveur
+// transitoires (redeploiement, blip nginx) provoquent typiquement 2-3 401
+// en rafale ; on veut survivre a ca SANS deconnecter le user. Les vrais
+// tokens revoques continueront a echouer en boucle et finiront par sortir.
 let postRefreshFailures = 0;
 let lastFailureAt = 0;
-const FAILURE_THRESHOLD = 3;
-// Au-dela de cette duree d'inactivite entre 2 echecs, on reset le compteur :
-// 2 echecs espaces de 5 min ne doivent pas s'agreger en "3 echecs successifs".
-const FAILURE_WINDOW_MS = 30_000;
+const FAILURE_THRESHOLD = 5;
+const FAILURE_WINDOW_MS = 60_000;
 
 function bumpFailures(): number {
   const now = Date.now();
@@ -124,13 +128,29 @@ function shouldRedirect(): boolean {
   return true;
 }
 
+// Mapping technique -> message utilisateur. Affiche en toast AVANT de
+// rediriger pour que la deconnexion ne soit pas surprenante.
+const REDIRECT_MESSAGES: Record<string, string> = {
+  'refresh-failed': 'Votre session a expire. Reconnectez-vous.',
+  'refresh-exception': 'Erreur reseau pendant le rafraichissement de session.',
+  'repeated-401-after-refresh':
+    'Le serveur a refuse plusieurs requetes consecutives. Reconnectez-vous.',
+};
+
 function redirectToLogin(reason: string) {
   if (!shouldRedirect()) return;
   authLog('redirect.to-login', { reason });
   redirecting = true;
-  signOut({ redirect: false }).finally(() => {
-    window.location.href = '/login?reason=' + encodeURIComponent(reason);
-  });
+  // Toast 800ms avant le redirect : le user voit pourquoi il bouge vers le
+  // login (sinon c'est juste un saut silencieux). Le ?reason= reste pose
+  // pour visibilite sur la page login.
+  const msg = REDIRECT_MESSAGES[reason] || 'Session terminee. Reconnectez-vous.';
+  toast.error(msg, { duration: 4000 });
+  setTimeout(() => {
+    signOut({ redirect: false }).finally(() => {
+      window.location.href = '/login?reason=' + encodeURIComponent(reason);
+    });
+  }, 800);
 }
 
 apiClient.interceptors.response.use(

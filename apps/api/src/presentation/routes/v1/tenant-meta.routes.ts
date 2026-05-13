@@ -31,6 +31,82 @@ function publicEmailConfig(cfg: EmailConfig | null | undefined): EmailConfigPubl
 const router = Router();
 
 /**
+ * Service-token middleware for ops -> tenant sync. The orchestrator pushes
+ * updates here whenever an ops-admin saves the tenant Studio so the running
+ * tenant-api reflects branding/modules/skin without provisioning churn.
+ */
+function requireServiceToken(req: any, res: any, next: any) {
+  const expected = process.env.OPS_TENANT_PROXY_TOKEN ?? '';
+  if (!expected) {
+    return res.status(503).json({ success: false, message: 'Service token non configure' });
+  }
+  if (req.headers['x-service-token'] !== expected) {
+    return res.status(401).json({ success: false, message: 'Service token invalide' });
+  }
+  next();
+}
+
+/**
+ * PATCH /api/v1/tenant-meta/ops-sync
+ * Called server-to-server by the orchestrator. Updates the Organization row
+ * with branding/modules/skin pushed from ops-admin. Auth via service token.
+ * The tenant id is resolved either from `X-Tenant-Id` header (orchestrator's
+ * own tenant id) or, falling back, from the single Organization row.
+ */
+router.patch('/ops-sync', requireServiceToken, async (req, res, next) => {
+  try {
+    const tenantId = (req.headers['x-tenant-id'] as string | undefined) ?? undefined;
+    const body = req.body as {
+      name?: string;
+      logoUrl?: string | null;
+      primaryColor?: string;
+      secondaryColor?: string;
+      accentColor?: string;
+      enabledModules?: string[];
+      skinId?: string | null;
+      skinCustomization?: unknown;
+    };
+
+    // Locate the Organization row. Tenant id from orchestrator may match the
+    // Organization id (single-org-per-api convention). Otherwise fall back to
+    // the unique Organization in this db.
+    let org = tenantId
+      ? await prisma.organization.findUnique({ where: { id: tenantId } })
+      : null;
+    if (!org) {
+      org = await prisma.organization.findFirst();
+    }
+    if (!org) {
+      return res.status(404).json({ success: false, message: 'Organization introuvable' });
+    }
+
+    if (body.skinId && !isKnownSkinId(body.skinId)) {
+      return res.status(400).json({ success: false, message: `skinId inconnu : ${body.skinId}` });
+    }
+
+    const updated = await prisma.organization.update({
+      where: { id: org.id },
+      data: {
+        ...(body.name !== undefined && { name: body.name }),
+        ...(body.logoUrl !== undefined && { logoUrl: body.logoUrl }),
+        ...(body.primaryColor !== undefined && { primaryColor: body.primaryColor }),
+        ...(body.secondaryColor !== undefined && { secondaryColor: body.secondaryColor }),
+        ...(body.accentColor !== undefined && { accentColor: body.accentColor }),
+        ...(body.enabledModules !== undefined && { enabledModules: body.enabledModules }),
+        ...(body.skinId !== undefined && { skinId: body.skinId } as any),
+        ...(body.skinCustomization !== undefined && {
+          skinCustomization: body.skinCustomization,
+        } as any),
+      },
+    });
+
+    res.json({ success: true, data: { id: updated.id } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
  * GET /api/v1/tenant-meta
  * PUBLIC : pas d'auth. Renvoie le branding + modules actifs du tenant courant.
  *

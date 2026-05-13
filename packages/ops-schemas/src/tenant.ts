@@ -19,6 +19,25 @@ export const createTenantSchema = z.object({
 });
 export type CreateTenantInput = z.infer<typeof createTenantSchema>;
 
+export const skinCustomizationSchema = z
+  .object({
+    primary: hexColorSchema.optional(),
+    accent: hexColorSchema.optional(),
+    radius: z.number().min(0).max(2).optional(),
+    fontBody: z.string().optional(),
+    fontHeading: z.string().optional(),
+    imageOverrides: z
+      .object({
+        hero: z.string().optional(),
+        authShell: z.string().optional(),
+        preview: z.string().optional(),
+      })
+      .partial()
+      .optional(),
+  })
+  .partial();
+export type SkinCustomizationInput = z.infer<typeof skinCustomizationSchema>;
+
 export const updateTenantSchema = z.object({
   name: z.string().min(2).optional(),
   customDomain: z.string().optional().nullable(),
@@ -29,6 +48,8 @@ export const updateTenantSchema = z.object({
   accentColor: hexColorSchema.optional(),
   pinnedVersion: z.string().optional().nullable(),
   autoUpdatePolicy: z.enum(['MANUAL', 'AUTO_STABLE', 'AUTO_CRITICAL_ONLY']).optional(),
+  skinId: z.string().nullable().optional(),
+  skinCustomization: skinCustomizationSchema.nullable().optional(),
 });
 export type UpdateTenantInput = z.infer<typeof updateTenantSchema>;
 

@@ -84,15 +84,37 @@ export class UnloadParcelUseCase {
       ? { space: { connect: { id: targetSpaceId } } }
       : { space: { disconnect: true } };
 
+    // Determine le STATUT FINAL du colis a partir de la destination :
+    //  - Si le conteneur arrive a la destination finale du colis
+    //    (container.arrivalAgencyId === parcel.destinationAgencyId), alors
+    //    le colis est RECEIVED (livre au point d'arrivee final, pret a
+    //    etre remis au destinataire).
+    //  - Sinon : le colis est juste en transit intermediaire. Il sera
+    //    repris dans un conteneur d'acheminement vers sa vraie destination.
+    //    Pour distinguer ce cas, on le pose en IN_STOCK (= present au
+    //    magasin transit) au lieu de RECEIVED. La page detail colis pourra
+    //    afficher "En attente de re-acheminement vers <destination>".
+    //
+    // Si parcel.destinationAgencyId est NULL (cas legacy ou agence non
+    // structuree), on retombe sur RECEIVED par defaut.
+    const reachedFinalDestination =
+      !parcel.destinationAgencyId ||
+      parcel.destinationAgencyId === container.arrivalAgencyId;
+    const finalStatus = reachedFinalDestination ? 'RECEIVED' : 'IN_STOCK';
+
     switch (action) {
       case 'received':
         await this.parcelRepo.update(parcelId, {
-          status: 'RECEIVED',
+          status: finalStatus,
           warehouse: { connect: { id: warehouseId } },
           container: { disconnect: true },
           // Trace l'origine : on memorise le conteneur dont est issu le colis
           // pour pouvoir filtrer "par conteneur d'ou ils ont ete decharges".
           lastContainer: { connect: { id: containerId } },
+          // arrivalDate : on l'a vraiment ARRIVE seulement a la destination
+          // finale. Sur les transits, on ne le set pas (sera set au prochain
+          // dechargement qui atteint la destination).
+          ...(reachedFinalDestination && { arrivalDate: new Date() }),
           warehouseEnteredAt: new Date(),
           isPresent: true,
           ...spaceConnect,
@@ -110,10 +132,11 @@ export class UnloadParcelUseCase {
 
       case 'modified':
         await this.parcelRepo.update(parcelId, {
-          status: 'RECEIVED',
+          status: finalStatus,
           warehouse: { connect: { id: warehouseId } },
           container: { disconnect: true },
           lastContainer: { connect: { id: containerId } },
+          ...(reachedFinalDestination && { arrivalDate: new Date() }),
           warehouseEnteredAt: new Date(),
           isPresent: true,
           ...spaceConnect,

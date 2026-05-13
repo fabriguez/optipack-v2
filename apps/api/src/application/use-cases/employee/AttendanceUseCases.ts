@@ -28,6 +28,20 @@ export class MarkAttendanceUseCase {
     const date = new Date(input.date);
     date.setUTCHours(0, 0, 0, 0);
 
+    // Verrou : interdit le pointage sur une date passee. On ne pointe que le
+    // jour meme (l'heure est prise automatiquement cote serveur). Les
+    // corrections retroactives passent par force=true (admin).
+    const todayUtc = new Date();
+    todayUtc.setUTCHours(0, 0, 0, 0);
+    if (date.getTime() < todayUtc.getTime() && !input.force) {
+      throw new BusinessError(
+        "Pointage retroactif interdit. On ne peut pointer que le jour meme.",
+      );
+    }
+    if (date.getTime() > todayUtc.getTime() && !input.force) {
+      throw new BusinessError('Pointage anticipe interdit. On ne peut pointer que le jour meme.');
+    }
+
     const elig = await this.eligibility.check(input.employeeId, date);
 
     // Verrou metier : on ne peut pas marquer PRESENT/LATE/ABSENT pendant un
@@ -39,8 +53,13 @@ export class MarkAttendanceUseCase {
       );
     }
 
-    if (input.status === 'LATE' && !input.checkInTime) {
-      throw new BusinessError("checkInTime requis pour status LATE");
+    // LATE n'est plus accepte explicitement : c'est COMPUTED a partir de
+    // l'heure d'arrivee + l'horaire planifie. L'appelant envoie PRESENT,
+    // on promote si lateMinutes > 0. Plus de saisie manuelle.
+    if (input.status === 'LATE') {
+      throw new BusinessError(
+        "Le statut LATE est calcule automatiquement. Envoyez PRESENT, le serveur derive si c'est un retard.",
+      );
     }
 
     // Calcule les metriques (lateMinutes, overtime, etc.) si pointage valide.
@@ -54,8 +73,18 @@ export class MarkAttendanceUseCase {
         })
       : null;
 
+    // Auto-promotion PRESENT -> LATE quand l'arrivee depasse la plage
+    // planifiee (lateMinutes > 0). L'utilisateur clique juste "Arrivee" et
+    // le serveur decide si c'est un retard. Cas LATE_TOLERANCE_MINUTES :
+    // 0 par defaut (le moindre retard compte). Configurable plus tard.
+    const LATE_TOLERANCE_MINUTES = 0;
+    let computedStatus: Status = input.status;
+    if (input.status === 'PRESENT' && (metrics?.lateMinutes ?? 0) > LATE_TOLERANCE_MINUTES) {
+      computedStatus = 'LATE';
+    }
+
     const data = {
-      status: input.status as any,
+      status: computedStatus as any,
       checkInTime: input.checkInTime ?? null,
       checkOutTime: input.checkOutTime ?? null,
       reason: input.reason ?? null,
@@ -101,6 +130,14 @@ export class CheckOutAttendanceUseCase {
   async execute(employeeId: string, date: Date, checkOutTime: string, userId: string) {
     const day = new Date(date);
     day.setUTCHours(0, 0, 0, 0);
+
+    // Comme pour le check-in : pas de check-out retroactif. Le check-out se
+    // fait le jour meme (l'heure est prise automatiquement par l'appelant).
+    const todayUtc = new Date();
+    todayUtc.setUTCHours(0, 0, 0, 0);
+    if (day.getTime() !== todayUtc.getTime()) {
+      throw new BusinessError("Le check-out ne peut se faire que le jour meme.");
+    }
 
     const att = await prisma.attendance.findUnique({
       where: { employeeId_date: { employeeId, date: day } },

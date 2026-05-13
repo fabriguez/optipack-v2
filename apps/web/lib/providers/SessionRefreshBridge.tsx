@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
+import { authLog } from '@/lib/api/authDebug';
 
 /**
  * Pont entre l'apiClient (non-React) et useSession().update().
@@ -18,6 +19,12 @@ import { useSession } from 'next-auth/react';
  * Solution : ce composant pose la fonction update() sur window.__forceSession-
  * Refresh. L'apiClient l'appelle quand il detecte un 401 valide localement
  * mais rejete par l'API (revocation serveur, clock skew, redemarrage API).
+ *
+ * Effet bord : refresh PROACTIF quand l'onglet revient au premier plan
+ * apres une periode prolongee. Cause #1 des "j'etais parti, je suis
+ * deconnecte" : le token expire en arriere-plan, le browser bloque
+ * souvent les fetch background, le premier click au retour tape un 401
+ * et embarque la session.
  */
 declare global {
   interface Window {
@@ -25,20 +32,55 @@ declare global {
   }
 }
 
+// Seuil au-dela duquel un retour au premier plan declenche un refresh
+// preventif. 25 min : suffisamment court pour devancer la plupart des
+// expirations (token backend typiquement 60 min), assez long pour ne pas
+// refresh inutilement a chaque alt-tab.
+const VISIBILITY_REFRESH_THRESHOLD_MS = 25 * 60 * 1000;
+
 export function SessionRefreshBridge() {
-  const { update } = useSession();
+  const { update, data: session } = useSession();
+  const lastRefreshAt = useRef<number>(Date.now());
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     window.__forceSessionRefresh = async () => {
       // Le payload { forceRefresh: true } sera lu dans auth.ts -> jwt callback
       // -> trigger='update' -> reset de accessTokenExpiresAt -> appel /auth/refresh.
-      return update({ forceRefresh: true });
+      const r = await update({ forceRefresh: true });
+      lastRefreshAt.current = Date.now();
+      return r;
     };
     return () => {
       delete window.__forceSessionRefresh;
     };
   }, [update]);
+
+  // Refresh proactif sur retour de focus / visibilite. Si le user revient
+  // sur l'onglet apres > 25 min, on force un refresh AVANT meme la 1ere
+  // requete API, pour eviter le 1er 401 -> redirect.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handler = async () => {
+      if (document.visibilityState !== 'visible') return;
+      if (!session) return;
+      const elapsed = Date.now() - lastRefreshAt.current;
+      if (elapsed < VISIBILITY_REFRESH_THRESHOLD_MS) return;
+      authLog('visibility.refresh-triggered', { elapsedMs: elapsed });
+      try {
+        await update({ forceRefresh: true });
+        lastRefreshAt.current = Date.now();
+      } catch (e) {
+        authLog('visibility.refresh-failed', { err: String(e) });
+      }
+    };
+    document.addEventListener('visibilitychange', handler);
+    window.addEventListener('focus', handler);
+    return () => {
+      document.removeEventListener('visibilitychange', handler);
+      window.removeEventListener('focus', handler);
+    };
+  }, [update, session]);
 
   return null;
 }

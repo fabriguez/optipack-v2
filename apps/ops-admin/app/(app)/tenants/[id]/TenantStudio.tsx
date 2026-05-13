@@ -1,9 +1,111 @@
 'use client';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Loader2, Palette, Save } from 'lucide-react';
+import { Loader2, Palette, Save, Type as TypeIcon } from 'lucide-react';
 import { api } from '@/lib/api';
 import { GhcrTagSelect } from '@/components/GhcrTagSelect';
+
+/**
+ * Catalogue statique des peaux disponibles - DOIT rester aligne avec
+ * packages/skins/src/skins.ts (BUILTIN_SKINS). On ne fetch pas depuis
+ * l'orchestrator pour rester fonctionnel meme quand celui-ci est offline
+ * (dev local, restart en cours) et eviter un round-trip pour des donnees
+ * statiques.
+ */
+const SKIN_CATALOG: SkinTokens[] = [
+  {
+    id: 'forest',
+    name: 'Forest',
+    tagline: 'Naturel & confiance - parfait pour la logistique',
+    primary: '#1B5E20',
+    secondary: '#4CAF50',
+    accent: '#A5D6A7',
+    heroGradient: ['#1B5E20', '#388E3C', '#A5D6A7'],
+    fontBody: 'Geist, system-ui, sans-serif',
+    fontHeading: 'Geist, system-ui, sans-serif',
+    radius: 0.75,
+    mood: 'natural',
+  },
+  {
+    id: 'sapphire',
+    name: 'Sapphire',
+    tagline: 'Corporate & precis - pour les operations B2B',
+    primary: '#1E40AF',
+    secondary: '#3B82F6',
+    accent: '#93C5FD',
+    heroGradient: ['#1E3A8A', '#2563EB', '#60A5FA'],
+    fontBody: 'Geist, system-ui, sans-serif',
+    fontHeading: 'Geist, system-ui, sans-serif',
+    radius: 0.5,
+    mood: 'corporate',
+  },
+  {
+    id: 'sunset',
+    name: 'Sunset',
+    tagline: 'Chaud & energique - taille pour les coursiers',
+    primary: '#C2410C',
+    secondary: '#F97316',
+    accent: '#FDBA74',
+    heroGradient: ['#9A3412', '#EA580C', '#FDBA74'],
+    fontBody: 'Geist, system-ui, sans-serif',
+    fontHeading: 'Geist, system-ui, sans-serif',
+    radius: 1.25,
+    mood: 'warm',
+  },
+  {
+    id: 'midnight',
+    name: 'Midnight',
+    tagline: 'Dark mode premium - editorial et sleek',
+    primary: '#A78BFA',
+    secondary: '#7C3AED',
+    accent: '#F0ABFC',
+    heroGradient: ['#0B0E1A', '#312E81', '#A78BFA'],
+    fontBody: 'Geist, system-ui, sans-serif',
+    fontHeading: 'Geist, system-ui, sans-serif',
+    radius: 1,
+    mood: 'dark',
+  },
+  {
+    id: 'pastel',
+    name: 'Pastel',
+    tagline: 'Doux & accessible - parfait pour le B2C',
+    primary: '#EC4899',
+    secondary: '#A855F7',
+    accent: '#F0ABFC',
+    heroGradient: ['#DB2777', '#C026D3', '#F472B6'],
+    fontBody: 'Geist, system-ui, sans-serif',
+    fontHeading: 'Geist, system-ui, sans-serif',
+    radius: 1.5,
+    mood: 'minimal',
+  },
+];
+
+interface SkinCustomization {
+  primary?: string;
+  accent?: string;
+  radius?: number;
+  fontBody?: string;
+  fontHeading?: string;
+  imageOverrides?: {
+    hero?: string;
+    authShell?: string;
+    preview?: string;
+  };
+}
+
+interface SkinTokens {
+  id: string;
+  name: string;
+  tagline: string;
+  primary: string;
+  secondary: string;
+  accent: string;
+  heroGradient: [string, string, string];
+  fontBody: string;
+  fontHeading: string;
+  radius: number;
+  mood: string;
+}
 
 interface StudioInput {
   primaryColor: string | null;
@@ -14,6 +116,8 @@ interface StudioInput {
   pinnedVersion: string | null;
   autoUpdatePolicy: string | null;
   customDomain: string | null;
+  skinId: string | null;
+  skinCustomization: SkinCustomization | null;
 }
 
 interface Props {
@@ -21,15 +125,41 @@ interface Props {
   initial: StudioInput;
 }
 
-const KNOWN_MODULES = [
-  { code: 'core', label: 'Core (parcels, clients, agencies)' },
-  { code: 'payments', label: 'Paiements en ligne' },
-  { code: 'stock', label: 'Magasin/Stock' },
-  { code: 'inventory', label: 'Inventaire' },
-  { code: 'debts', label: 'Dette client' },
-  { code: 'storage', label: 'Stockage/entreposage' },
-  { code: 'web-client', label: 'Portail client public' },
-  { code: 'mobile', label: 'App mobile white-label' },
+/**
+ * Liste des modules toggleables - DOIT correspondre aux `module:` declares
+ * dans apps/web/components/layout/Sidebar.tsx. Sans correspondance exacte,
+ * activer/desactiver un module n'a aucun effet visuel cote tenant.
+ */
+const KNOWN_MODULES: { code: string; label: string; group: string }[] = [
+  // Operations
+  { code: 'agencies', label: 'Agences', group: 'Operations' },
+  { code: 'warehouses', label: 'Magasins / entrepots', group: 'Operations' },
+  { code: 'clients', label: 'Clients', group: 'Operations' },
+  { code: 'parcels', label: 'Colis', group: 'Operations' },
+  { code: 'containers', label: 'Conteneurs', group: 'Operations' },
+  { code: 'transit-routes', label: 'Routes transit', group: 'Operations' },
+  // Finance
+  { code: 'invoices', label: 'Factures', group: 'Finance' },
+  { code: 'payments', label: 'Paiements + caisse', group: 'Finance' },
+  { code: 'disbursements', label: 'Decaissements', group: 'Finance' },
+  { code: 'fund-transfers', label: 'Transferts de fonds', group: 'Finance' },
+  { code: 'accounting', label: 'Comptabilite', group: 'Finance' },
+  { code: 'expenses', label: 'Depenses', group: 'Finance' },
+  { code: 'debts', label: 'Dette client', group: 'Finance' },
+  // Systeme
+  { code: 'employees', label: 'Personnel', group: 'Systeme' },
+  { code: 'loyalty', label: 'Fidelite', group: 'Systeme' },
+  { code: 'penalties', label: 'Penalites', group: 'Systeme' },
+  { code: 'chat', label: 'Support / messagerie', group: 'Systeme' },
+  { code: 'reports', label: 'Rapports', group: 'Systeme' },
+];
+
+const FONT_OPTIONS = [
+  { value: 'Geist, system-ui, sans-serif', label: 'Geist' },
+  { value: 'Inter, system-ui, sans-serif', label: 'Inter' },
+  { value: '"Plus Jakarta Sans", system-ui, sans-serif', label: 'Plus Jakarta Sans' },
+  { value: '"DM Sans", system-ui, sans-serif', label: 'DM Sans' },
+  { value: 'Manrope, system-ui, sans-serif', label: 'Manrope' },
 ];
 
 const AUTO_UPDATE_POLICIES = [
@@ -76,8 +206,41 @@ export function TenantStudio({ tenantId, initial }: Props) {
       pinnedVersion: form.pinnedVersion,
       autoUpdatePolicy: form.autoUpdatePolicy,
       customDomain: form.customDomain,
+      skinId: form.skinId,
+      skinCustomization: form.skinCustomization,
     });
   }
+
+  function enableAllModules() {
+    setForm((f) => ({ ...f, enabledModules: KNOWN_MODULES.map((m) => m.code) }));
+  }
+
+  function disableAllModules() {
+    setForm((f) => ({ ...f, enabledModules: [] }));
+  }
+
+  function patchSkin<K extends keyof SkinCustomization>(key: K, value: SkinCustomization[K]) {
+    setForm((f) => ({
+      ...f,
+      skinCustomization: { ...(f.skinCustomization ?? {}), [key]: value },
+    }));
+  }
+
+  // Catalogue de peaux statique - voir SKIN_CATALOG en haut du fichier.
+  const skins = { data: SKIN_CATALOG };
+
+  const selectedSkin = useMemo(
+    () => skins.data.find((s) => s.id === form.skinId) ?? null,
+    [form.skinId, skins.data],
+  );
+
+  const modulesByGroup = useMemo(() => {
+    const groups: Record<string, typeof KNOWN_MODULES> = {};
+    for (const m of KNOWN_MODULES) {
+      (groups[m.group] ??= []).push(m);
+    }
+    return groups;
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -135,37 +298,196 @@ export function TenantStudio({ tenantId, initial }: Props) {
 
       {/* Modules */}
       <div>
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-          Modules actives
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+            Modules actives
+          </h3>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={enableAllModules}
+              className="rounded border bg-white px-2 py-1 text-[11px] hover:bg-gray-50"
+            >
+              Tout activer
+            </button>
+            <button
+              type="button"
+              onClick={disableAllModules}
+              className="rounded border bg-white px-2 py-1 text-[11px] hover:bg-gray-50"
+            >
+              Tout desactiver
+            </button>
+          </div>
+        </div>
+        <p className="mt-1 text-xs text-gray-500">
+          Coche les modules visibles pour ce tenant. Liste vide = tous actifs (compat).
+          Les codes correspondent exactement aux flags du sidebar du tenant.
+        </p>
+        <div className="mt-3 space-y-4">
+          {Object.entries(modulesByGroup).map(([group, items]) => (
+            <div key={group}>
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                {group}
+              </p>
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                {items.map((m) => {
+                  const on = form.enabledModules.includes(m.code);
+                  return (
+                    <label
+                      key={m.code}
+                      className={
+                        'flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm ' +
+                        (on ? 'border-primary-300 bg-primary-50' : 'bg-white hover:bg-gray-50')
+                      }
+                    >
+                      <input
+                        type="checkbox"
+                        checked={on}
+                        onChange={() => toggleModule(m.code)}
+                        className="h-4 w-4"
+                      />
+                      <span className="flex-1">
+                        <span className="font-mono text-xs text-gray-500">{m.code}</span>
+                        <span className="ml-2 text-sm">{m.label}</span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Skin / Studio site public */}
+      <div>
+        <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
+          <Palette className="h-3.5 w-3.5" /> Peau du site public
         </h3>
         <p className="mt-1 text-xs text-gray-500">
-          Cochez les modules disponibles pour ce tenant. Le frontend du tenant masque les sections desactivees.
+          Le skin pilote palette etendue, fonts et radius. Combine avec la
+          customisation ci-dessous pour des overrides ponctuels.
         </p>
-        <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
-          {KNOWN_MODULES.map((m) => {
-            const on = form.enabledModules.includes(m.code);
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          <button
+            type="button"
+            onClick={() => update('skinId', null)}
+            className={
+              'flex flex-col overflow-hidden rounded-lg border text-left transition ' +
+              (!form.skinId
+                ? 'border-primary-400 ring-2 ring-primary-200'
+                : 'border-gray-200 hover:border-gray-300')
+            }
+          >
+            <div className="h-12 w-full bg-gradient-to-br from-gray-200 to-gray-100" />
+            <div className="flex-1 p-2">
+              <p className="text-xs font-semibold">Aucune</p>
+              <p className="line-clamp-2 text-[11px] text-gray-500">
+                Utilise uniquement les 3 couleurs ci-dessus.
+              </p>
+            </div>
+          </button>
+          {skins.data.map((s) => {
+            const active = s.id === form.skinId;
             return (
-              <label
-                key={m.code}
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => update('skinId', s.id)}
                 className={
-                  'flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm ' +
-                  (on ? 'border-primary-300 bg-primary-50' : 'bg-white hover:bg-gray-50')
+                  'group flex flex-col overflow-hidden rounded-lg border text-left transition ' +
+                  (active
+                    ? 'border-primary-400 ring-2 ring-primary-200'
+                    : 'border-gray-200 hover:border-gray-300')
                 }
               >
-                <input
-                  type="checkbox"
-                  checked={on}
-                  onChange={() => toggleModule(m.code)}
-                  className="h-4 w-4"
+                <div
+                  className="h-12 w-full"
+                  style={{
+                    background: `linear-gradient(135deg, ${s.heroGradient[0]}, ${s.heroGradient[1]} 50%, ${s.heroGradient[2]})`,
+                  }}
                 />
-                <span className="flex-1">
-                  <span className="font-mono text-xs text-gray-500">{m.code}</span>
-                  <span className="ml-2 text-sm">{m.label}</span>
-                </span>
-              </label>
+                <div className="flex-1 p-2">
+                  <p className="text-xs font-semibold">{s.name}</p>
+                  <p className="line-clamp-2 text-[11px] text-gray-500">{s.tagline}</p>
+                  <p className="mt-1 text-[10px] uppercase tracking-wide text-gray-400">
+                    {s.mood}
+                  </p>
+                </div>
+              </button>
             );
           })}
         </div>
+
+        {/* Fonts + radius override */}
+        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+          <Field label="Police - corps de texte">
+            <select
+              value={form.skinCustomization?.fontBody ?? selectedSkin?.fontBody ?? ''}
+              onChange={(e) => patchSkin('fontBody', e.target.value || undefined)}
+              className="w-full rounded-md border px-3 py-2 text-sm"
+            >
+              <option value="">{selectedSkin ? `(skin) ${selectedSkin.fontBody}` : 'Defaut'}</option>
+              {FONT_OPTIONS.map((f) => (
+                <option key={f.value} value={f.value}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Police - titres">
+            <select
+              value={form.skinCustomization?.fontHeading ?? selectedSkin?.fontHeading ?? ''}
+              onChange={(e) => patchSkin('fontHeading', e.target.value || undefined)}
+              className="w-full rounded-md border px-3 py-2 text-sm"
+            >
+              <option value="">
+                {selectedSkin ? `(skin) ${selectedSkin.fontHeading}` : 'Defaut'}
+              </option>
+              {FONT_OPTIONS.map((f) => (
+                <option key={f.value} value={f.value}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field
+            label="Rayon des coins"
+            hint={`${(form.skinCustomization?.radius ?? selectedSkin?.radius ?? 0.5).toFixed(2)} rem`}
+          >
+            <input
+              type="range"
+              min={0}
+              max={2}
+              step={0.05}
+              value={form.skinCustomization?.radius ?? selectedSkin?.radius ?? 0.5}
+              onChange={(e) => patchSkin('radius', Number(e.target.value))}
+              className="w-full"
+            />
+          </Field>
+        </div>
+
+        {(form.skinCustomization?.fontBody ||
+          form.skinCustomization?.fontHeading ||
+          form.skinCustomization?.radius !== undefined) && (
+          <button
+            type="button"
+            onClick={() =>
+              setForm((f) => ({
+                ...f,
+                skinCustomization: {
+                  ...f.skinCustomization,
+                  fontBody: undefined,
+                  fontHeading: undefined,
+                  radius: undefined,
+                },
+              }))
+            }
+            className="mt-2 inline-flex items-center gap-1 text-[11px] text-gray-500 underline hover:text-gray-700"
+          >
+            <TypeIcon className="h-3 w-3" /> Reinitialiser les overrides typo/radius
+          </button>
+        )}
       </div>
 
       {/* Domain + update policy */}

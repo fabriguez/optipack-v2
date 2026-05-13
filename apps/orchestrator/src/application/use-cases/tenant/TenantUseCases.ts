@@ -154,7 +154,7 @@ export class TenantUseCases {
     const tenant = await prisma.tenant.findUnique({ where: { id } });
     if (!tenant) throw new NotFoundError('Tenant', id);
 
-    return prisma.tenant.update({
+    const updated = await prisma.tenant.update({
       where: { id },
       data: {
         ...(input.name !== undefined && { name: input.name }),
@@ -166,8 +166,73 @@ export class TenantUseCases {
         ...(input.accentColor !== undefined && { accentColor: input.accentColor }),
         ...(input.pinnedVersion !== undefined && { pinnedVersion: input.pinnedVersion }),
         ...(input.autoUpdatePolicy !== undefined && { autoUpdatePolicy: input.autoUpdatePolicy }),
+        ...((input as any).skinId !== undefined && { skinId: (input as any).skinId } as any),
+        ...((input as any).skinCustomization !== undefined && {
+          skinCustomization: (input as any).skinCustomization,
+        } as any),
       },
     });
+
+    // Best-effort propagation to the tenant's own Organization DB. The
+    // orchestrator's Tenant table is the source of truth for ops-admin
+    // changes, but the running tenant-api reads its branding/modules/skin
+    // from its own Organization row. We fire-and-forget the sync so a
+    // tenant being offline never blocks an ops save.
+    void this.syncTenantOrg(updated, input).catch((err) => {
+      console.error('[tenant.update] tenant-org sync failed', err);
+    });
+
+    return updated;
+  }
+
+  /**
+   * Push the updated branding/modules/skin to the running tenant-api so the
+   * customization actually shows up in the web app. Routed through
+   * Caddy: https://api.{slug}.{BASE_DOMAIN}/api/v1/tenant-meta/ops-sync.
+   * Auth via the shared OPS_TENANT_PROXY_TOKEN service token.
+   */
+  private async syncTenantOrg(
+    t: { id: string; slug: string; customDomain: string | null; isMain?: boolean },
+    input: UpdateTenantInput,
+  ): Promise<void> {
+    const payload: Record<string, unknown> = {};
+    if (input.name !== undefined) payload.name = input.name;
+    if (input.logoUrl !== undefined) payload.logoUrl = input.logoUrl;
+    if (input.primaryColor !== undefined) payload.primaryColor = input.primaryColor;
+    if (input.secondaryColor !== undefined) payload.secondaryColor = input.secondaryColor;
+    if (input.accentColor !== undefined) payload.accentColor = input.accentColor;
+    if (input.enabledModules !== undefined) payload.enabledModules = input.enabledModules;
+    if ((input as any).skinId !== undefined) payload.skinId = (input as any).skinId;
+    if ((input as any).skinCustomization !== undefined) {
+      payload.skinCustomization = (input as any).skinCustomization;
+    }
+    if (Object.keys(payload).length === 0) return;
+
+    const token = process.env.OPS_TENANT_PROXY_TOKEN ?? '';
+    if (!token) return; // service token not configured -> skip silently
+
+    const base = process.env.BASE_DOMAIN ?? 'transitsoftservices.com';
+    const apiHost = (t as { isMain?: boolean }).isMain
+      ? `api.${base}`
+      : t.customDomain
+        ? `api.${t.customDomain}`
+        : `api.${t.slug}.${base}`;
+    const url = `https://${apiHost}/api/v1/tenant-meta/ops-sync`;
+
+    try {
+      await fetch(url, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Service-Token': token,
+          'X-Tenant-Id': t.id,
+        },
+        body: JSON.stringify(payload),
+      });
+    } catch (err) {
+      // Tenant offline / DNS not ready: log only, don't fail the ops change.
+      console.warn(`[tenant.update] sync to ${url} unreachable:`, (err as Error).message);
+    }
   }
 
   async freeze(id: string) {

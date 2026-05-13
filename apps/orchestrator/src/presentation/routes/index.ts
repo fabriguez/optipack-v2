@@ -115,8 +115,21 @@ router.get('/tenant-system/updates', requireServiceToken, ReleaseController.tena
 // Tenant-self studio (proxy depuis l'API tenant via service token).
 // Le tenant owner peut editer le theme et la config visible de son propre
 // tenant sans avoir de compte ops-admin.
+// Catalogue de skins (ops-admin + tenant-self).
+router.get('/skins/catalog', async (_req, res) => {
+  const { listSkins } = await import('@transitsoftservices/skins');
+  res.json({ success: true, data: listSkins() });
+});
+
 router.get('/tenant-self/studio', requireServiceToken, TenantController.getSelfStudio);
 router.patch('/tenant-self/studio', requireServiceToken, TenantController.patchSelfStudio);
+
+// Messagerie (envoi Resend, et bientot reception Mailcow) accessible au tenant
+// via proxy service-token depuis son API.
+router.get('/tenant-self/mail', requireServiceToken, TenantMailController.get);
+router.post('/tenant-self/mail/provision', requireServiceToken, TenantMailController.provision);
+router.post('/tenant-self/mail/verify', requireServiceToken, TenantMailController.verify);
+router.post('/tenant-self/mail/refresh', requireServiceToken, TenantMailController.refresh);
 
 // ============================================================
 // OPS ADMINS (super-admin uniquement)

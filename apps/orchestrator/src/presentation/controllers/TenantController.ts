@@ -26,6 +26,8 @@ const tenantSelfStudioSchema = z.object({
   autoUpdatePolicy: z.enum(['MANUAL', 'AUTO_STABLE', 'AUTO_CRITICAL_ONLY']).optional(),
   pinnedVersion: z.string().optional().nullable(),
   name: z.string().min(2).optional(),
+  skinId: z.string().nullable().optional(),
+  skinCustomization: z.any().nullable().optional(),
 });
 
 export class TenantController {
@@ -95,7 +97,9 @@ export class TenantController {
           autoUpdatePolicy: true,
           pinnedVersion: true,
           status: true,
-        },
+          skinId: true,
+          skinCustomization: true,
+        } as any,
       });
       if (!t) throw new BusinessError('Tenant introuvable');
       res.json({ success: true, data: t });

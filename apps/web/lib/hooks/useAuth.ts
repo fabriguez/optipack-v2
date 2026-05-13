@@ -22,7 +22,32 @@ export function useLogin() {
       });
 
       if (result?.error) {
-        throw new Error(result.error === '2FA_REQUIRED' ? '2FA_REQUIRED' : 'Email ou mot de passe incorrect');
+        // NextAuth v5 propage le message du throw fait dans authorize() via
+        // result.error. On mappe sur des libelles user-friendly distincts
+        // entre creds invalides et serveur down (sinon on dit "mauvais mdp"
+        // alors que c'est l'API qui ne repond pas).
+        const code = result.error;
+        const message = (() => {
+          switch (code) {
+            case '2FA_REQUIRED':
+              return '2FA_REQUIRED';
+            case 'NETWORK_ERROR':
+              return 'Serveur injoignable. Verifiez votre connexion ou reessayez dans un instant.';
+            case 'SERVER_ERROR':
+              return "Le serveur a rencontre une erreur. Reessayez dans quelques secondes ou contactez l'admin si le probleme persiste.";
+            case 'INVALID_CREDENTIALS':
+              return 'Email ou mot de passe incorrect.';
+            case 'MISSING_FIELDS':
+              return 'Email et mot de passe requis.';
+            case 'UNKNOWN_ERROR':
+              return 'Erreur inconnue lors de la connexion. Reessayez.';
+            default:
+              // CredentialsSignin / Configuration : NextAuth a sanitize le throw.
+              // Cas le plus frequent = creds invalides.
+              return 'Email ou mot de passe incorrect.';
+          }
+        })();
+        throw new Error(message);
       }
 
       return result;

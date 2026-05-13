@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { applyPaletteToDocument, generatePalette } from '@/lib/theme/palette-generator';
+import { applySkinById, type SkinCustomization, isKnownSkinId } from '@transitsoftservices/skins';
 
 export interface TenantMeta {
   id: string;
@@ -15,6 +16,8 @@ export interface TenantMeta {
   supportEmail: string | null;
   defaultCurrency: string;
   defaultLanguage: string;
+  skin?: string | null;
+  skinCustomization?: SkinCustomization | null;
 }
 
 interface TenantContextValue {
@@ -58,13 +61,32 @@ async function fetchTenantMeta(): Promise<TenantMeta> {
 }
 
 function applyTheme(meta: TenantMeta) {
-  // Genere et applique la palette principale
+  // 1) Skin (police, radius, palette etendue) si configure. La peau ecrit
+  //    aussi --color-primary-* donc on l'applique en premier, puis on laisse
+  //    la palette generee depuis primaryColor surcharger si necessaire.
+  if (meta.skin && isKnownSkinId(meta.skin)) {
+    applySkinById(meta.skin, (meta.skinCustomization ?? undefined) as SkinCustomization | undefined);
+  }
+
+  // 2) Palette tenant (sur-couche : la couleur primaire choisie par l'admin
+  //    a priorite sur celle de la peau).
   const primary = generatePalette(meta.primaryColor);
   applyPaletteToDocument(primary, 'color-primary');
-  // Couleurs additionnelles en CSS vars individuelles
   if (typeof document !== 'undefined') {
     document.documentElement.style.setProperty('--color-secondary', meta.secondaryColor);
     document.documentElement.style.setProperty('--color-accent', meta.accentColor);
+
+    // 3) Police effective : applique au body pour qu'elle se voie dans le
+    //    dashboard, pas seulement sur le site public.
+    const fontBody = meta.skinCustomization?.fontBody;
+    const fontHeading = meta.skinCustomization?.fontHeading;
+    if (fontBody) {
+      document.documentElement.style.setProperty('--font-body', fontBody);
+      document.body.style.fontFamily = fontBody;
+    }
+    if (fontHeading) {
+      document.documentElement.style.setProperty('--font-heading', fontHeading);
+    }
   }
 }
 

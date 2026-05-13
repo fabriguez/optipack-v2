@@ -168,6 +168,9 @@ importers:
       '@transitsoftservices/ops-schemas':
         specifier: workspace:*
         version: link:../../packages/ops-schemas
+      '@transitsoftservices/skins':
+        specifier: workspace:*
+        version: link:../../packages/skins
       '@transitsoftservices/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -471,6 +474,9 @@ importers:
       '@transitsoftservices/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@transitsoftservices/skins':
+        specifier: workspace:*
+        version: link:../../packages/skins
       '@zxing/browser':
         specifier: ^0.2.0
         version: 0.2.0(@zxing/library@0.23.0)

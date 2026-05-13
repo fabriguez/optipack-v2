@@ -124,6 +124,72 @@ router.patch('/studio', async (req, res, next) => {
 });
 
 // ============================================================
+// Messagerie (proxy vers l'orchestrator)
+// Le tenant owner pilote l'envoi (Resend) + a terme la reception (Mailcow)
+// sans avoir de compte ops-admin. Service token uniquement.
+// ============================================================
+
+router.get('/mail', async (req, res, next) => {
+  try {
+    const orgId = getOrgId(req);
+    const r = await fetch(
+      `${ORCHESTRATOR_URL}/ops/tenant-self/mail?tenantId=${encodeURIComponent(orgId)}`,
+      { headers: { 'X-Service-Token': SERVICE_TOKEN } },
+    );
+    const data = await r.json();
+    res.status(r.status).json(data);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/mail/provision', async (req, res, next) => {
+  try {
+    const orgId = getOrgId(req);
+    const r = await fetch(`${ORCHESTRATOR_URL}/ops/tenant-self/mail/provision?tenantId=${encodeURIComponent(orgId)}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Service-Token': SERVICE_TOKEN,
+      },
+      body: JSON.stringify(req.body ?? {}),
+    });
+    const data = await r.json();
+    res.status(r.status).json(data);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/mail/verify', async (req, res, next) => {
+  try {
+    const orgId = getOrgId(req);
+    const r = await fetch(`${ORCHESTRATOR_URL}/ops/tenant-self/mail/verify?tenantId=${encodeURIComponent(orgId)}`, {
+      method: 'POST',
+      headers: { 'X-Service-Token': SERVICE_TOKEN },
+    });
+    const data = await r.json();
+    res.status(r.status).json(data);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/mail/refresh', async (req, res, next) => {
+  try {
+    const orgId = getOrgId(req);
+    const r = await fetch(`${ORCHESTRATOR_URL}/ops/tenant-self/mail/refresh?tenantId=${encodeURIComponent(orgId)}`, {
+      method: 'POST',
+      headers: { 'X-Service-Token': SERVICE_TOKEN },
+    });
+    const data = await r.json();
+    res.status(r.status).json(data);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ============================================================
 // Politique de fidelite (admin uniquement)
 // ============================================================
 

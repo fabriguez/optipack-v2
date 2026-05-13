@@ -92,6 +92,7 @@ const systemNav: NavItem[] = [
   { label: 'Support', href: '/chat', icon: MessageSquare, module: 'chat' },
   { label: 'Rapports', href: '/reports', icon: BarChart3, module: 'reports' },
   { label: 'Personnalisation', href: '/settings/branding', icon: Settings },
+  { label: 'Studio site', href: '/settings/site', icon: Settings },
   { label: 'Parametres', href: '/settings', icon: Settings },
   { label: 'Audit', href: '/audit-log', icon: Shield },
 ];

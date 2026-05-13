@@ -37,10 +37,15 @@ export const { handlers, signIn, signOut, auth }: any = NextAuth({
         password: { label: 'Mot de passe', type: 'password' },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null;
+        if (!credentials?.email || !credentials?.password) {
+          throw new Error('MISSING_FIELDS');
+        }
 
+        // Etape 1 : reseau. On differencie "API injoignable" d'un "mauvais
+        // mot de passe" pour pouvoir afficher le bon message cote UI.
+        let res: Response;
         try {
-          const res = await fetch(`${API_URL}/auth/login`, {
+          res = await fetch(`${API_URL}/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -48,48 +53,64 @@ export const { handlers, signIn, signOut, auth }: any = NextAuth({
               password: credentials.password,
             }),
           });
-
-          const data = await res.json();
-
-          if (!res.ok || !data.success) return null;
-
-          if (data.data.requires2FA) {
-            throw new Error('2FA_REQUIRED');
-          }
-
-          // On lit la VRAIE date d'expiration depuis le JWT (claim exp)
-          // plutot que de la deviner. Evite la divergence si la config API
-          // est modifiee.
-          const realExp = jwtExpMs(data.data.accessToken);
-          if (realExp) {
-            const ttlSec = Math.floor((realExp - Date.now()) / 1000);
-            // eslint-disable-next-line no-console
-            console.log(
-              `[Auth.login] token exp=${new Date(realExp).toISOString()} ttl=${ttlSec}s`,
-            );
-          } else {
-            // eslint-disable-next-line no-console
-            console.warn('[Auth.login] impossible de decoder exp du JWT');
-          }
-          // Permissions ABAC : NE SONT PAS stockees ici. Elles vivent dans le claim
-          // `permissions` du JWT API (data.data.accessToken) et sont decodees a la
-          // demande par usePermission() cote client. Stocker une copie dans la
-          // session NextAuth gonflerait inutilement le cookie (limite ~4 kB).
-          return {
-            id: data.data.user.id,
-            email: data.data.user.email,
-            name: `${data.data.user.firstName} ${data.data.user.lastName}`,
-            role: data.data.user.role,
-            agencyIds: data.data.user.agencyIds,
-            accessToken: data.data.accessToken,
-            refreshToken: data.data.refreshToken,
-            // exp reelle depuis le JWT (fallback : 12h si decodage rate)
-            accessTokenExpiresAt: realExp ?? Date.now() + 12 * 60 * 60 * 1000,
-          };
         } catch (err: any) {
-          if (err.message === '2FA_REQUIRED') throw err;
-          return null;
+          // eslint-disable-next-line no-console
+          console.error('[Auth.login] network error', err?.message);
+          throw new Error('NETWORK_ERROR');
         }
+
+        let data: any = null;
+        try {
+          data = await res.json();
+        } catch {
+          /* reponse non-JSON : on tombera dans le branche d'erreur ci-dessous */
+        }
+
+        // Etape 2 : statut HTTP. 401/422 = creds invalides, 5xx = API en
+        // erreur, autre = inconnu. Tous typees.
+        if (!res.ok || !data?.success) {
+          if (res.status === 401 || res.status === 422) {
+            throw new Error('INVALID_CREDENTIALS');
+          }
+          if (res.status >= 500) {
+            throw new Error('SERVER_ERROR');
+          }
+          throw new Error('UNKNOWN_ERROR');
+        }
+
+        if (data.data.requires2FA) {
+          throw new Error('2FA_REQUIRED');
+        }
+
+        // On lit la VRAIE date d'expiration depuis le JWT (claim exp)
+        // plutot que de la deviner. Evite la divergence si la config API
+        // est modifiee.
+        const realExp = jwtExpMs(data.data.accessToken);
+        if (realExp) {
+          const ttlSec = Math.floor((realExp - Date.now()) / 1000);
+          // eslint-disable-next-line no-console
+          console.log(
+            `[Auth.login] token exp=${new Date(realExp).toISOString()} ttl=${ttlSec}s`,
+          );
+        } else {
+          // eslint-disable-next-line no-console
+          console.warn('[Auth.login] impossible de decoder exp du JWT');
+        }
+        // Permissions ABAC : NE SONT PAS stockees ici. Elles vivent dans le claim
+        // `permissions` du JWT API (data.data.accessToken) et sont decodees a la
+        // demande par usePermission() cote client. Stocker une copie dans la
+        // session NextAuth gonflerait inutilement le cookie (limite ~4 kB).
+        return {
+          id: data.data.user.id,
+          email: data.data.user.email,
+          name: `${data.data.user.firstName} ${data.data.user.lastName}`,
+          role: data.data.user.role,
+          agencyIds: data.data.user.agencyIds,
+          accessToken: data.data.accessToken,
+          refreshToken: data.data.refreshToken,
+          // exp reelle depuis le JWT (fallback : 12h si decodage rate)
+          accessTokenExpiresAt: realExp ?? Date.now() + 12 * 60 * 60 * 1000,
+        };
       },
     }),
   ],

@@ -38,6 +38,8 @@ interface TenantDetail {
   logoUrl: string | null;
   pinnedVersion: string | null;
   autoUpdatePolicy: string | null;
+  skinId?: string | null;
+  skinCustomization?: Record<string, unknown> | null;
 }
 
 interface Job {
@@ -250,6 +252,8 @@ export default function TenantDetailPage({
             pinnedVersion: t.pinnedVersion,
             autoUpdatePolicy: t.autoUpdatePolicy,
             customDomain: t.customDomain,
+            skinId: t.skinId ?? null,
+            skinCustomization: (t.skinCustomization as never) ?? null,
           }}
         />
       </Section>
