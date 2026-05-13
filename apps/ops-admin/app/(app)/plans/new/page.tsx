@@ -37,6 +37,7 @@ export default function NewPlanPage() {
     try {
       await api.post('/plans', {
         ...data,
+        cpuLimit: data.cpuCores,
         cpuLimits: data.cpuCores,
         code: data.name.toLowerCase().replace(/\s+/g, '-'),
       });
