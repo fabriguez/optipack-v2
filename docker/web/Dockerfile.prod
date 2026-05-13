@@ -22,8 +22,12 @@ RUN pnpm install --frozen-lockfile || pnpm install
 COPY packages/ ./packages/
 COPY apps/web/ ./apps/web/
 
-# Build shared package first
+# Build workspace packages d'abord. Le bundle Next requiert leurs `dist/`
+# car les package.json pointent main->./dist. Sans cette etape, Turbopack
+# echoue avec "Module not found: Can't resolve '@transitsoftservices/skins'"
+# (consomme par lib/providers/TenantProvider.tsx).
 RUN pnpm --filter @transitsoftservices/shared build
+RUN pnpm --filter @transitsoftservices/skins build
 
 # Accept NEXT_PUBLIC_* vars at build time (they are inlined into the JS bundle)
 ARG NEXT_PUBLIC_API_URL

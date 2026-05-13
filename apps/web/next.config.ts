@@ -5,7 +5,16 @@ const withNextIntl = createNextIntlPlugin('./i18n/request.ts');
 
 const nextConfig: NextConfig = {
   output: 'standalone',
-  transpilePackages: ['@transitsoftservices/shared', '@transitsoftservices/ui'],
+  // @transitsoftservices/skins est consomme par lib/providers/TenantProvider.
+  // En dev (sans dist/), Next/Turbopack a besoin de transpiler depuis les
+  // sources TS -- d'ou la presence dans transpilePackages. En prod le
+  // build cree dist/ via le Dockerfile, mais on garde le transpile comme
+  // filet de securite (et pour eviter "Module not found" sur dev local).
+  transpilePackages: [
+    '@transitsoftservices/shared',
+    '@transitsoftservices/ui',
+    '@transitsoftservices/skins',
+  ],
   images: {
     remotePatterns: [
       {
