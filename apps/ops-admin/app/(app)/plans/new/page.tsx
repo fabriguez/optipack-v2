@@ -11,7 +11,6 @@ const schema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
   cpuCores: z.coerce.number().min(0.25).max(64),
-  cpuLimits: z.coerce.number().min(0.25).max(64),
   memoryMb: z.coerce.number().int().min(256).max(65536),
   diskQuotaGb: z.coerce.number().int().min(1).max(2000),
   pricePerMonth: z.coerce.number().min(0),
@@ -38,7 +37,7 @@ export default function NewPlanPage() {
     try {
       await api.post('/plans', {
         ...data,
-        cpuLimits: data.cpuLimits ?? data.cpuCores,
+        cpuLimits: data.cpuCores,
         code: data.name.toLowerCase().replace(/\s+/g, '-'),
       });
       router.replace('/plans');
