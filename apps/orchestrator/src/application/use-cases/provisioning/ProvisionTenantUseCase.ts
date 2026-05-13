@@ -4,10 +4,18 @@ import { prisma } from '../../../config/database';
 import { config } from '../../../config';
 import { logger } from '../../../infrastructure/logger';
 import { DockerService, DOCKER_SERVICE } from '../../../infrastructure/docker/DockerService';
-import { CaddyService, CADDY_SERVICE, type TenantCaddyEntry } from '../../../infrastructure/caddy/CaddyService';
+import {
+  CaddyService,
+  CADDY_SERVICE,
+  type TenantCaddyEntry,
+} from '../../../infrastructure/caddy/CaddyService';
 import { UFWService, UFW_SERVICE } from '../../../infrastructure/ufw/UFWService';
 import { PortAllocator } from '../../../infrastructure/provisioning/PortAllocator';
-import { SSHService, SSH_SERVICE, type SshConnection } from '../../../infrastructure/ssh/SSHService';
+import {
+  SSHService,
+  SSH_SERVICE,
+  type SshConnection,
+} from '../../../infrastructure/ssh/SSHService';
 import { ProvisioningJobLogger } from './ProvisioningJobLogger';
 import { CapacityService } from '../../services/CapacityService';
 import { BusinessError, NotFoundError } from '../../../domain/errors/BusinessError';
@@ -62,7 +70,9 @@ export class ProvisionTenantUseCase {
 
     // 0. Verification capacite du VPS (Phase 4)
     const limits = await this.capacity.getTenantLimits(tenantId);
-    await log(`[provision] limits : ${limits.cpuLimit} CPU, ${limits.memoryMb}MB RAM, ${limits.diskQuotaGb}GB disk (source=${limits.source})`);
+    await log(
+      `[provision] limits : ${limits.cpuLimit} CPU, ${limits.memoryMb}MB RAM, ${limits.diskQuotaGb}GB disk (source=${limits.source})`,
+    );
     await this.capacity.assertCanAllocate(tenant.vpsId, limits, { excludeTenantId: tenantId });
 
     // 0.bis. Baseline UFW (idempotent) : 22/80/443 + enable.
@@ -103,9 +113,13 @@ export class ProvisionTenantUseCase {
         where: { id: tenantId },
         data: { apiPort, webPort, webClientPort },
       });
-      await log(`[provision] ports alloues api=${apiPort} web=${webPort} web-client=${webClientPort}`);
+      await log(
+        `[provision] ports alloues api=${apiPort} web=${webPort} web-client=${webClientPort}`,
+      );
     } else {
-      await log(`[provision] ports existants reutilises api=${apiPort} web=${webPort} web-client=${webClientPort}`);
+      await log(
+        `[provision] ports existants reutilises api=${apiPort} web=${webPort} web-client=${webClientPort}`,
+      );
     }
 
     // 2. Pull des images depuis GHCR (api + web staff + web-client public)
@@ -138,7 +152,7 @@ export class ProvisionTenantUseCase {
     // 4. Generer le .env du tenant
     const jwtSecret = randomBytes(32).toString('hex');
     const authSecret = randomBytes(32).toString('hex');
-    const envFile = `/etc/optipack/tenant-${tenant.slug}.env`;
+    const envFile = `${config.tenantEnvDir}/tenant-${tenant.slug}.env`;
     const envContent = [
       `NODE_ENV=production`,
       `TENANT_SLUG=${tenant.slug}`,
@@ -159,10 +173,13 @@ export class ProvisionTenantUseCase {
     ].join('\n');
 
     await log(`[provision] write env file ${envFile}`);
-    await this.ssh.exec(
+    const envWriteResult = await this.ssh.exec(
       creds,
-      `mkdir -p /etc/optipack && cat > ${envFile} <<'EOF'\n${envContent}\nEOF\nchmod 600 ${envFile}`,
+      `mkdir -p ${config.tenantEnvDir} && cat > ${envFile} <<'EOF'\n${envContent}\nEOF\nchmod 600 ${envFile}`,
     );
+    if (envWriteResult.code !== 0) {
+      throw new Error(`ecriture du fichier env ${envFile} echoue : ${envWriteResult.stderr || envWriteResult.stdout}`);
+    }
 
     // 5. Stop + remove les anciens containers s'ils existent (rejouabilite)
     const apiName = `tenant-${tenant.slug}-api`;
@@ -181,7 +198,9 @@ export class ProvisionTenantUseCase {
     const thirdCpu = limits.cpuLimit / 3;
     const halfCpu = limits.cpuLimit / 2; // conserve la variable pour minimiser le diff sur d'autres references eventuelles
     void halfCpu;
-    await log(`[provision] docker run ${apiName} (cpus=${thirdCpu.toFixed(2)} mem=${Math.round(apiMemoryMb)}MB)`);
+    await log(
+      `[provision] docker run ${apiName} (cpus=${thirdCpu.toFixed(2)} mem=${Math.round(apiMemoryMb)}MB)`,
+    );
     await this.docker.run(creds, {
       name: apiName,
       image: apiImage,
@@ -242,13 +261,19 @@ export class ProvisionTenantUseCase {
         })();
       "
     `.trim();
-    const seedResult = await this.docker.exec(creds, apiName, `sh -c "${seedScript.replace(/"/g, '\\"')}"`);
+    const seedResult = await this.docker.exec(
+      creds,
+      apiName,
+      `sh -c "${seedScript.replace(/"/g, '\\"')}"`,
+    );
     if (seedResult.code !== 0) {
       await log(`[provision] WARN seed : ${seedResult.stderr}`);
     }
 
     // 9. Run le container Web staff avec sa part de ressources
-    await log(`[provision] docker run ${webName} (cpus=${thirdCpu.toFixed(2)} mem=${Math.round(webMemoryMb)}MB)`);
+    await log(
+      `[provision] docker run ${webName} (cpus=${thirdCpu.toFixed(2)} mem=${Math.round(webMemoryMb)}MB)`,
+    );
     await this.docker.run(creds, {
       name: webName,
       image: webImage,
@@ -264,7 +289,9 @@ export class ProvisionTenantUseCase {
     });
 
     // 9.bis. Run le container Web-Client (site public + portail client)
-    await log(`[provision] docker run ${webClientName} (cpus=${thirdCpu.toFixed(2)} mem=${Math.round(webClientMemoryMb)}MB)`);
+    await log(
+      `[provision] docker run ${webClientName} (cpus=${thirdCpu.toFixed(2)} mem=${Math.round(webClientMemoryMb)}MB)`,
+    );
     await this.docker.run(creds, {
       name: webClientName,
       image: webClientImage,
@@ -307,7 +334,10 @@ export class ProvisionTenantUseCase {
         isFrozen: false,
       });
     }
-    await this.caddy.push(creds, this.caddy.buildConfig(caddyEntries, { baseDomain: BASE_DOMAIN, email: CADDY_EMAIL }));
+    await this.caddy.push(
+      creds,
+      this.caddy.buildConfig(caddyEntries, { baseDomain: BASE_DOMAIN, email: CADDY_EMAIL }),
+    );
 
     // 11. Health check API
     await log(`[provision] health check api`);

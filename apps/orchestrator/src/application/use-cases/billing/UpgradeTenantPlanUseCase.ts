@@ -135,7 +135,7 @@ export class UpgradeTenantPlanUseCase {
       };
       const apiName = `tenant-${tenant.slug}-api`;
       const webName = `tenant-${tenant.slug}-web`;
-      const envFile = `/etc/optipack/tenant-${tenant.slug}.env`;
+      const envFile = `${config.tenantEnvDir}/tenant-${tenant.slug}.env`;
       const apiImage = `ghcr.io/${config.ghcr.namespace}/optipack-api:${tenant.currentVersion ?? 'latest'}`;
       const webImage = `ghcr.io/${config.ghcr.namespace}/optipack-web:${tenant.currentVersion ?? 'latest'}`;
 

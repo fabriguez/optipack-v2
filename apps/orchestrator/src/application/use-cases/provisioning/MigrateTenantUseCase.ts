@@ -134,7 +134,7 @@ export class MigrateTenantUseCase {
       await this.docker.pull(targetCreds, webImage);
 
       // Recreer le env file sur target (memes secrets : on copie le fichier source)
-      const envFile = `/etc/optipack/tenant-${slug}.env`;
+      const envFile = `${config.tenantEnvDir}/tenant-${slug}.env`;
       await this.scp.transfer(sourceCreds, targetCreds, envFile, envFile);
       await this.ssh.exec(targetCreds, `chmod 600 ${envFile}`);
 

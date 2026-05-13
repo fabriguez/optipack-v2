@@ -117,7 +117,7 @@ export class UpdateTenantUseCase {
 
       // 5. Run prisma migrate deploy avec une instance temporaire de la nouvelle image
       await log('[update] step 5: prisma migrate deploy (container temp)');
-      const envFile = `/etc/optipack/tenant-${slug}.env`;
+      const envFile = `${config.tenantEnvDir}/tenant-${slug}.env`;
       const migrateRes = await this.ssh.exec(
         creds,
         `docker run --rm --env-file ${envFile} --network optipack-shared ${targetRelease.apiImageTag} pnpm prisma migrate deploy`,
@@ -203,7 +203,7 @@ export class UpdateTenantUseCase {
           const halfCpu = limits.cpuLimit / 2;
           const apiMem = Math.floor(limits.memoryMb * 0.6);
           const webMem = limits.memoryMb - apiMem;
-          const envFile = `/etc/optipack/tenant-${slug}.env`;
+          const envFile = `${config.tenantEnvDir}/tenant-${slug}.env`;
           await this.docker.run(creds, {
             name: apiName,
             image: `ghcr.io/${config.ghcr.namespace}/optipack-api:previous-${slug}`,
@@ -280,7 +280,7 @@ export class RollbackTenantUseCase {
     const dbName = tenant.dbName ?? `tenant_${slug.replace(/-/g, '_')}_db`;
     const apiName = `tenant-${slug}-api`;
     const webName = `tenant-${slug}-web`;
-    const envFile = `/etc/optipack/tenant-${slug}.env`;
+    const envFile = `${config.tenantEnvDir}/tenant-${slug}.env`;
 
     const log = (m: string) => this.jobLogger.append(updateJobId, m);
     await log(`[rollback] start ${slug} ${job.toVersion} -> ${job.fromVersion}`);
