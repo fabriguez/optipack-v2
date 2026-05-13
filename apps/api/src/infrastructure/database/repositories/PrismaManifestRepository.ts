@@ -17,7 +17,11 @@ const MANIFEST_INCLUDE = {
 
 // Statuts autorises pour generer un bordereau (audit fix #3 : statuts simplifies).
 const DISPATCH_ALLOWED = new Set(['LOADING', 'IN_TRANSIT', 'RECEIVED', 'UNLOADED']);
-const RECEPTION_ALLOWED = new Set(['RECEIVED', 'UNLOADED']);
+// Bordereau de reception (= livraison physique a destination) : reserve au
+// statut UNLOADED uniquement. Le conteneur doit etre entierement vide pour
+// que la liste des colis recus soit definitive (un dechargement partiel
+// peut encore changer).
+const RECEPTION_ALLOWED = new Set(['UNLOADED']);
 
 @injectable()
 export class PrismaManifestRepository implements IManifestRepository {

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { useQueryClient } from '@tanstack/react-query';
+import { Camera } from 'lucide-react';
 import { AppDialog } from '@/components/ui/AppDialog';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppInput } from '@/components/ui/AppInput';
@@ -13,6 +14,8 @@ import { AppSwitch } from '@/components/ui/AppSwitch';
 import { searchers } from '@/lib/api/searchers';
 import { apiClient } from '@/lib/api/client';
 import { ParcelCategoryValues } from '@transitsoftservices/shared';
+import { QRScannerDialog } from '@/components/shared/QRScannerDialog';
+import { normalizeScannedTracking } from '@/lib/utils/scanNormalize';
 import { toast } from 'sonner';
 
 interface Props {
@@ -56,7 +59,10 @@ export function RegisterExtraParcelDialog({
 }: Props) {
   const qc = useQueryClient();
   const [submitting, setSubmitting] = useState(false);
-  const { register, handleSubmit, control, watch, reset, formState: { errors } } = useForm<FormValues>({
+  // Scanner local pour saisir rapidement le tracking fournisseur depuis
+  // l'etiquette du colis non enregistre, sans avoir a le retaper.
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const { register, handleSubmit, control, watch, reset, setValue, formState: { errors } } = useForm<FormValues>({
     defaultValues: {
       designation: '',
       weight: '',
@@ -141,11 +147,28 @@ export function RegisterExtraParcelDialog({
             {...register('designation', { required: true })}
             error={errors.designation && 'Designation obligatoire'}
           />
-          <AppInput
-            label="Tracking fournisseur (optionnel)"
-            placeholder="Code externe"
-            {...register('trackingFournisseur')}
-          />
+          {/* Tracking fournisseur + bouton scan. Le QR / code-barres de
+              l'etiquette est decode et pose directement dans le champ.
+              `normalizeScannedTracking` retire les eventuels prefixes
+              d'URL ("https://.../tracking/XYZ" -> "XYZ"). */}
+          <div className="flex items-end gap-2">
+            <div className="flex-1">
+              <AppInput
+                label="Tracking fournisseur (optionnel)"
+                placeholder="Code externe"
+                {...register('trackingFournisseur')}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setScannerOpen(true)}
+              className="mb-px flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-500 transition-colors hover:border-primary-300 hover:bg-primary-50 hover:text-primary-700"
+              title="Scanner l'etiquette fournisseur"
+              aria-label="Scanner l'etiquette fournisseur"
+            >
+              <Camera className="h-4 w-4" />
+            </button>
+          </div>
           <AppInput label="Masse (kg)" type="number" step="0.1" {...register('weight')} />
           <AppInput label="Volume (m3)" type="number" step="0.01" {...register('volume')} />
           {!weightVal && !volumeVal && (
@@ -282,6 +305,22 @@ export function RegisterExtraParcelDialog({
           </div>
         </div>
       </form>
+
+      {/* Scanner overlay : ferme automatiquement apres detection
+          (closeOnDetect par defaut) -- on n'enregistre qu'un seul
+          tracking fournisseur par colis, contrairement aux flux batch. */}
+      <QRScannerDialog
+        open={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        onDetected={(decoded) => {
+          const v = normalizeScannedTracking(decoded);
+          if (v) {
+            setValue('trackingFournisseur', v, { shouldDirty: true });
+            toast.success(`Tracking fournisseur : ${v}`);
+          }
+        }}
+        title="Scanner l'etiquette fournisseur"
+      />
     </AppDialog>
   );
 }

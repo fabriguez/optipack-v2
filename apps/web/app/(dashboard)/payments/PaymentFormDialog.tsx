@@ -134,17 +134,25 @@ export function PaymentFormDialog({ open, onClose, invoiceId, parcelTracking }: 
           });
         })
         .catch((err) => {
+          // L'erreur axios encapsule le message backend dans response.data.message.
+          // On le surface plutot que le generique "Network Error" / "Echec upload".
+          const reason =
+            err?.response?.data?.message ||
+            err?.response?.data?.error ||
+            err?.message ||
+            'Echec upload';
           setPendingAttachments((prev) => {
             const cp = [...prev];
             if (cp[indexInBatch]) {
               cp[indexInBatch] = {
                 ...cp[indexInBatch],
                 uploading: false,
-                error: err?.message || 'Echec upload',
+                error: reason,
               };
             }
             return cp;
           });
+          toast.error(`Justificatif "${file.name}" : ${reason}`);
         });
     });
   };

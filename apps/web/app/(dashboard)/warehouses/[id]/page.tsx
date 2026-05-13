@@ -17,6 +17,7 @@ import { AppBadge } from '@/components/ui/AppBadge';
 import { AppDataTable } from '@/components/ui/AppDataTable';
 import { AppDialog } from '@/components/ui/AppDialog';
 import { AppSelect } from '@/components/ui/AppSelect';
+import { AppCheckbox } from '@/components/ui/AppCheckbox';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { RowActions } from '@/components/shared/RowActions';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
@@ -65,6 +66,10 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
   const [batchTransferCodes, setBatchTransferCodes] = useState<string[]>([]);
   const [batchTransferTarget, setBatchTransferTarget] = useState<string | null>(null);
   const [batchTransferBusy, setBatchTransferBusy] = useState(false);
+  // IDs des colis SELECTIONNES dans la liste du magasin (multi-select via
+  // checkboxes). Pre-rempli la modale de transfert quand on l'ouvre depuis
+  // le bouton "Transferer la selection".
+  const [selectedParcelIds, setSelectedParcelIds] = useState<Set<string>>(new Set());
 
   const { data, isLoading } = useQuery({
     queryKey: ['warehouses', id],
@@ -113,14 +118,23 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
     OTHER: 'Autres',
   };
 
-  // Load all warehouses for transfer dialog (single + batch).
+  const warehouse = data?.data;
+
+  // Load warehouses for transfer dialog (single + batch). On scope sur la
+  // MEME agence que le magasin courant : un transfert inter-agence aurait
+  // un autre semantique (handover via conteneur), pas un simple
+  // changement de warehouseId. Le filtre se fait cote API via
+  // `agencyId` qui retourne uniquement les magasins de cette agence.
+  const currentAgencyId = warehouse?.agency?.id || warehouse?.agencyId;
   const { data: allWarehousesData } = useQuery({
-    queryKey: ['all-warehouses-for-transfer'],
-    queryFn: () => apiClient.get('/warehouses', { params: { limit: 200 } }).then((r) => r.data),
-    enabled: !!transferParcel || batchTransferOpen,
+    queryKey: ['warehouses-for-transfer', currentAgencyId],
+    queryFn: () =>
+      apiClient
+        .get('/warehouses', { params: { limit: 200, agencyId: currentAgencyId } })
+        .then((r) => r.data),
+    enabled: (!!transferParcel || batchTransferOpen) && !!currentAgencyId,
   });
 
-  const warehouse = data?.data;
   if (isLoading) return <DashboardSkeleton />;
   if (!warehouse) return <p className="p-6 text-gray-500">Magasin introuvable</p>;
 
@@ -128,7 +142,7 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
     .filter((w: any) => w.id !== id)
     .map((w: any) => ({
       value: w.id,
-      label: `${w.name} - ${w.agency?.name || ''}`,
+      label: w.name,
     }));
 
   const invalidateAll = () => {
@@ -235,6 +249,42 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
     } else {
       // Garde uniquement les echecs en selection pour relance / debug.
       setBatchAddManualIds(failed.map((f) => f.id));
+    }
+  };
+
+  // Transfert d'un set d'IDs (pas de scan). Utilise quand on est passe par
+  // la selection multiple dans la liste. Le magasin destination doit etre
+  // de la meme agence (verifie cote backend aussi).
+  const handleBatchTransferByIds = async (ids: string[]) => {
+    if (!batchTransferTarget) {
+      toast.error('Selectionnez un magasin destination.');
+      return;
+    }
+    if (ids.length === 0) return;
+    setBatchTransferBusy(true);
+    let ok = 0;
+    const failed: { id: string; reason: string }[] = [];
+    for (const pid of ids) {
+      try {
+        await apiClient.patch(`/parcels/${pid}/status`, {
+          status: 'IN_STOCK',
+          warehouseId: batchTransferTarget,
+        });
+        ok++;
+      } catch (e: any) {
+        failed.push({ id: pid, reason: e?.response?.data?.message || 'echec' });
+      }
+    }
+    setBatchTransferBusy(false);
+    if (ok > 0 && failed.length === 0) scanSound.success();
+    else if (failed.length > 0) scanSound.error();
+    if (ok > 0) toast.success(`${ok} colis transfere${ok > 1 ? 's' : ''}`);
+    if (failed.length > 0) toast.error(`${failed.length} echec(s) : ${failed[0].reason}`);
+    invalidateAll();
+    if (failed.length === 0) {
+      setBatchTransferOpen(false);
+      setBatchTransferTarget(null);
+      setSelectedParcelIds(new Set());
     }
   };
 
@@ -347,7 +397,51 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
 
   const canModifyParcel = (row: any) => row.status === 'IN_STOCK';
 
+  // Selection multi-colis dans la liste (pour transfert en lot vers un
+  // autre magasin de la meme agence). Seuls les colis "modifiables"
+  // (IN_STOCK) sont eligibles. Les lignes non eligibles ne montrent pas
+  // de checkbox.
+  const visibleParcels: any[] = parcelsData?.data || [];
+  const selectableParcels = visibleParcels.filter(canModifyParcel);
+  const allVisibleSelected =
+    selectableParcels.length > 0 && selectableParcels.every((r) => selectedParcelIds.has(r.id));
+  const toggleAllVisible = () => {
+    setSelectedParcelIds((prev) => {
+      const next = new Set(prev);
+      if (allVisibleSelected) {
+        for (const r of selectableParcels) next.delete(r.id);
+      } else {
+        for (const r of selectableParcels) next.add(r.id);
+      }
+      return next;
+    });
+  };
+  const toggleOneParcel = (id: string) => {
+    setSelectedParcelIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   const parcelColumns = [
+    {
+      key: '__select',
+      label: '',
+      className: 'w-8',
+      render: (row: any) =>
+        canModifyParcel(row) ? (
+          <span onClick={(e) => e.stopPropagation()} className="inline-flex">
+            <AppCheckbox
+              checked={selectedParcelIds.has(row.id)}
+              onCheckedChange={() => toggleOneParcel(row.id)}
+            />
+          </span>
+        ) : (
+          <span className="text-[10px] text-gray-300">-</span>
+        ),
+    },
     {
       key: 'trackingNumber',
       label: 'Tracking',
@@ -667,6 +761,51 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
               </AppButton>
             </div>
           </div>
+          {/* Barre de selection : visible des qu'il y a au moins une ligne
+              eligible (IN_STOCK). Permet "tout cocher (page)", affiche le
+              compteur, et expose le bouton "Transferer la selection" qui
+              ouvre la modale batch transfert pre-remplie. */}
+          {selectableParcels.length > 0 && (
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
+              <div className="flex items-center gap-3 text-xs text-gray-600">
+                <span
+                  onClick={toggleAllVisible}
+                  className="inline-flex cursor-pointer select-none items-center gap-1"
+                >
+                  <AppCheckbox checked={allVisibleSelected} onCheckedChange={toggleAllVisible} />
+                  <span>Tout cocher (page)</span>
+                </span>
+                {selectedParcelIds.size > 0 && (
+                  <AppBadge variant="info">{selectedParcelIds.size} selectionne(s)</AppBadge>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {selectedParcelIds.size > 0 && (
+                  <>
+                    <AppButton
+                      size="sm"
+                      onClick={() => {
+                        // Ouvre la modale en mode "selection" (pas de scan).
+                        // batchTransferCodes reste vide, on passe directement
+                        // les IDs au handler `handleBatchTransferByIds`.
+                        setBatchTransferOpen(true);
+                      }}
+                    >
+                      <ArrowRightLeft className="h-3.5 w-3.5" />
+                      Transferer {selectedParcelIds.size} colis
+                    </AppButton>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedParcelIds(new Set())}
+                      className="text-xs text-gray-500 hover:text-gray-700 underline"
+                    >
+                      Annuler la selection
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
           <AppDataTable
             columns={parcelColumns}
             data={parcelsData?.data || []}
@@ -728,14 +867,19 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
       >
         <div className="space-y-4">
           <p className="text-sm text-gray-600">
-            Transferer le colis <span className="font-bold font-mono">{transferParcel?.trackingNumber}</span> ({transferParcel?.designation}) vers un autre magasin.
+            Transferer le colis <span className="font-bold font-mono">{transferParcel?.trackingNumber}</span> ({transferParcel?.designation}) vers un autre magasin de l&apos;agence{' '}
+            <span className="font-semibold">{warehouse.agency?.name || 'courante'}</span>.
           </p>
           <AppSelect
             label="Magasin de destination"
             options={warehouseOptions}
             value={targetWarehouseId}
             onValueChange={setTargetWarehouseId}
-            placeholder="Selectionner un magasin"
+            placeholder={
+              warehouseOptions.length === 0
+                ? 'Aucun autre magasin dans cette agence'
+                : 'Selectionner un magasin'
+            }
           />
         </div>
       </AppDialog>
@@ -898,31 +1042,97 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
         }}
         title="Transferer des colis vers un autre magasin"
         size="xl"
+        footer={
+          selectedParcelIds.size > 0 ? (
+            <>
+              <AppButton variant="ghost" onClick={() => setBatchTransferOpen(false)}>
+                Annuler
+              </AppButton>
+              <AppButton
+                onClick={() => handleBatchTransferByIds(Array.from(selectedParcelIds))}
+                loading={batchTransferBusy}
+                disabled={!batchTransferTarget}
+              >
+                <ArrowRightLeft className="h-4 w-4" />
+                Transferer {selectedParcelIds.size} colis selectionnes
+              </AppButton>
+            </>
+          ) : undefined
+        }
       >
         <div className="space-y-4">
           <p className="text-xs text-gray-500">
-            Scannez les colis a transferer depuis <span className="font-semibold">{warehouse.name}</span>.
-            Tous seront deplaces vers le magasin choisi ci-dessous.
+            {selectedParcelIds.size > 0
+              ? `${selectedParcelIds.size} colis selectionne(s) depuis la liste. Ils seront tous deplaces vers le magasin choisi.`
+              : `Scannez les colis a transferer depuis ${warehouse.name}. Tous seront deplaces vers le magasin choisi ci-dessous.`}
           </p>
-          <AppSelect
-            label="Magasin destination"
-            value={batchTransferTarget ?? ''}
-            onValueChange={(v) => setBatchTransferTarget(v || null)}
-            options={warehouseOptions}
-            placeholder="Selectionner le magasin destination"
-          />
-          <div className="rounded-xl border border-primary-100 bg-primary-50/40 p-3">
-            <p className="mb-2 text-xs font-semibold text-primary-900">Par scan QR / code-barres</p>
-            <BatchScanCollector
-              codes={batchTransferCodes}
-              onChange={setBatchTransferCodes}
-              submitLabel={`Transferer ${batchTransferCodes.length || ''} colis`}
-              onSubmit={handleBatchTransfer}
-              submitting={batchTransferBusy}
-              placeholder="Scanner ou coller un tracking..."
-              cameraTitle="Scanner pour transferer"
+          <p className="text-xs text-amber-700">
+            Les magasins proposes sont limites a la meme agence (
+            <span className="font-semibold">{warehouse.agency?.name || 'agence courante'}</span>
+            ). Pour un transfert inter-agence, utilisez un conteneur.
+          </p>
+          {/* Highlight rouge si tentative de soumission sans destination. */}
+          <div
+            className={
+              !batchTransferTarget && (batchTransferCodes.length > 0 || selectedParcelIds.size > 0)
+                ? 'rounded-xl ring-2 ring-red-300 ring-offset-2 animate-pulse'
+                : ''
+            }
+          >
+            <AppSelect
+              label="Magasin destination"
+              value={batchTransferTarget ?? ''}
+              onValueChange={(v) => setBatchTransferTarget(v || null)}
+              options={warehouseOptions}
+              placeholder={
+                warehouseOptions.length === 0
+                  ? 'Aucun autre magasin dans cette agence'
+                  : 'Selectionner le magasin destination'
+              }
             />
+            {!batchTransferTarget && (batchTransferCodes.length > 0 || selectedParcelIds.size > 0) && (
+              <p className="mt-1 text-xs font-medium text-red-600">
+                Selectionnez un magasin destination avant de valider le transfert.
+              </p>
+            )}
           </div>
+
+          {/* Mode SELECTION : on affiche un resume des colis pre-coches.
+              Pas de scan dans ce mode -- la liste est figee. */}
+          {selectedParcelIds.size > 0 ? (
+            <div className="rounded-xl border border-primary-100 bg-primary-50/40 p-3">
+              <p className="mb-2 text-xs font-semibold text-primary-900">
+                Colis selectionnes ({selectedParcelIds.size})
+              </p>
+              <ul className="max-h-44 space-y-1 overflow-auto text-xs">
+                {Array.from(selectedParcelIds).map((pid) => {
+                  const p = visibleParcels.find((x) => x.id === pid);
+                  return (
+                    <li key={pid} className="flex items-center justify-between">
+                      <span className="font-mono text-gray-700">
+                        {p?.trackingNumber || pid.slice(0, 8)}
+                      </span>
+                      <span className="text-gray-500">{p?.designation || ''}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ) : (
+            // Mode SCAN classique.
+            <div className="rounded-xl border border-primary-100 bg-primary-50/40 p-3">
+              <p className="mb-2 text-xs font-semibold text-primary-900">Par scan QR / code-barres</p>
+              <BatchScanCollector
+                codes={batchTransferCodes}
+                onChange={setBatchTransferCodes}
+                submitLabel={`Transferer ${batchTransferCodes.length || ''} colis`}
+                onSubmit={handleBatchTransfer}
+                submitting={batchTransferBusy}
+                placeholder="Scanner ou coller un tracking..."
+                cameraTitle="Scanner pour transferer"
+              />
+            </div>
+          )}
         </div>
       </AppDialog>
 

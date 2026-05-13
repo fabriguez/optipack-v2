@@ -2,6 +2,7 @@ import { Router, raw } from 'express';
 import { AuthController } from '../controllers/AuthController';
 import { VpsController } from '../controllers/VpsController';
 import { TenantController } from '../controllers/TenantController';
+import { TenantMailController } from '../controllers/TenantMailController';
 import { OpsAdminController } from '../controllers/OpsAdminController';
 import { AuditController } from '../controllers/AuditController';
 import { PlanController } from '../controllers/PlanController';
@@ -62,6 +63,12 @@ router.post('/tenants/:id/upgrade', authenticateOps, BillingController.requestUp
 router.get('/tenants/:id/jobs', authenticateOps, TenantController.listJobs);
 router.get('/tenants/:id/jobs/:jobId', authenticateOps, TenantController.getJob);
 router.get('/tenants/:id/logs', authenticateOps, TenantController.getLogs);
+
+// Messagerie (envoi via Resend, 1 domaine par tenant).
+router.get('/tenants/:id/mail', authenticateOps, TenantMailController.get);
+router.post('/tenants/:id/mail/provision', authenticateOps, TenantMailController.provision);
+router.post('/tenants/:id/mail/verify', authenticateOps, TenantMailController.verify);
+router.post('/tenants/:id/mail/refresh', authenticateOps, TenantMailController.refresh);
 
 // ============================================================
 // PLANS (lecture pour tous les ops, ecriture super-admin)

@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowLeft, Package, Play, PackageCheck, Plus, Eye, PackageMinus,
-  FileText, FileCheck, FileDiff, Printer, History, AlertCircle, Truck, Camera, QrCode,
+  FileText, FileCheck, FileDiff, Printer, History, AlertCircle, Truck, Camera, QrCode, ChevronDown, FileSpreadsheet,
 } from 'lucide-react';
+import { AppDropdownMenu } from '@/components/ui/AppDropdownMenu';
 import { ParcelQRDialog } from '@/components/shared/ParcelQRDialog';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard, AppCardHeader } from '@/components/ui/AppCard';
@@ -417,32 +418,50 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
     setRemoving(false);
   };
 
-  const handleGenerateDispatch = async () => {
+  // Le manifest record est independant du format de telechargement : on
+  // genere une fois cote backend (cree le snapshot des lignes) puis on
+  // propose au choix le PDF ou le XLSX. Les deux versions restent
+  // accessibles dans l'historique via les memes endpoints
+  // /manifests/:id/pdf et /manifests/:id/xlsx.
+  const downloadManifest = async (m: { id: string; number: string }, format: 'pdf' | 'xlsx') => {
+    if (format === 'xlsx') {
+      await fetchPdfAuthed(`/manifests/${m.id}/xlsx`, {
+        fileName: `bordereau-${m.number}.xlsx`,
+        mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+    } else {
+      await fetchPdfAuthed(`/manifests/${m.id}/pdf`, { fileName: `bordereau-${m.number}.pdf` });
+    }
+  };
+
+  const handleGenerateDispatch = async (format: 'pdf' | 'xlsx' = 'pdf') => {
     setBusyManifest('dispatch');
     try {
       const res = await manifestsApi.createDispatch(id);
       const m = res?.data;
       if (m?.id) {
-        await fetchPdfAuthed(`/manifests/${m.id}/pdf`, { fileName: `bordereau-${m.number}.pdf` });
-        toast.success(`Bordereau ${m.number} genere`);
+        await downloadManifest(m, format);
+        toast.success(`Bordereau ${m.number} genere (${format.toUpperCase()})`);
       }
       qc.invalidateQueries({ queryKey: ['containers', id, 'history'] });
+      qc.invalidateQueries({ queryKey: ['containers', id, 'manifests-history'] });
     } catch (e: any) {
       toast.error(e?.response?.data?.message || "Erreur lors de la generation du bordereau d'envoi");
     }
     setBusyManifest(null);
   };
 
-  const handleGenerateReception = async () => {
+  const handleGenerateReception = async (format: 'pdf' | 'xlsx' = 'pdf') => {
     setBusyManifest('reception');
     try {
       const res = await manifestsApi.createReception(id);
       const m = res?.data;
       if (m?.id) {
-        await fetchPdfAuthed(`/manifests/${m.id}/pdf`, { fileName: `bordereau-${m.number}.pdf` });
-        toast.success(`Bordereau ${m.number} genere`);
+        await downloadManifest(m, format);
+        toast.success(`Bordereau ${m.number} genere (${format.toUpperCase()})`);
       }
       qc.invalidateQueries({ queryKey: ['containers', id, 'history'] });
+      qc.invalidateQueries({ queryKey: ['containers', id, 'manifests-history'] });
     } catch (e: any) {
       toast.error(e?.response?.data?.message || 'Erreur lors de la generation du bordereau de reception');
     }
@@ -538,38 +557,79 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
             dechargement complet. */}
         {container.status !== 'EMPTY' ? (
           <div className="flex flex-wrap gap-3">
-            <AppButton
-              variant="outline"
-              size="sm"
-              onClick={handleGenerateDispatch}
-              loading={busyManifest === 'dispatch'}
-            >
-              <FileText className="h-4 w-4" />
-              Bordereau d&apos;envoi
-            </AppButton>
-            <AppButton
-              variant="outline"
-              size="sm"
-              onClick={handleGenerateReception}
-              loading={busyManifest === 'reception'}
-              disabled={!['RECEIVED', 'UNLOADED'].includes(container.status)}
-              title={
-                !['RECEIVED', 'UNLOADED'].includes(container.status)
-                  ? 'Le conteneur doit etre receptionne pour generer un bordereau de reception.'
-                  : undefined
+            {/* AppDropdownMenu : un seul bouton + chevron qui ouvre le
+                choix PDF / XLSX. Le manifest record est cree une fois ;
+                seul le format de telechargement differe. Les deux formats
+                restent disponibles dans l'historique. */}
+            <AppDropdownMenu
+              trigger={
+                <AppButton
+                  variant="outline"
+                  size="sm"
+                  loading={busyManifest === 'dispatch'}
+                >
+                  <FileText className="h-4 w-4" />
+                  Bordereau d&apos;envoi
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </AppButton>
               }
-            >
-              <FileCheck className="h-4 w-4" />
-              Bordereau de reception
-            </AppButton>
+              items={[
+                {
+                  label: 'Generer PDF',
+                  icon: <FileText className="h-4 w-4" />,
+                  onClick: () => handleGenerateDispatch('pdf'),
+                },
+                {
+                  label: 'Generer XLSX',
+                  icon: <FileSpreadsheet className="h-4 w-4" />,
+                  onClick: () => handleGenerateDispatch('xlsx'),
+                },
+              ]}
+            />
+
+            {/* Bordereau de reception : reserve a UNLOADED. */}
+            <AppDropdownMenu
+              trigger={
+                <AppButton
+                  variant="outline"
+                  size="sm"
+                  loading={busyManifest === 'reception'}
+                  disabled={container.status !== 'UNLOADED'}
+                  title={
+                    container.status !== 'UNLOADED'
+                      ? 'Disponible uniquement quand le conteneur est entierement vide (statut UNLOADED).'
+                      : undefined
+                  }
+                >
+                  <FileCheck className="h-4 w-4" />
+                  Bordereau de reception
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </AppButton>
+              }
+              items={[
+                {
+                  label: 'Generer PDF',
+                  icon: <FileText className="h-4 w-4" />,
+                  onClick: () => handleGenerateReception('pdf'),
+                  disabled: container.status !== 'UNLOADED',
+                },
+                {
+                  label: 'Generer XLSX',
+                  icon: <FileSpreadsheet className="h-4 w-4" />,
+                  onClick: () => handleGenerateReception('xlsx'),
+                  disabled: container.status !== 'UNLOADED',
+                },
+              ]}
+            />
+
             <AppButton
               variant="outline"
               size="sm"
               onClick={() => setShowComparison(true)}
-              disabled={!['RECEIVED', 'UNLOADED'].includes(container.status)}
+              disabled={container.status !== 'UNLOADED'}
               title={
-                !['RECEIVED', 'UNLOADED'].includes(container.status)
-                  ? 'Disponible apres reception du conteneur.'
+                container.status !== 'UNLOADED'
+                  ? 'Disponible uniquement apres dechargement complet (statut UNLOADED).'
                   : undefined
               }
             >
@@ -1166,21 +1226,38 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
               Tous les colis seront decharges comme &quot;bien recus&quot; vers le magasin selectionne.
               Pour signaler un colis modifie ou introuvable, utilisez le dechargement individuel.
             </p>
-            <AppSearchSelect
-              label="Magasin de destination"
-              value={batchUnloadWarehouseId}
-              onChange={setBatchUnloadWarehouseId}
-              // Restreint aux magasins de l'agence d'arrivee : evite qu'un
-              // operateur range les colis d'un conteneur dans un magasin
-              // d'une autre agence par erreur de selection.
-              search={(q, limit) =>
-                searchers.warehouses(q, limit, {
-                  agencyId: container.arrivalAgencyId || container.arrivalAgency?.id,
-                })
+            {/* Highlight rouge + message si l'utilisateur a deja scanne mais
+                oublie de choisir le magasin -- evite le toast generique
+                "Selectionnez un magasin" et pointe l'oeil sur le champ
+                manquant. */}
+            <div
+              className={
+                !batchUnloadWarehouseId && batchUnloadCodes.length > 0
+                  ? 'rounded-xl ring-2 ring-red-300 ring-offset-2 animate-pulse'
+                  : ''
               }
-              placeholder={`Magasin de ${container.arrivalAgency?.name || "l'agence d'arrivee"}`}
-              required
-            />
+            >
+              <AppSearchSelect
+                label="Magasin de destination"
+                value={batchUnloadWarehouseId}
+                onChange={setBatchUnloadWarehouseId}
+                // Restreint aux magasins de l'agence d'arrivee : evite qu'un
+                // operateur range les colis d'un conteneur dans un magasin
+                // d'une autre agence par erreur de selection.
+                search={(q, limit) =>
+                  searchers.warehouses(q, limit, {
+                    agencyId: container.arrivalAgencyId || container.arrivalAgency?.id,
+                  })
+                }
+                placeholder={`Magasin de ${container.arrivalAgency?.name || "l'agence d'arrivee"}`}
+                required
+              />
+              {!batchUnloadWarehouseId && batchUnloadCodes.length > 0 && (
+                <p className="mt-1 text-xs font-medium text-red-600">
+                  Selectionnez le magasin de destination avant de valider le dechargement.
+                </p>
+              )}
+            </div>
 
             <div className="rounded-xl border border-primary-100 bg-primary-50/40 p-3">
               <p className="mb-2 text-xs font-semibold text-primary-900">Par scan QR / code-barres</p>

@@ -423,7 +423,11 @@ export class PDFService {
   // -------------------------------------------------------------------------
 
   static async generateManifestPDF(manifestData: ManifestData): Promise<Buffer> {
-    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    // Paysage : la table de bordereau a beaucoup de colonnes (#, tracking,
+    // designation, client, destinataire, ville, route, P/V, a payer, avance).
+    // En portrait elle deborde / les colonnes sont trop serrees. En paysage
+    // (A4 = 842 x 595 pts) on a ~742pt utiles ce qui suffit largement.
+    const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 50 });
     const pageWidth = doc.page.width - 100;
     const title = manifestData.title || "BORDEREAU D'ENVOI";
 

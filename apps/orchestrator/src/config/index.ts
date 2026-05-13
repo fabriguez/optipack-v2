@@ -26,6 +26,14 @@ export const config = {
     namespace: process.env.OPS_GHCR_NAMESPACE ?? 'transitsoftservices',
     pullToken: process.env.OPS_GHCR_TOKEN ?? '',
   },
+  // Resend (envoi transactionnel multi-tenant, 1 domaine par tenant)
+  resend: {
+    apiKey: process.env.RESEND_API_KEY ?? '',
+    // Domaine racine : on cree les sous-domaines sous celui-ci par defaut.
+    // ex: tenants/acme.transitsoftservices.com
+    baseDomain: process.env.RESEND_BASE_DOMAIN ?? 'transitsoftservices.com',
+    region: process.env.RESEND_REGION ?? 'eu-west-1', // 'us-east-1' | 'eu-west-1' | 'sa-east-1' | 'ap-northeast-1'
+  },
   // Pour generer les liens dans les emails
   publicWebUrl: process.env.OPS_PUBLIC_WEB_URL ?? 'http://localhost:3020',
   // CORS : liste blanche d'origines (csv). Vide = autoriser toutes les origines (dev).

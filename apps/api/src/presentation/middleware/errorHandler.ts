@@ -44,6 +44,22 @@ export function errorHandler(err: Error, _req: Request, res: Response, _next: Ne
     return;
   }
 
+  // Erreurs S3/MinIO : surface explicite -- "SignatureDoesNotMatch" indique
+  // un mauvais access/secret key cote serveur, "NoSuchBucket" un bucket
+  // manquant, etc. On renvoie un 502 avec le code S3 pour que l'UI dise
+  // "credentials MinIO invalides" plutot que "une erreur est survenue".
+  const anyErr = err as any;
+  if (anyErr?.name === 'S3Error' || anyErr?.code === 'SignatureDoesNotMatch' || anyErr?.code === 'NoSuchBucket') {
+    logger.error({ err }, 'S3/MinIO error');
+    res.status(502).json({
+      success: false,
+      message: `Stockage indisponible (${anyErr.code || 'S3Error'}). Verifiez les credentials MinIO et le nom du bucket cote serveur.`,
+      code: 'STORAGE_ERROR',
+      detail: anyErr.message,
+    });
+    return;
+  }
+
   // Unexpected errors
   logger.error({ err }, 'Unhandled error');
   res.status(500).json({

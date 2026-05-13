@@ -8,6 +8,7 @@ import { ScpService, SCP_SERVICE } from './infrastructure/ssh/ScpService';
 import { StripeProvider } from './infrastructure/billing/StripeProvider';
 import { MobileMoneyProvider } from './infrastructure/billing/MobileMoneyProvider';
 import { GHCRClient } from './infrastructure/ghcr/GHCRClient';
+import { ResendClient } from './infrastructure/resend/ResendClient';
 import { NotificationService } from './infrastructure/notifications/NotificationService';
 import { MetricsService } from './infrastructure/metrics/MetricsService';
 
@@ -20,6 +21,7 @@ container.register(SCP_SERVICE, { useClass: ScpService });
 container.registerSingleton(StripeProvider);
 container.registerSingleton(MobileMoneyProvider);
 container.registerSingleton(GHCRClient);
+container.registerSingleton(ResendClient);
 container.registerSingleton(NotificationService);
 container.registerSingleton(MetricsService);
 

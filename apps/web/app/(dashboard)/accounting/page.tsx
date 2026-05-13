@@ -63,12 +63,15 @@ export default function AccountingPage() {
     {
       key: 'createdBy',
       label: 'Par',
-      render: (row: any) =>
-        row.createdBy?.fullName ? (
-          <span className="text-xs text-gray-600">{row.createdBy.fullName}</span>
+      render: (row: any) => {
+        const u = row.createdBy;
+        const name = u ? [u.firstName, u.lastName].filter(Boolean).join(' ') : '';
+        return name ? (
+          <span className="text-xs text-gray-600">{name}</span>
         ) : (
           <span className="text-xs text-gray-400">-</span>
-        ),
+        );
+      },
     },
     { key: 'date', label: 'Date', render: (row: any) => formatDateTime(row.date) },
   ];

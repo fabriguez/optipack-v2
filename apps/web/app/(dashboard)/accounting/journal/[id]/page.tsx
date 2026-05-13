@@ -144,7 +144,9 @@ export default function JournalEntryDetailPage({
             <UserIcon className="h-4 w-4 text-gray-400" />
             <span className="text-xs text-gray-500">Cree par :</span>
             <span className="font-medium">
-              {entry.createdBy?.fullName ?? 'systeme'}
+              {entry.createdBy
+                ? [entry.createdBy.firstName, entry.createdBy.lastName].filter(Boolean).join(' ') || 'systeme'
+                : 'systeme'}
             </span>
             {entry.createdBy?.email && (
               <span className="text-xs text-gray-400">({entry.createdBy.email})</span>

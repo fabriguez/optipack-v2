@@ -110,14 +110,16 @@ export function ContainerFormDialog({ open, onClose }: ContainerFormDialogProps)
                 label="Conteneur parent"
                 value={field.value || null}
                 onChange={(v) => field.onChange(v ?? undefined)}
+                // Tous les conteneurs (peu importe le statut : EMPTY, LOADING,
+                // IN_TRANSIT, RECEIVED, UNLOADED) peuvent etre parents. On
+                // exclut uniquement les conteneurs d'acheminement (pas de
+                // nesting de forwarding) via isForwarding=false. Le backend
+                // valide encore le statut au moment du `create` si besoin.
                 search={(q, limit) =>
-                  searchers.containers(q, limit, {
-                    isForwarding: 'false',
-                    status: 'EMPTY,LOADING',
-                  })
+                  searchers.containers(q, limit, { isForwarding: 'false' })
                 }
                 error={errors.parentContainerId?.message}
-                placeholder="Selectionner un conteneur parent (AIR/SEA)"
+                placeholder="Selectionner un conteneur parent"
                 required
               />
             )}

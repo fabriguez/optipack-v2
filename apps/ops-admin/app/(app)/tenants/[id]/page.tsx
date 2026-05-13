@@ -16,6 +16,7 @@ import { formatDate } from '@/lib/utils';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { JobLogsViewer } from '@/components/JobLogsViewer';
 import { TenantStudio } from './TenantStudio';
+import { TenantMail } from './TenantMail';
 
 interface TenantDetail {
   id: string;
@@ -232,6 +233,10 @@ export default function TenantDetailPage({
         <Info label="Web-client port">{t.webClientPort ?? '-'}</Info>
         <Info label="Custom domain">{t.customDomain ?? '-'}</Info>
       </div>
+
+      <Section title="Messagerie (Resend)">
+        <TenantMail tenantId={t.id} />
+      </Section>
 
       <Section title="Studio (theme et configuration)">
         <TenantStudio

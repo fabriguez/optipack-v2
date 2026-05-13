@@ -160,11 +160,45 @@ model Tenant {
   jobs        ProvisioningJob[]
   updateJobs  TenantUpdateJob[]
   planChanges PlanChange[]
+  mail        TenantMail?
 
   @@index([vpsId])
   @@index([status])
   @@index([resourcePlanId])
   @@map("tenants")
+}
+
+/**
+ * Configuration messagerie d'un tenant. Une seule entree par tenant.
+ *
+ * - Envoi : domaine Resend (DKIM + SPF verifies par l'admin DNS du tenant).
+ *   On stocke l'ID Resend et le status courant ; le verifier appel
+ *   GET /domains/{id} sur Resend pour rafraichir.
+ * - Reception : mailcowDomain + mailboxes (phase 2 -- pas encore branche).
+ *   On stocke le quota total + l'usage rapporte par Mailcow.
+ */
+model TenantMail {
+  tenantId           String   @id
+  tenant             Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // --- Envoi (Resend) ---
+  // Domaine d'envoi : tenants/{slug}.transitsoftservices.com OU custom domain.
+  sendingDomain      String?
+  resendDomainId     String?  @unique
+  resendStatus       String?  // pending | verified | failed
+  resendDnsRecords   Json?    // [{ type, name, value, status, ttl }]
+  lastVerifiedAt     DateTime?
+
+  // --- Reception (Mailcow, phase 2) ---
+  mailcowDomain      String?
+  primaryMailbox     String?  // ex: contact@acme.transitsoftservices.com
+  mailboxQuotaMb     Int      @default(250)
+  storageUsedMb      Int      @default(0)
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@map("tenant_mail")
 }
 
 enum TenantStatus {

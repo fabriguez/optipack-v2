@@ -79,11 +79,11 @@ export class CreateContainerUseCase {
           "Le conteneur parent ne peut pas etre lui-meme un conteneur d'acheminement.",
         );
       }
-      if (!['EMPTY', 'LOADING'].includes(parent.status)) {
-        throw new BusinessError(
-          `Le conteneur parent est au statut ${parent.status} ; il n'accepte plus de sous-conteneurs.`,
-        );
-      }
+      // On accepte n'importe quel statut de parent (EMPTY, LOADING, IN_TRANSIT,
+      // RECEIVED, UNLOADED). Le besoin metier : tracer la provenance d'un
+      // acheminement meme apres dechargement complet du conteneur parent.
+      // L'ancien filtre EMPTY/LOADING empechait la creation post-arrivee,
+      // ce qui bloquait les regroupements documentaires retroactifs.
     }
 
     const [depAgency, arrAgency] = await Promise.all([
