@@ -41,13 +41,19 @@ export class ContainerController {
       const { departureAgencyId, arrivalAgencyId, status, isForwarding } = req.query;
       const isForwardingFlag =
         isForwarding === 'true' ? true : isForwarding === 'false' ? false : undefined;
+      // SUPER_ADMIN voit tous les conteneurs (pas de scope agence). Les autres
+      // sont filtres par leurs agences. Sans ce bypass, un SUPER_ADMIN avec
+      // agencyIds=[] verrait LA LISTE VIDE -- bug observe sur le formulaire
+      // de creation de conteneur d'acheminement (parentContainer empty).
+      const agencyIds =
+        req.user!.role === 'SUPER_ADMIN' ? undefined : req.user!.agencyIds;
       const result = await useCase.execute(
         {
           departureAgencyId: departureAgencyId as string,
           arrivalAgencyId: arrivalAgencyId as string,
           status: status as string,
           isForwarding: isForwardingFlag,
-          agencyIds: req.user!.agencyIds,
+          agencyIds,
         },
         req.query as any,
       );
