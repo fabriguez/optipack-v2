@@ -29,7 +29,7 @@ export const config = {
   // Chemin local des fichiers d'environnement des tenants sur le VPS.
   // Si le VPS ne permet pas l'ecriture dans /etc/optipack, definissez
   // OPS_TENANT_ENV_DIR vers un repertoire utilisateur persistant.
-  tenantEnvDir: process.env.OPS_TENANT_ENV_DIR ?? '~/optipack',
+  tenantEnvDir: process.env.OPS_TENANT_ENV_DIR ?? '~/.optipack',
   // Resend (envoi transactionnel multi-tenant, 1 domaine par tenant)
   resend: {
     apiKey: process.env.RESEND_API_KEY ?? '',

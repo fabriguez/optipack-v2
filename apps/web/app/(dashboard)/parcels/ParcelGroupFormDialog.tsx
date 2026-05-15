@@ -217,8 +217,7 @@ export function ParcelGroupFormDialog({ open, onClose, defaultAgency }: Props) {
 
   const addParcel = () => setParcels((prev) => [...prev, emptyParcel()]);
 
-  const removeParcel = (i: number) =>
-    setParcels((prev) => prev.filter((_, idx) => idx !== i));
+  const removeParcel = (i: number) => setParcels((prev) => prev.filter((_, idx) => idx !== i));
 
   const collapseAll = (value: boolean) =>
     setParcels((prev) => prev.map((p) => ({ ...p, collapsed: value })));
@@ -377,8 +376,8 @@ export function ParcelGroupFormDialog({ open, onClose, defaultAgency }: Props) {
             />
           </div>
           <p className="mt-3 text-xs text-primary-700/80">
-            Le destinataire et l&apos;adresse de destination sont a renseigner sur chaque
-            colis individuel ci-dessous (ils peuvent differer d&apos;un colis a l&apos;autre).
+            Le destinataire et l&apos;adresse de destination sont a renseigner sur chaque colis
+            individuel ci-dessous (ils peuvent differer d&apos;un colis a l&apos;autre).
             L&apos;agence emettrice est deduite automatiquement du magasin de depart.
           </p>
           {notes !== '' || true ? (
@@ -400,7 +399,8 @@ export function ParcelGroupFormDialog({ open, onClose, defaultAgency }: Props) {
             <div>
               <p className="text-sm font-semibold">Colis du groupe ({parcels.length})</p>
               <p className="text-xs text-gray-500">
-                Total : <span className="font-bold text-primary-700">{total.toLocaleString()} XAF</span>
+                Total :{' '}
+                <span className="font-bold text-primary-700">{total.toLocaleString()} XAF</span>
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -500,7 +500,9 @@ function ParcelCard({
             <span className="ml-2 text-[11px] text-gray-500">
               {parcel.weight && `${parcel.weight} kg`}
               {parcel.volume && ` ${parcel.volume} m3`}
-              {parcel.price !== '0' && parcel.price && ` — ${Number(parcel.price).toLocaleString()} XAF`}
+              {parcel.price !== '0' &&
+                parcel.price &&
+                ` — ${Number(parcel.price).toLocaleString()} XAF`}
             </span>
           )}
         </button>

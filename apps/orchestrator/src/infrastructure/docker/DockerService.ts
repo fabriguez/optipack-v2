@@ -79,6 +79,25 @@ export class DockerService {
     return r.stdout.trim();
   }
 
+  async composeUp(creds: SshConnection, composeFilePath: string, composeYaml: string, projectName: string): Promise<string> {
+    const writeResult = await this.ssh.exec(
+      creds,
+      `cat > ${composeFilePath} <<'EOF'\n${composeYaml}\nEOF`,
+    );
+    if (writeResult.code !== 0) {
+      throw new Error(`ecriture du fichier compose ${composeFilePath} echoue : ${writeResult.stderr || writeResult.stdout}`);
+    }
+
+    const r = await this.ssh.exec(
+      creds,
+      `if docker compose version >/dev/null 2>&1; then docker compose -f ${composeFilePath} -p ${projectName} up -d --remove-orphans; elif docker-compose version >/dev/null 2>&1; then docker-compose -f ${composeFilePath} -p ${projectName} up -d --remove-orphans; else echo 'compose non trouve' >&2; exit 1; fi`,
+    );
+    if (r.code !== 0) {
+      throw new Error(`docker compose up echoue : ${r.stderr || r.stdout}`);
+    }
+    return r.stdout.trim();
+  }
+
   async exec(creds: SshConnection, container: string, cmd: string): Promise<{ stdout: string; stderr: string; code: number }> {
     return this.ssh.exec(creds, `docker exec ${container} ${cmd}`);
   }

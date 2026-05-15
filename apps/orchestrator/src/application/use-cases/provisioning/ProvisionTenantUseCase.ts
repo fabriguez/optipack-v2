@@ -190,27 +190,70 @@ export class ProvisionTenantUseCase {
     await this.docker.remove(creds, webName, true);
     await this.docker.remove(creds, webClientName, true);
 
-    // 6. Run le container API avec limites de ressources (Phase 4)
+    // 6. Run les containers tenant via docker compose
     // Split RAM 50/25/25 entre api, web staff et web-client public. CPU partage.
     const apiMemoryMb = Math.floor(limits.memoryMb * 0.5);
     const webMemoryMb = Math.floor(limits.memoryMb * 0.25);
     const webClientMemoryMb = limits.memoryMb - apiMemoryMb - webMemoryMb;
-    const thirdCpu = limits.cpuLimit / 3;
-    const halfCpu = limits.cpuLimit / 2; // conserve la variable pour minimiser le diff sur d'autres references eventuelles
-    void halfCpu;
-    await log(
-      `[provision] docker run ${apiName} (cpus=${thirdCpu.toFixed(2)} mem=${Math.round(apiMemoryMb)}MB)`,
+    const thirdCpu = Number((limits.cpuLimit / 3).toFixed(3));
+    const composeFile = `/tmp/tenant-${tenant.slug}-compose.yml`;
+    const composeProject = `tenant-${tenant.slug}`;
+    const composeYaml = `version: "3.9"
+services:
+  api:
+    container_name: ${apiName}
+    image: ${apiImage}
+    env_file:
+      - ${envFile}
+    ports:
+      - "127.0.0.1:${apiPort}:4000"
+    restart: unless-stopped
+    networks:
+      - optipack-shared
+    cpus: ${thirdCpu}
+    mem_limit: ${apiMemoryMb}m
+  web:
+    container_name: ${webName}
+    image: ${webImage}
+    env_file:
+      - ${envFile}
+    environment:
+      TENANT_SLUG: ${JSON.stringify(tenant.slug)}
+      NEXT_PUBLIC_API_URL: ${JSON.stringify(`https://api.${tenant.slug}.${BASE_DOMAIN}/api/v1`)}
+    ports:
+      - "127.0.0.1:${webPort}:3000"
+    restart: unless-stopped
+    networks:
+      - optipack-shared
+    cpus: ${thirdCpu}
+    mem_limit: ${webMemoryMb}m
+  web-client:
+    container_name: ${webClientName}
+    image: ${webClientImage}
+    env_file:
+      - ${envFile}
+    environment:
+      TENANT_SLUG: ${JSON.stringify(tenant.slug)}
+      NEXT_PUBLIC_API_URL: ${JSON.stringify(`https://api.${tenant.slug}.${BASE_DOMAIN}/api/v1`)}
+      NEXT_PUBLIC_TENANT_SLUG: ${JSON.stringify(tenant.slug)}
+    ports:
+      - "127.0.0.1:${webClientPort}:3001"
+    restart: unless-stopped
+    networks:
+      - optipack-shared
+    cpus: ${thirdCpu}
+    mem_limit: ${webClientMemoryMb}m
+networks:
+  optipack-shared:
+    external: true
+`;
+
+    await log(`[provision] docker compose up tenant ${tenant.slug}`);
+    await this.ssh.exec(
+      creds,
+      'docker network inspect optipack-shared >/dev/null 2>&1 || docker network create optipack-shared',
     );
-    await this.docker.run(creds, {
-      name: apiName,
-      image: apiImage,
-      ports: { [apiPort]: 4000 },
-      envFile,
-      restart: 'unless-stopped',
-      network: 'optipack-shared',
-      cpuLimit: Number(thirdCpu.toFixed(2)),
-      memoryMb: Math.round(apiMemoryMb),
-    });
+    await this.docker.composeUp(creds, composeFile, composeYaml, composeProject);
 
     // 7. Run prisma migrate deploy dans le container
     await log(`[provision] prisma migrate deploy`);
