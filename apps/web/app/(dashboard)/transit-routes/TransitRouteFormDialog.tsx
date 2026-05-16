@@ -1,9 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { createTransitRouteSchema, type CreateTransitRouteInput } from '@transitsoftservices/shared';
+import {
+  createTransitRouteSchema,
+  updateTransitRouteSchema,
+  type CreateTransitRouteInput,
+} from '@transitsoftservices/shared';
 import { AppDialog } from '@/components/ui/AppDialog';
 import { AppInput } from '@/components/ui/AppInput';
 import { AppButton } from '@/components/ui/AppButton';
@@ -48,9 +52,18 @@ export function TransitRouteFormDialog({ open, onClose, route }: Props) {
   const [arrCountryId, setArrCountryId] = useState<number>(0);
   const [arrStateId, setArrStateId] = useState<number>(0);
 
-  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<CreateTransitRouteInput>({
-    resolver: isEdit ? undefined : zodResolver(createTransitRouteSchema),
+  const { register, handleSubmit, reset, setValue, control, formState: { errors } } = useForm<CreateTransitRouteInput>({
+    // Validation cote client active en creation ET edition : sans elle, on
+    // pouvait soumettre une route SEA sans prix au m3 (la regle metier est
+    // dans le schema partage).
+    resolver: zodResolver(isEdit ? (updateTransitRouteSchema as any) : createTransitRouteSchema),
   });
+
+  // Surveille le type pour afficher les bons champs prix (AIR=kg, SEA=m3,
+  // LAND=les deux). Le champ inutilise est mis a 0 a la soumission.
+  const watchedType = useWatch({ control, name: 'type' }) as 'AIR' | 'SEA' | 'LAND' | undefined;
+  const showKg = watchedType === 'AIR' || watchedType === 'LAND' || !watchedType;
+  const showM3 = watchedType === 'SEA' || watchedType === 'LAND';
 
   useEffect(() => {
     if (open && route) {
@@ -67,16 +80,25 @@ export function TransitRouteFormDialog({ open, onClose, route }: Props) {
   }, [open, route, reset]);
 
   const onSubmit = (data: CreateTransitRouteInput) => {
+    // On force a 0 le prix non pertinent pour le type choisi. Cela aligne la
+    // DB avec la regle metier : pricePerKg=0 sur SEA empeche tout calcul kg.
+    const pricePerKg = data.type === 'SEA' ? 0 : Number(data.pricePerKg ?? 0);
+    const pricePerVolume = data.type === 'AIR' ? 0 : Number(data.pricePerVolume ?? 0);
+    const payload = {
+      name: data.name,
+      type: data.type,
+      pricePerKg,
+      pricePerVolume,
+      estimatedDurationDays: data.estimatedDurationDays,
+    };
     if (isEdit) {
-      mutation.mutate({
-        name: data.name,
-        type: data.type,
-        pricePerKg: data.pricePerKg,
-        pricePerVolume: data.pricePerVolume,
-        estimatedDurationDays: data.estimatedDurationDays,
-      });
+      mutation.mutate(payload);
     } else {
-      mutation.mutate(data);
+      mutation.mutate({
+        ...data,
+        pricePerKg,
+        pricePerVolume,
+      });
     }
     reset();
   };
@@ -152,11 +174,44 @@ export function TransitRouteFormDialog({ open, onClose, route }: Props) {
           </div>
         </div>}
 
+        {/* Champs de prix conditionnels au type de transport.
+            AIR : kg uniquement -- pricePerVolume forcee a 0 a la soumission.
+            SEA : m3 uniquement -- pricePerKg forcee a 0 a la soumission.
+            LAND : les deux acceptes (la facturation prend MAX(kg, m3)). */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <AppInput label="Prix par kg" type="number" step="0.01" {...register('pricePerKg', { valueAsNumber: true })} error={errors.pricePerKg?.message} />
-          <AppInput label="Prix par m3" type="number" step="0.01" {...register('pricePerVolume', { valueAsNumber: true })} />
-          <AppInput label="Delai estime (jours)" type="number" {...register('estimatedDurationDays', { valueAsNumber: true })} />
+          {showKg && (
+            <AppInput
+              label="Prix par kg"
+              type="number"
+              step="0.01"
+              {...register('pricePerKg', { valueAsNumber: true })}
+              error={errors.pricePerKg?.message}
+            />
+          )}
+          {showM3 && (
+            <AppInput
+              label="Prix par m3"
+              type="number"
+              step="0.01"
+              {...register('pricePerVolume', { valueAsNumber: true })}
+              error={(errors as any).pricePerVolume?.message}
+            />
+          )}
+          <AppInput
+            label="Delai estime (jours)"
+            type="number"
+            {...register('estimatedDurationDays', { valueAsNumber: true })}
+          />
         </div>
+        {watchedType && (
+          <p className="text-xs text-gray-500">
+            {watchedType === 'AIR'
+              ? 'Route aerienne : facturation au kilogramme uniquement.'
+              : watchedType === 'SEA'
+                ? 'Route maritime : facturation au metre cube uniquement.'
+                : 'Route terrestre : facturation au kg et/ou au m3. Le montant retenu sera le plus eleve des deux.'}
+          </p>
+        )}
       </form>
     </AppDialog>
   );

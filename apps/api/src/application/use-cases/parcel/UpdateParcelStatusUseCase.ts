@@ -78,7 +78,18 @@ export class UpdateParcelStatusUseCase {
 
     eventBus.emit({
       type: DomainEvents.PARCEL_STATUS_CHANGED,
-      payload: { parcelId, oldStatus, newStatus, trackingNumber: parcel.trackingNumber },
+      payload: {
+        parcelId,
+        oldStatus,
+        newStatus,
+        trackingNumber: parcel.trackingNumber,
+        // Champs requis par NotificationHandler pour resoudre destinataire +
+        // remplir le template email (sinon : cellules vides).
+        clientId: parcel.clientId,
+        agencyId: (parcel as any).warehouse?.agencyId ?? (parcel as any).agencyId ?? null,
+        organizationId: (parcel as any).organizationId ?? null,
+        designation: parcel.designation,
+      },
       timestamp: new Date(),
       userId,
     });

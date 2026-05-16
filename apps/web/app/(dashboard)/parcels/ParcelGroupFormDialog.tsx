@@ -62,11 +62,11 @@ interface ParcelInGroup {
   images: PendingImage[];
 }
 
-function emptyParcel(): ParcelInGroup {
+function emptyParcel(massMode: MassMode = 'weight'): ParcelInGroup {
   return {
     designation: '',
     trackingFournisseur: '',
-    massMode: 'weight',
+    massMode,
     weight: '',
     volume: '',
     category: 'STANDARD',
@@ -215,7 +215,13 @@ export function ParcelGroupFormDialog({ open, onClose, defaultAgency }: Props) {
   const updateParcel = (i: number, patch: Partial<ParcelInGroup>) =>
     setParcels((prev) => prev.map((p, idx) => (idx === i ? { ...p, ...patch } : p)));
 
-  const addParcel = () => setParcels((prev) => [...prev, emptyParcel()]);
+  // Bug fix : on cree un nouveau colis avec le massMode courant du groupe.
+  // Sans ca, les colis ajoutes apres le choix de la route gardaient le mode
+  // 'weight' par defaut alors que la route etait SEA/LAND -- le useEffect sur
+  // groupMassMode ne se redeclenchait pas (la valeur n'avait pas change),
+  // donc seuls les colis presents AU MOMENT du changement de route etaient
+  // alignes.
+  const addParcel = () => setParcels((prev) => [...prev, emptyParcel(groupMassMode ?? 'weight')]);
 
   const removeParcel = (i: number) => setParcels((prev) => prev.filter((_, idx) => idx !== i));
 

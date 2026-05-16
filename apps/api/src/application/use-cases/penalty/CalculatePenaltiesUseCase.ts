@@ -53,9 +53,36 @@ export class CalculatePenaltiesUseCase {
         });
         created++;
 
+        // Payload enrichi pour template "Penalite de stockage" : sans ces
+        // champs, le mail affichait penaliteEUR mais ni tracking ni agence ni
+        // taux journalier.
+        const parcelMeta = await prisma.parcel.findUnique({
+          where: { id: parcelId },
+          select: {
+            trackingNumber: true,
+            designation: true,
+            organizationId: true,
+          },
+        });
+        const agencyMeta = await prisma.agency.findUnique({
+          where: { id: agencyId },
+          select: { name: true },
+        });
         eventBus.emit({
           type: DomainEvents.PENALTY_APPLIED,
-          payload: { parcelId, clientId, agencyId, amount: totalAmount, days: penaltyDays },
+          payload: {
+            parcelId,
+            clientId,
+            agencyId,
+            organizationId: parcelMeta?.organizationId ?? null,
+            amount: totalAmount,
+            totalAmount,
+            days: penaltyDays,
+            trackingNumber: parcelMeta?.trackingNumber ?? '',
+            designation: parcelMeta?.designation ?? '',
+            dailyRate,
+            agencyName: agencyMeta?.name ?? '',
+          },
           timestamp: new Date(),
         });
       }

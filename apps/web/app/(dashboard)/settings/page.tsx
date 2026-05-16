@@ -13,6 +13,7 @@ import { AppTabs } from '@/components/ui/AppTabs';
 import { AppBadge } from '@/components/ui/AppBadge';
 import { AppDataTable } from '@/components/ui/AppDataTable';
 import { configApi, currenciesApi, type CurrencyInput } from '@/lib/api/config';
+import { useIsTenantAdmin } from '@/lib/hooks/usePermission';
 
 // ── Config Labels ──────────────────────────────────────────
 
@@ -23,6 +24,7 @@ const CONFIG_LABELS: Record<string, string> = {
 };
 
 export default function SettingsPage() {
+  const isAdmin = useIsTenantAdmin();
   return (
     <PageTransition>
       <div className="space-y-6">
@@ -58,19 +60,21 @@ export default function SettingsPage() {
               </div>
             </AppCard>
           </Link>
-          <Link href="/settings/site" className="block">
-            <AppCard className="hover:border-primary-300 transition">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50">
-                  <Layout className="h-5 w-5 text-primary-600" />
+          {isAdmin && (
+            <Link href="/settings/site" className="block">
+              <AppCard className="hover:border-primary-300 transition">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50">
+                    <Layout className="h-5 w-5 text-primary-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">Studio - Site public</p>
+                    <p className="text-xs text-gray-500">Peau, couleurs, typo et images du portail client</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-medium">Studio - Site public</p>
-                  <p className="text-xs text-gray-500">Peau, couleurs, typo et images du portail client</p>
-                </div>
-              </div>
-            </AppCard>
-          </Link>
+              </AppCard>
+            </Link>
+          )}
           <Link href="/settings/email" className="block">
             <AppCard className="hover:border-primary-300 transition">
               <div className="flex items-center gap-3">

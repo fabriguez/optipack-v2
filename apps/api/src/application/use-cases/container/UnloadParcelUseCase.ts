@@ -214,6 +214,11 @@ export class UnloadParcelUseCase {
           trackingNumber: parcel.trackingNumber,
           clientId: parcel.clientId,
           agencyId: container.arrivalAgencyId,
+          organizationId: (parcel as any).organizationId ?? null,
+          // Champs requis par templates : sans designation, le mail dit "Votre
+          // colis (TR-001)" -- avec, "Votre colis 'Carton X' (TR-001)".
+          designation: parcel.designation,
+          agencyName: (container as any).arrivalAgency?.name ?? null,
         },
         timestamp: new Date(),
         userId,

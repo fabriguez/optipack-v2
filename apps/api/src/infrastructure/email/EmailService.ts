@@ -52,18 +52,39 @@ class EmailService {
     trackingNumber: string,
     designation: string,
     destination: string,
-    weight: string,
+    weight: string | number | null | undefined,
     price: string,
     organizationId?: string | null,
+    options?: { volume?: string | number | null; transitType?: 'AIR' | 'SEA' | 'LAND' | string | null },
   ) {
+    // Choix de l'unite affichee selon le type de route :
+    //  - SEA  -> volume uniquement (m3)
+    //  - AIR  -> masse uniquement (kg)
+    //  - LAND -> les deux si renseignes
+    const type = options?.transitType;
+    const w = weight != null && Number(weight) > 0 ? Number(weight) : null;
+    const v = options?.volume != null && Number(options.volume) > 0 ? Number(options.volume) : null;
+    const quantityRows: string[] = [];
+    if (type === 'SEA') {
+      if (v != null) quantityRows.push(infoRow('Volume', `${v} m³`));
+    } else if (type === 'AIR') {
+      if (w != null) quantityRows.push(infoRow('Masse', `${w} kg`));
+    } else {
+      // LAND ou type inconnu : on affiche tout ce qui est dispo.
+      if (w != null) quantityRows.push(infoRow('Masse', `${w} kg`));
+      if (v != null) quantityRows.push(infoRow('Volume', `${v} m³`));
+    }
+    // Fallback ultime si rien : on n'affiche pas de ligne vide -- on a deja
+    // tracking + designation + destination + prix.
+
     const content = [
       heading('Colis enregistre'),
-      paragraph(`Votre colis <strong>${designation}</strong> a ete enregistre avec succes dans notre systeme.`),
+      paragraph(`Votre colis <strong>${designation || 'sans designation'}</strong> a ete enregistre avec succes dans notre systeme.`),
       highlightBlock('Numero de suivi', trackingNumber),
       infoTable(
-        infoRow('Designation', designation) +
-        infoRow('Destination', destination) +
-        infoRow('Masse', `${weight} kg`) +
+        infoRow('Designation', designation || '-') +
+        infoRow('Destination', destination || '-') +
+        quantityRows.join('') +
         infoRow('Prix', price),
       ),
       divider(),

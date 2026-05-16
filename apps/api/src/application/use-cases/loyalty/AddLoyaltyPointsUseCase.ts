@@ -3,6 +3,7 @@ import { calculateLoyaltyPoints, getLoyaltyTier } from '@transitsoftservices/sha
 import { LOYALTY_REPOSITORY, type ILoyaltyRepository } from '../../interfaces/ILoyaltyRepository';
 import { CLIENT_REPOSITORY, type IClientRepository } from '../../interfaces/IClientRepository';
 import { NotFoundError } from '../../../domain/errors/BusinessError';
+import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 
 @injectable()
 export class AddLoyaltyPointsUseCase {
@@ -36,6 +37,25 @@ export class AddLoyaltyPointsUseCase {
       loyaltyTier: newTier,
       totalSpent: { increment: amount },
     });
+
+    // Emit pour declencher la notification multi-canal "Points de fidelite
+    // mis a jour". Sans cet event, l'utilisateur ne savait pas qu'il avait
+    // gagne des points -- le handler etait pret mais n'etait jamais appele.
+    try {
+      eventBus.emit({
+        type: DomainEvents.CLIENT_LOYALTY_UPDATED,
+        payload: {
+          clientId,
+          organizationId: (client as any).organizationId ?? null,
+          points: newTotal,
+          delta: points,
+          reason: source,
+        },
+        timestamp: new Date(),
+      });
+    } catch {
+      // non bloquant
+    }
 
     return { points, newTotal, tier: newTier };
   }

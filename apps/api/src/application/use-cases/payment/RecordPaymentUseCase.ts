@@ -173,7 +173,10 @@ export class RecordPaymentUseCase {
       }
     }
 
-    // 9. Emit event
+    // 9. Emit event. Payload enrichi pour les templates email/SMS :
+    // sans invoiceRef/paymentMethod/remainingBalance/agencyName le mail
+    // "Paiement recu" affichait des cellules vides.
+    const agencyName = await this.resolveAgencyName(input.agencyId);
     eventBus.emit({
       type: DomainEvents.PAYMENT_RECEIVED,
       payload: {
@@ -183,15 +186,53 @@ export class RecordPaymentUseCase {
         amount: input.amount,
         newInvoiceStatus: newStatus,
         clientId: invoice.clientId,
+        organizationId: (invoice as any).organizationId ?? null,
+        invoiceRef: invoice.reference,
+        paymentMethod: input.paymentMethod,
+        remainingBalance: Math.max(0, newBalance),
+        agencyName,
       },
       timestamp: new Date(),
       userId,
     });
+
+    // Emit invoice.paid quand le solde tombe a 0 -- handler dedie envoie
+    // "Facture reglee" au client.
+    if (newStatus === 'PAID') {
+      eventBus.emit({
+        type: DomainEvents.INVOICE_PAID,
+        payload: {
+          invoiceId: invoice.id,
+          reference: invoice.reference,
+          clientId: invoice.clientId,
+          agencyId: input.agencyId,
+          organizationId: (invoice as any).organizationId ?? null,
+          totalAmount: invoice.netAmount,
+          currency: (invoice as any).currency ?? 'XAF',
+        },
+        timestamp: new Date(),
+        userId,
+      });
+    }
 
     return {
       payment,
       invoiceStatus: newStatus,
       invoiceBalance: Math.max(0, newBalance),
     };
+  }
+
+  /** Resolution simple du nom d'agence (cache memoire en process). */
+  private agencyNameCache = new Map<string, string>();
+  private async resolveAgencyName(agencyId: string): Promise<string> {
+    const cached = this.agencyNameCache.get(agencyId);
+    if (cached) return cached;
+    const a = await prisma.agency.findUnique({
+      where: { id: agencyId },
+      select: { name: true },
+    });
+    const name = a?.name ?? '';
+    if (name) this.agencyNameCache.set(agencyId, name);
+    return name;
   }
 }

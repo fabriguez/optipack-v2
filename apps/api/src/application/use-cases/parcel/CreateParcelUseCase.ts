@@ -126,7 +126,9 @@ export class CreateParcelUseCase {
           reference: invoice.reference,
           clientId: invoice.clientId,
           agencyId: invoice.agencyId,
+          organizationId: client.organizationId,
           totalAmount: invoice.totalAmount,
+          currency: (invoice as any).currency ?? 'XAF',
         },
         timestamp: new Date(),
       });
@@ -196,7 +198,19 @@ export class CreateParcelUseCase {
         parcelId: parcel.id,
         trackingNumber,
         clientId: client.id,
-        warehouseId: warehouse.agencyId,
+        organizationId: client.organizationId,
+        // Enrichi pour les templates email/notification : sans ces champs, le
+        // mail "Colis enregistre" affichait des cellules vides (designation,
+        // destination, masse). agencyId remplace l'ancien warehouseId (qui
+        // pointait deja sur l'agence -- naming corrige).
+        agencyId: warehouse.agencyId,
+        designation: parcel.designation,
+        destination: derivedDestination,
+        weight: hasWeight ? Number(input.weight) : null,
+        volume: hasVolume ? Number(input.volume) : null,
+        // Type route pour adapter l'unite affichee dans le mail (AIR=kg,
+        // SEA=m3, LAND=les deux).
+        transitType: transitRoute.type,
         invoiceId: invoice.id,
         price: pricing.finalPrice,
       },

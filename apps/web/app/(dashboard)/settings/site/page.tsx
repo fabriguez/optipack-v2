@@ -18,6 +18,9 @@ import { AppCard, AppCardHeader } from '@/components/ui/AppCard';
 import { AppInput } from '@/components/ui/AppInput';
 import { AppButton } from '@/components/ui/AppButton';
 import { apiClient } from '@/lib/api/client';
+import { useIsTenantAdmin } from '@/lib/hooks/usePermission';
+import { useRouter } from 'next/navigation';
+import { ShieldAlert } from 'lucide-react';
 
 interface SkinTokens {
   id: string;
@@ -68,6 +71,42 @@ const FONT_OPTIONS = [
 ];
 
 export default function SiteStudioPage() {
+  return (
+    <AdminGate>
+      <SiteStudioContent />
+    </AdminGate>
+  );
+}
+
+function AdminGate({ children }: { children: React.ReactNode }) {
+  const isAdmin = useIsTenantAdmin();
+  const router = useRouter();
+  // Garde stricte : seuls les admins du tenant peuvent ouvrir le Studio.
+  // Backend renvoie 401/403 sur les mutations, mais sans gate front
+  // l'utilisateur voit l'UI complete et essuie une erreur a la sauvegarde.
+  // On isole le gate dans un composant parent pour eviter de conditionner
+  // les hooks de SiteStudioContent (regle des hooks React).
+  if (!isAdmin) {
+    return (
+      <PageTransition>
+        <div className="mx-auto max-w-xl py-16">
+          <AppCard className="text-center p-10">
+            <ShieldAlert className="mx-auto mb-4 h-12 w-12 text-amber-500" />
+            <h2 className="text-lg font-semibold text-gray-900 mb-2">Accès reservé</h2>
+            <p className="text-sm text-gray-600 mb-6">
+              Le Studio site est reserve aux administrateurs du tenant. Contactez
+              votre administrateur pour personnaliser l&apos;apparence du site.
+            </p>
+            <AppButton onClick={() => router.push('/')}>Retour au tableau de bord</AppButton>
+          </AppCard>
+        </div>
+      </PageTransition>
+    );
+  }
+  return <>{children}</>;
+}
+
+function SiteStudioContent() {
   const qc = useQueryClient();
   const [skinId, setSkinId] = useState<string | null>(null);
   const [custom, setCustom] = useState<SkinCustomization>({});

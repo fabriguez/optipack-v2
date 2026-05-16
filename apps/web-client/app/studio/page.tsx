@@ -1,11 +1,32 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
-import { ArrowLeft, Mail, Palette, Smartphone } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ArrowLeft, Mail, Palette, Smartphone, ShieldAlert } from 'lucide-react';
 import { AppearanceTab } from '@/components/studio/AppearanceTab';
 import { EmailTab } from '@/components/studio/EmailTab';
 import { MobileAppTab } from '@/components/studio/MobileAppTab';
+import { getToken } from '@/lib/api/client';
+
+/**
+ * Decode role from portal JWT. Le portail authentifie normalement des Clients
+ * (qui n'ont pas de role admin) mais on peut hypothetiquement injecter un
+ * token admin pour previewer. Si role !== ADMIN/SUPER_ADMIN -> acces refuse.
+ */
+function getRoleFromToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  const token = getToken();
+  if (!token) return null;
+  try {
+    const payload = token.split('.')[1];
+    if (!payload) return null;
+    const json = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
+    const obj = JSON.parse(json) as { role?: string };
+    return obj.role ?? null;
+  } catch {
+    return null;
+  }
+}
 
 type Tab = 'appearance' | 'email' | 'mobile';
 
@@ -17,6 +38,42 @@ const TABS: { id: Tab; label: string; Icon: typeof Palette }[] = [
 
 export default function StudioPage() {
   const [tab, setTab] = useState<Tab>('appearance');
+  const [role, setRole] = useState<string | null | undefined>(undefined);
+
+  // Lecture cote client uniquement (localStorage n'existe pas au SSR).
+  useEffect(() => {
+    setRole(getRoleFromToken());
+  }, []);
+
+  if (role === undefined) {
+    // Skeleton silencieux pendant la lecture du token.
+    return <div className="min-h-screen" style={{ background: 'var(--skin-background)' }} />;
+  }
+
+  if (role !== 'ADMIN' && role !== 'SUPER_ADMIN') {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4" style={{ background: 'var(--skin-background)' }}>
+        <div className="max-w-md text-center p-10 skin-card">
+          <ShieldAlert className="mx-auto mb-4 h-12 w-12" style={{ color: 'var(--skin-primary)' }} />
+          <h1 className="text-lg font-semibold mb-2 skin-font-heading" style={{ color: 'var(--skin-foreground)' }}>
+            Acces reserve
+          </h1>
+          <p className="text-sm mb-6" style={{ color: 'var(--skin-foreground-muted)' }}>
+            Le Studio est reserve aux administrateurs du tenant. Connectez-vous
+            au tableau de bord d&apos;administration pour personnaliser
+            l&apos;apparence, l&apos;email et l&apos;application mobile.
+          </p>
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 px-4 py-2 skin-btn-primary skin-radius"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Retour a l&apos;accueil
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--skin-background)' }}>

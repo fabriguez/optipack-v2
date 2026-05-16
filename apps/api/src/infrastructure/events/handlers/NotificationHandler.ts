@@ -145,7 +145,7 @@ function registerHandlers() {
   // PARCEL_CREATED
   eventBus.on(DomainEvents.PARCEL_CREATED, async (event: DomainEvent) => {
     const payload = event.payload as Record<string, any>;
-    const { clientId, agencyId, trackingNumber, designation, destination, weight, price } = payload;
+    const { clientId, agencyId, trackingNumber, designation, destination, weight, volume, transitType, price } = payload;
     if (!clientId) return;
 
     const organizationId = await resolveEventOrg(event, payload);
@@ -166,9 +166,10 @@ function registerHandlers() {
         trackingNumber || '',
         designation || '',
         destination || '',
-        String(weight || ''),
-        String(price || ''),
+        weight ?? null,
+        Number(price || 0).toLocaleString('fr-FR') + ' XAF',
         organizationId,
+        { volume: volume ?? null, transitType: transitType ?? null },
       );
     }
 

@@ -32,6 +32,18 @@ export function usePermission(keys: string | string[], mode: 'any' | 'all' = 'an
     : required.some((k) => perms.includes(k));
 }
 
+/**
+ * Indique si l'utilisateur courant est admin du tenant (ADMIN ou SUPER_ADMIN).
+ * Utilise pour gater les surfaces dediees a l'administration tenant : Studio
+ * site, configuration email/branding/mobile-app, etc. Pour des permissions
+ * plus fines (RH, comptabilite), utiliser `usePermission`.
+ */
+export function useIsTenantAdmin(): boolean {
+  const { data: session } = useSession();
+  const role = (session as any)?.role as string | undefined;
+  return role === 'ADMIN' || role === 'SUPER_ADMIN';
+}
+
 /** Retourne la liste brute des permissions extraites du JWT API. */
 export function usePermissions(): string[] {
   const { data: session } = useSession();

@@ -92,6 +92,26 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
   const weight = watch('weight');
   const volume = watch('volume');
 
+  // Auto-sync du mode de pesee avec le type de la route selectionnee :
+  //   AIR  -> mode 'weight' (kg uniquement)
+  //   SEA  -> mode 'volume' (m3 uniquement)
+  //   LAND -> mode 'both' (libre)
+  // Cela evite que l'utilisateur saisisse une masse pour une route SEA (le
+  // backend rejette ou facture a 0). On clear aussi la valeur incompatible
+  // pour ne pas envoyer un weight sur SEA.
+  useEffect(() => {
+    const t = selectedRoute?.sublabel as 'AIR' | 'SEA' | 'LAND' | undefined;
+    if (!t) return;
+    const nextMode: Mode = t === 'AIR' ? 'weight' : t === 'SEA' ? 'volume' : 'both';
+    if (nextMode !== mode) {
+      setMode(nextMode);
+      if (nextMode === 'weight') setValue('volume', undefined as never);
+      if (nextMode === 'volume') setValue('weight', undefined as never);
+    }
+    // mode/setValue sont stables, on ne reagit qu'au changement de route.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedRoute?.sublabel]);
+
   useEffect(() => {
     if (!open) return;
     // Reset etat images a chaque ouverture (et cleanup des previews precedentes).

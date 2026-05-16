@@ -36,7 +36,7 @@ import {
 import { cn } from '@/lib/utils/cn';
 import { useTenantMeta } from '@/lib/providers/TenantProvider';
 import { AuthedImage } from '@/components/shared/AuthedImage';
-import { usePermission } from '@/lib/hooks/usePermission';
+import { usePermission, useIsTenantAdmin } from '@/lib/hooks/usePermission';
 
 interface NavItem {
   label: string;
@@ -46,6 +46,8 @@ interface NavItem {
   module?: string;
   /** Permission(s) ABAC requise(s) pour afficher l'entree (any). Phase 1 RH. */
   permissions?: string[];
+  /** Restreint l'entree aux admins du tenant (ADMIN / SUPER_ADMIN). */
+  adminOnly?: boolean;
 }
 
 const mainNav: NavItem[] = [
@@ -92,7 +94,7 @@ const systemNav: NavItem[] = [
   { label: 'Support', href: '/chat', icon: MessageSquare, module: 'chat' },
   { label: 'Rapports', href: '/reports', icon: BarChart3, module: 'reports' },
   { label: 'Personnalisation', href: '/settings/branding', icon: Settings },
-  { label: 'Studio site', href: '/settings/site', icon: Settings },
+  { label: 'Studio site', href: '/settings/site', icon: Settings, adminOnly: true },
   { label: 'Parametres', href: '/settings', icon: Settings },
   { label: 'Audit', href: '/audit-log', icon: Shield },
 ];
@@ -113,7 +115,9 @@ function NavSection({
   // dont l'attribut `permissions` n'est pas satisfait par l'utilisateur.
   const allPerms = items.flatMap((it) => it.permissions ?? []);
   const hasAnyPerm = usePermission(allPerms.length > 0 ? allPerms : ['*'], 'any');
+  const isAdmin = useIsTenantAdmin();
   const visibleItems = items.filter((it) => {
+    if (it.adminOnly && !isAdmin) return false;
     if (!it.permissions || it.permissions.length === 0) return true;
     return hasAnyPerm; // grossier mais suffisant tant qu'il n'y a qu'un item avec perms par section
   });

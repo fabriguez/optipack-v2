@@ -127,6 +127,9 @@ export class LoadParcelsUseCase {
             designation: parcel.designation,
             clientId: parcel.clientId,
             agencyId: container.departureAgencyId,
+            organizationId: (parcel as any).organizationId ?? null,
+            // Le template "Colis charge" affiche le nom du conteneur.
+            containerName: container.designation,
           },
           timestamp: new Date(),
           userId,
