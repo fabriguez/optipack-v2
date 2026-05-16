@@ -473,11 +473,20 @@ ${JSON.stringify(seedPayload)}
 OPTIPACK_SEED_DATA_EOF
 docker cp ${tmpScript} ${apiName}:/app/seed.js
 docker cp ${tmpData} ${apiName}:/app/seed.json
-# IMPORTANT : node doit tourner depuis /app (ou se trouve node_modules avec
-# @prisma/client + bcryptjs). Avant on lancait depuis /tmp -> module not
-# found. On essaye /app puis /app/apps/api (monorepo) en fallback.
-docker exec -e SEED_DATA="$(cat ${tmpData})" -w /app ${apiName} \
-  sh -c 'if [ -d node_modules ]; then node seed.js; elif [ -d apps/api/node_modules ]; then cp seed.js apps/api/seed.js && cd apps/api && node seed.js; else echo "ERR: node_modules introuvable dans /app ni /app/apps/api" >&2; exit 1; fi'
+# IMPORTANT : node doit voir node_modules contenant @prisma/client +
+# bcryptjs. Defense en profondeur :
+#   1) WORKDIR /app/apps/api (matche WORKDIR du Dockerfile API)
+#   2) NODE_PATH liste les 3 candidats node_modules (monorepo + root +
+#      cwd) pour que le resolver trouve les modules d'ou qu'on lance.
+#   3) On copie aussi seed.js dans /app/apps/api/seed.js en plus de
+#      /app/seed.js, comme garde-fou.
+docker exec ${apiName} cp /app/seed.js /app/apps/api/seed.js 2>/dev/null || true
+docker exec \\
+  -e SEED_DATA="$(cat ${tmpData})" \\
+  -e NODE_PATH="/app/apps/api/node_modules:/app/node_modules:/app/apps/api/node_modules/.prisma/client" \\
+  -w /app/apps/api \\
+  ${apiName} \\
+  sh -c 'node seed.js || node /app/seed.js'
 rm -f ${tmpScript} ${tmpData}
 `;
     const seedResult = await this.ssh.exec(creds, sshSeedCmd);

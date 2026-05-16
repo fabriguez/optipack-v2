@@ -282,3 +282,39 @@ sur les pages login + register, avec un toast "bientôt disponible" sur clic.
 - **Carrier** : un transporteur peut-il avoir plusieurs comptes
   (bénéfices, dettes, paiements anticipés) ? Si oui, modèle
   `CarrierAccount` à prévoir. Sinon on agrège tout sur `Carrier`.
+
+---
+
+## SMTP direct depuis VPS (alternative à Resend)
+
+Activer l'envoi mail SMTP natif depuis le VPS au lieu de passer par Resend.
+Utile si : volume gros (>3k/mois/tenant), coût Resend trop élevé, contraintes
+souveraineté/data residency, ou simple envie de contrôle.
+
+**DNS** :
+- `rDNS` (PTR) chez l'hébergeur : `IP_VPS` → `mail.tondomaine.com`
+- `A` : `mail.tondomaine.com` → `IP_VPS` (round-trip cohérent obligatoire)
+- `SPF` : `TXT @  v=spf1 ip4:IP_VPS ~all`
+- `DKIM` : générer paire via `opendkim-genkey`, publier la pub en
+  `TXT default._domainkey  v=DKIM1; k=rsa; p=...`
+- `DMARC` : `TXT _dmarc  v=DMARC1; p=quarantine; rua=mailto:dmarc@tondomaine.com`
+
+**Serveur** :
+- Installer Postfix (ou OpenSMTPD) sur le VPS
+- HELO/EHLO = `mail.tondomaine.com` (doit matcher rDNS exactement)
+- TLS obligatoire (Let's Encrypt cert)
+- UFW : `ufw allow 25/tcp 465/tcp 587/tcp`
+- Vérifier port 25 sortant pas bloqué par l'hébergeur (OVH/DO bloquent
+  par défaut, Hetzner ouvre sur demande, Contabo ouvre nativement)
+
+**Code** :
+- `EmailService` route déjà via `TenantEmailDispatcher` (cascade tenant→
+  shared). Ajouter un nouveau provider `VpsSmtpProvider` à côté de
+  `ResendProvider` / `SharedSmtpProvider`. Choix via
+  `Organization.emailConfig.provider = 'vps-smtp'`.
+
+**Validation** :
+- Test deliverability : `mail-tester.com` (cible >9/10)
+- Audit DNS : `mxtoolbox.com SuperTool`
+- Warm-up IP : commencer petit volume, monter progressivement (sinon spam
+  folder Gmail/Outlook le premier mois)
