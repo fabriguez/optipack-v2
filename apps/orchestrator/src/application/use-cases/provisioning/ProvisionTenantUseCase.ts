@@ -357,6 +357,26 @@ volumes:
     name: tenant-${tenant.slug}-miniodata
 `;
 
+    // Libere les ports planifies : un container zombie d'un AUTRE tenant
+    // (ex: provisioning precedent qui a echoue et reste accroche) peut
+    // encore binder le port host -> "port is already allocated". On scanne
+    // tous les containers par leur mapping de ports (parsing de Ports column),
+    // car `--filter publish=PORT` matche imparfaitement les bindings 127.0.0.1.
+    // Puis fallback fuser pour killer tout process host non-docker.
+    await log(`[provision] free ports ${apiPort}/${webPort}/${webClientPort} (force-kill containers occupants)`);
+    const ports = [apiPort, webPort, webClientPort];
+    const freePortsCmd = `set -e
+for p in ${ports.join(' ')}; do
+  # 1) containers docker qui mappent ce port (toute IP)
+  for c in $(docker ps -a --format '{{.ID}}|{{.Ports}}' 2>/dev/null | awk -F'|' -v p=":$p->" '$2 ~ p {print $1}'); do
+    docker rm -f "$c" >/dev/null 2>&1 || true
+  done
+  # 2) fallback : tout process host qui ecoute sur ce port (rare mais possible)
+  fuser -k -n tcp "$p" >/dev/null 2>&1 || true
+done
+true`;
+    await this.ssh.exec(creds, freePortsCmd);
+
     await log(`[provision] docker compose up tenant ${tenant.slug}`);
     // Le network est cree par compose (declaration `networks:` dans le YAML),
     // pas besoin de pre-creation. La stack est entierement isolee.
