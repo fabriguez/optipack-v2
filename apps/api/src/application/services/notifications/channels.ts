@@ -1,5 +1,6 @@
 import { prisma } from '../../../config/database';
 import { emailService } from '../../../infrastructure/email/EmailService';
+import { logChannelDelivery } from '../../../infrastructure/email/logging';
 import { realtimeService } from '../../../infrastructure/realtime/RealtimeService';
 import { createChildLogger } from '../../../config/logger';
 import type {
@@ -11,6 +12,75 @@ import type {
 
 const logger = createChildLogger('NotificationChannels');
 
+/**
+ * Resout l'organizationId du tenant pour router le mail vers le bon provider.
+ * Ordre : target.organizationId > client.organizationId > user.organizationId
+ *       > agency.organizationId. Si tout echoue, renvoie null (=> shared).
+ */
+async function resolveOrganizationId(
+  target: NotificationTarget,
+): Promise<string | null> {
+  if (target.organizationId) return target.organizationId;
+  if (target.clientId) {
+    const c = await prisma.client.findUnique({
+      where: { id: target.clientId },
+      select: { organizationId: true },
+    });
+    if (c?.organizationId) return c.organizationId;
+  }
+  if (target.userId) {
+    const u = await prisma.user.findUnique({
+      where: { id: target.userId },
+      select: { organizationId: true },
+    });
+    if (u?.organizationId) return u.organizationId;
+  }
+  if (target.agencyId) {
+    const a = await prisma.agency.findUnique({
+      where: { id: target.agencyId },
+      select: { organizationId: true },
+    });
+    if (a?.organizationId) return a.organizationId;
+  }
+  return null;
+}
+
+/**
+ * Resout le nom du tenant pour habiller le message in-app / sms / whatsapp
+ * d'un entete coherent ("[Acme Transit] ...").
+ */
+async function resolveTenantName(organizationId: string | null): Promise<string> {
+  if (!organizationId) return 'TransitSoftServices';
+  const org = await prisma.organization.findUnique({
+    where: { id: organizationId },
+    select: { name: true },
+  });
+  return org?.name || 'TransitSoftServices';
+}
+
+/**
+ * Habille un message court (in-app, SMS, WhatsApp) avec un entete tenant +
+ * pied de page minimal. Pour SMS on tronque le suffix.
+ */
+function wrapMessage(
+  tenantName: string,
+  title: string,
+  body: string,
+  channel: 'IN_APP' | 'SMS' | 'WHATSAPP' | 'PUSH',
+): { title: string; message: string } {
+  // IN_APP : la UI affiche deja titre + message + tenant, pas besoin de doubler.
+  if (channel === 'IN_APP') return { title, message: body };
+  if (channel === 'SMS') {
+    // SMS : on garde compact (max ~160 chars sur le body wrapper).
+    return { title, message: `[${tenantName}] ${body}` };
+  }
+  // WHATSAPP / PUSH : entete + pied avec branding tenant.
+  return {
+    title: `[${tenantName}] ${title}`,
+    message: `${body}\n\n— ${tenantName} via TransitSoftServices`,
+  };
+}
+
 // --- IN_APP : persiste + emet socket vers user/client room ---
 export async function deliverInApp(
   target: NotificationTarget,
@@ -19,6 +89,7 @@ export async function deliverInApp(
   if (!target.userId && !target.clientId) {
     return { channel: 'IN_APP', status: 'SKIPPED', error: 'Aucune cible userId ou clientId' };
   }
+  const organizationId = await resolveOrganizationId(target);
   try {
     const row = await prisma.notification.create({
       data: {
@@ -33,8 +104,6 @@ export async function deliverInApp(
         metadata: (payload.metadata ?? undefined) as never,
       },
     });
-    // Push realtime via socket.io. Le frontend ecoute 'notification:new'
-    // pour rafraichir le compteur de notifs et afficher un toast.
     const event = {
       id: row.id,
       title: row.title,
@@ -44,14 +113,29 @@ export async function deliverInApp(
     };
     if (target.userId) realtimeService.toUser(target.userId, 'notification:new', event);
     if (target.clientId) realtimeService.toClient(target.clientId, 'notification:new', event);
+    logChannelDelivery({
+      status: 'OK',
+      channel: 'IN_APP',
+      title: payload.title,
+      target: target.userId ? `user=${target.userId.slice(0, 8)}` : `client=${target.clientId?.slice(0, 8)}`,
+      organizationId,
+      event: (payload.metadata?.kind as string | undefined),
+    });
     return { channel: 'IN_APP', status: 'SENT', notificationId: row.id };
   } catch (err: any) {
     logger.error({ err }, 'IN_APP delivery failed');
+    logChannelDelivery({
+      status: 'FAIL',
+      channel: 'IN_APP',
+      title: payload.title,
+      organizationId,
+      error: err?.message ?? String(err),
+    });
     return { channel: 'IN_APP', status: 'FAILED', error: err?.message ?? String(err) };
   }
 }
 
-// --- EMAIL : delegue a EmailService existant + log dans Notification ---
+// --- EMAIL : delegue a EmailService (route via TenantEmailDispatcher) ---
 export async function deliverEmail(
   target: NotificationTarget,
   payload: NotificationPayload,
@@ -73,12 +157,29 @@ export async function deliverEmail(
     to = u?.email ?? null;
   }
   if (!to) {
+    logChannelDelivery({
+      status: 'SKIP',
+      channel: 'EMAIL',
+      title: payload.title,
+      error: 'Aucune adresse email',
+    });
     return { channel: 'EMAIL', status: 'SKIPPED', error: 'Aucune adresse email' };
   }
 
+  const organizationId = await resolveOrganizationId(target);
+
   try {
-    // Email simple texte. L'EmailService propose une methode generique unique.
-    await emailService.send(to, payload.title, payload.message);
+    // payload.message est texte brut -> on l'enveloppe via send() qui appelle
+    // emailLayout(). Si l'appelant veut un template riche, il utilise un
+    // sendXxx() dedie en amont.
+    const ok = await emailService.send(
+      to,
+      payload.title,
+      `<p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#4B5563">${payload.message}</p>`,
+      organizationId,
+      { event: (payload.metadata?.kind as string | undefined) ?? 'NOTIFICATION' },
+    );
+    if (!ok) throw new Error('email dispatcher returned false');
     const row = await prisma.notification.create({
       data: {
         userId: target.userId ?? null,
@@ -89,7 +190,7 @@ export async function deliverEmail(
         type: 'EMAIL',
         status: 'SENT',
         sentAt: new Date(),
-        metadata: { to, ...(payload.metadata ?? {}) } as never,
+        metadata: { to, organizationId, ...(payload.metadata ?? {}) } as never,
       },
     });
     return { channel: 'EMAIL', status: 'SENT', notificationId: row.id };
@@ -105,7 +206,7 @@ export async function deliverEmail(
           message: payload.message,
           type: 'EMAIL',
           status: 'FAILED',
-          metadata: { to, error: err?.message } as never,
+          metadata: { to, organizationId, error: err?.message } as never,
         },
       })
       .catch(() => {});
@@ -114,11 +215,6 @@ export async function deliverEmail(
 }
 
 // --- SMS / WHATSAPP / PUSH : providers injectables ---
-// Pour le moment, les providers sont des stubs configures par env vars.
-// Le vrai branchement (Twilio / Africa's Talking / Meta) se fera quand les
-// credentials seront fournies. Le code reste fonctionnel : tant que provider
-// est null/disabled, le canal renvoie SKIPPED proprement.
-
 let smsProvider: ExternalChannelProvider | null = null;
 let whatsappProvider: ExternalChannelProvider | null = null;
 let pushProvider: ExternalChannelProvider | null = null;
@@ -139,14 +235,17 @@ async function deliverExternal(
   target: NotificationTarget,
   payload: NotificationPayload,
 ): Promise<ChannelDeliveryResult> {
+  const organizationId = await resolveOrganizationId(target);
   if (!provider || !provider.enabled) {
-    return {
+    logChannelDelivery({
+      status: 'SKIP',
       channel,
-      status: 'SKIPPED',
+      title: payload.title,
+      organizationId,
       error: `Aucun provider ${channel} configure`,
-    };
+    });
+    return { channel, status: 'SKIPPED', error: `Aucun provider ${channel} configure` };
   }
-  // Resoudre le telephone (SMS / WhatsApp). Pour PUSH on prendrait un device token.
   let to = target.phone ?? null;
   if (!to && (channel === 'SMS' || channel === 'WHATSAPP')) {
     if (target.clientId) {
@@ -165,11 +264,23 @@ async function deliverExternal(
     }
   }
   if (!to) {
+    logChannelDelivery({
+      status: 'SKIP',
+      channel,
+      title: payload.title,
+      organizationId,
+      error: 'Pas de telephone / token',
+    });
     return { channel, status: 'SKIPPED', error: 'Pas de telephone / token' };
   }
+
+  // Habillage tenant header/footer pour SMS/WhatsApp/Push.
+  const tenantName = await resolveTenantName(organizationId);
+  const wrapped = wrapMessage(tenantName, payload.title, payload.message, channel);
+
   try {
-    await provider.send(to, payload.message, {
-      title: payload.title,
+    await provider.send(to, wrapped.message, {
+      title: wrapped.title,
       ...(payload.metadata ?? {}),
     });
     const row = await prisma.notification.create({
@@ -177,17 +288,33 @@ async function deliverExternal(
         userId: target.userId ?? null,
         clientId: target.clientId ?? null,
         agencyId: target.agencyId ?? null,
-        title: payload.title,
-        message: payload.message,
+        title: wrapped.title,
+        message: wrapped.message,
         type: channel,
         status: 'SENT',
         sentAt: new Date(),
-        metadata: { to, provider: provider.name, ...(payload.metadata ?? {}) } as never,
+        metadata: { to, organizationId, provider: provider.name, ...(payload.metadata ?? {}) } as never,
       },
+    });
+    logChannelDelivery({
+      status: 'OK',
+      channel,
+      title: payload.title,
+      target: to,
+      organizationId,
+      event: (payload.metadata?.kind as string | undefined),
     });
     return { channel, status: 'SENT', notificationId: row.id };
   } catch (err: any) {
     logger.warn({ err, channel, to, provider: provider.name }, 'External delivery failed');
+    logChannelDelivery({
+      status: 'FAIL',
+      channel,
+      title: payload.title,
+      target: to,
+      organizationId,
+      error: err?.message ?? String(err),
+    });
     await prisma.notification
       .create({
         data: {
@@ -198,7 +325,7 @@ async function deliverExternal(
           message: payload.message,
           type: channel,
           status: 'FAILED',
-          metadata: { to, provider: provider.name, error: err?.message } as never,
+          metadata: { to, organizationId, provider: provider.name, error: err?.message } as never,
         },
       })
       .catch(() => {});

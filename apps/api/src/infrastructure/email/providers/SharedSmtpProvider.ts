@@ -1,4 +1,6 @@
-import { emailService } from '../EmailService';
+import nodemailer from 'nodemailer';
+import type { Transporter } from 'nodemailer';
+import { config } from '../../../config';
 import type {
   EmailSendParams,
   EmailSendResult,
@@ -6,20 +8,45 @@ import type {
 } from './types';
 
 /**
- * Adapter wrapping the existing nodemailer-based EmailService so the
- * provider-aware dispatcher can use it as the 'shared' fallback (tenants
- * who haven't configured their own provider).
+ * Provider SMTP partage (nodemailer). Utilise comme fallback quand :
+ *  - le tenant n'a pas d'emailConfig
+ *  - RESEND_API_KEY n'est pas defini en env
  *
- * Note : the legacy EmailService prepends "TransitSoftServices - " to the
- * subject and wraps the body in emailLayout(). When we go through this
- * adapter we use its public `send(to, subject, body)` shape so existing
- * templates keep working.
+ * NB : ne preformatte pas le HTML (layout / subject prefix). C'est l'appelant
+ * (EmailService ou TenantEmailDispatcher) qui gere la mise en forme finale.
  */
 export class SharedSmtpProvider implements TenantEmailProvider {
   id = 'shared' as const;
 
+  private transporter: Transporter;
+
+  constructor() {
+    this.transporter = nodemailer.createTransport({
+      host: config.smtp.host,
+      port: config.smtp.port,
+      secure: config.smtp.secure,
+      auth: config.smtp.user && config.smtp.pass
+        ? { user: config.smtp.user, pass: config.smtp.pass }
+        : undefined,
+    });
+  }
+
   async send(params: EmailSendParams): Promise<EmailSendResult> {
-    const ok = await emailService.send(params.to, params.subject, params.html);
-    return ok ? { ok: true } : { ok: false, error: 'shared SMTP rejected' };
+    if (!config.smtp.user || !config.smtp.pass) {
+      return { ok: false, error: 'SMTP non configure (SMTP_USER/SMTP_PASS manquants)' };
+    }
+    try {
+      const info = await this.transporter.sendMail({
+        from: params.from ?? config.smtp.from,
+        to: params.to,
+        subject: params.subject,
+        html: params.html,
+        text: params.text,
+        replyTo: params.replyTo,
+      });
+      return { ok: true, providerMessageId: info.messageId };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
   }
 }

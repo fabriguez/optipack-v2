@@ -41,6 +41,13 @@ export const config = {
     from: process.env.SMTP_FROM || 'TransitSoftServices <noreply@transitsoftservices.com>',
   },
 
+  // Resend "shared" : utilise quand un tenant n'a pas son propre emailConfig.
+  // Si RESEND_API_KEY est defini, on prefere Resend a SMTP pour la fallback.
+  resend: {
+    apiKey: process.env.RESEND_API_KEY || '',
+    from: process.env.RESEND_FROM || process.env.SMTP_FROM || 'TransitSoftServices <noreply@transitsoftservices.com>',
+  },
+
   stripe: {
     secretKey: process.env.STRIPE_SECRET_KEY || '',
     webhookSecret: process.env.STRIPE_WEBHOOK_SECRET || '',

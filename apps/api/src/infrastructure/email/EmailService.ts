@@ -1,7 +1,5 @@
-import nodemailer from 'nodemailer';
-import type { Transporter } from 'nodemailer';
 import { config } from '../../config';
-import { createChildLogger } from '../../config/logger';
+import { tenantEmailDispatcher } from './TenantEmailDispatcher';
 import {
   emailLayout,
   heading,
@@ -13,43 +11,40 @@ import {
   actionButton,
 } from './emailLayout';
 
-const logger = createChildLogger('EmailService');
-
+/**
+ * Templates email + envoi route via TenantEmailDispatcher.
+ *
+ * Toutes les methodes acceptent un organizationId optionnel : si fourni, le
+ * dispatcher choisit le provider du tenant (Resend dedie), sinon il prend la
+ * cascade partagee (Resend env -> SMTP).
+ *
+ * NB : on conserve l'API des sendXxx() pour ne pas casser les appelants
+ * existants, mais le routing reseau passe maintenant toujours par le
+ * dispatcher (plus de nodemailer direct ici).
+ */
 class EmailService {
-  private transporter: Transporter;
-
-  constructor() {
-    this.transporter = nodemailer.createTransport({
-      host: config.smtp.host,
-      port: config.smtp.port,
-      secure: config.smtp.secure,
-      auth: {
-        user: config.smtp.user,
-        pass: config.smtp.pass,
-      },
-    });
-  }
-
-  async send(to: string, subject: string, bodyContent: string): Promise<boolean> {
-    console.log('smtp config:', config.smtp);
-    // if (!config.smtp.user || !config.smtp.pass) {
-    //   logger.warn('SMTP non configure, email non envoye');
-    //   return false;
-    // }
-
-    try {
-      await this.transporter.sendMail({
-        from: config.smtp.from,
+  /**
+   * Envoi generique. bodyContent est insere dans emailLayout (header/footer).
+   * Si l'appelant passe deja un HTML complet (<html>...</html>), il doit
+   * appeler tenantEmailDispatcher.sendForTenant directement.
+   */
+  async send(
+    to: string,
+    subject: string,
+    bodyContent: string,
+    organizationId?: string | null,
+    options?: { event?: string },
+  ): Promise<boolean> {
+    const result = await tenantEmailDispatcher.sendForTenant(
+      organizationId ?? null,
+      {
         to,
         subject: `TransitSoftServices - ${subject}`,
         html: emailLayout(bodyContent),
-      });
-      logger.info({ to, subject }, 'Email envoye');
-      return true;
-    } catch (err) {
-      logger.error({ err, to, subject }, 'Echec envoi email');
-      return false;
-    }
+      },
+      { event: options?.event },
+    );
+    return result.ok;
   }
 
   async sendParcelCreated(
@@ -59,6 +54,7 @@ class EmailService {
     destination: string,
     weight: string,
     price: string,
+    organizationId?: string | null,
   ) {
     const content = [
       heading('Colis enregistre'),
@@ -74,8 +70,7 @@ class EmailService {
       paragraph('Conservez votre numero de suivi pour suivre votre colis a tout moment.'),
       actionButton('Suivre mon colis', `${config.webUrl}/tracking/${trackingNumber}`),
     ].join('');
-
-    return this.send(to, `Colis enregistre - ${trackingNumber}`, content);
+    return this.send(to, `Colis enregistre - ${trackingNumber}`, content, organizationId, { event: 'PARCEL_CREATED' });
   }
 
   async sendParcelStatusChanged(
@@ -83,6 +78,7 @@ class EmailService {
     trackingNumber: string,
     designation: string,
     newStatus: string,
+    organizationId?: string | null,
   ) {
     const statusLabels: Record<string, string> = {
       IN_STOCK: 'En stock',
@@ -111,7 +107,138 @@ class EmailService {
       actionButton('Voir les details', `${config.webUrl}/tracking/${trackingNumber}`),
     ].join('');
 
-    return this.send(to, `Colis ${label.toLowerCase()} - ${trackingNumber}`, content);
+    return this.send(to, `Colis ${label.toLowerCase()} - ${trackingNumber}`, content, organizationId, { event: `PARCEL_${newStatus}` });
+  }
+
+  /** Colis charge dans un conteneur. */
+  async sendParcelLoaded(
+    to: string,
+    trackingNumber: string,
+    designation: string,
+    containerName: string,
+    organizationId?: string | null,
+  ) {
+    const content = [
+      heading('Colis charge'),
+      paragraph(`Votre colis <strong>${designation}</strong> vient d'etre charge dans le conteneur <strong>${containerName}</strong>.`),
+      highlightBlock('Etape', 'Chargement'),
+      infoTable(
+        infoRow('Numero de suivi', trackingNumber) +
+        infoRow('Designation', designation) +
+        infoRow('Conteneur', containerName),
+      ),
+      divider(),
+      paragraph('Le depart du conteneur sera notifie sous peu.'),
+      actionButton('Suivre mon colis', `${config.webUrl}/tracking/${trackingNumber}`),
+    ].join('');
+    return this.send(to, `Colis charge - ${trackingNumber}`, content, organizationId, { event: 'PARCEL_LOADED' });
+  }
+
+  /** Colis decharge / receptionne a destination. */
+  async sendParcelUnloaded(
+    to: string,
+    trackingNumber: string,
+    designation: string,
+    action: 'received' | 'not_found' | 'modified',
+    agencyName: string,
+    organizationId?: string | null,
+  ) {
+    const labels = {
+      received: { title: 'Colis decharge', highlight: 'Disponible en magasin' },
+      not_found: { title: 'Colis non retrouve', highlight: 'Recherche en cours' },
+      modified: { title: 'Colis mis a jour', highlight: 'Modification au dechargement' },
+    } as const;
+    const { title, highlight } = labels[action];
+
+    const content = [
+      heading(title),
+      paragraph(`Votre colis <strong>${designation}</strong> (${trackingNumber}) a ete traite a l'agence <strong>${agencyName}</strong>.`),
+      highlightBlock('Statut', highlight, action === 'not_found' ? 'warning' : 'success'),
+      infoTable(
+        infoRow('Numero de suivi', trackingNumber) +
+        infoRow('Designation', designation) +
+        infoRow('Agence', agencyName),
+      ),
+      divider(),
+      paragraph(action === 'received'
+        ? 'Votre colis est disponible et peut etre retire aux heures d\'ouverture.'
+        : action === 'not_found'
+        ? 'Notre equipe enquete et vous tiendra informe.'
+        : 'Consultez votre espace pour voir les modifications.'),
+      actionButton('Voir mon colis', `${config.webUrl}/tracking/${trackingNumber}`),
+    ].join('');
+    return this.send(to, `${title} - ${trackingNumber}`, content, organizationId, { event: `PARCEL_${action.toUpperCase()}` });
+  }
+
+  /** Retrait du colis par le client. */
+  async sendParcelWithdrawn(
+    to: string,
+    trackingNumber: string,
+    designation: string,
+    agencyName: string,
+    organizationId?: string | null,
+  ) {
+    const content = [
+      heading('Colis retire'),
+      paragraph(`Votre colis <strong>${designation}</strong> a bien ete retire a l'agence <strong>${agencyName}</strong>.`),
+      highlightBlock('Etape', 'Livraison finalisee'),
+      infoTable(
+        infoRow('Numero de suivi', trackingNumber) +
+        infoRow('Designation', designation) +
+        infoRow('Agence de retrait', agencyName),
+      ),
+      divider(),
+      paragraph('Merci de votre confiance. A bientot.'),
+    ].join('');
+    return this.send(to, `Colis retire - ${trackingNumber}`, content, organizationId, { event: 'PARCEL_WITHDRAWN' });
+  }
+
+  /** Facture creee pour un colis. */
+  async sendInvoiceCreated(
+    to: string,
+    reference: string,
+    totalAmount: string,
+    currency: string,
+    organizationId?: string | null,
+  ) {
+    const content = [
+      heading('Nouvelle facture'),
+      paragraph(`Une facture vient d'etre emise. Reference : <strong>${reference}</strong>.`),
+      highlightBlock('Montant total', `${totalAmount} ${currency}`),
+      infoTable(
+        infoRow('Reference', reference) +
+        infoRow('Montant', `${totalAmount} ${currency}`),
+      ),
+      divider(),
+      paragraph('Vous pouvez la consulter et la regler depuis votre espace client.'),
+      actionButton('Voir ma facture', `${config.webUrl}/invoices`),
+    ].join('');
+    return this.send(to, `Facture ${reference}`, content, organizationId, { event: 'INVOICE_CREATED' });
+  }
+
+  /** Mise a jour de la facture (modification colis, ajustement). */
+  async sendInvoiceUpdated(
+    to: string,
+    reference: string,
+    newTotal: string,
+    currency: string,
+    reason: string,
+    organizationId?: string | null,
+  ) {
+    const content = [
+      heading('Facture mise a jour'),
+      paragraph(`La facture <strong>${reference}</strong> a ete mise a jour.`),
+      highlightBlock('Nouveau total', `${newTotal} ${currency}`),
+      infoTable(
+        infoRow('Reference', reference) +
+        infoRow('Motif', reason) +
+        infoRow('Nouveau total', `${newTotal} ${currency}`),
+      ),
+      divider(),
+      paragraph('Pensez a verifier les details de l\'ajustement.'),
+      actionButton('Consulter', `${config.webUrl}/invoices`),
+    ].join('');
+    return this.send(to, `Facture mise a jour ${reference}`, content, organizationId, { event: 'INVOICE_UPDATED' });
   }
 
   async sendPaymentReceived(
@@ -121,6 +248,7 @@ class EmailService {
     agencyName: string,
     paymentMethod: string,
     remainingBalance: string,
+    organizationId?: string | null,
   ) {
     const methodLabels: Record<string, string> = {
       CASH: 'Especes',
@@ -144,7 +272,7 @@ class EmailService {
       paragraph('Merci pour votre paiement.'),
     ].join('');
 
-    return this.send(to, `Paiement recu - ${invoiceRef}`, content);
+    return this.send(to, `Paiement recu - ${invoiceRef}`, content, organizationId, { event: 'PAYMENT_RECEIVED' });
   }
 
   async sendPenaltyAlert(
@@ -155,6 +283,7 @@ class EmailService {
     dailyRate: string,
     totalAmount: string,
     agencyName: string,
+    organizationId?: string | null,
   ) {
     const content = [
       heading('Penalite de stockage'),
@@ -175,7 +304,32 @@ class EmailService {
       actionButton("Contacter l'agence", `${config.webUrl}/agencies`),
     ].join('');
 
-    return this.send(to, `Penalite de stockage - ${trackingNumber}`, content);
+    return this.send(to, `Penalite de stockage - ${trackingNumber}`, content, organizationId, { event: 'PENALTY_APPLIED' });
+  }
+
+  /** Mise a jour des points de fidelite. */
+  async sendLoyaltyPointsUpdated(
+    to: string,
+    delta: number,
+    newBalance: number,
+    reason: string,
+    organizationId?: string | null,
+  ) {
+    const positive = delta >= 0;
+    const content = [
+      heading('Points de fidelite mis a jour'),
+      paragraph(`Vos points de fidelite viennent d'etre ${positive ? 'credites' : 'debites'}.`),
+      highlightBlock(positive ? 'Points gagnes' : 'Points debites', `${positive ? '+' : ''}${delta} pts`, positive ? 'success' : 'warning'),
+      infoTable(
+        infoRow('Nouveau solde', `${newBalance} pts`) +
+        infoRow('Variation', `${positive ? '+' : ''}${delta} pts`) +
+        infoRow('Motif', reason || '-'),
+      ),
+      divider(),
+      paragraph('Cumulez des points a chaque envoi et utilisez-les pour vos prochains colis.'),
+      actionButton('Voir mon solde', `${config.webUrl}/loyalty`),
+    ].join('');
+    return this.send(to, `Points fidelite : ${positive ? '+' : ''}${delta}`, content, organizationId, { event: 'LOYALTY_UPDATED' });
   }
 
   async sendDebtReminder(
@@ -184,6 +338,7 @@ class EmailService {
     totalDebt: string,
     nextDueDate: string,
     nextAmount: string,
+    organizationId?: string | null,
   ) {
     const content = [
       heading('Rappel de dette'),
@@ -197,7 +352,7 @@ class EmailService {
       paragraph("Merci de regulariser votre situation avant la date d'echeance."),
     ].join('');
 
-    return this.send(to, `Rappel de dette - ${clientName}`, content);
+    return this.send(to, `Rappel de dette - ${clientName}`, content, organizationId, { event: 'DEBT_REMINDER' });
   }
 
   /**
@@ -210,6 +365,7 @@ class EmailService {
     employeeName: string,
     email: string,
     password: string,
+    organizationId?: string | null,
   ) {
     const content = [
       heading('Votre compte portail TransitSoftServices'),
@@ -226,13 +382,13 @@ class EmailService {
       ),
       actionButton('Se connecter', `${config.webUrl}/login`),
     ].join('');
-    return this.send(to, 'Vos identifiants TransitSoftServices', content);
+    return this.send(to, 'Vos identifiants TransitSoftServices', content, organizationId, { event: 'EMPLOYEE_CREDENTIALS' });
   }
 
   /**
    * Envoie un lien de reinitialisation de mot de passe.
    */
-  async sendPasswordResetLink(to: string, name: string, resetUrl: string) {
+  async sendPasswordResetLink(to: string, name: string, resetUrl: string, organizationId?: string | null) {
     const content = [
       heading('Reinitialisation de votre mot de passe'),
       paragraph(
@@ -246,10 +402,10 @@ class EmailService {
         'Si vous n\'etes pas a l\'origine de cette demande, ignorez ce mail.',
       ),
     ].join('');
-    return this.send(to, 'Reinitialisation mot de passe', content);
+    return this.send(to, 'Reinitialisation mot de passe', content, organizationId, { event: 'PASSWORD_RESET' });
   }
 
-  async sendWelcome(to: string, clientName: string) {
+  async sendWelcome(to: string, clientName: string, organizationId?: string | null) {
     const content = [
       heading('Bienvenue chez TransitSoftServices'),
       paragraph(
@@ -262,7 +418,7 @@ class EmailService {
       actionButton('Acceder a mon espace', config.webUrl),
     ].join('');
 
-    return this.send(to, 'Bienvenue', content);
+    return this.send(to, 'Bienvenue', content, organizationId, { event: 'WELCOME' });
   }
 }
 

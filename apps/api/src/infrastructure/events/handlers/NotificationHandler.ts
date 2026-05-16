@@ -13,14 +13,43 @@ import type {
 } from '../../../application/services/notifications/types';
 import { filterChannelsByPrefs } from '../../../application/services/notifications/preferences';
 
+const logger = createChildLogger('NotificationHandler');
+
 /**
- * Pousse une notification multi-canal hors IN_APP/EMAIL (deja geres
- * separement par cette unite pour conserver les templates riches d'email).
- * Inclut par defaut SMS + WHATSAPP : les providers SKIPPED retournent
- * simplement, donc aucun cout si non configures.
+ * Resout l'organizationId a partir d'un agencyId. Memoise pendant la vie du
+ * process : un agencyId ne change pas d'organisation.
  */
+const agencyOrgCache = new Map<string, string>();
+async function getOrgFromAgency(agencyId?: string | null): Promise<string | null> {
+  if (!agencyId) return null;
+  const cached = agencyOrgCache.get(agencyId);
+  if (cached) return cached;
+  const a = await prisma.agency.findUnique({
+    where: { id: agencyId },
+    select: { organizationId: true },
+  });
+  if (a?.organizationId) {
+    agencyOrgCache.set(agencyId, a.organizationId);
+    return a.organizationId;
+  }
+  return null;
+}
+
+/**
+ * Resolution organizationId pour un event : payload > event.organizationId
+ * > resolve depuis agencyId. Centralise pour eviter les divergences entre
+ * handlers.
+ */
+async function resolveEventOrg(event: DomainEvent, payload: Record<string, any>): Promise<string | null> {
+  return (
+    payload.organizationId ||
+    (event as any).organizationId ||
+    (await getOrgFromAgency(payload.agencyId || (event as any).agencyId))
+  );
+}
+
 async function dispatchExternal(
-  target: { clientId?: string | null; userId?: string | null; agencyId?: string | null },
+  target: NotificationTarget,
   payload: { title: string; message: string; metadata?: Record<string, unknown>; kind?: string },
 ): Promise<void> {
   const requested: NotificationChannel[] = ['SMS', 'WHATSAPP'];
@@ -34,7 +63,7 @@ async function dispatchExternal(
     await notificationService.notify(target, {
       title: payload.title,
       message: payload.message,
-      metadata: payload.metadata,
+      metadata: { ...(payload.metadata ?? {}), kind: payload.kind ?? payload.metadata?.kind },
       channels: allowed,
     });
   } catch (err) {
@@ -42,21 +71,11 @@ async function dispatchExternal(
   }
 }
 
-const logger = createChildLogger('NotificationHandler');
-
-/**
- * Cree la notification IN_APP et la pousse en temps-reel via socket.io.
- * Les notifications EMAIL/SMS/WHATSAPP sont envoyees separement par les
- * handlers d'evenements pour conserver les templates riches existants.
- *
- * Pour un envoi multi-canal complet (recommande pour les nouveaux events),
- * passer par `notificationService.notify(...)` dans
- * `application/services/notifications/NotificationService`.
- */
 async function createNotification(data: {
   clientId?: string;
   userId?: string;
   agencyId?: string;
+  organizationId?: string | null;
   title: string;
   message: string;
   type?: string;
@@ -76,7 +95,6 @@ async function createNotification(data: {
         metadata: data.metadata || undefined,
       },
     });
-    // Push realtime : vers le user concerne (agent) et/ou le client (portail).
     const event = {
       id: row.id,
       title: row.title,
@@ -87,8 +105,6 @@ async function createNotification(data: {
     if (data.userId) realtimeService.toUser(data.userId, 'notification:new', event);
     if (data.clientId) realtimeService.toClient(data.clientId, 'notification:new', event);
     if (data.agencyId && !data.userId && !data.clientId) {
-      // Diffusion a tous les utilisateurs de l'agence (cas notif d'agence
-      // ex: nouveau colis enregistre dans l'agence).
       realtimeService.toAgency(data.agencyId, 'notification:new', event);
     }
   } catch (err) {
@@ -125,156 +141,176 @@ async function getAgencyAdminEmails(agencyId: string): Promise<string[]> {
   }
 }
 
-
 function registerHandlers() {
-  // PARCEL_CREATED -> notify client "Colis enregistre"
+  // PARCEL_CREATED
   eventBus.on(DomainEvents.PARCEL_CREATED, async (event: DomainEvent) => {
-    const { clientId, agencyId, trackingNumber, designation, destination, weight, price } =
-      event.payload as Record<string, any>;
-
+    const payload = event.payload as Record<string, any>;
+    const { clientId, agencyId, trackingNumber, designation, destination, weight, price } = payload;
     if (!clientId) return;
+
+    const organizationId = await resolveEventOrg(event, payload);
 
     await createNotification({
       clientId,
       agencyId: agencyId || event.agencyId,
+      organizationId,
       title: 'Colis enregistre',
       message: `Votre colis "${designation || ''}" a ete enregistre avec le numero de suivi ${trackingNumber || ''}.`,
-      metadata: { trackingNumber, parcelId: event.payload.parcelId } as Prisma.InputJsonValue,
+      metadata: { trackingNumber, parcelId: payload.parcelId, kind: 'PARCEL_CREATED' } as Prisma.InputJsonValue,
     });
 
-    // Try to send email
-    if (clientId) {
-      const email = await getClientEmail(clientId);
-      if (email) {
-        await emailService.sendParcelCreated(
-          email,
-          trackingNumber || '',
-          designation || '',
-          destination || '',
-          String(weight || ''),
-          String(price || ''),
-        );
-      }
+    const email = await getClientEmail(clientId);
+    if (email) {
+      await emailService.sendParcelCreated(
+        email,
+        trackingNumber || '',
+        designation || '',
+        destination || '',
+        String(weight || ''),
+        String(price || ''),
+        organizationId,
+      );
     }
 
-    // Copy to agency admins
-    try {
-      const adminEmails = agencyId ? await getAgencyAdminEmails(agencyId) : [];
-      for (const e of adminEmails) {
-        await emailService.send(e, `Nouveau colis ${trackingNumber || ''}`, `<p>Colis ${designation || ''} enregistre. Suivi: ${trackingNumber || ''}</p>`);
-      }
-    } catch (err) {
-      logger.warn({ err }, 'Echec envoi email admins PARCEL_CREATED');
+    // Copies admins agence
+    const adminEmails = agencyId ? await getAgencyAdminEmails(agencyId) : [];
+    for (const e of adminEmails) {
+      await emailService.send(
+        e,
+        `Nouveau colis ${trackingNumber || ''}`,
+        `<p>Colis <strong>${designation || ''}</strong> enregistre.<br/>Suivi : <strong>${trackingNumber || ''}</strong></p>`,
+        organizationId,
+        { event: 'PARCEL_CREATED_ADMIN' },
+      );
     }
 
-    // SMS / WhatsApp (skipped si providers non configures).
     await dispatchExternal(
-      { clientId, agencyId: agencyId || event.agencyId },
+      { clientId, agencyId: agencyId || event.agencyId, organizationId },
       {
         title: 'Colis enregistre',
         message: `Bonjour, votre colis "${designation || ''}" est enregistre. Suivi : ${trackingNumber || ''}.`,
-        metadata: { trackingNumber, parcelId: event.payload.parcelId, kind: 'PARCEL_CREATED' },
+        metadata: { trackingNumber, parcelId: payload.parcelId },
+        kind: 'PARCEL_CREATED',
       },
     );
   });
 
-  // PARCEL_STATUS_CHANGED (ARRIVED) -> notify client "Colis arrive"
-  // PARCEL_STATUS_CHANGED (DELIVERED) -> notify client "Colis livre"
+  // PARCEL_STATUS_CHANGED (IN_TRANSIT / ARRIVED / DELIVERED / RECEIVED / LOADING)
   eventBus.on(DomainEvents.PARCEL_STATUS_CHANGED, async (event: DomainEvent) => {
-    const { clientId, agencyId, trackingNumber, designation, newStatus } =
-      event.payload as Record<string, any>;
-
+    const payload = event.payload as Record<string, any>;
+    const { clientId, agencyId, trackingNumber, designation, newStatus } = payload;
     if (!clientId) return;
+    const organizationId = await resolveEventOrg(event, payload);
 
-    if (newStatus === 'ARRIVED') {
-      await createNotification({
-        clientId,
-        agencyId: agencyId || event.agencyId,
-        title: 'Colis arrive',
-        message: `Votre colis "${designation || ''}" (${trackingNumber || ''}) est arrive a destination.`,
-        metadata: { trackingNumber, newStatus } as Prisma.InputJsonValue,
-      });
-    } else if (newStatus === 'DELIVERED') {
-      await createNotification({
-        clientId,
-        agencyId: agencyId || event.agencyId,
-        title: 'Colis livre',
-        message: `Votre colis "${designation || ''}" (${trackingNumber || ''}) a ete livre avec succes.`,
-        metadata: { trackingNumber, newStatus } as Prisma.InputJsonValue,
-      });
-    } else if (newStatus === 'IN_TRANSIT') {
-      await createNotification({
-        clientId,
-        agencyId: agencyId || event.agencyId,
-        title: 'Colis en transit',
-        message: `Votre colis "${designation || ''}" (${trackingNumber || ''}) est desormais en transit.`,
-        metadata: { trackingNumber, newStatus } as Prisma.InputJsonValue,
-      });
-    }
-
-    // Try to send email for any status change (including IN_TRANSIT)
-    if (clientId && (newStatus === 'ARRIVED' || newStatus === 'DELIVERED' || newStatus === 'IN_TRANSIT')) {
-      const email = await getClientEmail(clientId);
-      if (email) {
-        await emailService.sendParcelStatusChanged(
-          email,
-          trackingNumber || '',
-          designation || '',
-          newStatus,
-        );
-      }
-    }
-
-    // Send admin copies for significant status changes (IN_TRANSIT/ARRIVED/DELIVERED)
-    try {
-      const adminEmails = agencyId ? await getAgencyAdminEmails(agencyId) : [];
-      if (adminEmails.length > 0 && (newStatus === 'IN_TRANSIT' || newStatus === 'ARRIVED' || newStatus === 'DELIVERED')) {
-        for (const e of adminEmails) {
-          await emailService.send(e, `Statut colis ${trackingNumber || ''}: ${newStatus}`, `<p>Colis ${designation || ''} (${trackingNumber || ''}) statut: ${newStatus}</p>`);
-        }
-      }
-    } catch (err) {
-      logger.warn({ err }, 'Echec envoi email admins PARCEL_STATUS_CHANGED');
-    }
-
-    // SMS / WhatsApp pour les changements significatifs.
-    if (newStatus === 'ARRIVED') {
-      await dispatchExternal(
-        { clientId, agencyId: agencyId || event.agencyId },
-        {
-          title: 'Colis arrive',
-          message: `Votre colis "${designation || ''}" (${trackingNumber || ''}) est arrive a destination. Vous pouvez venir le retirer.`,
-          metadata: { trackingNumber, newStatus, kind: 'PARCEL_ARRIVED' },
-        },
-      );
-    } else if (newStatus === 'DELIVERED') {
-      await dispatchExternal(
-        { clientId, agencyId: agencyId || event.agencyId },
-        {
-          title: 'Colis livre',
-          message: `Votre colis "${designation || ''}" (${trackingNumber || ''}) a ete livre. Merci de votre confiance.`,
-          metadata: { trackingNumber, newStatus, kind: 'PARCEL_DELIVERED' },
-        },
-      );
-    }
-  });
-
-  // PAYMENT_RECEIVED -> notify client "Paiement recu"
-  eventBus.on(DomainEvents.PAYMENT_RECEIVED, async (event: DomainEvent) => {
-    const { clientId, agencyId, amount, invoiceRef, agencyName, paymentMethod, remainingBalance } =
-      event.payload as Record<string, any>;
-
-    if (!clientId) return;
+    const titles: Record<string, { title: string; kind: string }> = {
+      LOADING: { title: 'Colis en chargement', kind: 'PARCEL_LOADING' },
+      IN_TRANSIT: { title: 'Colis en transit', kind: 'PARCEL_IN_TRANSIT' },
+      ARRIVED: { title: 'Colis arrive', kind: 'PARCEL_ARRIVED' },
+      RECEIVED: { title: 'Colis receptionne', kind: 'PARCEL_RECEIVED' },
+      DELIVERED: { title: 'Colis livre', kind: 'PARCEL_DELIVERED' },
+    };
+    const meta = titles[newStatus];
+    if (!meta) return; // statut non notifiable
 
     await createNotification({
       clientId,
       agencyId: agencyId || event.agencyId,
-      title: 'Paiement recu',
-      message: `Votre paiement de ${amount || ''} a ete recu pour la facture ${invoiceRef || ''}.`,
-      metadata: { invoiceRef, amount } as Prisma.InputJsonValue,
+      organizationId,
+      title: meta.title,
+      message: `Votre colis "${designation || ''}" (${trackingNumber || ''}) : ${meta.title.toLowerCase()}.`,
+      metadata: { trackingNumber, newStatus, kind: meta.kind } as Prisma.InputJsonValue,
     });
 
-    // Try to send email
+    const email = await getClientEmail(clientId);
+    if (email) {
+      await emailService.sendParcelStatusChanged(
+        email,
+        trackingNumber || '',
+        designation || '',
+        newStatus,
+        organizationId,
+      );
+    }
+
+    // Copies admins pour les changements significatifs
+    if (['IN_TRANSIT', 'ARRIVED', 'DELIVERED'].includes(newStatus)) {
+      const adminEmails = agencyId ? await getAgencyAdminEmails(agencyId) : [];
+      for (const e of adminEmails) {
+        await emailService.send(
+          e,
+          `${meta.title} - ${trackingNumber || ''}`,
+          `<p>Colis <strong>${designation || ''}</strong> (${trackingNumber || ''}) statut : <strong>${newStatus}</strong></p>`,
+          organizationId,
+          { event: `${meta.kind}_ADMIN` },
+        );
+      }
+    }
+
+    if (['ARRIVED', 'DELIVERED'].includes(newStatus)) {
+      const body = newStatus === 'ARRIVED'
+        ? `Votre colis "${designation || ''}" (${trackingNumber || ''}) est arrive a destination. Vous pouvez venir le retirer.`
+        : `Votre colis "${designation || ''}" (${trackingNumber || ''}) a ete livre. Merci de votre confiance.`;
+      await dispatchExternal(
+        { clientId, agencyId: agencyId || event.agencyId, organizationId },
+        { title: meta.title, message: body, metadata: { trackingNumber, newStatus }, kind: meta.kind },
+      );
+    }
+  });
+
+  // PARCEL_DELIVERED -> notification dediee retrait (au cas ou un service emet
+  // l'evenement specifique au lieu de PARCEL_STATUS_CHANGED).
+  eventBus.on(DomainEvents.PARCEL_DELIVERED, async (event: DomainEvent) => {
+    const payload = event.payload as Record<string, any>;
+    const { clientId, agencyId, trackingNumber, designation, agencyName } = payload;
+    if (!clientId) return;
+    const organizationId = await resolveEventOrg(event, payload);
+
+    await createNotification({
+      clientId,
+      agencyId: agencyId || event.agencyId,
+      organizationId,
+      title: 'Colis retire',
+      message: `Vous avez retire votre colis "${designation || ''}" (${trackingNumber || ''}).`,
+      metadata: { trackingNumber, kind: 'PARCEL_WITHDRAWN' } as Prisma.InputJsonValue,
+    });
+
+    const email = await getClientEmail(clientId);
+    if (email) {
+      await emailService.sendParcelWithdrawn(
+        email,
+        trackingNumber || '',
+        designation || '',
+        agencyName || '',
+        organizationId,
+      );
+    }
+
+    await dispatchExternal(
+      { clientId, agencyId: agencyId || event.agencyId, organizationId },
+      {
+        title: 'Colis retire',
+        message: `Votre colis "${designation || ''}" (${trackingNumber || ''}) a bien ete retire. A bientot.`,
+        kind: 'PARCEL_WITHDRAWN',
+      },
+    );
+  });
+
+  // PAYMENT_RECEIVED
+  eventBus.on(DomainEvents.PAYMENT_RECEIVED, async (event: DomainEvent) => {
+    const payload = event.payload as Record<string, any>;
+    const { clientId, agencyId, amount, invoiceRef, agencyName, paymentMethod, remainingBalance } = payload;
+    if (!clientId) return;
+    const organizationId = await resolveEventOrg(event, payload);
+
+    await createNotification({
+      clientId,
+      agencyId: agencyId || event.agencyId,
+      organizationId,
+      title: 'Paiement recu',
+      message: `Votre paiement de ${amount || ''} a ete recu pour la facture ${invoiceRef || ''}.`,
+      metadata: { invoiceRef, amount, kind: 'PAYMENT_RECEIVED' } as Prisma.InputJsonValue,
+    });
+
     const email = await getClientEmail(clientId);
     if (email) {
       await emailService.sendPaymentReceived(
@@ -284,36 +320,37 @@ function registerHandlers() {
         agencyName || '',
         paymentMethod || '',
         String(remainingBalance || '0'),
+        organizationId,
       );
     }
 
-    // SMS / WhatsApp pour reglement.
     await dispatchExternal(
-      { clientId, agencyId: agencyId || event.agencyId },
+      { clientId, agencyId: agencyId || event.agencyId, organizationId },
       {
         title: 'Paiement recu',
         message: `Paiement de ${amount || ''} FCFA recu pour la facture ${invoiceRef || ''}. Solde restant : ${remainingBalance || '0'} FCFA.`,
-        metadata: { invoiceRef, amount, paymentMethod, kind: 'PAYMENT_RECEIVED' },
+        metadata: { invoiceRef, amount, paymentMethod },
+        kind: 'PAYMENT_RECEIVED',
       },
     );
   });
 
-  // PENALTY_APPLIED -> notify client "Penalite appliquee"
+  // PENALTY_APPLIED
   eventBus.on(DomainEvents.PENALTY_APPLIED, async (event: DomainEvent) => {
-    const { clientId, agencyId, trackingNumber, designation, days, dailyRate, totalAmount, agencyName } =
-      event.payload as Record<string, any>;
-
+    const payload = event.payload as Record<string, any>;
+    const { clientId, agencyId, trackingNumber, designation, days, dailyRate, totalAmount, agencyName } = payload;
     if (!clientId) return;
+    const organizationId = await resolveEventOrg(event, payload);
 
     await createNotification({
       clientId,
       agencyId: agencyId || event.agencyId,
+      organizationId,
       title: 'Penalite appliquee',
       message: `Une penalite de stockage de ${totalAmount || ''} a ete appliquee sur votre colis "${designation || ''}" (${trackingNumber || ''}).`,
-      metadata: { trackingNumber, totalAmount, days } as Prisma.InputJsonValue,
+      metadata: { trackingNumber, totalAmount, days, kind: 'PENALTY_APPLIED' } as Prisma.InputJsonValue,
     });
 
-    // Try to send email
     const email = await getClientEmail(clientId);
     if (email) {
       await emailService.sendPenaltyAlert(
@@ -324,165 +361,219 @@ function registerHandlers() {
         String(dailyRate || ''),
         String(totalAmount || ''),
         agencyName || '',
+        organizationId,
       );
     }
 
-    // SMS / WhatsApp pour penalite (critique : impact financier).
     await dispatchExternal(
-      { clientId, agencyId: agencyId || event.agencyId },
+      { clientId, agencyId: agencyId || event.agencyId, organizationId },
       {
         title: 'Penalite de stockage',
         message: `Penalite de ${totalAmount || ''} FCFA appliquee sur "${designation || ''}" (${trackingNumber || ''}) -- ${days || 0} jour(s) de stockage depasses.`,
-        metadata: { trackingNumber, totalAmount, days, kind: 'PENALTY_APPLIED' },
+        metadata: { trackingNumber, totalAmount, days },
+        kind: 'PENALTY_APPLIED',
       },
     );
   });
 
-  // NOTIFICATION_SEND -> dispatch via le service de notification multi-canal
+  // NOTIFICATION_SEND
   eventBus.on(DomainEvents.NOTIFICATION_SEND, async (event: DomainEvent) => {
     const { target, payload } = event.payload as {
       target?: NotificationTarget;
       payload?: NotificationPayload;
     };
-
     if (!target || !payload) {
       logger.warn({ payload: event.payload }, 'Notification send event invalid');
       return;
     }
-
     await notificationService.notify(target, payload);
   });
 
-  // PARCEL_LOADED -> notify client that parcel was loaded into a container
+  // PARCEL_LOADED -> template enrichi avec nom du conteneur
   eventBus.on(DomainEvents.PARCEL_LOADED, async (event: DomainEvent) => {
-    const { parcelId, clientId, trackingNumber, designation, agencyId } =
-      event.payload as Record<string, any>;
-
+    const payload = event.payload as Record<string, any>;
+    const { parcelId, clientId, trackingNumber, designation, containerName, agencyId } = payload;
     if (!clientId) return;
+    const organizationId = await resolveEventOrg(event, payload);
 
     await createNotification({
       clientId,
       agencyId: agencyId || event.agencyId,
+      organizationId,
       title: 'Colis charge',
-      message: `Votre colis "${designation || ''}" (${trackingNumber || ''}) a ete charge pour expedition.`,
-      metadata: { parcelId, trackingNumber } as Prisma.InputJsonValue,
+      message: `Votre colis "${designation || ''}" (${trackingNumber || ''}) a ete charge${containerName ? ` dans ${containerName}` : ''}.`,
+      metadata: { parcelId, trackingNumber, containerName, kind: 'PARCEL_LOADED' } as Prisma.InputJsonValue,
     });
 
     const email = await getClientEmail(clientId);
     if (email) {
-      await emailService.send(
+      await emailService.sendParcelLoaded(
         email,
-        `Colis ${trackingNumber || ''} charge`,
-        `<p>Bonjour,</p><p>Votre colis <strong>${designation || ''}</strong> (${trackingNumber || ''}) a ete charge dans un conteneur pour expedition.</p>`,
+        trackingNumber || '',
+        designation || '',
+        containerName || 'le conteneur',
+        organizationId,
       );
     }
+
+    await dispatchExternal(
+      { clientId, agencyId: agencyId || event.agencyId, organizationId },
+      {
+        title: 'Colis charge',
+        message: `Votre colis "${designation || ''}" (${trackingNumber || ''}) a ete charge${containerName ? ` dans ${containerName}` : ''}.`,
+        kind: 'PARCEL_LOADED',
+      },
+    );
   });
 
-  // PARCEL_UNLOADED -> notify client when parcel is unloaded (received / not_found / modified)
+  // PARCEL_UNLOADED -> template enrichi par action
   eventBus.on(DomainEvents.PARCEL_UNLOADED, async (event: DomainEvent) => {
-    const { parcelId, clientId, action, trackingNumber, agencyId } = event.payload as Record<string, any>;
+    const payload = event.payload as Record<string, any>;
+    const { parcelId, clientId, action, trackingNumber, designation, agencyName, agencyId } = payload;
     if (!clientId) return;
+    const organizationId = await resolveEventOrg(event, payload);
 
-    const title = action === 'received' ? 'Colis decharge' : action === 'not_found' ? 'Colis non retrouve' : 'Colis mis a jour';
-    const message =
-      action === 'received'
-        ? `Votre colis (${trackingNumber || ''}) a ete decharge et est disponible en magasin.`
-        : action === 'not_found'
-        ? `Nous n'avons pas retrouve votre colis (${trackingNumber || ''}) lors du dechargement.`
-        : `Votre colis (${trackingNumber || ''}) a ete mis a jour lors du dechargement.`;
+    const labels: Record<string, string> = {
+      received: 'Colis decharge',
+      not_found: 'Colis non retrouve',
+      modified: 'Colis mis a jour',
+    };
+    const title = labels[action] || 'Colis mis a jour';
+    const message = action === 'received'
+      ? `Votre colis (${trackingNumber || ''}) a ete decharge et est disponible en magasin.`
+      : action === 'not_found'
+      ? `Nous n'avons pas retrouve votre colis (${trackingNumber || ''}) lors du dechargement.`
+      : `Votre colis (${trackingNumber || ''}) a ete mis a jour lors du dechargement.`;
 
     await createNotification({
       clientId,
       agencyId: agencyId || event.agencyId,
+      organizationId,
       title,
       message,
-      metadata: { parcelId, trackingNumber, action } as Prisma.InputJsonValue,
+      metadata: { parcelId, trackingNumber, action, kind: 'PARCEL_UNLOADED' } as Prisma.InputJsonValue,
     });
 
     const email = await getClientEmail(clientId);
     if (email) {
-      await emailService.send(email, title, `<p>${message}</p>`);
+      await emailService.sendParcelUnloaded(
+        email,
+        trackingNumber || '',
+        designation || '',
+        (action as 'received' | 'not_found' | 'modified') || 'modified',
+        agencyName || '',
+        organizationId,
+      );
     }
+
+    await dispatchExternal(
+      { clientId, agencyId: agencyId || event.agencyId, organizationId },
+      { title, message, kind: 'PARCEL_UNLOADED' },
+    );
   });
 
-  // CONTAINER_DEPARTED -> notify agency admins
+  // CONTAINER_DEPARTED -> admins agence
   eventBus.on(DomainEvents.CONTAINER_DEPARTED, async (event: DomainEvent) => {
-    const { containerId, parcelCount } = event.payload as Record<string, any>;
+    const payload = event.payload as Record<string, any>;
+    const { containerId, parcelCount } = payload;
     try {
       const container = await prisma.container.findUnique({ where: { id: containerId } });
       if (!container) return;
       const agencyId = container.departureAgencyId || event.agencyId;
+      const organizationId = await getOrgFromAgency(agencyId);
 
       await createNotification({
-        agencyId,
+        agencyId: agencyId ?? undefined,
+        organizationId,
         title: 'Conteneur parti',
         message: `Le conteneur ${container.designation || container.id} est parti avec ${parcelCount || 0} colis.`,
-        metadata: { containerId, parcelCount } as Prisma.InputJsonValue,
+        metadata: { containerId, parcelCount, kind: 'CONTAINER_DEPARTED' } as Prisma.InputJsonValue,
       });
 
       const adminEmails = agencyId ? await getAgencyAdminEmails(agencyId) : [];
       for (const e of adminEmails) {
-        await emailService.send(e, `Conteneur ${container.designation || container.id} parti`, `<p>Depart: ${container.designation || container.id}</p><p>Colis: ${parcelCount || 0}</p>`);
+        await emailService.send(
+          e,
+          `Conteneur ${container.designation || container.id} parti`,
+          `<p>Depart : <strong>${container.designation || container.id}</strong></p><p>Colis embarques : <strong>${parcelCount || 0}</strong></p>`,
+          organizationId,
+          { event: 'CONTAINER_DEPARTED' },
+        );
       }
     } catch (err) {
       logger.warn({ err }, 'Erreur handler CONTAINER_DEPARTED');
     }
   });
 
-  // CONTAINER_ARRIVED -> notify agency admins
+  // CONTAINER_ARRIVED -> admins agence
   eventBus.on(DomainEvents.CONTAINER_ARRIVED, async (event: DomainEvent) => {
-    const { containerId, parcelCount } = event.payload as Record<string, any>;
+    const payload = event.payload as Record<string, any>;
+    const { containerId, parcelCount } = payload;
     try {
       const container = await prisma.container.findUnique({ where: { id: containerId } });
       if (!container) return;
       const agencyId = container.arrivalAgencyId || event.agencyId;
+      const organizationId = await getOrgFromAgency(agencyId);
 
       await createNotification({
-        agencyId,
+        agencyId: agencyId ?? undefined,
+        organizationId,
         title: 'Conteneur arrive',
         message: `Le conteneur ${container.designation || container.id} est arrive. ${parcelCount || 0} colis a decharger.`,
-        metadata: { containerId, parcelCount } as Prisma.InputJsonValue,
+        metadata: { containerId, parcelCount, kind: 'CONTAINER_ARRIVED' } as Prisma.InputJsonValue,
       });
 
       const adminEmails = agencyId ? await getAgencyAdminEmails(agencyId) : [];
       for (const e of adminEmails) {
-        await emailService.send(e, `Conteneur ${container.designation || container.id} arrive`, `<p>Arrivee: ${container.designation || container.id}</p><p>Colis: ${parcelCount || 0}</p>`);
+        await emailService.send(
+          e,
+          `Conteneur ${container.designation || container.id} arrive`,
+          `<p>Arrivee : <strong>${container.designation || container.id}</strong></p><p>Colis a decharger : <strong>${parcelCount || 0}</strong></p>`,
+          organizationId,
+          { event: 'CONTAINER_ARRIVED' },
+        );
       }
     } catch (err) {
       logger.warn({ err }, 'Erreur handler CONTAINER_ARRIVED');
     }
   });
 
-  // INVOICE_CREATED -> notify client + agency admins
+  // INVOICE_CREATED -> client + admins, template riche
   eventBus.on(DomainEvents.INVOICE_CREATED, async (event: DomainEvent) => {
-    const { invoiceId, reference, clientId, agencyId, totalAmount } = event.payload as Record<string, any>;
+    const payload = event.payload as Record<string, any>;
+    const { invoiceId, reference, clientId, agencyId, totalAmount, currency } = payload;
     try {
+      const organizationId = await resolveEventOrg(event, payload);
       if (clientId) {
         await createNotification({
           clientId,
           agencyId: agencyId || event.agencyId,
+          organizationId,
           title: 'Nouvelle facture',
-          message: `Votre facture ${reference || ''} a ete cree. Montant: ${totalAmount || ''}.`,
-          metadata: { invoiceId, reference, totalAmount } as Prisma.InputJsonValue,
+          message: `Votre facture ${reference || ''} a ete creee. Montant : ${totalAmount || ''}.`,
+          metadata: { invoiceId, reference, totalAmount, kind: 'INVOICE_CREATED' } as Prisma.InputJsonValue,
         });
 
         const email = await getClientEmail(clientId);
         if (email) {
-          await emailService.send(
+          await emailService.sendInvoiceCreated(
             email,
-            `Votre facture ${reference || ''}`,
-            `<p>Bonjour,</p><p>Votre facture <strong>${reference || ''}</strong> a ete cree. Montant: <strong>${Number(totalAmount || 0).toLocaleString()} XAF</strong>.</p>`,
+            reference || '',
+            Number(totalAmount || 0).toLocaleString(),
+            currency || 'XAF',
+            organizationId,
           );
         }
       }
 
-      // Send copies to agency admins
       const admins = agencyId ? await getAgencyAdminEmails(agencyId) : [];
       for (const a of admins) {
         await emailService.send(
           a,
-          `Facture cree ${reference || ''}`,
-          `<p>Facture ${reference || ''} creee pour le client. Montant: ${Number(totalAmount || 0).toLocaleString()} XAF.</p>`,
+          `Facture creee ${reference || ''}`,
+          `<p>Facture <strong>${reference || ''}</strong> creee pour le client.</p><p>Montant : <strong>${Number(totalAmount || 0).toLocaleString()} ${currency || 'XAF'}</strong></p>`,
+          organizationId,
+          { event: 'INVOICE_CREATED_ADMIN' },
         );
       }
     } catch (err) {
@@ -490,31 +581,74 @@ function registerHandlers() {
     }
   });
 
-  // CLIENT_LOYALTY_UPDATED -> notify client and admins about points
-  eventBus.on(DomainEvents.CLIENT_LOYALTY_UPDATED, async (event: DomainEvent) => {
-    const { clientId, points, delta, reason, agencyId } = event.payload as Record<string, any>;
+  // INVOICE_PAID
+  eventBus.on(DomainEvents.INVOICE_PAID, async (event: DomainEvent) => {
+    const payload = event.payload as Record<string, any>;
+    const { reference, clientId, agencyId, totalAmount, currency } = payload;
     if (!clientId) return;
+    const organizationId = await resolveEventOrg(event, payload);
+
+    await createNotification({
+      clientId,
+      agencyId: agencyId || event.agencyId,
+      organizationId,
+      title: 'Facture reglee',
+      message: `Votre facture ${reference || ''} est entierement reglee.`,
+      metadata: { reference, kind: 'INVOICE_PAID' } as Prisma.InputJsonValue,
+    });
+
+    const email = await getClientEmail(clientId);
+    if (email) {
+      await emailService.send(
+        email,
+        `Facture reglee - ${reference || ''}`,
+        `<p>Votre facture <strong>${reference || ''}</strong> est entierement reglee.</p><p>Montant total : <strong>${Number(totalAmount || 0).toLocaleString()} ${currency || 'XAF'}</strong></p><p>Merci pour votre confiance.</p>`,
+        organizationId,
+        { event: 'INVOICE_PAID' },
+      );
+    }
+  });
+
+  // CLIENT_LOYALTY_UPDATED -> template riche
+  eventBus.on(DomainEvents.CLIENT_LOYALTY_UPDATED, async (event: DomainEvent) => {
+    const payload = event.payload as Record<string, any>;
+    const { clientId, points, delta, reason, agencyId } = payload;
+    if (!clientId) return;
+    const organizationId = await resolveEventOrg(event, payload);
+
     try {
       const title = 'Points de fidelite mis a jour';
-      const message = `Vos points de fidelite ont ete mis a jour (${delta || 0}). Nouveau solde : ${points || 0}.` + (reason ? ` Raison: ${reason}` : '');
+      const message = `Vos points de fidelite ont ete mis a jour (${delta || 0}). Nouveau solde : ${points || 0}.` + (reason ? ` Raison : ${reason}` : '');
 
       await createNotification({
         clientId,
         agencyId: agencyId || event.agencyId,
+        organizationId,
         title,
         message,
-        metadata: { points, delta, reason } as Prisma.InputJsonValue,
+        metadata: { points, delta, reason, kind: 'CLIENT_LOYALTY_UPDATED' } as Prisma.InputJsonValue,
       });
 
       const email = await getClientEmail(clientId);
       if (email) {
-        await emailService.send(email, title, `<p>${message}</p>`);
+        await emailService.sendLoyaltyPointsUpdated(
+          email,
+          Number(delta || 0),
+          Number(points || 0),
+          reason || '',
+          organizationId,
+        );
       }
 
-      // admin copies
       const admins = agencyId ? await getAgencyAdminEmails(agencyId) : [];
       for (const a of admins) {
-        await emailService.send(a, `Fidelite client mise a jour`, `<p>Client ${clientId} points: ${points} (delta: ${delta})</p>`);
+        await emailService.send(
+          a,
+          `Fidelite client mise a jour`,
+          `<p>Client <code>${clientId}</code> : <strong>${points} pts</strong> (delta : ${delta})</p>`,
+          organizationId,
+          { event: 'LOYALTY_UPDATED_ADMIN' },
+        );
       }
     } catch (err) {
       logger.warn({ err }, 'Erreur handler CLIENT_LOYALTY_UPDATED');
