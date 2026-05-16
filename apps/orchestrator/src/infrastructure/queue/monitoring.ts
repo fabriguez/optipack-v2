@@ -1,9 +1,14 @@
 import { Queue, Worker, type Job } from 'bullmq';
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
+import * as os from 'node:os';
 import { redisConnection } from './connection';
 import { container } from '../../container';
 import { prisma } from '../../config/database';
 import { logger } from '../logger';
 import { SSHService, SSH_SERVICE } from '../ssh/SSHService';
+
+const execAsync = promisify(exec);
 import { DockerService, DOCKER_SERVICE } from '../docker/DockerService';
 import { BillingUseCases } from '../../application/use-cases/billing/BillingUseCases';
 import { GHCRClient } from '../ghcr/GHCRClient';
@@ -26,6 +31,56 @@ const BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h - backups nightly
  * skip ce VPS dans les cron de monitoring SSH.
  */
 const SELF_VPS_NAME = process.env.OPS_SELF_VPS_NAME ?? 'self';
+
+/**
+ * Identifie un VPS "self" : nom configure OU host loopback. Le double check
+ * couvre les seeds qui renomment self en "self-prod" tout en gardant 127.0.0.1.
+ */
+function isSelfVps(vps: { name: string; host: string }): boolean {
+  return vps.name === SELF_VPS_NAME || vps.host === '127.0.0.1' || vps.host === 'localhost';
+}
+
+/**
+ * Metriques locales (CPU/RAM/disque) sans SSH. Utilise pour le VPS self : on
+ * affiche les memes infos que les VPS distants au lieu d'avoir des cellules
+ * vides dans la liste ops-admin.
+ *
+ *  - CPU  : moyenne sur 1 seconde (delta de os.cpus() times entre deux mesures)
+ *  - RAM  : (total - free) / total via os.totalmem()/os.freemem()
+ *  - Disk : `df -P /` (POSIX, sortie stable) parsing colonne "Use%"
+ */
+async function collectLocalUsage(): Promise<{ cpuUsagePct: number; ramUsagePct: number; diskUsagePct: number }> {
+  // CPU : echantillon delta sur 1s
+  const t1 = os.cpus().map((c) => c.times);
+  await new Promise((r) => setTimeout(r, 1000));
+  const t2 = os.cpus().map((c) => c.times);
+  let totalDelta = 0;
+  let idleDelta = 0;
+  for (let i = 0; i < t1.length; i++) {
+    const a = t1[i];
+    const b = t2[i];
+    if (!a || !b) continue;
+    const aTotal = a.user + a.nice + a.sys + a.idle + a.irq;
+    const bTotal = b.user + b.nice + b.sys + b.idle + b.irq;
+    totalDelta += bTotal - aTotal;
+    idleDelta += b.idle - a.idle;
+  }
+  const cpuUsagePct = totalDelta > 0 ? Math.round(((totalDelta - idleDelta) / totalDelta) * 100) : 0;
+
+  const total = os.totalmem();
+  const free = os.freemem();
+  const ramUsagePct = total > 0 ? Math.round(((total - free) / total) * 100) : 0;
+
+  let diskUsagePct = 0;
+  try {
+    const { stdout } = await execAsync("df -P / | tail -1 | awk '{print $5}'");
+    diskUsagePct = parseInt(stdout.trim().replace('%', ''), 10) || 0;
+  } catch {
+    // df indisponible (Windows, containers minimalistes) : on laisse 0.
+  }
+
+  return { cpuUsagePct, ramUsagePct, diskUsagePct };
+}
 
 export const monitoringQueue = new Queue(MONITOR_QUEUE, { connection: redisConnection });
 
@@ -70,12 +125,30 @@ async function runVpsHeartbeat() {
   const allVps = await prisma.vPS.findMany({ where: { status: 'ACTIVE' } });
 
   for (const vps of allVps) {
-    // VPS local : pas de SSH, on marque juste vivant a chaque cycle.
-    if (vps.name === SELF_VPS_NAME) {
-      await prisma.vPS.update({
-        where: { id: vps.id },
-        data: { lastSeenAt: new Date() },
-      });
+    // VPS local : pas de SSH, on collecte les metriques directement via
+    // node:os + df. Sans ca, l'UI ops-admin affichait des cellules vides
+    // pour le self alors que les autres VPS montraient des pourcentages.
+    if (isSelfVps(vps)) {
+      try {
+        const usage = await collectLocalUsage();
+        await prisma.vPS.update({
+          where: { id: vps.id },
+          data: {
+            cpuUsagePct: usage.cpuUsagePct,
+            ramUsagePct: usage.ramUsagePct,
+            diskUsagePct: usage.diskUsagePct,
+            lastSeenAt: new Date(),
+          },
+        });
+        logger.debug({ vpsId: vps.id, host: vps.host, ...usage }, '[monitor] self vps ok');
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        logger.warn({ vpsId: vps.id, err: msg }, '[monitor] self vps local metrics failed');
+        await prisma.vPS.update({
+          where: { id: vps.id },
+          data: { lastSeenAt: new Date() },
+        });
+      }
       continue;
     }
     try {
@@ -120,7 +193,7 @@ async function runTenantHealthCheck() {
     // Tenant principal (isMain) ou VPS local : pas de SSH a faire. Son
     // healthcheck devrait passer par un canal local (a faire dans un second
     // temps), pour l'instant on skip pour eviter de polluer les logs.
-    if ((t as { isMain?: boolean }).isMain || t.vps.name === SELF_VPS_NAME) {
+    if ((t as { isMain?: boolean }).isMain || isSelfVps(t.vps)) {
       continue;
     }
     try {

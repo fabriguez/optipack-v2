@@ -61,6 +61,18 @@ echo "[orchestrator] BDD prete."
 echo "[orchestrator] Application des migrations Prisma..."
 "$PRISMA" migrate deploy --schema=./prisma/schema.prisma
 
+# Le orchestrator n'a pas de dossier prisma/migrations (developpe en `db push`
+# pendant le bootstrap). `migrate deploy` ne fait donc rien et le schema en DB
+# peut diverger de schema.prisma quand on ajoute une colonne (ex: P2022 sur
+# releases.webClientImageTag). On force un `db push` pour synchroniser tant
+# qu'on n'a pas de migrations versionnees.
+#
+# OPS_DB_SYNC=migrate -> seul migrate deploy s'execute (skip push).
+if [ "${OPS_DB_SYNC:-push}" = "push" ]; then
+  echo "[orchestrator] Sync schema (prisma db push --accept-data-loss=false)..."
+  "$PRISMA" db push --schema=./prisma/schema.prisma --accept-data-loss=false --skip-generate
+fi
+
 if [ "${OPS_RUN_SEED:-false}" = "true" ]; then
   echo "[orchestrator] Seed initial (OPS_RUN_SEED=true)..."
   # tsx est installe globalement en prod (cf. Dockerfile.prod -> npm i -g tsx).

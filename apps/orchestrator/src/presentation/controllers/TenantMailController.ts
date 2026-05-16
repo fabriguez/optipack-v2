@@ -4,9 +4,16 @@ import { TenantMailUseCases } from '../../application/use-cases/mail/TenantMailU
 import { AuditLogger } from '../../application/services/AuditLogger';
 import { BusinessError } from '../../domain/errors/BusinessError';
 
-/** Recupere le tenantId depuis :id (route ops-admin) OU header/query (route service-token). */
+/**
+ * Recupere le tenantId depuis :id (route ops-admin) OU header/query (route
+ * service-token).
+ *
+ * Bug : la version precedente s'appelait elle-meme (`resolveTenantId(req)`
+ * au lieu de `req.params.id`) -> RangeError stack overflow sur chaque GET.
+ * Toutes les requetes /ops/tenants/:id/mail crashaient en boucle.
+ */
 function resolveTenantId(req: Request): string {
-  const fromParam = resolveTenantId(req);
+  const fromParam = req.params.id as string | undefined;
   const fromHeader = req.headers['x-tenant-id'] as string | undefined;
   const fromQuery = req.query.tenantId as string | undefined;
   const id = fromParam ?? fromHeader ?? fromQuery;

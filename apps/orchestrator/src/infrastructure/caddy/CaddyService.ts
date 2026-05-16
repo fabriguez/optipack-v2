@@ -221,10 +221,17 @@ export class CaddyService {
     const json = JSON.stringify(configJson);
     // Echappement single-quote pour heredoc bash
     const escaped = json.replace(/'/g, "'\\''");
-    const cmd = `cat > /tmp/caddy-tenants.json <<'EOF'\n${escaped}\nEOF\ncurl -fsSL -X POST -H "Content-Type: application/json" --data-binary @/tmp/caddy-tenants.json http://localhost:2019/load`;
+    // Caddy admin API valide l'header Origin et rejette '' avec 403 (meme
+    // bug que pushLocal). Sans cet header, curl par defaut n'envoie pas
+    // d'Origin -> "client is not allowed to access from origin ''".
+    // L'origin envoye doit etre liste dans `admin { origins ... }` du
+    // Caddyfile. La valeur par defaut "http://orchestrator" matche le bloc
+    // admin auto-genere a la ligne 175 de ce fichier.
+    const origin = process.env.CADDY_ADMIN_ORIGIN ?? 'http://orchestrator';
+    const cmd = `cat > /tmp/caddy-tenants.json <<'EOF'\n${escaped}\nEOF\ncurl -fsSL -X POST -H "Content-Type: application/json" -H "Origin: ${origin}" --data-binary @/tmp/caddy-tenants.json http://localhost:2019/load`;
     const r = await this.ssh.exec(creds, cmd);
     if (r.code !== 0) {
-      throw new Error(`Caddy /load a echoue : ${r.stderr || r.stdout}`);
+      throw new Error(`Caddy /load a echoue : ${(r.stderr || r.stdout || '').trim()}`);
     }
   }
 
