@@ -471,9 +471,13 @@ OPTIPACK_SEED_SCRIPT_EOF
 cat > ${tmpData} <<'OPTIPACK_SEED_DATA_EOF'
 ${JSON.stringify(seedPayload)}
 OPTIPACK_SEED_DATA_EOF
-docker cp ${tmpScript} ${apiName}:/tmp/seed.js
-docker cp ${tmpData} ${apiName}:/tmp/seed.json
-docker exec -e SEED_DATA="$(cat ${tmpData})" ${apiName} node /tmp/seed.js
+docker cp ${tmpScript} ${apiName}:/app/seed.js
+docker cp ${tmpData} ${apiName}:/app/seed.json
+# IMPORTANT : node doit tourner depuis /app (ou se trouve node_modules avec
+# @prisma/client + bcryptjs). Avant on lancait depuis /tmp -> module not
+# found. On essaye /app puis /app/apps/api (monorepo) en fallback.
+docker exec -e SEED_DATA="$(cat ${tmpData})" -w /app ${apiName} \
+  sh -c 'if [ -d node_modules ]; then node seed.js; elif [ -d apps/api/node_modules ]; then cp seed.js apps/api/seed.js && cd apps/api && node seed.js; else echo "ERR: node_modules introuvable dans /app ni /app/apps/api" >&2; exit 1; fi'
 rm -f ${tmpScript} ${tmpData}
 `;
     const seedResult = await this.ssh.exec(creds, sshSeedCmd);

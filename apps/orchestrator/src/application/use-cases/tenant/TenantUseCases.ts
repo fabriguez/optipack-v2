@@ -54,6 +54,23 @@ export class TenantUseCases {
     const expiresAt = new Date(now.getTime() + (input.trialDays ?? 14) * 24 * 60 * 60 * 1000);
     const dbName = `tenant_${input.slug.replace(/-/g, '_')}_db`;
 
+    // Si un resourcePlanId est fourni, on copie ses limites comme prix
+    // mensuel par defaut (UI les a deja affichees). Persistance du FK pour
+    // que CapacityService.getTenantLimits retourne source='plan'.
+    let pricePerMonth = input.pricePerMonth;
+    if (input.resourcePlanId) {
+      const plan = await prisma.resourcePlan.findUnique({
+        where: { id: input.resourcePlanId },
+      });
+      if (!plan) {
+        throw new NotFoundError('ResourcePlan', input.resourcePlanId);
+      }
+      if (!plan.isActive) {
+        throw new BusinessError(`Plan "${plan.code}" inactif`);
+      }
+      pricePerMonth = pricePerMonth || Number(plan.pricePerMonth);
+    }
+
     const tenant = await prisma.tenant.create({
       data: {
         slug: input.slug,
@@ -61,6 +78,7 @@ export class TenantUseCases {
         ownerEmail: input.ownerEmail,
         ownerUsername: input.ownerUsername,
         vpsId: input.vpsId,
+        ...(input.resourcePlanId && { resourcePlanId: input.resourcePlanId }),
         customDomain: input.customDomain ?? null,
         primaryColor: input.primaryColor ?? '#1B5E20',
         secondaryColor: input.secondaryColor ?? '#4CAF50',
@@ -72,7 +90,7 @@ export class TenantUseCases {
         subscription: {
           create: {
             plan: input.plan ?? 'starter',
-            pricePerMonth: input.pricePerMonth ?? 0,
+            pricePerMonth: pricePerMonth ?? 0,
             startedAt: now,
             expiresAt,
           },

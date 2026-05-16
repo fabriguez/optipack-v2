@@ -14,6 +14,9 @@ export const createTenantSchema = z.object({
   enabledModules: z.array(z.string()).optional(),
   logoUrl: httpUrlSchema.optional().nullable(),
   plan: z.enum(['starter', 'pro', 'enterprise']).optional().default('starter'),
+  // FK vers ResourcePlan (table BDD). Sans ca, le tenant tombe sur les
+  // limites par defaut (0.5 CPU, 512MB) au provisioning.
+  resourcePlanId: uuidSchema.optional(),
   pricePerMonth: z.coerce.number().nonnegative().optional().default(0),
   trialDays: z.coerce.number().int().nonnegative().optional().default(14),
 });
