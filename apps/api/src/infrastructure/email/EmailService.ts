@@ -31,10 +31,11 @@ class EmailService {
   }
 
   async send(to: string, subject: string, bodyContent: string): Promise<boolean> {
-    if (!config.smtp.user || !config.smtp.pass) {
-      logger.warn('SMTP non configure, email non envoye');
-      return false;
-    }
+    console.log('smtp config:', config.smtp);
+    // if (!config.smtp.user || !config.smtp.pass) {
+    //   logger.warn('SMTP non configure, email non envoye');
+    //   return false;
+    // }
 
     try {
       await this.transporter.sendMail({
