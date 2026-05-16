@@ -6,6 +6,7 @@ import { NuqsAdapter } from 'nuqs/adapters/next/app';
 import { QueryProvider } from '@/lib/providers/QueryProvider';
 import { SkinProvider } from '@/lib/providers/SkinProvider';
 import { TenantMetaProvider } from '@/lib/providers/TenantMetaProvider';
+import { DynamicFavicon } from '@/components/DynamicFavicon';
 import { cn } from '@/lib/utils';
 import './globals.css';
 
@@ -30,6 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <NuqsAdapter>
           <QueryProvider>
             <TenantMetaProvider>
+              <DynamicFavicon />
               <SkinProvider>{children}</SkinProvider>
             </TenantMetaProvider>
           </QueryProvider>

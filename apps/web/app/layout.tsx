@@ -3,6 +3,7 @@ import { NuqsAdapter } from 'nuqs/adapters/next/app';
 import { SessionProvider } from '@/lib/providers/SessionProvider';
 import { QueryProvider } from '@/lib/providers/QueryProvider';
 import { TenantProvider } from '@/lib/providers/TenantProvider';
+import { DynamicFavicon } from '@/components/layout/DynamicFavicon';
 import { NextIntlClientProvider } from 'next-intl';
 import { getLocale, getMessages } from 'next-intl/server';
 import { AppToaster } from '@/components/ui/AppToast';
@@ -37,6 +38,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <SessionProvider>
             <QueryProvider>
               <TenantProvider>
+                <DynamicFavicon />
                 <NextIntlClientProvider messages={messages}>
                   {children}
                 </NextIntlClientProvider>

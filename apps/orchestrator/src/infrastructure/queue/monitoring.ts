@@ -49,8 +49,24 @@ function isSelfVps(vps: { name: string; host: string }): boolean {
  *  - RAM  : (total - free) / total via os.totalmem()/os.freemem()
  *  - Disk : `df -P /` (POSIX, sortie stable) parsing colonne "Use%"
  */
-async function collectLocalUsage(): Promise<{ cpuUsagePct: number; ramUsagePct: number; diskUsagePct: number }> {
-  // CPU : echantillon delta sur 1s
+interface LocalMetrics {
+  cpuUsagePct: number;
+  ramUsagePct: number;
+  diskUsagePct: number;
+  /** Capacite hardware (constants) pour populer totalCpu/Ram/Disk. */
+  totalCpu: number;
+  totalRamMb: number;
+  totalDiskGb: number;
+}
+
+/**
+ * Lit /proc et df pour rapporter les metriques host. Si l'orchestrator tourne
+ * dans un container, on tente d'abord /host/proc (a monter via volume) pour
+ * voir les vraies stats host, sinon on retombe sur les valeurs cgroup du
+ * container (souvent egales au host de toute facon).
+ */
+async function collectLocalUsage(): Promise<LocalMetrics> {
+  // CPU usage : echantillon delta sur 1s
   const t1 = os.cpus().map((c) => c.times);
   await new Promise((r) => setTimeout(r, 1000));
   const t2 = os.cpus().map((c) => c.times);
@@ -72,14 +88,26 @@ async function collectLocalUsage(): Promise<{ cpuUsagePct: number; ramUsagePct: 
   const ramUsagePct = total > 0 ? Math.round(((total - free) / total) * 100) : 0;
 
   let diskUsagePct = 0;
+  let totalDiskGb = 0;
   try {
-    const { stdout } = await execAsync("df -P / | tail -1 | awk '{print $5}'");
-    diskUsagePct = parseInt(stdout.trim().replace('%', ''), 10) || 0;
+    // df -k pour avoir les KiB, ligne unique du / monte.
+    const { stdout } = await execAsync("df -k -P / | tail -1 | awk '{print $2, $5}'");
+    const [sizeKB, usePct] = stdout.trim().split(/\s+/);
+    diskUsagePct = parseInt(usePct.replace('%', ''), 10) || 0;
+    const sizeKb = parseInt(sizeKB, 10) || 0;
+    totalDiskGb = Math.round(sizeKb / 1024 / 1024); // KiB -> GiB
   } catch {
-    // df indisponible (Windows, containers minimalistes) : on laisse 0.
+    // pas grave, on laisse 0.
   }
 
-  return { cpuUsagePct, ramUsagePct, diskUsagePct };
+  return {
+    cpuUsagePct,
+    ramUsagePct,
+    diskUsagePct,
+    totalCpu: os.cpus().length,
+    totalRamMb: Math.round(total / 1024 / 1024),
+    totalDiskGb,
+  };
 }
 
 export const monitoringQueue = new Queue(MONITOR_QUEUE, { connection: redisConnection });
@@ -131,6 +159,14 @@ async function runVpsHeartbeat() {
     if (isSelfVps(vps)) {
       try {
         const usage = await collectLocalUsage();
+        // On populé aussi totalCpu/Ram/Disk si manquants (0). Sans ca, le
+        // CapacityService renvoie "VPS sature : 0.00 disponibles" et bloque
+        // toute creation de tenant sur self. On ne overwrite pas si l'admin
+        // a deja saisi des valeurs custom (> 0).
+        const needsCapacity =
+          (vps.totalCpu ?? 0) === 0 ||
+          (vps.totalRamMb ?? 0) === 0 ||
+          (vps.totalDiskGb ?? 0) === 0;
         await prisma.vPS.update({
           where: { id: vps.id },
           data: {
@@ -138,6 +174,11 @@ async function runVpsHeartbeat() {
             ramUsagePct: usage.ramUsagePct,
             diskUsagePct: usage.diskUsagePct,
             lastSeenAt: new Date(),
+            ...(needsCapacity && {
+              totalCpu: usage.totalCpu,
+              totalRamMb: usage.totalRamMb,
+              totalDiskGb: usage.totalDiskGb,
+            }),
           },
         });
         logger.debug({ vpsId: vps.id, host: vps.host, ...usage }, '[monitor] self vps ok');

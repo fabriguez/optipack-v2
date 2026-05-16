@@ -1,6 +1,38 @@
 import { injectable } from 'tsyringe';
+import * as os from 'node:os';
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
 import { prisma } from '../../config/database';
 import { BusinessError, NotFoundError } from '../../domain/errors/BusinessError';
+
+const execAsync = promisify(exec);
+
+const SELF_VPS_NAME = process.env.OPS_SELF_VPS_NAME ?? 'self';
+
+function isSelfVps(vps: { name: string; host: string }): boolean {
+  return vps.name === SELF_VPS_NAME || vps.host === '127.0.0.1' || vps.host === 'localhost';
+}
+
+/**
+ * Mesure capacite hardware locale (CPU cores, RAM totale, disk total). Lance
+ * uniquement quand le VPS self n'a pas de capacite saisie en DB -- evite que
+ * le CapacityService voie 0 et bloque toute creation de tenant.
+ */
+async function measureLocalCapacity(): Promise<{ totalCpu: number; totalRamMb: number; totalDiskGb: number }> {
+  let totalDiskGb = 0;
+  try {
+    const { stdout } = await execAsync("df -k -P / | tail -1 | awk '{print $2}'");
+    const sizeKb = parseInt(stdout.trim(), 10) || 0;
+    totalDiskGb = Math.round(sizeKb / 1024 / 1024);
+  } catch {
+    // df indispo : on laisse 0
+  }
+  return {
+    totalCpu: os.cpus().length,
+    totalRamMb: Math.round(os.totalmem() / 1024 / 1024),
+    totalDiskGb,
+  };
+}
 
 export interface ResourceRequirement {
   cpuLimit: number;
@@ -44,8 +76,26 @@ export interface CapacityReport {
 @injectable()
 export class CapacityService {
   async report(vpsId: string): Promise<CapacityReport> {
-    const vps = await prisma.vPS.findUnique({ where: { id: vpsId } });
+    let vps = await prisma.vPS.findUnique({ where: { id: vpsId } });
     if (!vps) throw new NotFoundError('VPS', vpsId);
+
+    // Lazy populate des totaux du VPS self : sans ca, capacite=0 -> blocage
+    // de toute creation de tenant ("VPS sature : 0.00 disponibles"). On le
+    // fait au premier appel pour ne pas attendre le cron heartbeat (5min).
+    if (
+      isSelfVps(vps) &&
+      ((vps.totalCpu ?? 0) === 0 || (vps.totalRamMb ?? 0) === 0 || (vps.totalDiskGb ?? 0) === 0)
+    ) {
+      const cap = await measureLocalCapacity();
+      vps = await prisma.vPS.update({
+        where: { id: vpsId },
+        data: {
+          ...(((vps.totalCpu ?? 0) === 0) && { totalCpu: cap.totalCpu }),
+          ...(((vps.totalRamMb ?? 0) === 0) && { totalRamMb: cap.totalRamMb }),
+          ...(((vps.totalDiskGb ?? 0) === 0) && { totalDiskGb: cap.totalDiskGb }),
+        },
+      });
+    }
 
     const tenants = await prisma.tenant.findMany({
       where: {

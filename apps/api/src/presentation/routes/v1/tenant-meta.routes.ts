@@ -11,6 +11,8 @@ import {
   type MobileAppConfig,
 } from '@transitsoftservices/shared';
 import { tenantEmailDispatcher } from '../../../infrastructure/email/TenantEmailDispatcher';
+import { realtimeService } from '../../../infrastructure/realtime/RealtimeService';
+import { emailService } from '../../../infrastructure/email/EmailService';
 
 /** Strip secrets before returning email config to clients. */
 function publicEmailConfig(cfg: EmailConfig | null | undefined): EmailConfigPublic | null {
@@ -99,6 +101,19 @@ router.patch('/ops-sync', requireServiceToken, async (req, res, next) => {
         } as any),
       },
     });
+
+    emailService.invalidateBranding(updated.id);
+    // Broadcast realtime aux clients web/web-client connectes : skin + modules
+    // doivent s'appliquer immediatement sans reload. Cle 'tenant:meta:updated'
+    // ecoutee par TenantProvider (web) et TenantMetaProvider (web-client).
+    try {
+      realtimeService.toOrganization(updated.id, 'tenant:meta:updated', {
+        organizationId: updated.id,
+        changedFields: Object.keys(body),
+      });
+    } catch {
+      // non bloquant : si le broadcast echoue, le prochain reload prendra le relais
+    }
 
     res.json({ success: true, data: { id: updated.id } });
   } catch (err) {
@@ -224,6 +239,16 @@ router.patch(
         },
       });
 
+      emailService.invalidateBranding(updated.id);
+      try {
+        realtimeService.toOrganization(updated.id, 'tenant:meta:updated', {
+          organizationId: updated.id,
+          changedFields: ['branding'],
+        });
+      } catch {
+        // non bloquant
+      }
+
       res.json({
         success: true,
         data: {
@@ -285,6 +310,17 @@ router.patch(
           } as any),
         },
       });
+
+      // Broadcast realtime aux clients web/web-client : applique skin sans
+      // reload. Voir handler ops-sync pour le meme pattern.
+      try {
+        realtimeService.toOrganization(updated.id, 'tenant:meta:updated', {
+          organizationId: updated.id,
+          changedFields: ['skin', 'skinCustomization'],
+        });
+      } catch {
+        // non bloquant
+      }
 
       res.json({
         success: true,

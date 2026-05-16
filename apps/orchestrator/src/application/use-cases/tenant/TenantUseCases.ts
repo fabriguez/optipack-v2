@@ -209,7 +209,16 @@ export class TenantUseCases {
     if (Object.keys(payload).length === 0) return;
 
     const token = process.env.OPS_TENANT_PROXY_TOKEN ?? '';
-    if (!token) return; // service token not configured -> skip silently
+    if (!token) {
+      // Sans token, le DB tenant ne sera jamais mis a jour -> le site continue
+      // d'afficher l'ancien skin/branding. Avant : skip silencieux, impossible
+      // a diagnostiquer cote ops. Maintenant : warn loud avec le tenant + les
+      // champs modifies, pour qu'on voie clair dans les logs.
+      console.warn(
+        `[tenant.update] OPS_TENANT_PROXY_TOKEN absent -> sync ${t.slug} SKIP (champs: ${Object.keys(payload).join(',')}). Le site tenant ne sera PAS rafraichi.`,
+      );
+      return;
+    }
 
     const base = process.env.BASE_DOMAIN ?? 'transitsoftservices.com';
     const apiHost = (t as { isMain?: boolean }).isMain
@@ -220,7 +229,7 @@ export class TenantUseCases {
     const url = `https://${apiHost}/api/v1/tenant-meta/ops-sync`;
 
     try {
-      await fetch(url, {
+      const res = await fetch(url, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -229,6 +238,14 @@ export class TenantUseCases {
         },
         body: JSON.stringify(payload),
       });
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        console.warn(
+          `[tenant.update] sync ${t.slug} -> ${url} HTTP ${res.status} : ${body.slice(0, 200)}`,
+        );
+      } else {
+        console.log(`[tenant.update] sync ${t.slug} OK (champs: ${Object.keys(payload).join(',')})`);
+      }
     } catch (err) {
       // Tenant offline / DNS not ready: log only, don't fail the ops change.
       console.warn(`[tenant.update] sync to ${url} unreachable:`, (err as Error).message);

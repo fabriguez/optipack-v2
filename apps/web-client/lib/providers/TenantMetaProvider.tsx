@@ -28,9 +28,13 @@ export interface TenantMeta {
 interface Ctx {
   meta: TenantMeta | null;
   loading: boolean;
+  /** Force un refetch sans reload (utile apres une action admin). */
+  refresh: () => Promise<void>;
 }
 
-const TenantMetaContext = createContext<Ctx>({ meta: null, loading: true });
+const TenantMetaContext = createContext<Ctx>({ meta: null, loading: true, refresh: async () => {} });
+
+const REFRESH_INTERVAL_MS = 60_000;
 
 const FALLBACK: TenantMeta = {
   id: 'fallback',
@@ -49,26 +53,51 @@ export function TenantMetaProvider({ children }: { children: ReactNode }) {
   const [meta, setMeta] = useState<TenantMeta | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const fetchMeta = async () => {
+    try {
+      const r = await apiClient.get('/tenant-meta');
+      setMeta((r.data?.data as TenantMeta) ?? FALLBACK);
+    } catch {
+      setMeta(FALLBACK);
+    }
+  };
+
   useEffect(() => {
     let cancelled = false;
-    apiClient
-      .get('/tenant-meta')
-      .then((r) => {
-        if (cancelled) return;
-        setMeta((r.data?.data as TenantMeta) ?? FALLBACK);
-      })
-      .catch(() => {
-        if (!cancelled) setMeta(FALLBACK);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    fetchMeta().finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+
+    // Propagation skin/branding sans WebSocket (le portail public ne se
+    // connecte pas a socket.io) :
+    //   1) refetch au focus de la fenetre (visite revient sur l'onglet)
+    //   2) refetch quand l'onglet redevient visible
+    //   3) polling lent toutes les 60s pour les sessions longues laissees
+    //      ouvertes pendant un changement admin
+    const onFocus = () => fetchMeta();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') fetchMeta();
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisible);
+    const interval = window.setInterval(fetchMeta, REFRESH_INTERVAL_MS);
+
     return () => {
       cancelled = true;
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.clearInterval(interval);
     };
   }, []);
 
-  const value = useMemo(() => ({ meta, loading }), [meta, loading]);
+  const value = useMemo<Ctx>(
+    () => ({
+      meta,
+      loading,
+      refresh: fetchMeta,
+    }),
+    [meta, loading],
+  );
   return <TenantMetaContext.Provider value={value}>{children}</TenantMetaContext.Provider>;
 }
 

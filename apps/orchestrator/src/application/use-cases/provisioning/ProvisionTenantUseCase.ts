@@ -176,14 +176,33 @@ export class ProvisionTenantUseCase {
       await log(`[provision] WARN createdb : ${(createDbResult.stderr || createDbResult.stdout || '').trim()}`);
     }
 
-    // 4. Generer le .env du tenant
+    // 4. Generer le .env du tenant.
+    //
+    // Bug majeur fixe : avant, on ecrivait `${POSTGRES_PASSWORD}` litteral
+    // dans l'env_file via heredoc 'EOF'. docker n'expanse PAS les variables
+    // dans env_file (chaque ligne = literal KEY=VALUE). Le container API
+    // recevait DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@...
+    // litteral -> Prisma echouait au parse. Compose loggait aussi "variable
+    // is not set" en chargeant l'env_file pour son interpolation YAML.
+    //
+    // Fix : on substitue maintenant les valeurs depuis l'env de l'orchestrator
+    // (POSTGRES_USER/PASSWORD, MINIO_ROOT_USER/PASSWORD) au moment de l'ecriture.
     const jwtSecret = randomBytes(32).toString('hex');
     const authSecret = randomBytes(32).toString('hex');
     const envFile = `${config.tenantEnvDir}/tenant-${tenant.slug}.env`;
+    const pgUser = process.env.POSTGRES_USER || 'postgres';
+    const pgPass = process.env.POSTGRES_PASSWORD || '';
+    const pgHost = process.env.OPS_TENANT_POSTGRES_HOST || 'postgres';
+    const pgPort = process.env.OPS_TENANT_POSTGRES_PORT || '5432';
+    const minioUser = process.env.MINIO_ROOT_USER || '';
+    const minioPass = process.env.MINIO_ROOT_PASSWORD || '';
+    if (!pgPass) {
+      await log(`[provision] WARN POSTGRES_PASSWORD vide cote orchestrator -> DATABASE_URL invalide. Definir la var d'env.`);
+    }
     const envContent = [
       `NODE_ENV=production`,
       `TENANT_SLUG=${tenant.slug}`,
-      `DATABASE_URL=postgresql://\${POSTGRES_USER:-postgres}:\${POSTGRES_PASSWORD}@postgres:5432/${dbName}?schema=public`,
+      `DATABASE_URL=postgresql://${pgUser}:${pgPass}@${pgHost}:${pgPort}/${dbName}?schema=public`,
       `REDIS_URL=redis://redis:6379`,
       `JWT_SECRET=${jwtSecret}`,
       `AUTH_SECRET=${authSecret}`,
@@ -192,8 +211,8 @@ export class ProvisionTenantUseCase {
       `MINIO_ENDPOINT=minio`,
       `MINIO_PORT=9000`,
       `MINIO_BUCKET=tenant-${tenant.slug}`,
-      `MINIO_ROOT_USER=\${MINIO_ROOT_USER}`,
-      `MINIO_ROOT_PASSWORD=\${MINIO_ROOT_PASSWORD}`,
+      `MINIO_ROOT_USER=${minioUser}`,
+      `MINIO_ROOT_PASSWORD=${minioPass}`,
       `API_PORT=4000`,
       `NEXT_PUBLIC_API_URL=https://api.${tenant.slug}.${BASE_DOMAIN}/api/v1`,
       `PUBLIC_TRACKING_URL=https://${tenant.slug}.${BASE_DOMAIN}`,
@@ -208,11 +227,24 @@ export class ProvisionTenantUseCase {
       throw new Error(`ecriture du fichier env ${envFile} echoue : ${envWriteResult.stderr || envWriteResult.stdout}`);
     }
 
-    // 5. Stop + remove les anciens containers s'ils existent (rejouabilite)
+    // 5. Stop + remove les anciens containers s'ils existent (rejouabilite).
+    //
+    // Bug fixe : avant on faisait juste `docker rm -f tenant-<slug>-(api|web|
+    // web-client)`. Mais le compose project pouvait garder des refs / ports
+    // reserves -> "port is already allocated" au prochain compose up.
+    // Solution : compose down --remove-orphans -t 5 -v pour reset complet,
+    // PUIS rm -f par nom comme garde-fou (au cas ou le compose file aurait
+    // change de nom de container entre essais).
     const apiName = `tenant-${tenant.slug}-api`;
     const webName = `tenant-${tenant.slug}-web`;
     const webClientName = `tenant-${tenant.slug}-web-client`;
+    const composeFilePath = `/tmp/tenant-${tenant.slug}-compose.yml`;
+    const composeProjectName = `tenant-${tenant.slug}`;
     await log(`[provision] cleanup anciens containers (rejouabilite)`);
+    await this.ssh.exec(
+      creds,
+      `docker compose -p ${composeProjectName} -f ${composeFilePath} down --remove-orphans -t 5 -v 2>/dev/null || true`,
+    );
     await this.docker.remove(creds, apiName, true);
     await this.docker.remove(creds, webName, true);
     await this.docker.remove(creds, webClientName, true);
@@ -223,10 +255,9 @@ export class ProvisionTenantUseCase {
     const webMemoryMb = Math.floor(limits.memoryMb * 0.25);
     const webClientMemoryMb = limits.memoryMb - apiMemoryMb - webMemoryMb;
     const thirdCpu = Number((limits.cpuLimit / 3).toFixed(3));
-    const composeFile = `/tmp/tenant-${tenant.slug}-compose.yml`;
-    const composeProject = `tenant-${tenant.slug}`;
-    const composeYaml = `version: "3.9"
-services:
+    // (composeFilePath / composeProjectName deja declares lors du cleanup
+    // a l'etape 5). On reutilise les memes valeurs.
+    const composeYaml = `services:
   api:
     container_name: ${apiName}
     image: ${apiImage}
@@ -280,7 +311,7 @@ networks:
       creds,
       'docker network inspect optipack-shared >/dev/null 2>&1 || docker network create optipack-shared',
     );
-    await this.docker.composeUp(creds, composeFile, composeYaml, composeProject);
+    await this.docker.composeUp(creds, composeFilePath, composeYaml, composeProjectName);
 
     // 7. Run prisma migrate deploy dans le container.
     //

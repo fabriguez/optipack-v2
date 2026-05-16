@@ -7,6 +7,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { ModuleGuard } from '@/components/layout/ModuleGuard';
 import { SocketProvider } from '@/lib/providers/SocketProvider';
 import { SessionRefreshBridge } from '@/lib/providers/SessionRefreshBridge';
+import { TenantMetaSocketSync } from '@/components/layout/TenantMetaSocketSync';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 import { authLog } from '@/lib/api/authDebug';
 
@@ -87,6 +88,7 @@ export default function DashboardRootLayout({ children }: { children: React.Reac
   return (
     <SocketProvider>
       <SessionRefreshBridge />
+      <TenantMetaSocketSync />
       <DashboardLayout>
         <ModuleGuard>{children}</ModuleGuard>
       </DashboardLayout>

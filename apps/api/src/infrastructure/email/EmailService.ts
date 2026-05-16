@@ -1,4 +1,5 @@
 import { config } from '../../config';
+import { prisma } from '../../config/database';
 import { tenantEmailDispatcher } from './TenantEmailDispatcher';
 import {
   emailLayout,
@@ -10,6 +11,25 @@ import {
   divider,
   actionButton,
 } from './emailLayout';
+
+// Cache branding tenant pour eviter un SELECT a chaque envoi mail.
+// Invalide via emailService.invalidateBranding(orgId) au PATCH branding/skin.
+const brandingCache = new Map<string, { logoUrl: string | null; name: string | null }>();
+
+async function getBranding(organizationId?: string | null) {
+  if (!organizationId) return undefined;
+  const cached = brandingCache.get(organizationId);
+  if (cached) return cached;
+  const org = await prisma.organization.findUnique({
+    where: { id: organizationId },
+    select: { logoUrl: true, name: true },
+  });
+  if (org) {
+    brandingCache.set(organizationId, { logoUrl: org.logoUrl, name: org.name });
+    return { logoUrl: org.logoUrl, name: org.name };
+  }
+  return undefined;
+}
 
 /**
  * Templates email + envoi route via TenantEmailDispatcher.
@@ -35,16 +55,25 @@ class EmailService {
     organizationId?: string | null,
     options?: { event?: string },
   ): Promise<boolean> {
+    // Branding tenant : logo + nom dans header/footer du mail. Sans
+    // organizationId, on garde le wording generique TransitSoftServices.
+    const branding = await getBranding(organizationId);
+    const orgName = branding?.name?.trim() || 'TransitSoftServices';
     const result = await tenantEmailDispatcher.sendForTenant(
       organizationId ?? null,
       {
         to,
-        subject: `TransitSoftServices - ${subject}`,
-        html: emailLayout(bodyContent),
+        subject: `${orgName} - ${subject}`,
+        html: emailLayout(bodyContent, branding),
       },
       { event: options?.event },
     );
     return result.ok;
+  }
+
+  /** Invalide le cache branding (apres modif logoUrl/name d'un tenant). */
+  invalidateBranding(organizationId: string): void {
+    brandingCache.delete(organizationId);
   }
 
   async sendParcelCreated(

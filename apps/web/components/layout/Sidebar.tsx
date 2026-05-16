@@ -210,7 +210,15 @@ export function Sidebar() {
         {!collapsed && (
           <div className="flex items-center gap-2 min-w-0">
             {meta?.logoUrl && (
-              <AuthedImage src={meta.logoUrl} alt="logo" className="h-8 w-8 object-contain rounded" fallback={<div className="h-8 w-8" />} />
+              // Logo : public par definition (affiche partout, mail, favicon).
+              // Si URL absolue http(s), on l'utilise direct -- AuthedImage
+              // n'aurait pas accroche le token et echouerait silencieusement.
+              /^https?:\/\//.test(meta.logoUrl) ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={meta.logoUrl} alt="logo" className="h-8 w-8 object-contain rounded" />
+              ) : (
+                <AuthedImage src={meta.logoUrl} alt="logo" className="h-8 w-8 object-contain rounded" fallback={<div className="h-8 w-8" />} />
+              )
             )}
             <span className="text-lg font-bold text-white tracking-tight truncate">
               {meta?.name ?? 'TransitSoftServices'}

@@ -93,7 +93,6 @@ function applyTheme(meta: TenantMeta) {
 export function TenantProvider({ children, initialMeta }: { children: ReactNode; initialMeta?: TenantMeta }) {
   const [meta, setMeta] = useState<TenantMeta | null>(initialMeta ?? null);
   const [loading, setLoading] = useState(!initialMeta);
-
   useEffect(() => {
     if (initialMeta) {
       applyTheme(initialMeta);
@@ -110,6 +109,22 @@ export function TenantProvider({ children, initialMeta }: { children: ReactNode;
       cancelled = true;
     };
   }, [initialMeta]);
+
+  // Bridge realtime : le composant `TenantMetaSocketSync` (monte sous le
+  // SocketProvider dans (dashboard)/layout.tsx) appelle window.dispatchEvent
+  // d'un CustomEvent 'tenant:meta:updated' a chaque broadcast socket. On
+  // ecoute ici pour refetch + reapplyer le theme sans reload.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onUpdated = () => {
+      fetchTenantMeta().then((m) => {
+        setMeta(m);
+        applyTheme(m);
+      });
+    };
+    window.addEventListener('tenant:meta:updated', onUpdated);
+    return () => window.removeEventListener('tenant:meta:updated', onUpdated);
+  }, []);
 
   const value = useMemo<TenantContextValue>(
     () => ({

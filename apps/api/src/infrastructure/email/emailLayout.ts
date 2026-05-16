@@ -33,21 +33,27 @@ const STYLES = {
   muted: 'font-size:12px;color:#9CA3AF;',
 };
 
-export function emailLayout(content: string): string {
+export function emailLayout(content: string, branding?: { logoUrl?: string | null; name?: string | null; tagline?: string | null }): string {
+  const orgName = branding?.name?.trim() || 'TransitSoftServices';
+  const tagline = branding?.tagline?.trim() || 'Gestion de transit aerien, maritime et terrestre';
+  const logoBlock = branding?.logoUrl
+    ? `<img src="${branding.logoUrl}" alt="${orgName}" style="height:40px;width:auto;display:block;margin-bottom:8px;border-radius:6px;background:#FFFFFF;padding:4px"/>`
+    : '';
   return `<!DOCTYPE html>
 <html lang="fr">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>TransitSoftServices</title>
+  <title>${orgName}</title>
 </head>
 <body style="${STYLES.wrapper}">
   <div style="${STYLES.container}">
     <div style="${STYLES.card}">
       <!-- Header -->
       <div style="${STYLES.header}">
-        <h1 style="${STYLES.headerLogo}">TransitSoftServices</h1>
-        <p style="${STYLES.headerSub}">Gestion de transit aerien, maritime et terrestre</p>
+        ${logoBlock}
+        <h1 style="${STYLES.headerLogo}">${orgName}</h1>
+        <p style="${STYLES.headerSub}">${tagline}</p>
       </div>
 
       <!-- Body -->
@@ -58,18 +64,18 @@ export function emailLayout(content: string): string {
       <!-- Footer -->
       <div style="${STYLES.footer}">
         <p style="${STYLES.footerText}">
-          Cet email a ete envoye automatiquement par TransitSoftServices.<br>
+          Cet email a ete envoye automatiquement par ${orgName}.<br>
           Pour toute question, contactez votre agence de reference.
         </p>
         <p style="${STYLES.footerText};margin-top:12px">
-          &copy; ${new Date().getFullYear()} TransitSoftServices. Tous droits reserves.
+          &copy; ${new Date().getFullYear()} ${orgName}. Tous droits reserves.
         </p>
       </div>
     </div>
 
     <!-- Unsubscribe -->
     <p style="text-align:center;margin-top:16px;${STYLES.muted}">
-      Vous recevez cet email car vous etes client chez TransitSoftServices.
+      Vous recevez cet email car vous etes client chez ${orgName}.
     </p>
   </div>
 </body>
