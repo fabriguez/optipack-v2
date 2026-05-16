@@ -137,72 +137,38 @@ export class ProvisionTenantUseCase {
     await log(`[provision] docker pull ${webClientImage}`);
     await this.docker.pull(creds, webClientImage);
 
-    // 3. Creer la BDD tenant si elle n'existe pas. On essaye plusieurs noms
-    //    de container postgres connus + un fallback par filtre image, puis on
-    //    bascule sur psql distant si rien ne marche. Avant, le nom etait
-    //    hardcode "postgres" -> "No such container: postgres" sur tous les
-    //    VPS ou le container est nomme autrement (optipack-postgres, etc).
+    // 3. (supprime) -- chaque tenant a maintenant son propre container
+    //    postgres dans son stack compose. Pas de "CREATE DATABASE" externe :
+    //    POSTGRES_DB env initialise la base au premier boot du container.
     const dbName = tenant.dbName ?? `tenant_${tenant.slug.replace(/-/g, '_')}_db`;
-    await log(`[provision] CREATE DATABASE ${dbName} (si manquant)`);
-    const pgContainerCandidates = [
-      process.env.OPS_POSTGRES_CONTAINER,
-      'optipack-postgres',
-      'postgres',
-      'pg',
-    ].filter(Boolean) as string[];
-    // Detecte le container postgres en tournant une fois, puis cree la DB.
-    const detectAndCreate = `
-      set -e
-      PG_CTR=""
-      for name in ${pgContainerCandidates.map((c) => `"${c}"`).join(' ')}; do
-        if docker ps --format '{{.Names}}' | grep -qx "$name"; then PG_CTR="$name"; break; fi
-      done
-      if [ -z "$PG_CTR" ]; then
-        # Fallback : chercher un container dont l'image commence par "postgres".
-        PG_CTR=$(docker ps --filter "ancestor=postgres" --format '{{.Names}}' | head -n 1)
-      fi
-      if [ -z "$PG_CTR" ]; then
-        echo "ERR no postgres container found" >&2
-        exit 1
-      fi
-      docker exec -e PGPASSWORD="\${POSTGRES_PASSWORD:-}" "$PG_CTR" \
-        psql -U "\${POSTGRES_USER:-postgres}" -tc \
-        "SELECT 1 FROM pg_database WHERE datname='${dbName}'" | grep -q 1 || \
-      docker exec -e PGPASSWORD="\${POSTGRES_PASSWORD:-}" "$PG_CTR" \
-        psql -U "\${POSTGRES_USER:-postgres}" -c 'CREATE DATABASE "${dbName}"'
-    `;
-    const createDbResult = await this.ssh.exec(creds, detectAndCreate);
-    if (createDbResult.code !== 0) {
-      await log(`[provision] WARN createdb : ${(createDbResult.stderr || createDbResult.stdout || '').trim()}`);
-    }
 
-    // 4. Generer le .env du tenant.
+    // 4. Generer credentials uniques + .env du tenant.
     //
-    // Bug majeur fixe : avant, on ecrivait `${POSTGRES_PASSWORD}` litteral
-    // dans l'env_file via heredoc 'EOF'. docker n'expanse PAS les variables
-    // dans env_file (chaque ligne = literal KEY=VALUE). Le container API
-    // recevait DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@...
-    // litteral -> Prisma echouait au parse. Compose loggait aussi "variable
-    // is not set" en chargeant l'env_file pour son interpolation YAML.
-    //
-    // Fix : on substitue maintenant les valeurs depuis l'env de l'orchestrator
-    // (POSTGRES_USER/PASSWORD, MINIO_ROOT_USER/PASSWORD) au moment de l'ecriture.
-    const jwtSecret = randomBytes(32).toString('hex');
-    const authSecret = randomBytes(32).toString('hex');
+    // Stack isolee par tenant : chaque tenant possede ses propres containers
+    // postgres + redis + minio. Les credentials sont generees aleatoirement
+    // une fois ici, persistees dans /etc/optipack/tenant-<slug>.env et
+    // partagees uniquement avec les services internes du compose (api +
+    // postgres + minio se voient via le network compose).
     const envFile = `${config.tenantEnvDir}/tenant-${tenant.slug}.env`;
-    const pgUser = process.env.POSTGRES_USER || 'postgres';
-    const pgPass = process.env.POSTGRES_PASSWORD || '';
-    const pgHost = process.env.OPS_TENANT_POSTGRES_HOST || 'postgres';
-    const pgPort = process.env.OPS_TENANT_POSTGRES_PORT || '5432';
-    const minioUser = process.env.MINIO_ROOT_USER || '';
-    const minioPass = process.env.MINIO_ROOT_PASSWORD || '';
-    if (!pgPass) {
-      await log(`[provision] WARN POSTGRES_PASSWORD vide cote orchestrator -> DATABASE_URL invalide. Definir la var d'env.`);
-    }
+    // Re-provisioning : on relit le .env existant pour reutiliser les memes
+    // credentials (sinon le volume postgres persistant garde l'ancien user/
+    // pass et l'API n'arrive plus a se connecter). Si le fichier n'existe
+    // pas (premier provision), on genere de nouvelles valeurs aleatoires.
+    const existingEnv = await this.readExistingEnv(creds, envFile);
+    const jwtSecret = existingEnv?.JWT_SECRET || randomBytes(32).toString('hex');
+    const authSecret = existingEnv?.AUTH_SECRET || randomBytes(32).toString('hex');
+    const pgUser = existingEnv?.POSTGRES_USER || `tenant_${tenant.slug.replace(/-/g, '_')}`;
+    const pgPass = existingEnv?.POSTGRES_PASSWORD || randomBytes(24).toString('hex');
+    const minioUser = existingEnv?.MINIO_ROOT_USER || `tenant_${tenant.slug.replace(/-/g, '_')}`;
+    const minioPass = existingEnv?.MINIO_ROOT_PASSWORD || randomBytes(24).toString('hex');
+    const minioBucket = `tenant-${tenant.slug}`;
+    // Les noms de services compose = noms DNS au sein du network compose.
+    // L'API tenant s'y connecte directement (pas de port host expose pour
+    // postgres/redis/minio).
     const envContent = [
       `NODE_ENV=production`,
       `TENANT_SLUG=${tenant.slug}`,
-      `DATABASE_URL=postgresql://${pgUser}:${pgPass}@${pgHost}:${pgPort}/${dbName}?schema=public`,
+      `DATABASE_URL=postgresql://${pgUser}:${pgPass}@postgres:5432/${dbName}?schema=public`,
       `REDIS_URL=redis://redis:6379`,
       `JWT_SECRET=${jwtSecret}`,
       `AUTH_SECRET=${authSecret}`,
@@ -210,9 +176,14 @@ export class ProvisionTenantUseCase {
       `JWT_REFRESH_EXPIRY=7d`,
       `MINIO_ENDPOINT=minio`,
       `MINIO_PORT=9000`,
-      `MINIO_BUCKET=tenant-${tenant.slug}`,
+      `MINIO_BUCKET=${minioBucket}`,
       `MINIO_ROOT_USER=${minioUser}`,
       `MINIO_ROOT_PASSWORD=${minioPass}`,
+      `MINIO_ACCESS_KEY=${minioUser}`,
+      `MINIO_SECRET_KEY=${minioPass}`,
+      `POSTGRES_USER=${pgUser}`,
+      `POSTGRES_PASSWORD=${pgPass}`,
+      `POSTGRES_DB=${dbName}`,
       `API_PORT=4000`,
       `NEXT_PUBLIC_API_URL=https://api.${tenant.slug}.${BASE_DOMAIN}/api/v1`,
       `PUBLIC_TRACKING_URL=https://${tenant.slug}.${BASE_DOMAIN}`,
@@ -249,26 +220,99 @@ export class ProvisionTenantUseCase {
     await this.docker.remove(creds, webName, true);
     await this.docker.remove(creds, webClientName, true);
 
-    // 6. Run les containers tenant via docker compose
-    // Split RAM 50/25/25 entre api, web staff et web-client public. CPU partage.
-    const apiMemoryMb = Math.floor(limits.memoryMb * 0.5);
-    const webMemoryMb = Math.floor(limits.memoryMb * 0.25);
-    const webClientMemoryMb = limits.memoryMb - apiMemoryMb - webMemoryMb;
-    const thirdCpu = Number((limits.cpuLimit / 3).toFixed(3));
+    // 6. Stack docker compose isole par tenant : postgres + redis + minio +
+    // api + web + web-client. Aucun service partage entre tenants. Les
+    // services postgres/redis/minio ne sont PAS exposes sur le host (pas de
+    // ports:) -- l'API tenant s'y connecte via le network interne du
+    // compose.
+    //
+    // Repartition CPU/RAM sur 6 services (split tres approximatif --
+    // postgres + api sont les plus gourmands) :
+    //   api          : 30% RAM, 1/3 CPU
+    //   postgres     : 25% RAM, 1/4 CPU
+    //   web          : 15% RAM, 1/8 CPU
+    //   web-client   : 15% RAM, 1/8 CPU
+    //   minio        : 10% RAM, 1/12 CPU
+    //   redis        :  5% RAM, 1/16 CPU
+    const apiMemoryMb = Math.floor(limits.memoryMb * 0.30);
+    const pgMemoryMb = Math.floor(limits.memoryMb * 0.25);
+    const webMemoryMb = Math.floor(limits.memoryMb * 0.15);
+    const webClientMemoryMb = Math.floor(limits.memoryMb * 0.15);
+    const minioMemoryMb = Math.floor(limits.memoryMb * 0.10);
+    const redisMemoryMb = Math.max(64, limits.memoryMb - apiMemoryMb - pgMemoryMb - webMemoryMb - webClientMemoryMb - minioMemoryMb);
+    const apiCpu = Number((limits.cpuLimit / 3).toFixed(3));
+    const pgCpu = Number((limits.cpuLimit / 4).toFixed(3));
+    const webCpu = Number((limits.cpuLimit / 8).toFixed(3));
+    const webClientCpu = Number((limits.cpuLimit / 8).toFixed(3));
+    const minioCpu = Number((limits.cpuLimit / 12).toFixed(3));
+    const redisCpu = Number(Math.max(0.05, limits.cpuLimit / 16).toFixed(3));
+
+    const pgName = `tenant-${tenant.slug}-postgres`;
+    const redisName = `tenant-${tenant.slug}-redis`;
+    const minioName = `tenant-${tenant.slug}-minio`;
+    const networkName = `tenant-${tenant.slug}-net`;
     // (composeFilePath / composeProjectName deja declares lors du cleanup
     // a l'etape 5). On reutilise les memes valeurs.
     const composeYaml = `services:
+  postgres:
+    container_name: ${pgName}
+    image: postgres:16-alpine
+    env_file:
+      - ${envFile}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - tenant
+    cpus: ${pgCpu}
+    mem_limit: ${pgMemoryMb}m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  redis:
+    container_name: ${redisName}
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    volumes:
+      - redisdata:/data
+    restart: unless-stopped
+    networks:
+      - tenant
+    cpus: ${redisCpu}
+    mem_limit: ${redisMemoryMb}m
+  minio:
+    container_name: ${minioName}
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    env_file:
+      - ${envFile}
+    volumes:
+      - miniodata:/data
+    restart: unless-stopped
+    networks:
+      - tenant
+    cpus: ${minioCpu}
+    mem_limit: ${minioMemoryMb}m
   api:
     container_name: ${apiName}
     image: ${apiImage}
     env_file:
       - ${envFile}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
     ports:
       - "127.0.0.1:${apiPort}:4000"
     restart: unless-stopped
     networks:
-      - optipack-shared
-    cpus: ${thirdCpu}
+      - tenant
+    cpus: ${apiCpu}
     mem_limit: ${apiMemoryMb}m
   web:
     container_name: ${webName}
@@ -282,8 +326,8 @@ export class ProvisionTenantUseCase {
       - "127.0.0.1:${webPort}:3000"
     restart: unless-stopped
     networks:
-      - optipack-shared
-    cpus: ${thirdCpu}
+      - tenant
+    cpus: ${webCpu}
     mem_limit: ${webMemoryMb}m
   web-client:
     container_name: ${webClientName}
@@ -298,19 +342,24 @@ export class ProvisionTenantUseCase {
       - "127.0.0.1:${webClientPort}:3001"
     restart: unless-stopped
     networks:
-      - optipack-shared
-    cpus: ${thirdCpu}
+      - tenant
+    cpus: ${webClientCpu}
     mem_limit: ${webClientMemoryMb}m
 networks:
-  optipack-shared:
-    external: true
+  tenant:
+    name: ${networkName}
+volumes:
+  pgdata:
+    name: tenant-${tenant.slug}-pgdata
+  redisdata:
+    name: tenant-${tenant.slug}-redisdata
+  miniodata:
+    name: tenant-${tenant.slug}-miniodata
 `;
 
     await log(`[provision] docker compose up tenant ${tenant.slug}`);
-    await this.ssh.exec(
-      creds,
-      'docker network inspect optipack-shared >/dev/null 2>&1 || docker network create optipack-shared',
-    );
+    // Le network est cree par compose (declaration `networks:` dans le YAML),
+    // pas besoin de pre-creation. La stack est entierement isolee.
     await this.docker.composeUp(creds, composeFilePath, composeYaml, composeProjectName);
 
     // 7. Run prisma migrate deploy dans le container.
@@ -464,5 +513,32 @@ rm -f ${tmpScript} ${tmpData}
     });
     await log(`[provision] DONE tenant=${tenant.slug} ACTIVE`);
     logger.info({ tenantId, slug: tenant.slug }, '[provision] tenant ready');
+  }
+
+  /**
+   * Lit le fichier .env d'un tenant sur le VPS et retourne un dict
+   * KEY=VALUE. Permet de reutiliser les credentials (postgres, jwt, minio)
+   * sur les re-provisionings -- sinon le volume postgres persistant garde
+   * l'ancien user/pass et l'API n'arrive plus a se connecter.
+   *
+   * Retourne null si le fichier n'existe pas (premier provision).
+   */
+  private async readExistingEnv(
+    creds: SshConnection,
+    envFile: string,
+  ): Promise<Record<string, string> | null> {
+    const r = await this.ssh.exec(creds, `test -f ${envFile} && cat ${envFile} || echo __NOFILE__`);
+    if (r.code !== 0) return null;
+    const out = (r.stdout || '').trim();
+    if (out === '__NOFILE__' || out === '') return null;
+    const result: Record<string, string> = {};
+    for (const line of out.split('\n')) {
+      const idx = line.indexOf('=');
+      if (idx <= 0) continue;
+      const k = line.slice(0, idx).trim();
+      const v = line.slice(idx + 1);
+      if (k) result[k] = v;
+    }
+    return result;
   }
 }
