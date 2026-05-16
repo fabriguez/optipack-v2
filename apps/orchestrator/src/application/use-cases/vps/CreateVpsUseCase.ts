@@ -3,6 +3,8 @@ import { prisma } from '../../../config/database';
 import { SshKeyEncryption } from '../../../infrastructure/crypto/SshKeyEncryption';
 import { SSHService, SSH_SERVICE } from '../../../infrastructure/ssh/SSHService';
 import { BusinessError, ConflictError } from '../../../domain/errors/BusinessError';
+import { VpsBootstrapService } from '../../services/VpsBootstrapService';
+import { logger } from '../../../infrastructure/logger';
 
 // Schemas migres dans @transitsoftservices/ops-schemas (partages avec ops-admin).
 import { createVpsSchema, type CreateVpsInput } from '@transitsoftservices/ops-schemas';
@@ -10,7 +12,10 @@ export { createVpsSchema, type CreateVpsInput };
 
 @injectable()
 export class CreateVpsUseCase {
-  constructor(@inject(SSH_SERVICE) private ssh: SSHService) {}
+  constructor(
+    @inject(SSH_SERVICE) private ssh: SSHService,
+    private bootstrap: VpsBootstrapService,
+  ) {}
 
   async execute(input: CreateVpsInput) {
     // Test la connexion AVANT de creer le record (sinon on laisse une SSH key
@@ -79,6 +84,33 @@ export class CreateVpsUseCase {
         lastSeenAt: new Date(),
       },
     });
+
+    // Bootstrap auto : installe Docker + Caddy + Git + UFW si demande.
+    // Active par defaut (anciennement les admins devaient le faire a la main
+    // via doc vps-setup.md). On peut desactiver par tenant en passant
+    // input.autoBootstrap=false ou via OPS_VPS_AUTO_BOOTSTRAP=false en env.
+    const wantBootstrap =
+      (input as { autoBootstrap?: boolean }).autoBootstrap ??
+      process.env.OPS_VPS_AUTO_BOOTSTRAP !== 'false';
+    if (wantBootstrap) {
+      const autoEnableUfw =
+        (input as { autoEnableUfw?: boolean }).autoEnableUfw ??
+        process.env.OPS_UFW_AUTO_ENABLE === 'true';
+      try {
+        const report = await this.bootstrap.bootstrap(
+          { host: input.host, port: input.port, username: input.username, sshKeyEncrypted },
+          { autoEnableUfw },
+        );
+        logger.info({ vpsId: vps.id, report }, '[vps] bootstrap done');
+      } catch (err) {
+        // Non bloquant : admin peut reessayer via endpoint dedie. Le VPS est
+        // deja enregistre, il reste utilisable si Docker/Caddy sont deja la.
+        logger.warn(
+          { vpsId: vps.id, err: err instanceof Error ? err.message : String(err) },
+          '[vps] bootstrap failed (non bloquant)',
+        );
+      }
+    }
 
     return this.toPublic(vps);
   }

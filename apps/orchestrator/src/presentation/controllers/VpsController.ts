@@ -2,6 +2,8 @@ import type { Request, Response, NextFunction } from 'express';
 import { container } from '../../container';
 import { CreateVpsUseCase, createVpsSchema } from '../../application/use-cases/vps/CreateVpsUseCase';
 import { VpsQueryService, updateVpsSchema } from '../../application/use-cases/vps/VpsQueryService';
+import { VpsBootstrapService } from '../../application/services/VpsBootstrapService';
+import { prisma } from '../../config/database';
 import { AuditLogger } from '../../application/services/AuditLogger';
 import { parsePagination, paginated } from '../../application/utils/pagination';
 
@@ -97,6 +99,40 @@ export class VpsController {
       const svc = container.resolve(VpsQueryService);
       const results = await svc.refreshAllUsage();
       res.json({ success: true, data: results });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * POST /ops/vps/:id/bootstrap -- rejoue l'installation Docker/Caddy/UFW
+   * sur un VPS existant. Idempotent (les etapes deja faites sont skippees).
+   * Utile si le bootstrap automatique a partiellement echoue a la creation.
+   */
+  static async bootstrap(req: Request, res: Response, next: NextFunction) {
+    try {
+      const vps = await prisma.vPS.findUnique({ where: { id: req.params.id } });
+      if (!vps) {
+        res.status(404).json({ success: false, message: 'VPS introuvable' });
+        return;
+      }
+      const autoEnableUfw = req.body?.autoEnableUfw === true;
+      const report = await container.resolve(VpsBootstrapService).bootstrap(
+        {
+          host: vps.host,
+          port: vps.port,
+          username: vps.username,
+          sshKeyEncrypted: vps.sshKeyEncrypted,
+        },
+        { autoEnableUfw },
+      );
+      await container.resolve(AuditLogger).log(req, {
+        action: 'VPS_BOOTSTRAPPED',
+        entityType: 'VPS',
+        entityId: req.params.id,
+        payload: { autoEnableUfw, report } as Record<string, unknown>,
+      });
+      res.json({ success: true, data: report });
     } catch (err) {
       next(err);
     }
