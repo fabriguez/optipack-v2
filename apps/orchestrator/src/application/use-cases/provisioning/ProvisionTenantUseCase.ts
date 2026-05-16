@@ -382,18 +382,45 @@ true`;
     // pas besoin de pre-creation. La stack est entierement isolee.
     await this.docker.composeUp(creds, composeFilePath, composeYaml, composeProjectName);
 
-    // 7. Run prisma migrate deploy dans le container.
+    // 7. Sync schema BDD dans le container API.
     //
-    // L'image API n'a pas forcement pnpm (build prod = node only). On essaye
-    // `npx prisma` puis `node_modules/.bin/prisma` puis `pnpm prisma` en
-    // fallback. Avant, le warn ne montrait que stderr -> message vide quand
-    // l'echec etait dans stdout (ex: "pnpm: command not found").
-    await log(`[provision] prisma migrate deploy`);
-    const migrateCmd = "sh -c 'cd /app/apps/api 2>/dev/null || cd /app; if command -v prisma >/dev/null 2>&1; then prisma migrate deploy --schema=./prisma/schema.prisma; elif [ -x ./node_modules/.bin/prisma ]; then ./node_modules/.bin/prisma migrate deploy --schema=./prisma/schema.prisma; elif command -v npx >/dev/null 2>&1; then npx -y prisma migrate deploy --schema=./prisma/schema.prisma; elif command -v pnpm >/dev/null 2>&1; then pnpm prisma migrate deploy; else echo \"ERR: prisma CLI introuvable\" >&2; exit 1; fi'";
+    // L'API ne contient pas de dossier prisma/migrations (developpe via
+    // `db push` pendant le bootstrap). Du coup `prisma migrate deploy` ne
+    // fait rien -> tables jamais creees -> seed echoue P2021
+    // "public.organizations does not exist".
+    //
+    // On lance d'abord `migrate deploy` (no-op si pas de migrations) PUIS
+    // `db push --accept-data-loss=false` qui synchronise schema.prisma avec
+    // la DB. db push est idempotent : si tout est deja en place, no-op.
+    //
+    // Override possible : OPS_TENANT_DB_SYNC=migrate -> skip db push (pour
+    // les futurs deploiements quand on aura des migrations versionees).
+    await log(`[provision] prisma migrate deploy + db push`);
+    const dbSyncMode = process.env.OPS_TENANT_DB_SYNC ?? 'push';
+    const prismaResolve =
+      'if command -v prisma >/dev/null 2>&1; then PRISMA=prisma; ' +
+      'elif [ -x ./node_modules/.bin/prisma ]; then PRISMA=./node_modules/.bin/prisma; ' +
+      'elif command -v npx >/dev/null 2>&1; then PRISMA="npx -y prisma"; ' +
+      'elif command -v pnpm >/dev/null 2>&1; then PRISMA="pnpm prisma"; ' +
+      'else echo "ERR: prisma CLI introuvable" >&2; exit 1; fi';
+    const migrateSteps =
+      '$PRISMA migrate deploy --schema=./prisma/schema.prisma 2>&1 || true; ' +
+      (dbSyncMode === 'push'
+        ? '$PRISMA db push --schema=./prisma/schema.prisma --accept-data-loss=false --skip-generate'
+        : 'echo "db push skipped (OPS_TENANT_DB_SYNC=migrate)"');
+    const migrateCmd = `sh -c 'cd /app/apps/api 2>/dev/null || cd /app; ${prismaResolve}; ${migrateSteps}'`;
     const migrateResult = await this.docker.exec(creds, apiName, migrateCmd);
     if (migrateResult.code !== 0) {
       const detail = [migrateResult.stderr, migrateResult.stdout].filter(Boolean).join(' | ').trim();
       await log(`[provision] WARN migrate (code=${migrateResult.code}) : ${detail || '(no output)'}`);
+    } else {
+      // Affiche le resume du push (Prisma loggue "Your database is now in sync...")
+      const summary = (migrateResult.stdout || '')
+        .split('\n')
+        .filter((l) => l.includes('sync') || l.includes('Applied') || l.includes('No migration'))
+        .slice(-3)
+        .join(' | ');
+      if (summary) await log(`[provision] schema sync : ${summary}`);
     }
 
     // 8. Seed initial : creer Organization + admin user.
