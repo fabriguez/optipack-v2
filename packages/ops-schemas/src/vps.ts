@@ -29,5 +29,15 @@ export const updateVpsSchema = z.object({
   cpuOvercommit: z.coerce.number().min(1).optional(),
   memoryOvercommit: z.coerce.number().min(1).optional(),
   diskOvercommit: z.coerce.number().min(1).optional(),
-});
+  // Plage de ports pour les tenants (api/web/web-client). 30000-39999 par
+  // defaut. Refine global : start < end.
+  portRangeStart: z.coerce.number().int().min(1024).max(65534).optional(),
+  portRangeEnd: z.coerce.number().int().min(1025).max(65535).optional(),
+}).refine(
+  (d) =>
+    d.portRangeStart === undefined ||
+    d.portRangeEnd === undefined ||
+    d.portRangeStart < d.portRangeEnd,
+  { message: 'portRangeStart doit etre strictement inferieur a portRangeEnd', path: ['portRangeEnd'] },
+);
 export type UpdateVpsInput = z.infer<typeof updateVpsSchema>;

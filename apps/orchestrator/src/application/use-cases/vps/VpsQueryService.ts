@@ -21,6 +21,9 @@ export const updateVpsSchema = z.object({
   cpuOvercommit: z.number().min(0.5).max(5).optional(),
   memoryOvercommit: z.number().min(0.5).max(3).optional(),
   diskOvercommit: z.number().min(0.5).max(2).optional(),
+  // Plage de ports tenants editable par l'admin (PortAllocator la lit).
+  portRangeStart: z.coerce.number().int().min(1024).max(65534).optional(),
+  portRangeEnd: z.coerce.number().int().min(1025).max(65535).optional(),
   status: z.enum(['ACTIVE', 'MAINTENANCE', 'DECOMMISSIONED']).optional(),
 });
 
@@ -208,6 +211,8 @@ export class VpsQueryService {
         ...(input.cpuOvercommit !== undefined && { cpuOvercommit: input.cpuOvercommit }),
         ...(input.memoryOvercommit !== undefined && { memoryOvercommit: input.memoryOvercommit }),
         ...(input.diskOvercommit !== undefined && { diskOvercommit: input.diskOvercommit }),
+        ...(input.portRangeStart !== undefined && { portRangeStart: input.portRangeStart }),
+        ...(input.portRangeEnd !== undefined && { portRangeEnd: input.portRangeEnd }),
         ...(input.status !== undefined && { status: input.status }),
         ...(sshKeyEncrypted && { sshKeyEncrypted }),
       },

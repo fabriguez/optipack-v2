@@ -1,5 +1,5 @@
 'use client';
-import { use } from 'react';
+import { use, useState } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -33,6 +33,8 @@ interface Vps {
   totalCpu: number | null;
   totalRamMb: number | null;
   totalDiskGb: number | null;
+  portRangeStart: number | null;
+  portRangeEnd: number | null;
   lastSeenAt: string | null;
   createdAt: string;
 }
@@ -90,6 +92,13 @@ export default function VpsDetailPage({
 
   const testConnection = useMutation({
     mutationFn: async () => (await api.post(`/vps/${id}/test-connection`)).data?.data,
+  });
+  const updateVps = useMutation({
+    mutationFn: async (patch: Partial<{ portRangeStart: number; portRangeEnd: number }>) =>
+      (await api.patch(`/vps/${id}`, patch)).data?.data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['vps', id] });
+    },
   });
   const deleteVps = useMutation({
     mutationFn: async () => (await api.delete(`/vps/${id}`)).data?.data,
@@ -246,6 +255,8 @@ export default function VpsDetailPage({
         )}
       </section>
 
+      {v && <PortRangeSection vps={v} loading={updateVps.isPending} onSave={(p) => updateVps.mutate(p)} />}
+
       <section className="rounded-lg border bg-white shadow-sm">
         <h2 className="border-b px-4 py-3 text-sm font-semibold">
           Tenants sur ce VPS ({tenants.data?.length ?? 0})
@@ -359,5 +370,86 @@ function CapacityBar({
         Alloue {fmt(used)} - reserve systeme {fmt(reserved)}
       </p>
     </div>
+  );
+}
+
+/**
+ * Edit la plage de ports allouee aux tenants sur ce VPS. La plage par defaut
+ * 30000-39999 (~3333 tenants). A retrecir si le VPS heberge d'autres services
+ * sur ces ports, ou a deplacer si conflit avec une plage existante.
+ */
+function PortRangeSection({
+  vps,
+  loading,
+  onSave,
+}: {
+  vps: { portRangeStart: number | null; portRangeEnd: number | null };
+  loading: boolean;
+  onSave: (patch: { portRangeStart: number; portRangeEnd: number }) => void;
+}) {
+  const [start, setStart] = useState<number>(vps.portRangeStart ?? 30000);
+  const [end, setEnd] = useState<number>(vps.portRangeEnd ?? 39999);
+
+  const dirty = start !== (vps.portRangeStart ?? 30000) || end !== (vps.portRangeEnd ?? 39999);
+  const valid = start >= 1024 && end <= 65535 && start < end;
+  const capacity = valid ? Math.floor((end - start + 1) / 3) : 0;
+
+  return (
+    <section className="rounded-lg border bg-white p-4 shadow-sm">
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <h2 className="text-sm font-semibold">Plage de ports tenants</h2>
+          <p className="text-xs text-gray-500">
+            Utilisee par le PortAllocator pour allouer api / web / web-client (3 ports par tenant).
+          </p>
+        </div>
+        <span className="rounded bg-gray-100 px-2 py-1 text-[11px] font-mono text-gray-600">
+          ~{capacity.toLocaleString()} tenants max
+        </span>
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <label className="block text-xs">
+          <span className="mb-1 block font-medium text-gray-700">Port debut</span>
+          <input
+            type="number"
+            min={1024}
+            max={65534}
+            value={start}
+            onChange={(e) => setStart(Number(e.target.value) || 0)}
+            className="w-full rounded-md border bg-white px-3 py-1.5 text-sm font-mono"
+          />
+        </label>
+        <label className="block text-xs">
+          <span className="mb-1 block font-medium text-gray-700">Port fin</span>
+          <input
+            type="number"
+            min={1025}
+            max={65535}
+            value={end}
+            onChange={(e) => setEnd(Number(e.target.value) || 0)}
+            className="w-full rounded-md border bg-white px-3 py-1.5 text-sm font-mono"
+          />
+        </label>
+        <div className="flex items-end">
+          <button
+            type="button"
+            disabled={!dirty || !valid || loading}
+            onClick={() => onSave({ portRangeStart: start, portRangeEnd: end })}
+            className="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-md bg-primary-700 px-3 text-sm text-white hover:bg-primary-900 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {loading ? 'Enregistrement...' : 'Enregistrer la plage'}
+          </button>
+        </div>
+      </div>
+      {!valid && (
+        <p className="mt-2 text-xs text-red-600">
+          Plage invalide. Contrainte : 1024 &lt;= debut &lt; fin &lt;= 65535.
+        </p>
+      )}
+      <p className="mt-2 text-[11px] text-gray-500">
+        Astuce : reduire la plage n&apos;impacte pas les tenants deja deployes (leurs ports sont
+        persistes en BDD). Les futurs provisionings utiliseront la nouvelle plage.
+      </p>
+    </section>
   );
 }

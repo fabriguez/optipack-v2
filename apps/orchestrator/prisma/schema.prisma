@@ -72,6 +72,11 @@ model VPS {
   cpuOvercommit   Float     @default(1.5)
   memoryOvercommit Float    @default(1.2)
   diskOvercommit  Float     @default(1.0)
+  // Plage de ports allouee aux tenants (api/web/web-client). Editable depuis
+  // l'UI ops. Defaut 30000-39999 (~3333 tenants max). A elargir si saturation
+  // ou retrecir si le VPS heberge autre chose sur ces ports.
+  portRangeStart  Int       @default(30000)
+  portRangeEnd    Int       @default(39999)
   // Derniere telemetrie (mise a jour par le worker vps-monitor)
   lastSeenAt      DateTime?
   cpuUsagePct     Float?
