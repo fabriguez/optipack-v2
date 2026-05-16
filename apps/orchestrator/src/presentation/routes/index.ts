@@ -59,6 +59,7 @@ router.patch('/tenants/:id', authenticateOps, TenantController.update);
 router.post('/tenants/:id/freeze', authenticateOps, TenantController.freeze);
 router.post('/tenants/:id/unfreeze', authenticateOps, TenantController.unfreeze);
 router.post('/tenants/:id/archive', authenticateOps, requireSuperAdmin, TenantController.archive);
+router.delete('/tenants/:id/purge', authenticateOps, requireSuperAdmin, TenantController.purge);
 router.post('/tenants/:id/migrate', authenticateOps, requireSuperAdmin, TenantController.migrate);
 router.post('/tenants/:id/upgrade', authenticateOps, BillingController.requestUpgrade);
 router.get('/tenants/:id/jobs', authenticateOps, TenantController.listJobs);

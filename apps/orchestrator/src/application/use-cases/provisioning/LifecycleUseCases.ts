@@ -2,7 +2,7 @@ import { inject, injectable } from 'tsyringe';
 import { prisma } from '../../../config/database';
 import { DockerService, DOCKER_SERVICE } from '../../../infrastructure/docker/DockerService';
 import { CaddyService, CADDY_SERVICE, type TenantCaddyEntry } from '../../../infrastructure/caddy/CaddyService';
-import { SshConnection } from '../../../infrastructure/ssh/SSHService';
+import { SSHService, SSH_SERVICE, type SshConnection } from '../../../infrastructure/ssh/SSHService';
 import { ProvisioningJobLogger } from './ProvisioningJobLogger';
 import { BusinessError, NotFoundError } from '../../../domain/errors/BusinessError';
 
@@ -162,6 +162,7 @@ export class DeleteTenantUseCase {
   constructor(
     @inject(DOCKER_SERVICE) private docker: DockerService,
     @inject(CADDY_SERVICE) private caddy: CaddyService,
+    @inject(SSH_SERVICE) private ssh: SSHService,
     private jobLogger: ProvisioningJobLogger,
   ) {}
 
@@ -170,22 +171,75 @@ export class DeleteTenantUseCase {
     const { tenant, creds } = await getCredsAndTenant(tenantId);
     await log(`[delete] start tenant=${tenant.slug}`);
 
-    // 1. Stop + remove containers
-    await this.docker.remove(creds, `tenant-${tenant.slug}-api`, true);
-    await this.docker.remove(creds, `tenant-${tenant.slug}-web`, true);
-    await log(`[delete] containers removed`);
+    const slug = tenant.slug;
+    const composeFilePath = `/tmp/tenant-${slug}-compose.yml`;
+    const composeProjectName = `tenant-${slug}`;
+    const envFile = `~/.optipack/tenant-${slug}.env`;
+    const allContainers = [
+      `tenant-${slug}-api`,
+      `tenant-${slug}-web`,
+      `tenant-${slug}-web-client`,
+      `tenant-${slug}-postgres`,
+      `tenant-${slug}-redis`,
+      `tenant-${slug}-minio`,
+    ];
+    const volumes = [
+      `tenant-${slug}-pgdata`,
+      `tenant-${slug}-redisdata`,
+      `tenant-${slug}-miniodata`,
+    ];
+    const networkName = `tenant-${slug}-net`;
 
-    // 2. Drop DB tenant (DESTRUCTIF - pas de retour en arriere)
-    const dbName = tenant.dbName ?? `tenant_${tenant.slug.replace(/-/g, '_')}_db`;
+    // 1. compose down avec --remove-orphans + -v (volumes) + --rmi local
+    //    (images sans tag, ne touche pas postgres/redis/minio officielles).
+    //    Sans ca, le rollback post-fail laissait des conteneurs zombies
+    //    qui retenaient les ports + volumes orphelins.
+    await this.ssh
+      .exec(
+        creds,
+        `docker compose -p ${composeProjectName} -f ${composeFilePath} down --remove-orphans -t 5 -v --rmi local 2>/dev/null || true`,
+      )
+      .catch(() => {/* noop */});
+
+    // 2. Force-remove tous les containers (garde-fou si compose file absent)
+    for (const c of allContainers) {
+      await this.docker.remove(creds, c, true).catch(() => {/* noop */});
+    }
+    await log(`[delete] containers removed (api/web/web-client/postgres/redis/minio)`);
+
+    // 3. Remove volumes nommes (donnees tenant). Idempotent.
+    await this.ssh
+      .exec(
+        creds,
+        `for v in ${volumes.join(' ')}; do docker volume rm -f "$v" 2>/dev/null || true; done`,
+      )
+      .catch(() => {/* noop */});
+    await log(`[delete] volumes removed (pgdata/redisdata/miniodata)`);
+
+    // 4. Remove network compose
+    await this.ssh
+      .exec(creds, `docker network rm ${networkName} 2>/dev/null || true`)
+      .catch(() => {/* noop */});
+
+    // 5. Cleanup fichiers : env + compose + seed
+    await this.ssh
+      .exec(
+        creds,
+        `rm -f ${composeFilePath} ${envFile} /tmp/seed-${slug}.js /tmp/seed-${slug}.json 2>/dev/null || true`,
+      )
+      .catch(() => {/* noop */});
+    await log(`[delete] files cleaned (compose + env + seed)`);
+
+    // 6. (Legacy) Drop DB partagee si jamais le tenant utilisait l'ancien
+    //    schema (shared postgres). No-op pour les tenants neufs (chaque
+    //    tenant a son propre container postgres, vire au step 1).
+    const dbName = tenant.dbName ?? `tenant_${slug.replace(/-/g, '_')}_db`;
     await this.docker
       .exec(creds, 'postgres', `psql -U \${POSTGRES_USER:-postgres} -c 'DROP DATABASE IF EXISTS "${dbName}"'`)
       .catch(() => {/* best-effort */});
-    await log(`[delete] DB ${dbName} dropped`);
+    await log(`[delete] DB ${dbName} dropped (legacy shared PG, no-op si stack isolee)`);
 
-    // 3. (TODO) Remove env file /etc/optipack/tenant-<slug>.env via SSH brut.
-    //    Peu critique : le fichier orphelin ne nuit pas et facilite un eventuel restore.
-
-    // 4. Update Caddy (retire le tenant)
+    // 7. Update Caddy (retire le tenant)
     await refreshCaddy(this.caddy, tenant.vpsId, creds);
     await log(`[delete] Caddy reloaded (tenant retire)`);
 
@@ -193,6 +247,113 @@ export class DeleteTenantUseCase {
       where: { id: tenantId },
       data: { status: 'ARCHIVED', archivedAt: new Date() },
     });
-    await log(`[delete] DONE tenant=${tenant.slug} ARCHIVED`);
+    await log(`[delete] DONE tenant=${slug} ARCHIVED`);
+  }
+}
+
+/**
+ * Suppression DEFINITIVE d'un tenant : containers + volumes + network + images
+ * locales + env file + compose file + DB Postgres orchestrator (record tenant).
+ *
+ * Difference avec DeleteTenantUseCase :
+ *  - DeleteTenant : soft, status=ARCHIVED, garde le record + tenant rows
+ *    historiques (subscriptions, jobs, etc.) pour audit.
+ *  - PurgeTenant  : hard, supprime physiquement TOUT et le record tenant
+ *    lui-meme. Aucun retour possible. Audit a faire AVANT l'appel.
+ *
+ * A reserver aux operations de nettoyage / RGPD / desabonnement explicite.
+ */
+@injectable()
+export class PurgeTenantUseCase {
+  constructor(
+    @inject(DOCKER_SERVICE) private docker: DockerService,
+    @inject(CADDY_SERVICE) private caddy: CaddyService,
+    @inject(SSH_SERVICE) private ssh: SSHService,
+    private jobLogger: ProvisioningJobLogger,
+  ) {}
+
+  async execute(tenantId: string, jobId: string): Promise<void> {
+    const log = (msg: string) => this.jobLogger.append(jobId, msg);
+    const { tenant, creds } = await getCredsAndTenant(tenantId);
+    if ((tenant as { isMain?: boolean }).isMain) {
+      throw new BusinessError('Impossible de purger le tenant principal');
+    }
+    await log(`[purge] start tenant=${tenant.slug} (HARD DELETE)`);
+
+    const slug = tenant.slug;
+    const composeFilePath = `/tmp/tenant-${slug}-compose.yml`;
+    const composeProjectName = `tenant-${slug}`;
+    const envFile = `~/.optipack/tenant-${slug}.env`;
+    const containers = [
+      `tenant-${slug}-api`,
+      `tenant-${slug}-web`,
+      `tenant-${slug}-web-client`,
+      `tenant-${slug}-postgres`,
+      `tenant-${slug}-redis`,
+      `tenant-${slug}-minio`,
+    ];
+    const volumes = [
+      `tenant-${slug}-pgdata`,
+      `tenant-${slug}-redisdata`,
+      `tenant-${slug}-miniodata`,
+    ];
+    const networkName = `tenant-${slug}-net`;
+
+    // 1. docker compose down --remove-orphans -v --rmi local
+    //    Retire containers + volumes + images locales en une seule passe.
+    //    `--rmi local` = supprime uniquement les images sans tag (build local).
+    //    Les images officielles (postgres/redis/minio/optipack-api) sont
+    //    laissees -- elles servent encore aux autres tenants.
+    await log(`[purge] docker compose down -v --remove-orphans`);
+    await this.ssh.exec(
+      creds,
+      `docker compose -p ${composeProjectName} -f ${composeFilePath} down --remove-orphans -t 5 -v --rmi local 2>/dev/null || true`,
+    );
+
+    // 2. rm -f par nom (garde-fou si compose file manque ou project deplace)
+    await log(`[purge] force-remove containers`);
+    for (const c of containers) {
+      await this.docker.remove(creds, c, true).catch(() => {/* noop */});
+    }
+
+    // 3. Volumes nommes (declares par compose avec name: explicite)
+    await log(`[purge] remove named volumes`);
+    await this.ssh.exec(
+      creds,
+      `for v in ${volumes.join(' ')}; do docker volume rm -f "$v" 2>/dev/null || true; done`,
+    );
+
+    // 4. Network compose
+    await log(`[purge] remove network ${networkName}`);
+    await this.ssh.exec(
+      creds,
+      `docker network rm ${networkName} 2>/dev/null || true`,
+    );
+
+    // 5. Cleanup fichiers VPS : compose file + env file
+    await log(`[purge] cleanup files (compose + env)`);
+    await this.ssh.exec(
+      creds,
+      `rm -f ${composeFilePath} ${envFile} /tmp/seed-${slug}.js /tmp/seed-${slug}.json 2>/dev/null || true`,
+    );
+
+    // 6. Update Caddy (retire le tenant de la config full-replace)
+    await log(`[purge] reload Caddy config sans ${slug}`);
+    await refreshCaddy(this.caddy, tenant.vpsId, creds);
+
+    // 7. Delete record tenant + cascade (subscriptions, jobs, etc. via FK)
+    //    Best-effort sur les FK qui n'ont pas onDelete: Cascade defini cote
+    //    schema. On supprime les enfants explicitement pour eviter
+    //    PrismaClientKnownRequestError P2003.
+    await log(`[purge] delete tenant record + dependances`);
+    await prisma.$transaction(async (tx) => {
+      await tx.provisioningJob.deleteMany({ where: { tenantId } });
+      await tx.planChange.deleteMany({ where: { tenantId } }).catch(() => {});
+      await tx.subscription.deleteMany({ where: { tenantId } }).catch(() => {});
+      await tx.tenantUpdateJob.deleteMany({ where: { tenantId } }).catch(() => {});
+      await tx.tenant.delete({ where: { id: tenantId } });
+    });
+
+    await log(`[purge] DONE tenant=${slug} (record supprime, volumes purges)`);
   }
 }

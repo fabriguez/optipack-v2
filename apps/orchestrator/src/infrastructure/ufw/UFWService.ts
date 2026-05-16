@@ -93,19 +93,31 @@ export class UFWService {
    * Idempotent : ufw refuse les doublons silencieusement.
    */
   async applyBaseline(creds: SshConnection): Promise<{ ok: boolean; messages: string[] }> {
+    // Self / loopback : orchestrator tourne dans un container sans acces a
+    // l'host ufw (et sans sudo TTY). On skip silencieux -- l'admin gere ufw
+    // manuellement sur la machine host. Sans ca, chaque tentative produisait
+    // 6 lignes "FAIL :" sans contexte.
+    if (creds.host === '127.0.0.1' || creds.host === 'localhost' || creds.host === '::1') {
+      return {
+        ok: true,
+        messages: ['skipped (host self : ufw doit etre configure manuellement sur la machine host)'],
+      };
+    }
+    // `sudo -n` (non-interactif) : si pas de sudoers NOPASSWD on echoue
+    // proprement plutot que d'attendre un prompt qui ne viendra jamais.
     const cmds = [
-      'sudo ufw default deny incoming',
-      'sudo ufw default allow outgoing',
-      'sudo ufw allow 22/tcp',
-      'sudo ufw allow 80/tcp',
-      'sudo ufw allow 443/tcp',
-      'sudo ufw --force enable',
+      'sudo -n ufw default deny incoming',
+      'sudo -n ufw default allow outgoing',
+      'sudo -n ufw allow 22/tcp',
+      'sudo -n ufw allow 80/tcp',
+      'sudo -n ufw allow 443/tcp',
+      'sudo -n ufw --force enable',
     ];
     const messages: string[] = [];
     let ok = true;
     for (const cmd of cmds) {
       const r = await this.ssh.exec(creds, `${cmd} 2>&1`);
-      messages.push(`${cmd} -> ${r.code === 0 ? 'OK' : 'FAIL'} : ${(r.stdout || r.stderr).trim()}`);
+      messages.push(`${cmd} -> ${r.code === 0 ? 'OK' : 'FAIL'} : ${(r.stdout || r.stderr).trim() || '(no output)'}`);
       if (r.code !== 0) ok = false;
     }
     return { ok, messages };

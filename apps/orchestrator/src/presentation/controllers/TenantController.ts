@@ -189,6 +189,26 @@ export class TenantController {
     }
   }
 
+  /**
+   * DELETE /ops/tenants/:id/purge -- destruction physique COMPLETE
+   * (containers + volumes + images locales + network + env files + record
+   * tenant). Aucun retour en arriere. Reserve super-admin.
+   */
+  static async purge(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await container.resolve(TenantUseCases).purge(req.params.id);
+      await container.resolve(AuditLogger).log(req, {
+        action: 'TENANT_PURGED',
+        entityType: 'Tenant',
+        entityId: req.params.id,
+        payload: { slug: result.slug, jobId: result.jobId } as Record<string, unknown>,
+      });
+      res.json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   static async migrate(req: Request, res: Response, next: NextFunction) {
     try {
       const targetVpsId = req.body?.targetVpsId as string | undefined;

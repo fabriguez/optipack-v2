@@ -1,7 +1,7 @@
 'use client';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { CheckCircle2, Loader2, XCircle, Clock } from 'lucide-react';
+import { CheckCircle2, Loader2, XCircle, Clock, Copy, Download, ArrowDown, Maximize2, Minimize2, Check } from 'lucide-react';
 import { api } from '@/lib/api';
 
 interface Job {
@@ -29,6 +29,8 @@ interface Props {
  */
 export function JobLogsViewer({ tenantId, jobId, stopOnTerminal = true }: Props) {
   const preRef = useRef<HTMLPreElement>(null);
+  const [copied, setCopied] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
 
   const { data: job, isLoading, error } = useQuery<Job>({
     queryKey: ['tenant', tenantId, 'job', jobId],
@@ -80,8 +82,36 @@ export function JobLogsViewer({ tenantId, jobId, stopOnTerminal = true }: Props)
       ? 'text-blue-600 bg-blue-50 border-blue-200'
       : 'text-gray-600 bg-gray-50 border-gray-200';
 
+  const logsText = job.logs || '';
+
+  const copyLogs = async () => {
+    try {
+      await navigator.clipboard.writeText(logsText);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {/* clipboard refuse */}
+  };
+  const downloadLogs = () => {
+    const blob = new Blob([logsText], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `job-${job.id.slice(0, 8)}-${job.type.toLowerCase()}.log`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+  const scrollBottom = () => {
+    if (preRef.current) preRef.current.scrollTop = preRef.current.scrollHeight;
+  };
+
   return (
-    <div className="rounded-lg border bg-white shadow-sm">
+    <div
+      className={
+        fullscreen
+          ? 'fixed inset-0 z-50 flex flex-col bg-white shadow-2xl'
+          : 'rounded-lg border bg-white shadow-sm'
+      }
+    >
       <div className="flex items-center justify-between border-b px-4 py-2">
         <div className="flex items-center gap-2">
           <span
@@ -96,17 +126,32 @@ export function JobLogsViewer({ tenantId, jobId, stopOnTerminal = true }: Props)
             {job.status}
           </span>
           <span className="text-xs text-gray-500">{job.type}</span>
+          <span className="font-mono text-[10px] text-gray-400">{job.id.slice(0, 8)}...</span>
         </div>
-        <span className="font-mono text-[10px] text-gray-400">
-          {job.id.slice(0, 8)}...
-        </span>
+        <div className="flex items-center gap-1">
+          <ToolbarBtn label={copied ? 'Copie !' : 'Copier les logs'} onClick={copyLogs}>
+            {copied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+          </ToolbarBtn>
+          <ToolbarBtn label="Telecharger .log" onClick={downloadLogs}>
+            <Download className="h-3.5 w-3.5" />
+          </ToolbarBtn>
+          <ToolbarBtn label="Scroll en bas" onClick={scrollBottom}>
+            <ArrowDown className="h-3.5 w-3.5" />
+          </ToolbarBtn>
+          <ToolbarBtn label={fullscreen ? 'Quitter plein ecran' : 'Plein ecran'} onClick={() => setFullscreen((v) => !v)}>
+            {fullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+          </ToolbarBtn>
+        </div>
       </div>
 
       <pre
         ref={preRef}
-        className="max-h-[60vh] overflow-auto bg-gray-900 p-4 text-[12px] leading-relaxed text-gray-100"
+        className={
+          'overflow-auto bg-gray-900 p-4 text-[12px] leading-relaxed text-gray-100 ' +
+          (fullscreen ? 'flex-1' : 'max-h-[60vh]')
+        }
       >
-{job.logs || '(en attente de la 1ere ligne de log...)'}
+{logsText || '(en attente de la 1ere ligne de log...)'}
       </pre>
 
       {job.errorMessage && (
@@ -116,5 +161,27 @@ export function JobLogsViewer({ tenantId, jobId, stopOnTerminal = true }: Props)
         </div>
       )}
     </div>
+  );
+}
+
+function ToolbarBtn({
+  label,
+  onClick,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+      className="inline-flex h-7 w-7 items-center justify-center rounded border bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+    >
+      {children}
+    </button>
   );
 }

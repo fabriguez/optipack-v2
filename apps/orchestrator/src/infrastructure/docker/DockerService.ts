@@ -28,11 +28,19 @@ export class DockerService {
   constructor(@inject(SSH_SERVICE) private ssh: SSHService) {}
 
   async loginGhcr(creds: SshConnection, username: string, token: string): Promise<void> {
+    if (!username || !token) {
+      throw new Error(
+        'docker login ghcr.io impossible : OPS_GHCR_USERNAME ou OPS_GHCR_TOKEN absent cote orchestrator.',
+      );
+    }
     // Echappement minimal - le token est cense etre alphanumerique
     const cmd = `echo '${token.replace(/'/g, "")}' | docker login ghcr.io -u '${username}' --password-stdin`;
     const r = await this.ssh.exec(creds, cmd);
     if (r.code !== 0) {
-      throw new Error(`docker login ghcr.io echoue : ${r.stderr || r.stdout}`);
+      const detail = (r.stderr || r.stdout || '').trim();
+      throw new Error(
+        `docker login ghcr.io echoue (exit=${r.code}) : ${detail || '(no stderr/stdout -- docker CLI absent du container ? socket non monte ? user/token vides ?)'}`,
+      );
     }
   }
 

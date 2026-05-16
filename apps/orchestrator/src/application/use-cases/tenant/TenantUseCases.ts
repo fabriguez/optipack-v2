@@ -7,6 +7,7 @@ import {
   freezeQueue,
   unfreezeQueue,
   deleteQueue,
+  purgeQueue,
   migrateQueue,
 } from '../../../infrastructure/queue/queues';
 
@@ -313,6 +314,26 @@ export class TenantUseCases {
     await deleteQueue.add('delete', { tenantId: id, provisioningJobId: job.id }, { jobId: job.id });
 
     return tenant;
+  }
+
+  /**
+   * Suppression DEFINITIVE : appelle PurgeTenantUseCase via la queue PURGE.
+   * Le record tenant + volumes + images locales + env files sont detruits.
+   * Aucun retour en arriere possible. Reserve aux super-admins.
+   */
+  async purge(id: string) {
+    const tenant = await prisma.tenant.findUnique({ where: { id } });
+    if (!tenant) throw new NotFoundError('Tenant', id);
+    if ((tenant as { isMain?: boolean }).isMain) {
+      throw new BusinessError('Impossible de purger le tenant principal');
+    }
+
+    const job = await prisma.provisioningJob.create({
+      data: { tenantId: id, type: 'PURGE', payload: {}, status: 'queued' },
+    });
+    await purgeQueue.add('purge', { tenantId: id, provisioningJobId: job.id }, { jobId: job.id });
+
+    return { id, jobId: job.id, slug: tenant.slug };
   }
 
   /**

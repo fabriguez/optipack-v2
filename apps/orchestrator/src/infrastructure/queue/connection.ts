@@ -17,6 +17,7 @@ export const QUEUE_NAMES = {
   FREEZE: 'tenant-freeze',
   UNFREEZE: 'tenant-unfreeze',
   DELETE: 'tenant-delete',
+  PURGE: 'tenant-purge',
   MIGRATE: 'tenant-migrate',
   UPDATE: 'tenant-update',
   ROLLBACK: 'tenant-rollback',

@@ -14,6 +14,7 @@ import {
   FreezeTenantUseCase,
   UnfreezeTenantUseCase,
   DeleteTenantUseCase,
+  PurgeTenantUseCase,
 } from '../../../application/use-cases/provisioning/LifecycleUseCases';
 import { MigrateTenantUseCase } from '../../../application/use-cases/provisioning/MigrateTenantUseCase';
 import {
@@ -144,6 +145,22 @@ export function startProvisioningWorkers(): Worker[] {
       async (bullJob) => {
         await withJobLogger(bullJob, async () => {
           await container.resolve(DeleteTenantUseCase).execute(bullJob.data.tenantId, bullJob.data.provisioningJobId);
+        });
+      },
+      workerOpts,
+    ),
+  );
+
+  // PURGE (hard delete : containers + volumes + images locales + network +
+  // env files + record tenant supprime de la DB orchestrator)
+  workers.push(
+    new Worker<LifecycleJobData>(
+      QUEUE_NAMES.PURGE,
+      async (bullJob) => {
+        await withJobLogger(bullJob, async () => {
+          await container
+            .resolve(PurgeTenantUseCase)
+            .execute(bullJob.data.tenantId, bullJob.data.provisioningJobId);
         });
       },
       workerOpts,
