@@ -3,6 +3,7 @@ import { prisma } from '../../../config/database';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
 import { generateReference } from '@transitsoftservices/shared';
 import { emailService } from '../../../infrastructure/email/EmailService';
+import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 import { config } from '../../../config';
 
 interface ParcelInGroupInput {
@@ -211,8 +212,8 @@ export class GenerateGroupInvoiceUseCase {
     const count = await prisma.invoice.count({ where: { agencyId: group.agencyId } });
     const reference = generateReference('FCT-GRP', count + 1);
 
-    return prisma.$transaction(async (tx) => {
-      const invoice = await tx.invoice.create({
+    const invoice = await prisma.$transaction(async (tx) => {
+      const invoiceTx = await tx.invoice.create({
         data: {
           reference,
           clientId: group.clientId,
@@ -225,14 +226,33 @@ export class GenerateGroupInvoiceUseCase {
       });
       await tx.parcel.updateMany({
         where: { parcelGroupId: group.id },
-        data: { invoiceId: invoice.id },
+        data: { invoiceId: invoiceTx.id },
       });
       await tx.parcelGroup.update({
         where: { id: group.id },
         data: { status: 'FINALIZED' },
       });
-      return invoice;
+      return invoiceTx;
     });
+
+    // Emit invoice created event for notifications
+    try {
+      eventBus.emit({
+        type: DomainEvents.INVOICE_CREATED,
+        payload: {
+          invoiceId: invoice.id,
+          reference: invoice.reference,
+          clientId: invoice.clientId,
+          agencyId: invoice.agencyId,
+          totalAmount: invoice.totalAmount,
+        },
+        timestamp: new Date(),
+      });
+    } catch (e) {
+      // non blocking
+    }
+
+    return invoice;
   }
 }
 

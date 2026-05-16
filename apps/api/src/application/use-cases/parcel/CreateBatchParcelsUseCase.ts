@@ -103,6 +103,23 @@ export class CreateBatchParcelsUseCase {
       agency: { connect: { id: warehouse.agencyId } },
     });
 
+    // Emit invoice.created so notification handlers can act (client + admins)
+    try {
+      eventBus.emit({
+        type: DomainEvents.INVOICE_CREATED,
+        payload: {
+          invoiceId: invoice.id,
+          reference: invoice.reference,
+          clientId: invoice.clientId,
+          agencyId: invoice.agencyId,
+          totalAmount: invoice.totalAmount,
+        },
+        timestamp: new Date(),
+      });
+    } catch (e) {
+      // non blocking
+    }
+
     // Creation des colis attaches a cette facture
     const created = [];
     for (const p of computed) {

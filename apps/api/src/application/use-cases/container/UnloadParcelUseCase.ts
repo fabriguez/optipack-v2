@@ -4,6 +4,7 @@ import { PARCEL_REPOSITORY, type IParcelRepository } from '../../interfaces/IPar
 import { WAREHOUSE_REPOSITORY, type IWarehouseRepository } from '../../interfaces/IWarehouseRepository';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
 import { HistoryService } from '../../services/HistoryService';
+import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 import { prisma } from '../../../config/database';
 
 interface UnloadResult {
@@ -201,6 +202,25 @@ export class UnloadParcelUseCase {
       parcelTrackingSnapshot: parcel.trackingNumber,
       metadata: options?.newWeight ? { newWeight: options.newWeight, previousWeight: parcelWeight } : null,
     });
+
+    // Emit parcel unloaded event for notifications (client + agency)
+    try {
+      eventBus.emit({
+        type: DomainEvents.PARCEL_UNLOADED,
+        payload: {
+          parcelId,
+          action,
+          containerId,
+          trackingNumber: parcel.trackingNumber,
+          clientId: parcel.clientId,
+          agencyId: container.arrivalAgencyId,
+        },
+        timestamp: new Date(),
+        userId,
+      });
+    } catch (e) {
+      // non blocking
+    }
 
     return {
       parcelId,

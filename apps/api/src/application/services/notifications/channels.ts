@@ -77,12 +77,8 @@ export async function deliverEmail(
   }
 
   try {
-    // Email simple texte. L'EmailService a des methodes specialisees pour des
-    // templates riches ; pour l'instant on utilise un envoi generique.
-    await (emailService as unknown as {
-      sendGeneric?: (to: string, subject: string, body: string) => Promise<void>;
-      sendEmail?: (to: string, subject: string, body: string) => Promise<void>;
-    }).sendEmail?.(to, payload.title, payload.message);
+    // Email simple texte. L'EmailService propose une methode generique unique.
+    await emailService.send(to, payload.title, payload.message);
     const row = await prisma.notification.create({
       data: {
         userId: target.userId ?? null,

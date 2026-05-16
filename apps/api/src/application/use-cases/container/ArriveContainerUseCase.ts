@@ -73,6 +73,24 @@ export class ArriveContainerUseCase {
       userId,
     });
 
+    // Emit parcel status change events for each parcel (IN_TRANSIT -> ARRIVED)
+    try {
+      for (const p of parcels) {
+        try {
+          eventBus.emit({
+            type: DomainEvents.PARCEL_STATUS_CHANGED,
+            payload: { parcelId: p.id, oldStatus: 'IN_TRANSIT', newStatus: 'ARRIVED', trackingNumber: p.trackingNumber },
+            timestamp: new Date(),
+            userId,
+          });
+        } catch (e) {
+          // non blocking
+        }
+      }
+    } catch (e) {
+      // non blocking
+    }
+
     return { containerId, parcelCount: parcelIds.length, status: 'RECEIVED' };
   }
 }

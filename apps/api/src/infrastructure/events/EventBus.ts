@@ -81,4 +81,6 @@ export const DomainEvents = {
   CLIENT_LOYALTY_UPDATED: 'client.loyaltyUpdated',
 
   NOTIFICATION_SEND: 'notification.send',
+
+  
 } as const;

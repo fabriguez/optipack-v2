@@ -6,7 +6,11 @@ import { emailService } from '../../email/EmailService';
 import { createChildLogger } from '../../../config/logger';
 import { realtimeService } from '../../realtime/RealtimeService';
 import { notificationService } from '../../../application/services/notifications/NotificationService';
-import type { NotificationChannel } from '../../../application/services/notifications/types';
+import type {
+  NotificationChannel,
+  NotificationPayload,
+  NotificationTarget,
+} from '../../../application/services/notifications/types';
 import { filterChannelsByPrefs } from '../../../application/services/notifications/preferences';
 
 /**
@@ -104,6 +108,24 @@ async function getClientEmail(clientId: string): Promise<string | null> {
   }
 }
 
+async function getAgencyAdminEmails(agencyId: string): Promise<string[]> {
+  try {
+    const users = await prisma.user.findMany({
+      where: {
+        isActive: true,
+        email: { not: '' },
+        role: { in: ['ADMIN', 'SUPER_ADMIN'] as any },
+        userAgencies: { some: { agencyId } },
+      },
+      select: { email: true },
+    });
+    return users.map((u) => u.email).filter(Boolean) as string[];
+  } catch (e) {
+    return [];
+  }
+}
+
+
 function registerHandlers() {
   // PARCEL_CREATED -> notify client "Colis enregistre"
   eventBus.on(DomainEvents.PARCEL_CREATED, async (event: DomainEvent) => {
@@ -133,6 +155,16 @@ function registerHandlers() {
           String(price || ''),
         );
       }
+    }
+
+    // Copy to agency admins
+    try {
+      const adminEmails = agencyId ? await getAgencyAdminEmails(agencyId) : [];
+      for (const e of adminEmails) {
+        await emailService.send(e, `Nouveau colis ${trackingNumber || ''}`, `<p>Colis ${designation || ''} enregistre. Suivi: ${trackingNumber || ''}</p>`);
+      }
+    } catch (err) {
+      logger.warn({ err }, 'Echec envoi email admins PARCEL_CREATED');
     }
 
     // SMS / WhatsApp (skipped si providers non configures).
@@ -170,10 +202,18 @@ function registerHandlers() {
         message: `Votre colis "${designation || ''}" (${trackingNumber || ''}) a ete livre avec succes.`,
         metadata: { trackingNumber, newStatus } as Prisma.InputJsonValue,
       });
+    } else if (newStatus === 'IN_TRANSIT') {
+      await createNotification({
+        clientId,
+        agencyId: agencyId || event.agencyId,
+        title: 'Colis en transit',
+        message: `Votre colis "${designation || ''}" (${trackingNumber || ''}) est desormais en transit.`,
+        metadata: { trackingNumber, newStatus } as Prisma.InputJsonValue,
+      });
     }
 
-    // Try to send email for any status change
-    if (clientId && (newStatus === 'ARRIVED' || newStatus === 'DELIVERED')) {
+    // Try to send email for any status change (including IN_TRANSIT)
+    if (clientId && (newStatus === 'ARRIVED' || newStatus === 'DELIVERED' || newStatus === 'IN_TRANSIT')) {
       const email = await getClientEmail(clientId);
       if (email) {
         await emailService.sendParcelStatusChanged(
@@ -183,6 +223,18 @@ function registerHandlers() {
           newStatus,
         );
       }
+    }
+
+    // Send admin copies for significant status changes (IN_TRANSIT/ARRIVED/DELIVERED)
+    try {
+      const adminEmails = agencyId ? await getAgencyAdminEmails(agencyId) : [];
+      if (adminEmails.length > 0 && (newStatus === 'IN_TRANSIT' || newStatus === 'ARRIVED' || newStatus === 'DELIVERED')) {
+        for (const e of adminEmails) {
+          await emailService.send(e, `Statut colis ${trackingNumber || ''}: ${newStatus}`, `<p>Colis ${designation || ''} (${trackingNumber || ''}) statut: ${newStatus}</p>`);
+        }
+      }
+    } catch (err) {
+      logger.warn({ err }, 'Echec envoi email admins PARCEL_STATUS_CHANGED');
     }
 
     // SMS / WhatsApp pour les changements significatifs.
@@ -284,6 +336,189 @@ function registerHandlers() {
         metadata: { trackingNumber, totalAmount, days, kind: 'PENALTY_APPLIED' },
       },
     );
+  });
+
+  // NOTIFICATION_SEND -> dispatch via le service de notification multi-canal
+  eventBus.on(DomainEvents.NOTIFICATION_SEND, async (event: DomainEvent) => {
+    const { target, payload } = event.payload as {
+      target?: NotificationTarget;
+      payload?: NotificationPayload;
+    };
+
+    if (!target || !payload) {
+      logger.warn({ payload: event.payload }, 'Notification send event invalid');
+      return;
+    }
+
+    await notificationService.notify(target, payload);
+  });
+
+  // PARCEL_LOADED -> notify client that parcel was loaded into a container
+  eventBus.on(DomainEvents.PARCEL_LOADED, async (event: DomainEvent) => {
+    const { parcelId, clientId, trackingNumber, designation, agencyId } =
+      event.payload as Record<string, any>;
+
+    if (!clientId) return;
+
+    await createNotification({
+      clientId,
+      agencyId: agencyId || event.agencyId,
+      title: 'Colis charge',
+      message: `Votre colis "${designation || ''}" (${trackingNumber || ''}) a ete charge pour expedition.`,
+      metadata: { parcelId, trackingNumber } as Prisma.InputJsonValue,
+    });
+
+    const email = await getClientEmail(clientId);
+    if (email) {
+      await emailService.send(
+        email,
+        `Colis ${trackingNumber || ''} charge`,
+        `<p>Bonjour,</p><p>Votre colis <strong>${designation || ''}</strong> (${trackingNumber || ''}) a ete charge dans un conteneur pour expedition.</p>`,
+      );
+    }
+  });
+
+  // PARCEL_UNLOADED -> notify client when parcel is unloaded (received / not_found / modified)
+  eventBus.on(DomainEvents.PARCEL_UNLOADED, async (event: DomainEvent) => {
+    const { parcelId, clientId, action, trackingNumber, agencyId } = event.payload as Record<string, any>;
+    if (!clientId) return;
+
+    const title = action === 'received' ? 'Colis decharge' : action === 'not_found' ? 'Colis non retrouve' : 'Colis mis a jour';
+    const message =
+      action === 'received'
+        ? `Votre colis (${trackingNumber || ''}) a ete decharge et est disponible en magasin.`
+        : action === 'not_found'
+        ? `Nous n'avons pas retrouve votre colis (${trackingNumber || ''}) lors du dechargement.`
+        : `Votre colis (${trackingNumber || ''}) a ete mis a jour lors du dechargement.`;
+
+    await createNotification({
+      clientId,
+      agencyId: agencyId || event.agencyId,
+      title,
+      message,
+      metadata: { parcelId, trackingNumber, action } as Prisma.InputJsonValue,
+    });
+
+    const email = await getClientEmail(clientId);
+    if (email) {
+      await emailService.send(email, title, `<p>${message}</p>`);
+    }
+  });
+
+  // CONTAINER_DEPARTED -> notify agency admins
+  eventBus.on(DomainEvents.CONTAINER_DEPARTED, async (event: DomainEvent) => {
+    const { containerId, parcelCount } = event.payload as Record<string, any>;
+    try {
+      const container = await prisma.container.findUnique({ where: { id: containerId } });
+      if (!container) return;
+      const agencyId = container.departureAgencyId || event.agencyId;
+
+      await createNotification({
+        agencyId,
+        title: 'Conteneur parti',
+        message: `Le conteneur ${container.designation || container.id} est parti avec ${parcelCount || 0} colis.`,
+        metadata: { containerId, parcelCount } as Prisma.InputJsonValue,
+      });
+
+      const adminEmails = agencyId ? await getAgencyAdminEmails(agencyId) : [];
+      for (const e of adminEmails) {
+        await emailService.send(e, `Conteneur ${container.designation || container.id} parti`, `<p>Depart: ${container.designation || container.id}</p><p>Colis: ${parcelCount || 0}</p>`);
+      }
+    } catch (err) {
+      logger.warn({ err }, 'Erreur handler CONTAINER_DEPARTED');
+    }
+  });
+
+  // CONTAINER_ARRIVED -> notify agency admins
+  eventBus.on(DomainEvents.CONTAINER_ARRIVED, async (event: DomainEvent) => {
+    const { containerId, parcelCount } = event.payload as Record<string, any>;
+    try {
+      const container = await prisma.container.findUnique({ where: { id: containerId } });
+      if (!container) return;
+      const agencyId = container.arrivalAgencyId || event.agencyId;
+
+      await createNotification({
+        agencyId,
+        title: 'Conteneur arrive',
+        message: `Le conteneur ${container.designation || container.id} est arrive. ${parcelCount || 0} colis a decharger.`,
+        metadata: { containerId, parcelCount } as Prisma.InputJsonValue,
+      });
+
+      const adminEmails = agencyId ? await getAgencyAdminEmails(agencyId) : [];
+      for (const e of adminEmails) {
+        await emailService.send(e, `Conteneur ${container.designation || container.id} arrive`, `<p>Arrivee: ${container.designation || container.id}</p><p>Colis: ${parcelCount || 0}</p>`);
+      }
+    } catch (err) {
+      logger.warn({ err }, 'Erreur handler CONTAINER_ARRIVED');
+    }
+  });
+
+  // INVOICE_CREATED -> notify client + agency admins
+  eventBus.on(DomainEvents.INVOICE_CREATED, async (event: DomainEvent) => {
+    const { invoiceId, reference, clientId, agencyId, totalAmount } = event.payload as Record<string, any>;
+    try {
+      if (clientId) {
+        await createNotification({
+          clientId,
+          agencyId: agencyId || event.agencyId,
+          title: 'Nouvelle facture',
+          message: `Votre facture ${reference || ''} a ete cree. Montant: ${totalAmount || ''}.`,
+          metadata: { invoiceId, reference, totalAmount } as Prisma.InputJsonValue,
+        });
+
+        const email = await getClientEmail(clientId);
+        if (email) {
+          await emailService.send(
+            email,
+            `Votre facture ${reference || ''}`,
+            `<p>Bonjour,</p><p>Votre facture <strong>${reference || ''}</strong> a ete cree. Montant: <strong>${Number(totalAmount || 0).toLocaleString()} XAF</strong>.</p>`,
+          );
+        }
+      }
+
+      // Send copies to agency admins
+      const admins = agencyId ? await getAgencyAdminEmails(agencyId) : [];
+      for (const a of admins) {
+        await emailService.send(
+          a,
+          `Facture cree ${reference || ''}`,
+          `<p>Facture ${reference || ''} creee pour le client. Montant: ${Number(totalAmount || 0).toLocaleString()} XAF.</p>`,
+        );
+      }
+    } catch (err) {
+      logger.warn({ err }, 'Erreur handler INVOICE_CREATED');
+    }
+  });
+
+  // CLIENT_LOYALTY_UPDATED -> notify client and admins about points
+  eventBus.on(DomainEvents.CLIENT_LOYALTY_UPDATED, async (event: DomainEvent) => {
+    const { clientId, points, delta, reason, agencyId } = event.payload as Record<string, any>;
+    if (!clientId) return;
+    try {
+      const title = 'Points de fidelite mis a jour';
+      const message = `Vos points de fidelite ont ete mis a jour (${delta || 0}). Nouveau solde : ${points || 0}.` + (reason ? ` Raison: ${reason}` : '');
+
+      await createNotification({
+        clientId,
+        agencyId: agencyId || event.agencyId,
+        title,
+        message,
+        metadata: { points, delta, reason } as Prisma.InputJsonValue,
+      });
+
+      const email = await getClientEmail(clientId);
+      if (email) {
+        await emailService.send(email, title, `<p>${message}</p>`);
+      }
+
+      // admin copies
+      const admins = agencyId ? await getAgencyAdminEmails(agencyId) : [];
+      for (const a of admins) {
+        await emailService.send(a, `Fidelite client mise a jour`, `<p>Client ${clientId} points: ${points} (delta: ${delta})</p>`);
+      }
+    } catch (err) {
+      logger.warn({ err }, 'Erreur handler CLIENT_LOYALTY_UPDATED');
+    }
   });
 
   logger.info('Notification event handlers registered');

@@ -67,6 +67,24 @@ export class DepartContainerUseCase {
       userId,
     });
 
+    // Emit parcel status change events for each parcel (LOADING -> IN_TRANSIT)
+    try {
+      for (const p of parcels) {
+        try {
+          eventBus.emit({
+            type: DomainEvents.PARCEL_STATUS_CHANGED,
+            payload: { parcelId: p.id, oldStatus: 'LOADING', newStatus: 'IN_TRANSIT', trackingNumber: p.trackingNumber },
+            timestamp: new Date(),
+            userId,
+          });
+        } catch (e) {
+          // non blocking
+        }
+      }
+    } catch (e) {
+      // non blocking
+    }
+
     return { containerId, parcelCount: parcelIds.length, status: 'IN_TRANSIT' };
   }
 }

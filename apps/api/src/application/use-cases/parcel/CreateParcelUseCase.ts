@@ -117,6 +117,23 @@ export class CreateParcelUseCase {
       });
     }
 
+    // Emit invoice.created for notification flows
+    try {
+      eventBus.emit({
+        type: DomainEvents.INVOICE_CREATED,
+        payload: {
+          invoiceId: invoice.id,
+          reference: invoice.reference,
+          clientId: invoice.clientId,
+          agencyId: invoice.agencyId,
+          totalAmount: invoice.totalAmount,
+        },
+        timestamp: new Date(),
+      });
+    } catch (e) {
+      // non blocking
+    }
+
     const parcel = await this.parcelRepo.create({
       organizationId: client.organizationId,
       trackingNumber,

@@ -2,6 +2,7 @@ import { inject, injectable } from 'tsyringe';
 import { CONTAINER_REPOSITORY, type IContainerRepository } from '../../interfaces/IContainerRepository';
 import { PARCEL_REPOSITORY, type IParcelRepository } from '../../interfaces/IParcelRepository';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
+import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 import { HistoryService } from '../../services/HistoryService';
 
 const LOADABLE_STATUSES = new Set(['EMPTY', 'LOADING']);
@@ -114,6 +115,25 @@ export class LoadParcelsUseCase {
         parcelTrackingSnapshot: parcel.trackingNumber,
         comment: `Charge dans ${container.designation}`,
       });
+
+      // Emit event for each loaded parcel so notifications can be dispatched
+      try {
+        eventBus.emit({
+          type: DomainEvents.PARCEL_LOADED,
+          payload: {
+            parcelId,
+            containerId,
+            trackingNumber: parcel.trackingNumber,
+            designation: parcel.designation,
+            clientId: parcel.clientId,
+            agencyId: container.departureAgencyId,
+          },
+          timestamp: new Date(),
+          userId,
+        });
+      } catch (e) {
+        // non blocking
+      }
 
       loaded.push(parcelId);
     }
