@@ -128,6 +128,35 @@ export default function TenantsPage() {
                 <td className="px-4 py-2 text-xs text-gray-500">{formatDate(t.createdAt)}</td>
                 <td className="px-4 py-2 text-right">
                   <div className="inline-flex items-center gap-1">
+                    {(() => {
+                      // Liens publics du tenant : on calcule a la volee
+                      // (meme regle que CaddyService cote backend).
+                      const base = process.env.NEXT_PUBLIC_BASE_DOMAIN || 'transitsoftservices.com';
+                      const publicHost = t.isMain ? base : `${t.slug}.${base}`;
+                      const apiHost = t.isMain ? `api.${base}` : `api.${t.slug}.${base}`;
+                      return (
+                        <>
+                          <a
+                            href={`https://${publicHost}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-50"
+                            title={`Site public : ${publicHost}`}
+                          >
+                            Site
+                          </a>
+                          <a
+                            href={`https://${apiHost}/api/v1`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-50"
+                            title={`API : ${apiHost}/api/v1`}
+                          >
+                            API
+                          </a>
+                        </>
+                      );
+                    })()}
                     <Link
                       href={`/tenants/${t.id}`}
                       className="inline-flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-gray-50"

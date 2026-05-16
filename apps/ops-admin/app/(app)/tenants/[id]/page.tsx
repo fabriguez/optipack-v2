@@ -236,6 +236,10 @@ export default function TenantDetailPage({
         <Info label="Custom domain">{t.customDomain ?? '-'}</Info>
       </div>
 
+      <Section title="URLs publiques du tenant">
+        <TenantUrls slug={t.slug} customDomain={t.customDomain} isMain={!!t.isMain} />
+      </Section>
+
       <Section title="Messagerie (Resend)">
         <TenantMail tenantId={t.id} />
       </Section>
@@ -397,6 +401,75 @@ function Section({
         {action}
       </div>
       {children}
+    </div>
+  );
+}
+
+/**
+ * Liens publics du tenant calcules depuis slug + customDomain + BASE_DOMAIN.
+ * Reproduit la logique routing de CaddyService :
+ *   main tenant :  base / app.base / api.base
+ *   regular      :  slug.base / app.slug.base / api.slug.base
+ *   custom domain : override du host public (web-client) si fourni
+ */
+function TenantUrls({
+  slug,
+  customDomain,
+  isMain,
+}: {
+  slug: string;
+  customDomain: string | null;
+  isMain: boolean;
+}) {
+  const base = process.env.NEXT_PUBLIC_BASE_DOMAIN || 'transitsoftservices.com';
+  const publicHost = isMain ? base : `${slug}.${base}`;
+  const staffHost = isMain ? `app.${base}` : `app.${slug}.${base}`;
+  const apiHost = isMain ? `api.${base}` : `api.${slug}.${base}`;
+  const links: { label: string; url: string; sub?: string }[] = [
+    { label: 'Site public + portail client', url: `https://${publicHost}`, sub: 'web-client (skin)' },
+    { label: 'Dashboard staff', url: `https://${staffHost}`, sub: 'web (admin tenant)' },
+    { label: 'API tenant', url: `https://${apiHost}/api/v1`, sub: 'backend REST' },
+  ];
+  if (customDomain) {
+    links.unshift({ label: 'Custom domain', url: `https://${customDomain}`, sub: 'alias public' });
+  }
+  return (
+    <div className="space-y-2">
+      {links.map((l) => (
+        <div key={l.url} className="flex items-start justify-between gap-3 rounded border bg-gray-50 px-3 py-2">
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-gray-700">{l.label}</p>
+            <a
+              href={l.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block truncate font-mono text-xs text-primary-700 hover:underline"
+            >
+              {l.url}
+            </a>
+            {l.sub && <p className="mt-0.5 text-[10px] text-gray-400">{l.sub}</p>}
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={() => navigator.clipboard.writeText(l.url).catch(() => {})}
+              className="rounded border bg-white px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-100"
+              title="Copier"
+            >
+              Copier
+            </button>
+            <a
+              href={l.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded border bg-white px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-100"
+              title="Ouvrir dans un nouvel onglet"
+            >
+              Ouvrir
+            </a>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
