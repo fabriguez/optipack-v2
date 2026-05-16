@@ -31,7 +31,8 @@ export default function PlansPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['plans', { page, pageSize, q }],
     queryFn: async (): Promise<Listing> =>
-      (await api.get('/plans', { params: { page, pageSize, q, active: 'false' } })).data,
+      // Pas de filtre active : on veut voir actifs ET inactifs cote ops.
+      (await api.get('/plans', { params: { page, pageSize, q } })).data,
     placeholderData: (prev) => prev,
   });
 

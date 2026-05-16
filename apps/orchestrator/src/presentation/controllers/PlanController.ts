@@ -13,9 +13,17 @@ export class PlanController {
   static async list(req: Request, res: Response, next: NextFunction) {
     try {
       const p = parsePagination(req);
+      // Semantique propre :
+      //  - param absent              -> aucun filtre (tous, actifs+inactifs)
+      //  - ?active=true              -> seulement isActive=true
+      //  - ?active=false             -> seulement isActive=false
+      // Avant : `active=false` filtrait isActive=false ET l'absence forcait
+      // isActive=true -> nouveaux plans actifs caches selon l'envoi UI.
+      const activeParam = req.query.active as string | undefined;
+      const publicParam = req.query.public as string | undefined;
       const { items, total } = await container.resolve(ResourcePlanUseCases).list({
-        isPublic: req.query.public === 'true' ? true : undefined,
-        isActive: req.query.active === 'false' ? false : true,
+        isPublic: publicParam === 'true' ? true : publicParam === 'false' ? false : undefined,
+        isActive: activeParam === 'true' ? true : activeParam === 'false' ? false : undefined,
         q: p.q,
         page: p.page,
         pageSize: p.pageSize,
