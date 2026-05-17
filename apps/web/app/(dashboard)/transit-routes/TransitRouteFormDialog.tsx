@@ -80,10 +80,14 @@ export function TransitRouteFormDialog({ open, onClose, route }: Props) {
   }, [open, route, reset]);
 
   const onSubmit = (data: CreateTransitRouteInput) => {
-    // On force a 0 le prix non pertinent pour le type choisi. Cela aligne la
-    // DB avec la regle metier : pricePerKg=0 sur SEA empeche tout calcul kg.
-    const pricePerKg = data.type === 'SEA' ? 0 : Number(data.pricePerKg ?? 0);
-    const pricePerVolume = data.type === 'AIR' ? 0 : Number(data.pricePerVolume ?? 0);
+    // On force a null le prix non pertinent pour le type choisi (la DB autorise
+    // maintenant null). pricePerKg null sur SEA, pricePerVolume null sur AIR.
+    const pricePerKg = data.type === 'SEA'
+      ? null
+      : (data.pricePerKg != null && Number(data.pricePerKg) > 0 ? Number(data.pricePerKg) : null);
+    const pricePerVolume = data.type === 'AIR'
+      ? null
+      : (data.pricePerVolume != null && Number(data.pricePerVolume) > 0 ? Number(data.pricePerVolume) : null);
     const payload = {
       name: data.name,
       type: data.type,

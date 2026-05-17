@@ -13,21 +13,44 @@ import { TransitType } from '../constants/enums';
  * persiste a 0 -- cela rend impossible le calcul de prix dans le mauvais mode
  * cote backend (PricingService verifie le mode actif de la route).
  */
-function checkPricing(data: {
+interface PricingShape {
   type?: 'AIR' | 'SEA' | 'LAND';
-  pricePerKg?: number;
-  pricePerVolume?: number;
-}): boolean {
-  const kg = data.pricePerKg ?? 0;
-  const vol = data.pricePerVolume ?? 0;
-  if (data.type === 'AIR') return kg > 0;
-  if (data.type === 'SEA') return vol > 0;
-  if (data.type === 'LAND') return kg > 0 || vol > 0;
-  return true;
+  pricePerKg?: number | null;
+  pricePerVolume?: number | null;
 }
 
-const pricingErrorMessage =
-  'Tarification incoherente : AIR exige pricePerKg, SEA exige pricePerVolume, LAND exige au moins un des deux.';
+function validatePricing(
+  data: PricingShape,
+  ctx: z.RefinementCtx,
+): void {
+  const kg = data.pricePerKg ?? 0;
+  const vol = data.pricePerVolume ?? 0;
+  if (data.type === 'AIR') {
+    if (kg <= 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Une route aerienne exige un prix au kilogramme superieur a 0.',
+        path: ['pricePerKg'],
+      });
+    }
+  } else if (data.type === 'SEA') {
+    if (vol <= 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Une route maritime exige un prix au metre cube superieur a 0.',
+        path: ['pricePerVolume'],
+      });
+    }
+  } else if (data.type === 'LAND') {
+    if (kg <= 0 && vol <= 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Une route terrestre exige au moins un prix au kg ou au m3.',
+        path: ['pricePerKg'],
+      });
+    }
+  }
+}
 
 export const createTransitRouteSchema = z
   .object({
@@ -37,17 +60,20 @@ export const createTransitRouteSchema = z
     departureCountry: z.string().min(2, 'Pays de depart requis'),
     arrivalCity: z.string().min(2, "Ville d'arrivee requise"),
     arrivalCountry: z.string().min(2, "Pays d'arrivee requis"),
-    // Les deux prix sont techniquement optionnels au niveau du champ : on
-    // applique la regle metier dans le refine final pour pouvoir produire un
-    // message clair par type de route.
-    pricePerKg: z.number().nonnegative('Le prix par kg ne peut pas etre negatif').optional().default(0),
-    pricePerVolume: z.number().nonnegative('Le prix par m3 ne peut pas etre negatif').optional().default(0),
+    // Prix nullable + preprocess : un champ vide / NaN -> null (au lieu de
+    // crasher la validation z.number()). La regle metier active appliquee
+    // dans superRefine en aval cible alors le BON champ selon le type.
+    pricePerKg: z.preprocess(
+      (v) => (v === '' || v === undefined || v === null || Number.isNaN(v as number) ? null : v),
+      z.number().nonnegative('Le prix par kg ne peut pas etre negatif').nullable().optional(),
+    ),
+    pricePerVolume: z.preprocess(
+      (v) => (v === '' || v === undefined || v === null || Number.isNaN(v as number) ? null : v),
+      z.number().nonnegative('Le prix par m3 ne peut pas etre negatif').nullable().optional(),
+    ),
     estimatedDurationDays: z.number().int().min(0).optional().default(0),
   })
-  .refine((d) => checkPricing(d), {
-    message: pricingErrorMessage,
-    path: ['pricePerKg'],
-  });
+  .superRefine((data, ctx) => validatePricing(data, ctx));
 
 /**
  * Update : tous les champs optionnels MAIS si type ou un prix est fourni, on
@@ -62,26 +88,18 @@ export const updateTransitRouteSchema = z
     departureCountry: z.string().min(2).optional(),
     arrivalCity: z.string().min(2).optional(),
     arrivalCountry: z.string().min(2).optional(),
-    pricePerKg: z.number().nonnegative().optional(),
-    pricePerVolume: z.number().nonnegative().optional(),
+    pricePerKg: z.preprocess(
+      (v) => (v === '' || v === undefined || v === null || Number.isNaN(v as number) ? null : v),
+      z.number().nonnegative().nullable().optional(),
+    ),
+    pricePerVolume: z.preprocess(
+      (v) => (v === '' || v === undefined || v === null || Number.isNaN(v as number) ? null : v),
+      z.number().nonnegative().nullable().optional(),
+    ),
     estimatedDurationDays: z.number().int().min(0).optional(),
   })
   .superRefine((data, ctx) => {
-    // Si le type est explicitement update (avec ou sans prix), on exige que
-    // les prix fournis (ou existants implicitement 0) couvrent le type.
-    // Si seul un prix est fourni sans type, on ne peut pas verifier sans
-    // hitter la DB -> la verification cote use case backend reste source de
-    // verite. Ici on couvre uniquement le cas frontend ou les deux sont
-    // saisis (l'edit form renvoie les 3 champs).
-    if (data.type !== undefined) {
-      if (!checkPricing(data)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: pricingErrorMessage,
-          path: ['pricePerKg'],
-        });
-      }
-    }
+    if (data.type !== undefined) validatePricing(data, ctx);
   });
 
 export type CreateTransitRouteInput = z.infer<typeof createTransitRouteSchema>;

@@ -1230,8 +1230,8 @@ model PartnerPricing {
   id             String   @id @default(uuid())
   clientId       String
   transitRouteId String?
-  pricePerKg     Decimal  @db.Decimal(15, 2)
-  pricePerVolume Decimal  @default(0) @db.Decimal(15, 2)
+  pricePerKg     Decimal? @db.Decimal(15, 2)
+  pricePerVolume Decimal? @db.Decimal(15, 2)
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -1262,8 +1262,11 @@ model TransitRoute {
   departureCountry      String
   arrivalCity           String
   arrivalCountry        String
-  pricePerKg            Decimal     @db.Decimal(15, 2)
-  pricePerVolume        Decimal     @default(0) @db.Decimal(15, 2)
+  // Prix par kg : null pour routes maritimes (SEA), sinon obligatoire > 0.
+  // Prix par m3 : null pour routes aeriennes (AIR), sinon obligatoire > 0
+  // pour SEA. LAND accepte les deux (au moins un > 0).
+  pricePerKg            Decimal?    @db.Decimal(15, 2)
+  pricePerVolume        Decimal?    @db.Decimal(15, 2)
   estimatedDurationDays Int         @default(0)
   isActive              Boolean     @default(true)
   createdAt             DateTime    @default(now())
