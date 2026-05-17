@@ -1,15 +1,17 @@
 import type { ReactNode } from 'react';
-import { MarketingNav } from '@/components/marketing/MarketingNav';
-import { Footer } from '@/components/marketing/Footer';
+import { MarketingShell } from '@/components/marketing/shells/MarketingShell';
 import { SkinPicker } from '@/components/marketing/SkinPicker';
 
+/**
+ * Layout marketing : delegue Nav + Footer + ambient bg au MarketingShell
+ * qui dispatche selon le `layoutVariant` du skin. Changement de skin =
+ * changement complet du site (pas juste de la home).
+ */
 export default function MarketingLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="relative">
-      <MarketingNav />
-      <main>{children}</main>
-      <Footer />
+    <>
+      <MarketingShell>{children}</MarketingShell>
       <SkinPicker />
-    </div>
+    </>
   );
 }
