@@ -40,6 +40,8 @@ import { QRScannerDialog } from '@/components/shared/QRScannerDialog';
 import { LiveScanCollector } from '@/components/shared/LiveScanCollector';
 import { ParcelPickerList } from '@/components/shared/ParcelPickerList';
 import { AgencyAvatar } from '@/components/shared/AgencyAvatar';
+import { ContainerExpensesTab } from './ContainerExpensesTab';
+import { HandCoins, Link2 } from 'lucide-react';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
 
@@ -897,6 +899,7 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
         <AppTabs
           tabs={[
             { value: 'info', label: 'Informations', icon: <Package className="h-4 w-4" />, content: infoTab },
+            { value: 'expenses', label: 'Depenses', icon: <HandCoins className="h-4 w-4" />, content: <ContainerExpensesTab containerId={id} /> },
             { value: 'history', label: `Historique (${history.length})`, icon: <History className="h-4 w-4" />, content: historyTab },
           ]}
         />

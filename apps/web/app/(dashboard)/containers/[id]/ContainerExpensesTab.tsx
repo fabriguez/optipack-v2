@@ -1,0 +1,222 @@
+'use client';
+
+import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Plus, CreditCard, CheckCircle2, Clock } from 'lucide-react';
+import { apiClient } from '@/lib/api/client';
+import { AppCard } from '@/components/ui/AppCard';
+import { AppButton } from '@/components/ui/AppButton';
+import { AppBadge } from '@/components/ui/AppBadge';
+import { AppDialog } from '@/components/ui/AppDialog';
+import { AppInput } from '@/components/ui/AppInput';
+import { AppTextarea } from '@/components/ui/AppTextarea';
+import { formatAmount, formatDate } from '@transitsoftservices/shared';
+import { toast } from 'sonner';
+
+interface Expense {
+  id: string;
+  title: string;
+  reason: string;
+  description: string | null;
+  category: string | null;
+  amount: number | string;
+  isPaid: boolean;
+  paidAt: string | null;
+  cashRegisterId: string | null;
+  paidBy: { firstName: string; lastName: string } | null;
+  approvedBy: { firstName: string; lastName: string } | null;
+  cashRegister: { id: string; date: string } | null;
+  createdAt: string;
+}
+
+export function ContainerExpensesTab({ containerId }: { containerId: string }) {
+  const qc = useQueryClient();
+  const [createOpen, setCreateOpen] = useState(false);
+  const [payTarget, setPayTarget] = useState<Expense | null>(null);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['containers', containerId, 'expenses'],
+    queryFn: () => apiClient.get(`/expenses/container/${containerId}`).then((r) => r.data),
+  });
+
+  const expenses: Expense[] = data?.data ?? [];
+  const totalUnpaid = expenses.filter((e) => !e.isPaid).reduce((s, e) => s + Number(e.amount), 0);
+  const totalPaid = expenses.filter((e) => e.isPaid).reduce((s, e) => s + Number(e.amount), 0);
+
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['containers', containerId, 'expenses'] });
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <Stat label="A payer" value={formatAmount(totalUnpaid)} tone="warning" />
+        <Stat label="Paye" value={formatAmount(totalPaid)} tone="success" />
+        <Stat label="Total depenses" value={formatAmount(totalUnpaid + totalPaid)} />
+      </div>
+
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-gray-700">Depenses du conteneur</h3>
+        <AppButton size="sm" onClick={() => setCreateOpen(true)}>
+          <Plus className="h-3.5 w-3.5" />
+          Ajouter une depense
+        </AppButton>
+      </div>
+
+      {isLoading ? (
+        <p className="text-sm text-gray-400">Chargement...</p>
+      ) : expenses.length === 0 ? (
+        <AppCard><p className="py-6 text-center text-sm text-gray-400">Aucune depense.</p></AppCard>
+      ) : (
+        <ul className="space-y-2">
+          {expenses.map((e) => (
+            <li key={e.id} className="rounded-xl border border-gray-100 bg-white p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="truncate text-sm font-semibold text-gray-900">{e.title}</p>
+                    {e.isPaid ? (
+                      <AppBadge variant="success"><CheckCircle2 className="mr-1 h-3 w-3" />Paye</AppBadge>
+                    ) : (
+                      <AppBadge variant="warning"><Clock className="mr-1 h-3 w-3" />A payer</AppBadge>
+                    )}
+                    {e.category && <AppBadge variant="default">{e.category}</AppBadge>}
+                  </div>
+                  <p className="mt-0.5 text-xs text-gray-500 truncate">{e.reason}</p>
+                  {e.description && <p className="mt-1 text-xs text-gray-600">{e.description}</p>}
+                  <p className="mt-1 text-[11px] text-gray-400">
+                    Cree le {formatDate(e.createdAt)}{e.approvedBy && ` par ${e.approvedBy.firstName} ${e.approvedBy.lastName}`}
+                    {e.paidAt && e.paidBy && ` - paye le ${formatDate(e.paidAt)} par ${e.paidBy.firstName} ${e.paidBy.lastName}`}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-base font-bold text-gray-900">{formatAmount(Number(e.amount))}</p>
+                  {!e.isPaid && (
+                    <AppButton size="sm" variant="outline" className="mt-2" onClick={() => setPayTarget(e)}>
+                      <CreditCard className="h-3.5 w-3.5" />
+                      Payer
+                    </AppButton>
+                  )}
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <CreateExpenseDialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        containerId={containerId}
+        onCreated={() => { invalidate(); setCreateOpen(false); }}
+      />
+      <PayExpenseDialog
+        expense={payTarget}
+        onClose={() => setPayTarget(null)}
+        onPaid={() => { invalidate(); setPayTarget(null); }}
+      />
+    </div>
+  );
+}
+
+function Stat({ label, value, tone = 'default' }: { label: string; value: string; tone?: 'default' | 'success' | 'warning' }) {
+  const color = tone === 'success' ? 'text-green-600' : tone === 'warning' ? 'text-amber-600' : 'text-gray-900';
+  return (
+    <AppCard padding="sm">
+      <p className="text-[11px] uppercase tracking-wider text-gray-500">{label}</p>
+      <p className={`mt-1 text-base font-bold ${color}`}>{value}</p>
+    </AppCard>
+  );
+}
+
+function CreateExpenseDialog({ open, onClose, containerId, onCreated }: { open: boolean; onClose: () => void; containerId: string; onCreated: () => void }) {
+  const [title, setTitle] = useState('');
+  const [reason, setReason] = useState('');
+  const [description, setDescription] = useState('');
+  const [category, setCategory] = useState('CONTAINER');
+  const [amount, setAmount] = useState('');
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      apiClient.post(`/expenses/container/${containerId}`, {
+        title,
+        reason: reason || title,
+        description: description || undefined,
+        category,
+        amount: Number(amount),
+      }),
+    onSuccess: () => {
+      toast.success('Depense ajoutee');
+      setTitle(''); setReason(''); setDescription(''); setAmount('');
+      onCreated();
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Echec'),
+  });
+
+  return (
+    <AppDialog
+      open={open}
+      onClose={onClose}
+      title="Nouvelle depense conteneur"
+      size="md"
+      footer={
+        <>
+          <AppButton variant="ghost" onClick={onClose}>Annuler</AppButton>
+          <AppButton onClick={() => mutation.mutate()} loading={mutation.isPending} disabled={!title.trim() || !amount || Number(amount) <= 0}>
+            Enregistrer (non payee)
+          </AppButton>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <AppInput label="Titre" value={title} onChange={(e) => setTitle(e.target.value)} required />
+        <AppInput label="Motif" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Defaut = titre" />
+        <AppTextarea label="Description" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
+        <div className="grid grid-cols-2 gap-3">
+          <AppInput label="Categorie" value={category} onChange={(e) => setCategory(e.target.value)} />
+          <AppInput label="Montant" type="number" min={0} value={amount} onChange={(e) => setAmount(e.target.value)} required />
+        </div>
+      </div>
+    </AppDialog>
+  );
+}
+
+function PayExpenseDialog({ expense, onClose, onPaid }: { expense: Expense | null; onClose: () => void; onPaid: () => void }) {
+  const [note, setNote] = useState('');
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      apiClient.post(`/expenses/${expense!.id}/pay`, {
+        note: note || undefined,
+      }),
+    onSuccess: () => {
+      toast.success('Depense payee');
+      setNote('');
+      onPaid();
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Echec paiement'),
+  });
+
+  return (
+    <AppDialog
+      open={!!expense}
+      onClose={onClose}
+      title={expense ? `Payer ${expense.title} (${formatAmount(Number(expense.amount))})` : 'Payer'}
+      size="md"
+      footer={
+        <>
+          <AppButton variant="ghost" onClick={onClose}>Annuler</AppButton>
+          <AppButton onClick={() => mutation.mutate()} loading={mutation.isPending}>
+            <CreditCard className="h-4 w-4" />
+            Payer depuis caisse du jour
+          </AppButton>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <p className="text-xs text-gray-500">
+          La depense sera reglee depuis la caisse du jour de l&apos;agence de rattachement. Si la caisse est cloturee, on bascule sur celle du jour suivant.
+        </p>
+        <AppTextarea label="Note" value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="Optionnel" />
+      </div>
+    </AppDialog>
+  );
+}

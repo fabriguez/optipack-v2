@@ -4,6 +4,7 @@ import { PARCEL_REPOSITORY, type IParcelRepository } from '../../interfaces/IPar
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
 import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 import { HistoryService } from '../../services/HistoryService';
+import { prisma } from '../../../config/database';
 
 const LOADABLE_STATUSES = new Set(['EMPTY', 'LOADING']);
 
@@ -86,6 +87,19 @@ export class LoadParcelsUseCase {
       if (newLoad > Number(container.capacity)) {
         errors.push({ parcelId, reason: 'Capacite du conteneur depassee' });
         continue;
+      }
+
+      // Si on charge dans un conteneur d'acheminement et que le colis etait
+      // deja dans un autre conteneur source, on cree/incremente le lien M:N
+      // ContainerForwardingParent (acheminement -> source). Permet de tracer
+      // la provenance documentaire de chaque colis regroupe.
+      const sourceContainerId = parcel.containerId;
+      if (container.isForwarding && sourceContainerId && sourceContainerId !== containerId) {
+        await prisma.containerForwardingParent.upsert({
+          where: { forwardingId_parentId: { forwardingId: containerId, parentId: sourceContainerId } },
+          create: { forwardingId: containerId, parentId: sourceContainerId, parcelCount: 1 },
+          update: { parcelCount: { increment: 1 } },
+        });
       }
 
       await this.parcelRepo.update(parcelId, {

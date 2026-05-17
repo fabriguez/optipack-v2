@@ -10,6 +10,20 @@ const CONTAINER_INCLUDE = {
   transitRoute: { select: { id: true, name: true, type: true } },
   parentContainer: { select: { id: true, designation: true, type: true, isForwarding: true } },
   childContainers: { select: { id: true, designation: true, type: true } },
+  // Liens M:N : pour un conteneur d'acheminement, liste des conteneurs
+  // parents auquels il est lie (via colis communs).
+  forwardingParents: {
+    include: {
+      parent: { select: { id: true, designation: true, type: true, status: true } },
+    },
+  },
+  // Liens inverses : pour un conteneur "standard", liste des conteneurs
+  // d'acheminement qui contiennent au moins un colis de ce conteneur.
+  forwardingChildren: {
+    include: {
+      forwarding: { select: { id: true, designation: true, type: true, status: true, isForwarding: true } },
+    },
+  },
   _count: { select: { parcels: true, childContainers: true } },
 };
 

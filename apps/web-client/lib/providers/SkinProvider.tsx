@@ -20,6 +20,7 @@ import {
   type SkinId,
   type SkinTokens,
 } from '@transitsoftservices/skins';
+import { useTenantMeta } from '@/lib/providers/TenantMetaProvider';
 
 interface SkinContextValue {
   skinId: SkinId;
@@ -35,28 +36,8 @@ interface SkinContextValue {
 
 const SkinContext = createContext<SkinContextValue | undefined>(undefined);
 
-const STORAGE_KEY = 'optipack_skin';
-
-interface StoredSkin {
-  id: SkinId;
-  customization: SkinCustomization;
-}
-
-function readStored(): StoredSkin | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw) as StoredSkin;
-  } catch {
-    return null;
-  }
-}
-
-function writeStored(s: StoredSkin) {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
-}
+// LocalStorage skin retire : le skin est centralement gere par le tenant
+// (Studio admin). Aucun fallback visiteur -- coherence garantie.
 
 export interface SkinProviderProps {
   children: ReactNode;
@@ -77,19 +58,28 @@ export function SkinProvider({
     registerSkins(extraSkins);
   }
 
+  // Le skin actif est dicte par le tenant (Studio admin / ops). Le visiteur
+  // ne peut PLUS le changer cote client web -- on retire le picker visiteur.
+  // Source de verite : useTenantMeta().meta.skin et .skinCustomization,
+  // poussés par /tenant-meta (avec refetch realtime).
+  const { meta } = useTenantMeta();
   const [skinId, setSkinId] = useState<SkinId>(initialSkinId ?? DEFAULT_SKIN_ID);
   const [customization, setCustomization] = useState<SkinCustomization>(
     initialCustomization ?? {},
   );
 
+  // Sync : quand /tenant-meta resout (ou apres un broadcast tenant:meta:updated),
+  // on adopte le skin du tenant. Fallback localStorage retire pour eviter
+  // que le visiteur garde un skin obsolete entre 2 sessions.
   useEffect(() => {
-    if (initialSkinId) return;
-    const stored = readStored();
-    if (stored) {
-      setSkinId(stored.id);
-      setCustomization(stored.customization);
+    if (!meta) return;
+    if (meta.skin && meta.skin !== skinId) setSkinId(meta.skin);
+    if (meta.skinCustomization) {
+      setCustomization(meta.skinCustomization as SkinCustomization);
     }
-  }, [initialSkinId]);
+    // skinId/customization volontairement absents : on suit toujours meta.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meta?.skin, JSON.stringify(meta?.skinCustomization ?? null)]);
 
   useEffect(() => {
     applySkinById(skinId, customization);
@@ -104,9 +94,8 @@ export function SkinProvider({
   const resetCustomization = useCallback(() => setCustomization({}), []);
 
   const publish = useCallback(async () => {
-    writeStored({ id: skinId, customization });
-    // TODO: POST to /api/v1/tenant-meta/skin once backend exposes it.
-  }, [skinId, customization]);
+    // No-op cote client : changement de skin = via dashboard admin uniquement.
+  }, []);
 
   const resolved = useMemo(
     () => resolveSkin(skinId, customization),

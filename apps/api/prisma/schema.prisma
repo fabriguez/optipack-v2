@@ -64,24 +64,24 @@ model Organization {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  agencies      Agency[]
-  users         User[]
-  clients       Client[]
-  transitRoutes TransitRoute[]
-  currencies    Currency[]
-  accounts      AccountingAccount[]
-  loyaltyTiers  LoyaltyTierConfig[]
-  systemConfigs SystemConfig[]
+  agencies                Agency[]
+  users                   User[]
+  clients                 Client[]
+  transitRoutes           TransitRoute[]
+  currencies              Currency[]
+  accounts                AccountingAccount[]
+  loyaltyTiers            LoyaltyTierConfig[]
+  systemConfigs           SystemConfig[]
   // Dettes scopees a l'organisation (tous types confondus).
-  debts         Debt[]
+  debts                   Debt[]
   // Transporteurs tiers utilises par l'organisation.
-  carriers      Carrier[]
+  carriers                Carrier[]
   // Caisse du siege (une seule par organisation, solde courant cumule).
-  headOfficeCashRegister HeadOfficeCashRegister?
+  headOfficeCashRegister  HeadOfficeCashRegister?
   // Bons de decaissement emis depuis le siege.
   headOfficeDisbursements HeadOfficeDisbursementVoucher[]
   // Transferts de fond initie depuis le siege.
-  headOfficeFundTransfers FundTransfer[] @relation("HeadOfficeSourceTransfers")
+  headOfficeFundTransfers FundTransfer[]                  @relation("HeadOfficeSourceTransfers")
 
   @@map("organizations")
 }
@@ -470,60 +470,61 @@ model User {
 
   organization Organization @relation(fields: [organizationId], references: [id])
 
-  userAgencies               UserAgency[]
-  responsibleAgencies        Agency[]                      @relation("AgencyResponsible")
-  refreshTokens              RefreshToken[]
-  paymentsReceived           Payment[]
-  voidedPayments             Payment[]                     @relation("VoidedByUser")
-  disbursementsIssued        DisbursementVoucher[]         @relation("IssuedByUser")
-  disbursementsApproved      DisbursementVoucher[]         @relation("ApprovedByUser")
+  userAgencies                    UserAgency[]
+  responsibleAgencies             Agency[]                        @relation("AgencyResponsible")
+  refreshTokens                   RefreshToken[]
+  paymentsReceived                Payment[]
+  voidedPayments                  Payment[]                       @relation("VoidedByUser")
+  disbursementsIssued             DisbursementVoucher[]           @relation("IssuedByUser")
+  disbursementsApproved           DisbursementVoucher[]           @relation("ApprovedByUser")
   // Decaissements pour lesquels cet utilisateur a ete l'ordonnateur (lien
   // optionnel : un ordonnateur peut etre un employe non-user, dans ce cas
   // seul le champ texte `orderer` est rempli).
-  disbursementsOrdered       DisbursementVoucher[]         @relation("OrdererUser")
+  disbursementsOrdered            DisbursementVoucher[]           @relation("OrdererUser")
   // Decaissements siege
   headOfficeDisbursementsIssued   HeadOfficeDisbursementVoucher[] @relation("HeadOfficeIssuedByUser")
   headOfficeDisbursementsApproved HeadOfficeDisbursementVoucher[] @relation("HeadOfficeApprovedByUser")
   headOfficeDisbursementsOrdered  HeadOfficeDisbursementVoucher[] @relation("HeadOfficeOrdererUser")
-  transfersInitiated         FundTransfer[]                @relation("InitiatedByUser")
-  transfersConfirmed         FundTransfer[]                @relation("ConfirmedByUser")
-  closedCashRegisters        AgencyCashRegister[]
-  journalEntriesCreated      JournalEntry[]
-  expensesApproved           Expense[]
-  payslipPaymentsIssued      PayslipPayment[]              @relation("PayslipPaymentIssuer")
-  parcelHistories            ParcelHistory[]
-  containerHistories         ContainerHistory[]
-  auditLogs                  AuditLog[]
-  chatMessagesAgent          ChatMessage[]
-  assignedConversations      ChatConversation[]
-  inventoriesStarted         WarehouseInventory[]          @relation("InventoryStartedBy")
-  inventoriesClosed          WarehouseInventory[]          @relation("InventoryClosedBy")
-  inventoryItemsScanned      WarehouseInventoryItem[]      @relation("InventoryItemScannedBy")
-  chargeDocsUploaded         AgencyChargeDocument[]        @relation("ChargeDocUploader")
-  chargeHistoryActions       AgencyChargeHistory[]         @relation("ChargeHistoryUser")
-  dailyReportsClosed         AgencyDailyReport[]           @relation("DailyReportClosedBy")
-  dailyReportAttachments     AgencyDailyReportAttachment[] @relation("DailyReportAttachmentBy")
+  transfersInitiated              FundTransfer[]                  @relation("InitiatedByUser")
+  transfersConfirmed              FundTransfer[]                  @relation("ConfirmedByUser")
+  closedCashRegisters             AgencyCashRegister[]
+  journalEntriesCreated           JournalEntry[]
+  expensesApproved                Expense[]
+  expensesPaid                    Expense[]                       @relation("ExpensePaidBy")
+  payslipPaymentsIssued           PayslipPayment[]                @relation("PayslipPaymentIssuer")
+  parcelHistories                 ParcelHistory[]
+  containerHistories              ContainerHistory[]
+  auditLogs                       AuditLog[]
+  chatMessagesAgent               ChatMessage[]
+  assignedConversations           ChatConversation[]
+  inventoriesStarted              WarehouseInventory[]            @relation("InventoryStartedBy")
+  inventoriesClosed               WarehouseInventory[]            @relation("InventoryClosedBy")
+  inventoryItemsScanned           WarehouseInventoryItem[]        @relation("InventoryItemScannedBy")
+  chargeDocsUploaded              AgencyChargeDocument[]          @relation("ChargeDocUploader")
+  chargeHistoryActions            AgencyChargeHistory[]           @relation("ChargeHistoryUser")
+  dailyReportsClosed              AgencyDailyReport[]             @relation("DailyReportClosedBy")
+  dailyReportAttachments          AgencyDailyReportAttachment[]   @relation("DailyReportAttachmentBy")
   // Lien optionnel 1-1 avec un Employee (pour la connexion personnel/chef d'agence)
-  employee                   Employee?                     @relation("EmployeeUser")
-  salaryDeductionsCreated    SalaryDeduction[]             @relation("SalaryDeductionCreator")
-  attendancesMarked          Attendance[]                  @relation("AttendanceMarker")
-  leavesValidated            EmployeeLeave[]               @relation("LeaveValidator")
-  leavesRequested            EmployeeLeave[]               @relation("LeaveRequester")
-  sanctionsDecided           EmployeeSanction[]            @relation("SanctionDecider")
-  terminationsDecided        ContractTermination[]         @relation("TerminationDecider")
-  reviewsAuthored            EmployeeReview[]              @relation("ReviewAuthor")
-  passwordResetTokens        PasswordResetToken[]
+  employee                        Employee?                       @relation("EmployeeUser")
+  salaryDeductionsCreated         SalaryDeduction[]               @relation("SalaryDeductionCreator")
+  attendancesMarked               Attendance[]                    @relation("AttendanceMarker")
+  leavesValidated                 EmployeeLeave[]                 @relation("LeaveValidator")
+  leavesRequested                 EmployeeLeave[]                 @relation("LeaveRequester")
+  sanctionsDecided                EmployeeSanction[]              @relation("SanctionDecider")
+  terminationsDecided             ContractTermination[]           @relation("TerminationDecider")
+  reviewsAuthored                 EmployeeReview[]                @relation("ReviewAuthor")
+  passwordResetTokens             PasswordResetToken[]
   // Dettes : creation, annulation, encaissement paiements (cote agent).
-  debtsCreated               Debt[]                        @relation("DebtCreatedBy")
-  debtsVoided                Debt[]                        @relation("DebtVoidedBy")
-  debtPaymentsReceived       DebtPayment[]                 @relation("DebtPaymentReceivedBy")
-  debtPaymentsVoided         DebtPayment[]                 @relation("DebtPaymentVoidedBy")
-  debtHistoryActions         DebtHistory[]
-  paymentAttachmentsUploaded PaymentAttachment[]           @relation("PaymentAttachmentUploader")
-  permissionOverrides        UserPermissionOverride[]
-  justificationsSubmitted    AttendanceJustification[]     @relation("JustificationSubmitter")
-  justificationsReviewed     AttendanceJustification[]     @relation("JustificationReviewer")
-  leavesEnded                EmployeeLeave[]               @relation("LeaveEndedBy")
+  debtsCreated                    Debt[]                          @relation("DebtCreatedBy")
+  debtsVoided                     Debt[]                          @relation("DebtVoidedBy")
+  debtPaymentsReceived            DebtPayment[]                   @relation("DebtPaymentReceivedBy")
+  debtPaymentsVoided              DebtPayment[]                   @relation("DebtPaymentVoidedBy")
+  debtHistoryActions              DebtHistory[]
+  paymentAttachmentsUploaded      PaymentAttachment[]             @relation("PaymentAttachmentUploader")
+  permissionOverrides             UserPermissionOverride[]
+  justificationsSubmitted         AttendanceJustification[]       @relation("JustificationSubmitter")
+  justificationsReviewed          AttendanceJustification[]       @relation("JustificationReviewer")
+  leavesEnded                     EmployeeLeave[]                 @relation("LeaveEndedBy")
 
   @@index([organizationId])
   @@index([email])
@@ -1139,22 +1140,22 @@ model Client {
   // pour chaque type d'evenement.
   notificationPrefs Json?
 
-  organization        Organization[]
-  agency              Agency?               @relation(fields: [agencyId], references: [id])
-  parcels             Parcel[]              @relation("ParcelClient")
-  parcelsAsRecipient  Parcel[]              @relation("ParcelRecipient")
-  invoices            Invoice[]
-  debts               Debt[]
-  loyaltyTransactions LoyaltyTransaction[]
-  penalties           Penalty[]
-  chatConversations   ChatConversation[]
-  notifications       Notification[]        @relation("ClientNotifications")
-  partnerPricings     PartnerPricing[]
-  parcelGroups        ParcelGroup[]         @relation("ClientParcelGroups")
+  organization            Organization[]
+  agency                  Agency?                         @relation(fields: [agencyId], references: [id])
+  parcels                 Parcel[]                        @relation("ParcelClient")
+  parcelsAsRecipient      Parcel[]                        @relation("ParcelRecipient")
+  invoices                Invoice[]
+  debts                   Debt[]
+  loyaltyTransactions     LoyaltyTransaction[]
+  penalties               Penalty[]
+  chatConversations       ChatConversation[]
+  notifications           Notification[]                  @relation("ClientNotifications")
+  partnerPricings         PartnerPricing[]
+  parcelGroups            ParcelGroup[]                   @relation("ClientParcelGroups")
   // Lien retour 1-1 si ce client correspond a un membre du personnel.
-  employee            Employee?             @relation("EmployeeClient")
+  employee                Employee?                       @relation("EmployeeClient")
   // Decaissements rembourses a ce client (cas remboursement client).
-  disbursements       DisbursementVoucher[]
+  disbursements           DisbursementVoucher[]
   headOfficeDisbursements HeadOfficeDisbursementVoucher[] @relation("HeadOfficeDisbursementClient")
 
   @@index([organizationId])
@@ -1269,22 +1270,30 @@ model Container {
   createdAt            DateTime        @default(now())
   updatedAt            DateTime        @updatedAt
 
-  transitRoute     TransitRoute?         @relation(fields: [transitRouteId], references: [id])
-  departureAgency  Agency                @relation("DepartureAgency", fields: [departureAgencyId], references: [id])
-  arrivalAgency    Agency                @relation("ArrivalAgency", fields: [arrivalAgencyId], references: [id])
-  parentContainer  Container?            @relation("ContainerHierarchy", fields: [parentContainerId], references: [id])
-  childContainers  Container[]           @relation("ContainerHierarchy")
-  parcels          Parcel[]              @relation("CurrentContainer")
-  lastContainerFor Parcel[]              @relation("LastContainer")
-  histories        ContainerHistory[]
-  manifests        ShippingManifest[]
-  expenses         Expense[]
+  transitRoute            TransitRoute?                   @relation(fields: [transitRouteId], references: [id])
+  departureAgency         Agency                          @relation("DepartureAgency", fields: [departureAgencyId], references: [id])
+  arrivalAgency           Agency                          @relation("ArrivalAgency", fields: [arrivalAgencyId], references: [id])
+  // Hierarchie legacy 1:1 (conserve pour compat ascendante / migration).
+  // Le modele actif est M:N via ContainerForwardingParent : un conteneur
+  // d'acheminement peut etre lie a N parents (un par conteneur source des
+  // colis qu'il regroupe).
+  parentContainer         Container?                      @relation("ContainerHierarchy", fields: [parentContainerId], references: [id])
+  childContainers         Container[]                     @relation("ContainerHierarchy")
+  // M:N : liens vers les conteneurs parents quand isForwarding=true.
+  forwardingParents       ContainerForwardingParent[]     @relation("ForwardingChildren")
+  // M:N : liens depuis ce conteneur (parent) vers ses conteneurs d'acheminement.
+  forwardingChildren      ContainerForwardingParent[]     @relation("ForwardingParents")
+  parcels                 Parcel[]                        @relation("CurrentContainer")
+  lastContainerFor        Parcel[]                        @relation("LastContainer")
+  histories               ContainerHistory[]
+  manifests               ShippingManifest[]
+  expenses                Expense[]
   // Decaissements imputes a ce conteneur (frais transit, douane, surcout).
-  disbursements    DisbursementVoucher[]
+  disbursements           DisbursementVoucher[]
   headOfficeDisbursements HeadOfficeDisbursementVoucher[] @relation("HeadOfficeDisbursementContainer")
-  routingSource    InterAgencyRouting[]  @relation("SourceContainer")
-  routingTarget    InterAgencyRouting[]  @relation("TargetContainer")
-  discrepancies    ManifestDiscrepancy[]
+  routingSource           InterAgencyRouting[]            @relation("SourceContainer")
+  routingTarget           InterAgencyRouting[]            @relation("TargetContainer")
+  discrepancies           ManifestDiscrepancy[]
 
   @@unique([organizationId, designation])
   @@index([organizationId])
@@ -1293,6 +1302,29 @@ model Container {
   @@index([status])
   @@index([parentContainerId])
   @@map("containers")
+}
+
+// Liens M:N entre un conteneur d'acheminement (forwarding) et ses conteneurs
+// parents. Le lien est cree implicitement par LoadParcelsUseCase : quand on
+// ajoute un colis (deja charge dans un conteneur source) a un conteneur
+// d'acheminement, on insere ici (forwardingId, parentId=conteneur source du
+// colis). Un meme couple n'est insere qu'une fois (@@unique).
+model ContainerForwardingParent {
+  id           String   @id @default(uuid())
+  forwardingId String
+  parentId     String
+  // Nombre de colis communs au lien (incremente a chaque ajout, decremente
+  // au retrait). Permet de detacher automatiquement le parent quand 0.
+  parcelCount  Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  forwarding Container @relation("ForwardingChildren", fields: [forwardingId], references: [id], onDelete: Cascade)
+  parent     Container @relation("ForwardingParents", fields: [parentId], references: [id], onDelete: Cascade)
+
+  @@unique([forwardingId, parentId])
+  @@index([forwardingId])
+  @@index([parentId])
+  @@map("container_forwarding_parents")
 }
 
 // Cycle de vie simplifie a 5 statuts (audit fix #3) :
@@ -1394,21 +1426,21 @@ model Parcel {
   transitRoute      TransitRoute?   @relation(fields: [transitRouteId], references: [id])
   invoice           Invoice?        @relation(fields: [invoiceId], references: [id])
 
-  histories      ParcelHistory[]
-  manifestLines  ManifestLine[]
-  penalties      Penalty[]
-  routings       InterAgencyRouting[]
-  images         ParcelImage[]
-  discrepancies  ManifestDiscrepancy[]
-  inventoryItems WarehouseInventoryItem[]
+  histories               ParcelHistory[]
+  manifestLines           ManifestLine[]
+  penalties               Penalty[]
+  routings                InterAgencyRouting[]
+  images                  ParcelImage[]
+  discrepancies           ManifestDiscrepancy[]
+  inventoryItems          WarehouseInventoryItem[]
   // Decaissements imputes a ce colis (frais douane, remboursement, indemnite).
-  disbursements  DisbursementVoucher[]
+  disbursements           DisbursementVoucher[]
   headOfficeDisbursements HeadOfficeDisbursementVoucher[] @relation("HeadOfficeDisbursementParcel")
   // Dettes liees a ce colis (retrait sans paiement, paiement partiel,
   // remboursement client). Une dette CLIENT typique a un parcelId.
-  debts          Debt[]
+  debts                   Debt[]
   // Paiements scopes a ce colis (cas facture multi-colis, paiement partiel).
-  payments       Payment[]                @relation("ParcelPayments")
+  payments                Payment[]                       @relation("ParcelPayments")
 
   @@index([organizationId])
   @@index([clientId])
@@ -1852,11 +1884,11 @@ model HeadOfficeDisbursementVoucher {
   proofKey                 String?
   justificationDescription String?
   // Liens optionnels vers une entite metier.
-  containerId      String?
-  parcelId         String?
-  clientId         String?
-  issuedByUserId   String
-  approvedByUserId String?
+  containerId              String?
+  parcelId                 String?
+  clientId                 String?
+  issuedByUserId           String
+  approvedByUserId         String?
 
   // Immutabilite
   isVoided       Boolean   @default(false)
@@ -1866,16 +1898,16 @@ model HeadOfficeDisbursementVoucher {
 
   createdAt DateTime @default(now())
 
-  organization     Organization                   @relation(fields: [organizationId], references: [id])
-  cashRegister     HeadOfficeCashRegister         @relation(fields: [headOfficeCashRegisterId], references: [id])
-  ordererUser      User?                          @relation("HeadOfficeOrdererUser", fields: [ordererUserId], references: [id])
-  container        Container?                     @relation("HeadOfficeDisbursementContainer", fields: [containerId], references: [id])
-  parcel           Parcel?                        @relation("HeadOfficeDisbursementParcel", fields: [parcelId], references: [id])
-  client           Client?                        @relation("HeadOfficeDisbursementClient", fields: [clientId], references: [id])
-  issuedBy         User                           @relation("HeadOfficeIssuedByUser", fields: [issuedByUserId], references: [id])
-  approvedBy       User?                          @relation("HeadOfficeApprovedByUser", fields: [approvedByUserId], references: [id])
-  reverseEntry     HeadOfficeDisbursementVoucher? @relation("HeadOfficeReverseVoucher", fields: [reverseEntryId], references: [id])
-  reversedBy       HeadOfficeDisbursementVoucher? @relation("HeadOfficeReverseVoucher")
+  organization Organization                   @relation(fields: [organizationId], references: [id])
+  cashRegister HeadOfficeCashRegister         @relation(fields: [headOfficeCashRegisterId], references: [id])
+  ordererUser  User?                          @relation("HeadOfficeOrdererUser", fields: [ordererUserId], references: [id])
+  container    Container?                     @relation("HeadOfficeDisbursementContainer", fields: [containerId], references: [id])
+  parcel       Parcel?                        @relation("HeadOfficeDisbursementParcel", fields: [parcelId], references: [id])
+  client       Client?                        @relation("HeadOfficeDisbursementClient", fields: [clientId], references: [id])
+  issuedBy     User                           @relation("HeadOfficeIssuedByUser", fields: [issuedByUserId], references: [id])
+  approvedBy   User?                          @relation("HeadOfficeApprovedByUser", fields: [approvedByUserId], references: [id])
+  reverseEntry HeadOfficeDisbursementVoucher? @relation("HeadOfficeReverseVoucher", fields: [reverseEntryId], references: [id])
+  reversedBy   HeadOfficeDisbursementVoucher? @relation("HeadOfficeReverseVoucher")
 
   @@index([organizationId])
   @@index([headOfficeCashRegisterId])
@@ -1890,38 +1922,46 @@ model HeadOfficeDisbursementVoucher {
 // ============================================================
 
 model Expense {
-  id               String   @id @default(uuid())
-  agencyId         String
-  title            String
-  reason           String
-  description      String?
-  category         String?
-  orderer          String?
-  amount           Decimal  @db.Decimal(15, 2)
-  receiptUrl       String?
-  justificationUrl String?
-  containerId      String?
-  parcelId         String?
-  associationType  String?
-  approvedByUserId String?
+  id                       String    @id @default(uuid())
+  agencyId                 String
+  title                    String
+  reason                   String
+  description              String?
+  category                 String?
+  orderer                  String?
+  amount                   Decimal   @db.Decimal(15, 2)
+  receiptUrl               String?
+  justificationUrl         String?
+  containerId              String?
+  parcelId                 String?
+  associationType          String?
+  approvedByUserId         String?
   // Lien optionnel vers une charge recurrente (eau, electricite, loyer, ...)
-  agencyChargeId   String?
+  agencyChargeId           String?
   // Periode de la charge au format YYYY-MM (ex : "2025-11"). Permet de detecter
   // les charges deja payees pour un mois donne (= idempotence metier).
-  period           String?
+  period                   String?
   // Caisse depuis laquelle le paiement a ete effectue. Permet de remonter
   // depuis l'Expense vers le compte qui a ete debite, et inversement.
-  cashRegisterId   String?
+  cashRegisterId           String?
   // Caisse siege quand la depense est payee depuis le siege au lieu de
   // l'agence. Mutuellement exclusif avec cashRegisterId (au plus l'un des
   // deux est defini).
   headOfficeCashRegisterId String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  // Etat de paiement. Pour compat ascendante : true par defaut (toutes les
+  // depenses historiques ont ete creees au moment de leur paiement). Les
+  // depenses imputees a un conteneur (CreateContainerExpense) sont creees
+  // avec isPaid=false puis payees plus tard via PayContainerExpense.
+  isPaid                   Boolean   @default(true)
+  paidAt                   DateTime?
+  paidByUserId             String?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
 
   agency                 Agency                  @relation(fields: [agencyId], references: [id])
   container              Container?              @relation(fields: [containerId], references: [id])
   approvedBy             User?                   @relation(fields: [approvedByUserId], references: [id])
+  paidBy                 User?                   @relation("ExpensePaidBy", fields: [paidByUserId], references: [id])
   agencyCharge           AgencyCharge?           @relation(fields: [agencyChargeId], references: [id])
   cashRegister           AgencyCashRegister?     @relation(fields: [cashRegisterId], references: [id])
   headOfficeCashRegister HeadOfficeCashRegister? @relation("HeadOfficeExpense", fields: [headOfficeCashRegisterId], references: [id])
