@@ -7,6 +7,8 @@ import { AppDialog } from '@/components/ui/AppDialog';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppInput } from '@/components/ui/AppInput';
 import { AppSelect } from '@/components/ui/AppSelect';
+import { MonthYearPicker } from '@/components/ui/MonthYearPicker';
+import { fetchPdfAuthed } from '@/lib/api/pdfDownload';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
 
@@ -163,6 +165,12 @@ export function PayEmployeeDialog({ open, onClose, employee, defaultCashRegister
       qc.invalidateQueries({ queryKey: ['employees'] });
       qc.invalidateQueries({ queryKey: ['cash-register'] });
       qc.invalidateQueries({ queryKey: ['employees', employee?.id, 'payslips'] });
+      // Ouvre automatiquement le bulletin de paie genere/mis a jour pour
+      // que l'utilisateur puisse l'imprimer / l'envoyer a l'employe.
+      const payslipId = data?.payslip?.id;
+      if (payslipId) {
+        fetchPdfAuthed(`/employees/payslips/${payslipId}/pdf`, { mode: 'open' }).catch(() => {});
+      }
       onClose();
     },
     onError: (e: any) => toast.error(e?.response?.data?.message || 'Echec du paiement'),
@@ -213,12 +221,7 @@ export function PayEmployeeDialog({ open, onClose, employee, defaultCashRegister
         </p>
 
         <div className="grid grid-cols-2 gap-3">
-          <AppInput
-            label="Periode (YYYY-MM)"
-            value={period}
-            onChange={(e) => setPeriod(e.target.value)}
-            placeholder="2026-05"
-          />
+          <MonthYearPicker label="Periode" value={period} onChange={setPeriod} />
           <AppInput
             label={isInstallmentMode ? 'Brut (fige)' : 'Montant brut'}
             type="number"

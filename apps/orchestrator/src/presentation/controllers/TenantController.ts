@@ -190,6 +190,26 @@ export class TenantController {
   }
 
   /**
+   * POST /ops/tenants/:id/reset-owner-password -- regenere le pwd owner
+   * (SUPER_ADMIN du tenant) + retourne email + plaintext one-shot.
+   * Audit log capture seulement la date + email, JAMAIS la pwd.
+   */
+  static async resetOwnerPassword(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await container.resolve(TenantUseCases).resetOwnerPassword(req.params.id);
+      await container.resolve(AuditLogger).log(req, {
+        action: 'TENANT_OWNER_PASSWORD_RESET',
+        entityType: 'Tenant',
+        entityId: req.params.id,
+        payload: { email: result.email } as Record<string, unknown>,
+      });
+      res.json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
    * DELETE /ops/tenants/:id/purge -- destruction physique COMPLETE
    * (containers + volumes + images locales + network + env files + record
    * tenant). Aucun retour en arriere. Reserve super-admin.

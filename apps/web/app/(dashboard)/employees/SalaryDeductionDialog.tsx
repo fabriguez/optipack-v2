@@ -5,8 +5,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { AppDialog } from '@/components/ui/AppDialog';
 import { AppInput } from '@/components/ui/AppInput';
+import { AppSelect } from '@/components/ui/AppSelect';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppBadge } from '@/components/ui/AppBadge';
+import { MonthYearPicker } from '@/components/ui/MonthYearPicker';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
 import { Plus, X } from 'lucide-react';
 import { toast } from 'sonner';
@@ -45,6 +47,7 @@ export function SalaryDeductionDialog({ open, onClose, employee }: Props) {
     setAmount('');
     setReason('');
     setPeriod('');
+    setSelectedSanctionId('__custom__');
   }, [open]);
 
   const { data } = useQuery({
@@ -53,6 +56,40 @@ export function SalaryDeductionDialog({ open, onClose, employee }: Props) {
     enabled: open && !!employee?.id,
   });
   const items = (data?.data as Deduction[]) ?? [];
+
+  // Sanctions de l'employe : utilisees pour proposer le motif de retenue.
+  // Une sanction non resolue peut justifier un prelevement (gel, casse,
+  // suspension partielle, ...). On filtre celles pouvant impliquer une
+  // retenue financiere (toutes, l'admin trie).
+  const { data: sanctionsData } = useQuery({
+    queryKey: ['employees', employee?.id, 'sanctions'],
+    queryFn: () => apiClient.get(`/employees/${employee!.id}/sanctions`).then((r) => r.data),
+    enabled: open && !!employee?.id,
+  });
+  const sanctions: Array<{ id: string; type: string; reason: string; effectiveFrom: string }> =
+    sanctionsData?.data ?? [];
+
+  const SANCTION_TYPE_LABEL: Record<string, string> = {
+    WARNING: 'Avertissement',
+    SUSPENSION: 'Suspension',
+    PAY_FREEZE: 'Gel salaire',
+    DEMOTION: 'Retrogradation',
+  };
+  const sanctionOptions = [
+    { value: '__custom__', label: '-- Motif libre (autre) --' },
+    ...sanctions.map((s) => ({
+      value: s.id,
+      label: `[${SANCTION_TYPE_LABEL[s.type] ?? s.type}] ${s.reason}`.slice(0, 80),
+    })),
+  ];
+  const [selectedSanctionId, setSelectedSanctionId] = useState<string>('__custom__');
+
+  useEffect(() => {
+    if (selectedSanctionId === '__custom__') return;
+    const found = sanctions.find((s) => s.id === selectedSanctionId);
+    if (found) setReason(`Sanction ${SANCTION_TYPE_LABEL[found.type] ?? found.type} : ${found.reason}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSanctionId]);
 
   const createMutation = useMutation({
     mutationFn: () =>
@@ -91,7 +128,7 @@ export function SalaryDeductionDialog({ open, onClose, employee }: Props) {
       <div className="space-y-4">
         <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
           <p className="mb-2 text-sm font-medium text-gray-700">Nouvelle retenue (ponctuelle)</p>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <AppInput
               label="Montant"
               type="number"
@@ -99,17 +136,28 @@ export function SalaryDeductionDialog({ open, onClose, employee }: Props) {
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
             />
-            <AppInput
-              label="Motif (obligatoire)"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="Ex : avance, sanction, casse, ..."
+            <MonthYearPicker
+              label="Periode cible (optionnel)"
+              value={period}
+              onChange={setPeriod}
+              allowEmpty
+            />
+            <AppSelect
+              label="Motif - sanction liee"
+              options={sanctionOptions}
+              value={selectedSanctionId}
+              onValueChange={setSelectedSanctionId}
+              placeholder={sanctions.length === 0 ? 'Aucune sanction enregistree' : 'Choisir une sanction'}
             />
             <AppInput
-              label="Periode cible (YYYY-MM, optionnel)"
-              value={period}
-              onChange={(e) => setPeriod(e.target.value)}
-              placeholder="2026-05"
+              label="Motif detaille (obligatoire)"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder={
+                selectedSanctionId === '__custom__'
+                  ? 'Ex : avance, casse, materiel perdu...'
+                  : 'Motif pre-rempli depuis la sanction (modifiable)'
+              }
             />
           </div>
           <div className="mt-3 flex justify-end">

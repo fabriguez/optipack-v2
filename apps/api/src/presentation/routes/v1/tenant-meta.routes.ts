@@ -122,6 +122,59 @@ router.patch('/ops-sync', requireServiceToken, async (req, res, next) => {
 });
 
 /**
+ * POST /api/v1/tenant-meta/reset-owner-password
+ * Called by the orchestrator (service token). Regenerates the SUPER_ADMIN
+ * owner password to a strong random value, returns plaintext one-shot.
+ * Tenant id from X-Tenant-Id header (or fallback first org).
+ *
+ * Body : { ownerEmail?: string } (override target user, default = first
+ * SUPER_ADMIN of the org).
+ */
+router.post('/reset-owner-password', requireServiceToken, async (req, res, next) => {
+  try {
+    const { randomBytes } = await import('node:crypto');
+    const bcrypt = (await import('bcryptjs')).default;
+    const tenantId = (req.headers['x-tenant-id'] as string | undefined) ?? undefined;
+    const overrideEmail = (req.body?.ownerEmail as string | undefined) ?? undefined;
+
+    let org = tenantId
+      ? await prisma.organization.findUnique({ where: { id: tenantId } })
+      : null;
+    if (!org) org = await prisma.organization.findFirst();
+    if (!org) {
+      return res.status(404).json({ success: false, message: 'Organization introuvable' });
+    }
+
+    // Cible : user explicite OU premier SUPER_ADMIN de l'org
+    const user = overrideEmail
+      ? await prisma.user.findFirst({ where: { organizationId: org.id, email: overrideEmail } })
+      : await prisma.user.findFirst({
+          where: { organizationId: org.id, role: 'SUPER_ADMIN' as never, isActive: true },
+          orderBy: { createdAt: 'asc' },
+        });
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: 'Aucun user admin trouve pour ce tenant' });
+    }
+
+    const newPassword = randomBytes(12).toString('base64url');
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash },
+    });
+
+    res.json({
+      success: true,
+      data: { email: user.email, password: newPassword, userId: user.id },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
  * GET /api/v1/tenant-meta
  * PUBLIC : pas d'auth. Renvoie le branding + modules actifs du tenant courant.
  *

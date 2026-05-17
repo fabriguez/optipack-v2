@@ -317,6 +317,59 @@ export class TenantUseCases {
   }
 
   /**
+   * Reset le mot de passe owner du tenant. Appelle l'API tenant (service
+   * token) qui genere une nouvelle pwd aleatoire + met a jour le hash. La
+   * pwd plaintext est renvoyee a l'ops-admin une seule fois -- jamais
+   * persistee cote orchestrator.
+   */
+  async resetOwnerPassword(id: string): Promise<{ email: string; password: string }> {
+    const tenant = await prisma.tenant.findUnique({ where: { id } });
+    if (!tenant) throw new NotFoundError('Tenant', id);
+
+    const token = process.env.OPS_TENANT_PROXY_TOKEN ?? '';
+    if (!token) {
+      throw new BusinessError(
+        'OPS_TENANT_PROXY_TOKEN absent cote orchestrator -- reset impossible.',
+      );
+    }
+
+    const base = process.env.BASE_DOMAIN ?? 'transitsoftservices.com';
+    const apiHost = (tenant as { isMain?: boolean }).isMain
+      ? `api.${base}`
+      : tenant.customDomain
+        ? `api.${tenant.customDomain}`
+        : `api.${tenant.slug}.${base}`;
+    const url = `https://${apiHost}/api/v1/tenant-meta/reset-owner-password`;
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Service-Token': token,
+        'X-Tenant-Id': tenant.id,
+      },
+      body: JSON.stringify({}),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new BusinessError(
+        `Reset pwd echoue (${apiHost} HTTP ${res.status}) : ${body.slice(0, 200)}`,
+      );
+    }
+    const json = (await res.json()) as {
+      success?: boolean;
+      data?: { email: string; password: string };
+      message?: string;
+    };
+    if (!json.success || !json.data) {
+      throw new BusinessError(
+        `Reset pwd : reponse invalide (${json.message ?? 'unknown'})`,
+      );
+    }
+    return { email: json.data.email, password: json.data.password };
+  }
+
+  /**
    * Suppression DEFINITIVE : appelle PurgeTenantUseCase via la queue PURGE.
    * Le record tenant + volumes + images locales + env files sont detruits.
    * Aucun retour en arriere possible. Reserve aux super-admins.

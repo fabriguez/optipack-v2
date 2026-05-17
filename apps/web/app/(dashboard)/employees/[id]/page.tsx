@@ -23,7 +23,8 @@ import { EmployeeLeavesTab } from './EmployeeLeavesTab';
 import { EmployeeDisciplineTab } from './EmployeeDisciplineTab';
 import { EmployeeReviewsTab } from './EmployeeReviewsTab';
 import { EmployeeDocumentsTab } from './EmployeeDocumentsTab';
-import { FileText } from 'lucide-react';
+import { EmployeePayslipsTab } from './EmployeePayslipsTab';
+import { FileText, Receipt } from 'lucide-react';
 
 export default function EmployeeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -157,6 +158,7 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
           { value: 'attendance', label: 'Pointage', icon: <ListChecks className="h-4 w-4" />, content: <EmployeeAttendanceTab employeeId={id} /> },
           { value: 'leaves', label: 'Conges', icon: <Plane className="h-4 w-4" />, content: <EmployeeLeavesTab employeeId={id} /> },
           { value: 'discipline', label: 'Discipline', icon: <Gavel className="h-4 w-4" />, content: <EmployeeDisciplineTab employeeId={id} employee={employee} /> },
+          { value: 'payslips', label: 'Bulletins', icon: <Receipt className="h-4 w-4" />, content: <EmployeePayslipsTab employeeId={id} employeeName={employee.fullName} /> },
           { value: 'reviews', label: 'Evaluation', icon: <Star className="h-4 w-4" />, content: <EmployeeReviewsTab employeeId={id} agencyId={employee.agencyId} /> },
         ]} />
       </div>

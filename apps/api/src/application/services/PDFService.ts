@@ -872,4 +872,165 @@ export class PDFService {
 
     return collectBuffer(doc);
   }
+
+  // -------------------------------------------------------------------------
+  // Bulletin de paie (Payslip)
+  // -------------------------------------------------------------------------
+
+  static async generatePayslipPDF(data: PayslipPDFData): Promise<Buffer> {
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    const pageWidth = doc.page.width - 100;
+
+    // Header
+    doc.rect(50, 40, pageWidth, 70).fill(COLORS.primary);
+    doc.fontSize(22).fillColor(COLORS.white).text('BULLETIN DE PAIE', 60, 55, {
+      width: pageWidth - 20,
+      align: 'center',
+    });
+    doc.fontSize(11).fillColor(COLORS.white).text(`Periode : ${data.period}`, 60, 85, {
+      width: pageWidth - 20,
+      align: 'center',
+    });
+
+    let y = 130;
+
+    // Agency block (left) / Employee block (right)
+    doc.fontSize(9).fillColor(COLORS.gray).text('Employeur', 50, y);
+    doc.text('Employe', 320, y, { width: pageWidth - 270 });
+    y += 14;
+    doc.fontSize(10).fillColor(COLORS.dark).text(data.agency?.name ?? '-', 50, y);
+    doc.text(data.employee.fullName, 320, y, { width: pageWidth - 270 });
+    y += 14;
+    if (data.agency?.address) { doc.fontSize(9).text(data.agency.address, 50, y); }
+    if (data.employee.position) {
+      doc.fontSize(9).text(`Poste : ${data.employee.position}`, 320, y, { width: pageWidth - 270 });
+    }
+    y += 14;
+    if (data.agency?.phone) { doc.fontSize(9).text(`Tel: ${data.agency.phone}`, 50, y); }
+    if (data.employee.idNumber) {
+      doc.fontSize(9).text(`Matricule : ${data.employee.idNumber}`, 320, y, { width: pageWidth - 270 });
+    }
+    y += 14;
+    if (data.employee.contractType) {
+      doc.fontSize(9).text(`Contrat : ${data.employee.contractType}`, 320, y, { width: pageWidth - 270 });
+    }
+
+    // Salary breakdown table
+    y = Math.max(y, 220);
+    doc.rect(50, y, pageWidth, 22).fill(COLORS.primary);
+    doc.fontSize(10).fillColor(COLORS.white).text('Designation', 60, y + 6);
+    doc.text('Montant', 60, y + 6, { width: pageWidth - 20, align: 'right' });
+    y += 22;
+
+    const rows: Array<[string, number, 'add' | 'sub' | 'neutral']> = [
+      ['Salaire de base', Number(data.baseSalary), 'add'],
+    ];
+    if (Number(data.bonuses ?? 0) > 0) rows.push(['Primes', Number(data.bonuses), 'add']);
+    if (Number(data.benefitsInKind ?? 0) > 0) rows.push(['Avantages en nature', Number(data.benefitsInKind), 'add']);
+    rows.push(['Salaire brut', Number(data.grossSalary), 'neutral']);
+    if (Number(data.socialContributions ?? 0) > 0) rows.push(['Cotisations sociales', -Number(data.socialContributions), 'sub']);
+    if (Number(data.deductionsTotal ?? 0) > 0) rows.push(['Retenues sur salaire', -Number(data.deductionsTotal), 'sub']);
+    rows.push(['Salaire net', Number(data.netSalary), 'neutral']);
+
+    doc.fontSize(10);
+    rows.forEach(([label, amount, kind], i) => {
+      const bg = i % 2 === 0 ? COLORS.white : COLORS.lightGray;
+      doc.rect(50, y, pageWidth, 22).fill(bg);
+      const color = kind === 'sub' ? '#B91C1C' : kind === 'add' ? COLORS.dark : COLORS.primary;
+      const fontEmphasis = kind === 'neutral' ? 'Helvetica-Bold' : 'Helvetica';
+      doc.fillColor(color).font(fontEmphasis).text(label, 60, y + 6, { width: pageWidth / 2 });
+      doc.text(formatCurrency(amount), 60, y + 6, { width: pageWidth - 20, align: 'right' });
+      y += 22;
+    });
+    doc.font('Helvetica').fillColor(COLORS.dark);
+
+    // Payments history (installments)
+    y += 15;
+    if (y > 650) { doc.addPage(); y = 50; }
+    doc.fontSize(11).fillColor(COLORS.primary).text('Historique des versements', 50, y);
+    y += 18;
+
+    if (!data.payments || data.payments.length === 0) {
+      doc.fontSize(9).fillColor(COLORS.gray).text('Aucun versement enregistre.', 50, y);
+      y += 16;
+    } else {
+      const cols = [
+        { label: 'Date', width: 100 },
+        { label: 'Montant', width: 120 },
+        { label: 'Note', width: pageWidth - 220 },
+      ];
+      doc.rect(50, y, pageWidth, 20).fill(COLORS.primary);
+      let xCol = 55;
+      doc.fontSize(9).fillColor(COLORS.white);
+      for (const col of cols) {
+        doc.text(col.label, xCol, y + 6, { width: col.width });
+        xCol += col.width;
+      }
+      y += 20;
+      doc.fillColor(COLORS.dark).fontSize(9);
+      data.payments.forEach((p, i) => {
+        if (y > 720) { doc.addPage(); y = 50; }
+        const bg = i % 2 === 0 ? COLORS.white : COLORS.lightGray;
+        doc.rect(50, y, pageWidth, 18).fill(bg);
+        doc.fillColor(COLORS.dark);
+        doc.text(formatDate(p.paidAt), 55, y + 5, { width: cols[0].width });
+        doc.text(formatCurrency(Number(p.amount)), 55 + cols[0].width, y + 5, { width: cols[1].width });
+        doc.text(p.note || '-', 55 + cols[0].width + cols[1].width, y + 5, { width: cols[2].width });
+        y += 18;
+      });
+    }
+
+    // Totals
+    y += 10;
+    if (y > 700) { doc.addPage(); y = 50; }
+    const paidTotal = (data.payments ?? []).reduce((s, p) => s + Number(p.amount), 0);
+    const remaining = Math.max(0, Number(data.netSalary) - paidTotal);
+
+    doc.rect(50, y, pageWidth, 60).fill(COLORS.lightGray);
+    doc.fontSize(10).fillColor(COLORS.dark);
+    doc.text(`Total verse : ${formatCurrency(paidTotal)}`, 60, y + 10);
+    doc.text(`Reste a payer : ${formatCurrency(remaining)}`, 60, y + 28);
+    doc
+      .fontSize(12)
+      .fillColor(remaining === 0 ? COLORS.primary : '#B91C1C')
+      .text(remaining === 0 ? 'SOLDE' : 'EN COURS', 60, y + 10, {
+        width: pageWidth - 20,
+        align: 'right',
+      });
+
+    y += 90;
+    if (y > 720) { doc.addPage(); y = 50; }
+
+    // Signatures
+    doc.fontSize(10).fillColor(COLORS.dark);
+    doc.text('Employeur :', 60, y);
+    doc.text('Employe :', 330, y);
+    y += 40;
+    doc.moveTo(60, y).lineTo(220, y).strokeColor(COLORS.dark).stroke();
+    doc.moveTo(330, y).lineTo(490, y).strokeColor(COLORS.dark).stroke();
+
+    drawFooter(doc, pageWidth);
+    return collectBuffer(doc);
+  }
+}
+
+export interface PayslipPDFData {
+  period: string;
+  generatedAt: Date | string;
+  agency?: { name: string; address?: string | null; phone?: string | null } | null;
+  employee: {
+    fullName: string;
+    position?: string | null;
+    idNumber?: string | null;
+    contractType?: string | null;
+  };
+  baseSalary: number;
+  bonuses?: number;
+  benefitsInKind?: number;
+  socialContributions?: number;
+  grossSalary: number;
+  netSalary: number;
+  deductionsTotal?: number;
+  paymentNote?: string | null;
+  payments?: Array<{ amount: number | string; paidAt: Date | string; note?: string | null }>;
 }

@@ -221,6 +221,58 @@ export class EmployeeController {
     }
   }
 
+  static async payslipPdf(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { prisma } = await import('../../config/database');
+      const { PDFService } = await import('../../application/services/PDFService');
+      const payslip = await prisma.payslip.findUnique({
+        where: { id: req.params.payslipId },
+        include: {
+          employee: {
+            include: { agency: { select: { name: true, address: true, phone: true } } },
+          },
+          payments: { orderBy: { paidAt: 'asc' } },
+        },
+      });
+      if (!payslip) {
+        res.status(404).json({ success: false, message: 'Bulletin introuvable' });
+        return;
+      }
+      const buf = await PDFService.generatePayslipPDF({
+        period: payslip.period,
+        generatedAt: payslip.generatedAt,
+        agency: payslip.employee.agency,
+        employee: {
+          fullName: payslip.employee.fullName,
+          position: payslip.employee.position,
+          idNumber: payslip.employee.idNumber,
+          contractType: payslip.employee.contractType,
+        },
+        baseSalary: Number(payslip.baseSalary),
+        bonuses: Number(payslip.bonuses),
+        benefitsInKind: Number(payslip.benefitsInKind),
+        socialContributions: Number(payslip.socialContributions),
+        grossSalary: Number(payslip.grossSalary),
+        netSalary: Number(payslip.netSalary),
+        deductionsTotal: payslip.deductionsTotal ? Number(payslip.deductionsTotal) : 0,
+        paymentNote: payslip.paymentNote,
+        payments: payslip.payments.map((p) => ({
+          amount: Number(p.amount),
+          paidAt: p.paidAt,
+          note: p.note,
+        })),
+      });
+      res.set({
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `inline; filename="bulletin-${payslip.period}-${payslip.employee.fullName.replace(/\s+/g, '_')}.pdf"`,
+        'Content-Length': buf.length.toString(),
+      });
+      res.send(buf);
+    } catch (err) {
+      next(err);
+    }
+  }
+
   // ----- Retenues sur salaire -----
 
   static async listDeductions(req: Request, res: Response, next: NextFunction) {

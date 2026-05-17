@@ -6,6 +6,7 @@ import { apiClient } from '@/lib/api/client';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppInput } from '@/components/ui/AppInput';
+import { MonthYearPicker } from '@/components/ui/MonthYearPicker';
 import { Wand2 } from 'lucide-react';
 import { formatDate } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
@@ -168,7 +169,7 @@ export function EmployeeReviewsTab({ employeeId, agencyId }: { employeeId: strin
       <AppCard>
         <h3 className="mb-3 text-base font-semibold">Nouvelle evaluation</h3>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <AppInput label="Periode" placeholder="2026-04 (mois), Q1-2026..." value={period} onChange={(e) => setPeriod(e.target.value)} />
+          <MonthYearPicker label="Periode" value={period} onChange={setPeriod} />
           <AppInput label="Synthese" value={summary} onChange={(e) => setSummary(e.target.value)} />
         </div>
 

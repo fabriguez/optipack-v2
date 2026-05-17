@@ -18,6 +18,7 @@ import { AppButton } from '@/components/ui/AppButton';
 import { AppBadge } from '@/components/ui/AppBadge';
 import { AppDialog } from '@/components/ui/AppDialog';
 import { AppInput } from '@/components/ui/AppInput';
+import { MonthYearPicker } from '@/components/ui/MonthYearPicker';
 import { AppSelect } from '@/components/ui/AppSelect';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { ImageUrlField } from '@/components/shared/ImageUrlField';
@@ -581,11 +582,16 @@ function PayChargeDialog({ open, onClose, charge, period, onSaved }: PayProps) {
           {...register('amount', { valueAsNumber: true })}
           error={errors.amount?.message}
         />
-        <AppInput
-          label="Periode"
-          placeholder="YYYY-MM"
-          {...register('period')}
-          error={errors.period?.message}
+        <Controller
+          name="period"
+          control={control}
+          render={({ field }) => (
+            <MonthYearPicker
+              label="Periode"
+              value={field.value ?? ''}
+              onChange={field.onChange}
+            />
+          )}
         />
         <AppInput
           label="Description (optionnel)"

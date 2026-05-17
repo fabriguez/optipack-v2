@@ -274,6 +274,10 @@ export default function TenantDetailPage({
         <TenantUrls slug={t.slug} customDomain={t.customDomain} isMain={!!t.isMain} />
       </Section>
 
+      <Section title="Compte admin tenant">
+        <OwnerCredentials tenantId={t.id} ownerEmail={t.ownerEmail} />
+      </Section>
+
       <Section title="Messagerie (Resend)">
         <TenantMail tenantId={t.id} />
       </Section>
@@ -504,6 +508,102 @@ function TenantUrls({
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * Section "Compte admin tenant" : affiche l'email owner, permet de generer
+ * une nouvelle pwd. La plaintext n'est affichee qu'une seule fois apres
+ * generation (jamais persistee cote ops-admin). Bouton copy + show/hide.
+ */
+function OwnerCredentials({ tenantId, ownerEmail }: { tenantId: string; ownerEmail: string }) {
+  const [generated, setGenerated] = useState<{ email: string; password: string } | null>(null);
+  const [visible, setVisible] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const reset = useMutation({
+    mutationFn: async () =>
+      (await api.post(`/tenants/${tenantId}/reset-owner-password`)).data?.data as {
+        email: string;
+        password: string;
+      },
+    onSuccess: (data) => {
+      setGenerated(data);
+      setVisible(true);
+    },
+  });
+
+  const copyPwd = async () => {
+    if (!generated) return;
+    try {
+      await navigator.clipboard.writeText(generated.password);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {/* clipboard refuse */}
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+        <div>
+          <p className="text-xs text-gray-500">Email owner (SUPER_ADMIN)</p>
+          <p className="font-mono text-sm">{ownerEmail}</p>
+        </div>
+        <div>
+          <p className="text-xs text-gray-500">Mot de passe initial</p>
+          <p className="text-xs italic text-gray-400">
+            Genere a la creation du tenant. Visible dans les logs du job
+            PROVISION (cherche &quot;OWNER CREDENTIALS&quot;). Si perdu, regenere ci-dessous.
+          </p>
+        </div>
+      </div>
+
+      {generated && (
+        <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs">
+          <p className="mb-1 font-semibold text-amber-900">
+            Nouveau mot de passe genere (affiche une seule fois)
+          </p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 break-all rounded bg-white px-2 py-1 font-mono">
+              {visible ? generated.password : '••••••••••••••••'}
+            </code>
+            <button
+              type="button"
+              onClick={() => setVisible((v) => !v)}
+              className="rounded border bg-white px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-50"
+            >
+              {visible ? 'Masquer' : 'Afficher'}
+            </button>
+            <button
+              type="button"
+              onClick={copyPwd}
+              className="rounded border bg-white px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-50"
+            >
+              {copied ? 'Copie !' : 'Copier'}
+            </button>
+          </div>
+          <p className="mt-2 text-[11px] text-amber-800">
+            Email : <span className="font-mono">{generated.email}</span> -- transmets-le par un
+            canal sur. La pwd n&apos;est pas conservee en clair cote ops.
+          </p>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => reset.mutate()}
+          disabled={reset.isPending}
+          className="inline-flex items-center gap-1.5 rounded-md border border-red-300 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+        >
+          {reset.isPending ? 'Generation...' : 'Generer un nouveau mot de passe'}
+        </button>
+        {reset.isError && (
+          <p className="text-xs text-red-600">
+            {(reset.error as Error | undefined)?.message ?? 'Echec'}
+          </p>
+        )}
+      </div>
     </div>
   );
 }

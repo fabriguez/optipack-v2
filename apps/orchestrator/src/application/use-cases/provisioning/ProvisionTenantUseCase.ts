@@ -454,7 +454,15 @@ true`;
     // #1B5E20,` non quote, SyntaxError au parse Node. Solution propre : on
     // ecrit le script dans /tmp via heredoc puis on l'execute -- plus aucun
     // probleme d'echappement.
+    // Mot de passe owner : genere aleatoire (16 chars URL-safe). Affiche en
+    // clair dans les logs du job une seule fois -- admin doit le noter ou
+    // le copier depuis le JobLogsViewer. Apres, seul un reset via
+    // POST /tenants/:id/reset-owner-password peut regenerer un nouveau pwd.
+    const ownerPassword = randomBytes(12).toString('base64url');
     await log(`[provision] seed initial Organization + admin owner`);
+    await log(
+      `[provision] OWNER CREDENTIALS : email=${tenant.ownerEmail} password=${ownerPassword} (NOTE-LE : non recuperable apres ce log)`,
+    );
     const seedPayload = {
       id: tenant.id,
       name: tenant.name,
@@ -467,6 +475,7 @@ true`;
       supportEmail: tenant.ownerEmail ?? null,
       ownerEmail: tenant.ownerEmail,
       ownerUsername: tenant.ownerUsername ?? 'admin',
+      ownerPassword,
     };
     // Le script lit le JSON via process.env.SEED_DATA -- plus de pollution du
     // shell par le contenu utilisateur (couleurs, names, emails).
@@ -491,7 +500,7 @@ const p = new PrismaClient();
         supportEmail: data.supportEmail,
       },
     });
-    const hash = await bcrypt.hash('changeme', 10);
+    const hash = await bcrypt.hash(data.ownerPassword || 'changeme', 10);
     await p.user.create({
       data: {
         organizationId: data.id,
