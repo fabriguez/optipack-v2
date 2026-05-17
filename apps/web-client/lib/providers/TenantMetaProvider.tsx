@@ -56,7 +56,13 @@ export function TenantMetaProvider({ children }: { children: ReactNode }) {
   const fetchMeta = async () => {
     try {
       const r = await apiClient.get('/tenant-meta');
-      setMeta((r.data?.data as TenantMeta) ?? FALLBACK);
+      const m = (r.data?.data as TenantMeta) ?? FALLBACK;
+      setMeta(m);
+      // Titre + branding : applique le nom du tenant comme document.title
+      // (et pas le hardcode "Transit Soft Services" du layout).
+      if (typeof document !== 'undefined' && m.name) {
+        document.title = m.name;
+      }
     } catch {
       setMeta(FALLBACK);
     }

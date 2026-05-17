@@ -126,11 +126,27 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
               <p className="text-sm text-gray-500 mt-0.5">{employee.position}</p>
             </div>
           </div>
-          <AppButton variant="outline" onClick={() => setShowEdit(true)}>
-            <Edit className="h-4 w-4" />
-            Modifier
-          </AppButton>
+          {employee.isActive && (
+            <AppButton variant="outline" onClick={() => setShowEdit(true)}>
+              <Edit className="h-4 w-4" />
+              Modifier
+            </AppButton>
+          )}
         </div>
+
+        {!employee.isActive && (
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm">
+            <p className="font-semibold text-red-800">Contrat rompu</p>
+            <p className="mt-1 text-red-700">
+              Cet employe est inactif depuis le {employee.endDate ? formatDate(employee.endDate) : '-'}.
+              {employee.termination?.reason && (
+                <> Motif : <span className="italic">{employee.termination.reason}</span>.</>
+              )}
+              {' '}Aucune action (modification, sanction, paiement, statut chef, nouvelle rupture) n&apos;est possible.
+              La masse salariale de l&apos;agence a ete recalculee.
+            </p>
+          </div>
+        )}
 
         <EmployeeFormDialog open={showEdit} onClose={() => setShowEdit(false)} employee={employee} />
 
@@ -141,7 +157,7 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
           { value: 'attendance', label: 'Pointage', icon: <ListChecks className="h-4 w-4" />, content: <EmployeeAttendanceTab employeeId={id} /> },
           { value: 'leaves', label: 'Conges', icon: <Plane className="h-4 w-4" />, content: <EmployeeLeavesTab employeeId={id} /> },
           { value: 'discipline', label: 'Discipline', icon: <Gavel className="h-4 w-4" />, content: <EmployeeDisciplineTab employeeId={id} employee={employee} /> },
-          { value: 'reviews', label: 'Evaluation', icon: <Star className="h-4 w-4" />, content: <EmployeeReviewsTab employeeId={id} /> },
+          { value: 'reviews', label: 'Evaluation', icon: <Star className="h-4 w-4" />, content: <EmployeeReviewsTab employeeId={id} agencyId={employee.agencyId} /> },
         ]} />
       </div>
     </PageTransition>

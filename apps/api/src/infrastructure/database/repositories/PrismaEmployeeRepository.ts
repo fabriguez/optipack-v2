@@ -9,7 +9,10 @@ export class PrismaEmployeeRepository implements IEmployeeRepository {
   async findById(id: string): Promise<Employee | null> {
     return prisma.employee.findUnique({
       where: { id },
-      include: { agency: { select: { id: true, name: true, code: true } } },
+      include: {
+        agency: { select: { id: true, name: true, code: true } },
+        termination: true,
+      },
     });
   }
 

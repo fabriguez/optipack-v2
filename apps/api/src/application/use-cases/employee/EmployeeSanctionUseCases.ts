@@ -22,6 +22,9 @@ export class CreateEmployeeSanctionUseCase {
     if (!input.reason?.trim()) throw new BusinessError('Le motif est obligatoire');
     const employee = await prisma.employee.findUnique({ where: { id: input.employeeId } });
     if (!employee) throw new NotFoundError('Employe', input.employeeId);
+    if (!employee.isActive) {
+      throw new BusinessError('Employe inactif (contrat rompu). Aucune sanction ne peut etre ajoutee.');
+    }
 
     return prisma.employeeSanction.create({
       data: {
@@ -63,28 +66,29 @@ export class TerminateEmployeeContractUseCase {
   constructor(private payrollCharge: PayrollChargeService) {}
 
   async execute(input: TerminationInput, userId: string) {
-    const employee = await prisma.employee.findUnique({ where: { id: input.employeeId } });
+    const employee = await prisma.employee.findUnique({
+      where: { id: input.employeeId },
+      include: { termination: true },
+    });
     if (!employee) throw new NotFoundError('Employe', input.employeeId);
     if (!input.reason?.trim()) throw new BusinessError('Le motif est obligatoire');
+    if (employee.termination || !employee.isActive) {
+      throw new BusinessError(
+        'Contrat deja rompu pour cet employe. Une rupture est definitive.',
+      );
+    }
 
     const date = new Date(input.effectiveDate);
 
     const result = await prisma.$transaction(async (tx) => {
-      const term = await tx.contractTermination.upsert({
-        where: { employeeId: input.employeeId },
-        create: {
+      const term = await tx.contractTermination.create({
+        data: {
           employeeId: input.employeeId,
           type: input.type as any,
           reason: input.reason.trim(),
           effectiveDate: date,
           attachmentUrl: input.attachmentUrl ?? null,
           attachmentKey: input.attachmentKey ?? null,
-          decidedByUserId: userId,
-        },
-        update: {
-          type: input.type as any,
-          reason: input.reason.trim(),
-          effectiveDate: date,
           decidedByUserId: userId,
         },
       });

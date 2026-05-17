@@ -149,6 +149,9 @@ export function EmployeeAttendanceTab({ employeeId }: { employeeId: string }) {
             <AppBadge variant={STATUS_VARIANT[todayRow.status] ?? 'default'}>
               {STATUS_LABEL[todayRow.status] ?? todayRow.status}
             </AppBadge>
+            {todayRow.expectedStart && (
+              <span className="ml-2 text-gray-500">prevu {todayRow.expectedStart}-{todayRow.expectedEnd}</span>
+            )}
             {todayRow.checkInTime && (
               <span className="ml-2 font-mono text-gray-700">arrivee {todayRow.checkInTime}</span>
             )}
@@ -157,6 +160,12 @@ export function EmployeeAttendanceTab({ employeeId }: { employeeId: string }) {
             )}
             {todayRow.lateMinutes ? (
               <span className="ml-2 text-amber-700">+{todayRow.lateMinutes} min retard</span>
+            ) : null}
+            {todayRow.earlyDepartureMinutes ? (
+              <span className="ml-2 text-red-700">-{todayRow.earlyDepartureMinutes} min depart anticipe</span>
+            ) : null}
+            {todayRow.overtimeMinutes ? (
+              <span className="ml-2 text-emerald-700">+{todayRow.overtimeMinutes} min heures sup</span>
             ) : null}
           </div>
         )}
@@ -172,9 +181,11 @@ export function EmployeeAttendanceTab({ employeeId }: { employeeId: string }) {
               <tr>
                 <th className="pb-2">Date</th>
                 <th className="pb-2">Statut</th>
-                <th className="pb-2">Arrivee</th>
-                <th className="pb-2">Depart</th>
-                <th className="pb-2">Retard (min)</th>
+                <th className="pb-2">Arrivee (prevu / pointe)</th>
+                <th className="pb-2">Depart (prevu / pointe)</th>
+                <th className="pb-2">Retard</th>
+                <th className="pb-2">Depart anticipe</th>
+                <th className="pb-2">Heures sup</th>
                 <th className="pb-2">Motif</th>
                 <th className="pb-2">Source</th>
               </tr>
@@ -188,9 +199,23 @@ export function EmployeeAttendanceTab({ employeeId }: { employeeId: string }) {
                       {STATUS_LABEL[a.status] ?? a.status}
                     </AppBadge>
                   </td>
-                  <td className="py-2 font-mono">{a.checkInTime || '-'}</td>
-                  <td className="py-2 font-mono">{a.checkOutTime || '-'}</td>
-                  <td className="py-2">{a.lateMinutes ?? '-'}</td>
+                  <td className="py-2 font-mono text-xs">
+                    <span className="text-gray-400">{a.expectedStart || '--:--'}</span>
+                    <span className="mx-1 text-gray-300">/</span>
+                    <span className={a.lateMinutes ? 'text-amber-700 font-semibold' : 'text-gray-700'}>{a.checkInTime || '-'}</span>
+                  </td>
+                  <td className="py-2 font-mono text-xs">
+                    <span className="text-gray-400">{a.expectedEnd || '--:--'}</span>
+                    <span className="mx-1 text-gray-300">/</span>
+                    <span className={
+                      a.earlyDepartureMinutes ? 'text-red-700 font-semibold'
+                      : a.overtimeMinutes ? 'text-emerald-700 font-semibold'
+                      : 'text-gray-700'
+                    }>{a.checkOutTime || '-'}</span>
+                  </td>
+                  <td className="py-2 text-amber-700">{a.lateMinutes ? `+${a.lateMinutes} min` : '-'}</td>
+                  <td className="py-2 text-red-700">{a.earlyDepartureMinutes ? `-${a.earlyDepartureMinutes} min` : '-'}</td>
+                  <td className="py-2 text-emerald-700">{a.overtimeMinutes ? `+${a.overtimeMinutes} min` : '-'}</td>
                   <td className="py-2 text-gray-600">{a.reason || '-'}</td>
                   <td className="py-2 text-xs text-gray-400">{a.source}</td>
                 </tr>

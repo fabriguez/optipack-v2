@@ -100,8 +100,42 @@ export function EmployeeDisciplineTab({ employeeId, employee }: { employeeId: st
     onError: (e: any) => toast.error(e?.response?.data?.message || 'Erreur'),
   });
 
+  const isInactive = !employee?.isActive;
+  const termination = employee?.termination;
+
   return (
     <div className="space-y-4">
+      {isInactive && termination && (
+        <AppCard>
+          <h3 className="mb-2 text-base font-semibold text-red-700">Rupture de contrat enregistree</h3>
+          <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+            <div>
+              <p className="text-xs text-gray-500">Type</p>
+              <p className="font-medium">{termination.type}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">Date d&apos;effet</p>
+              <p className="font-medium">{formatDate(termination.effectiveDate)}</p>
+            </div>
+            <div className="sm:col-span-2">
+              <p className="text-xs text-gray-500">Motif</p>
+              <p className="font-medium">{termination.reason}</p>
+            </div>
+            {termination.attachmentUrl && (
+              <div className="sm:col-span-2">
+                <a href={termination.attachmentUrl} className="text-xs text-primary-700 hover:underline" target="_blank" rel="noreferrer">
+                  Voir piece jointe
+                </a>
+              </div>
+            )}
+          </div>
+          <p className="mt-3 text-xs text-gray-500">
+            Une rupture est definitive : aucune sanction ni nouvelle rupture ne peut etre ajoutee.
+          </p>
+        </AppCard>
+      )}
+
+      {!isInactive && (
       <AppCard>
         <h3 className="mb-3 text-base font-semibold">Nouvelle sanction</h3>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -132,6 +166,7 @@ export function EmployeeDisciplineTab({ employeeId, employee }: { employeeId: st
           </AppButton>
         </div>
       </AppCard>
+      )}
 
       <AppCard>
         <h3 className="mb-3 text-base font-semibold">Historique des sanctions</h3>

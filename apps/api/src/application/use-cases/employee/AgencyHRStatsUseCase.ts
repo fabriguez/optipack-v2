@@ -25,7 +25,15 @@ export class AgencyHRStatsUseCase {
           date: { gte: start, lt: end },
           employee: { agencyId },
         },
-        select: { id: true, employeeId: true, status: true, lateMinutes: true },
+        select: {
+          id: true,
+          employeeId: true,
+          status: true,
+          lateMinutes: true,
+          earlyDepartureMinutes: true,
+          overtimeMinutes: true,
+          undertimeMinutes: true,
+        },
       }),
       prisma.employeeLeave.findMany({
         where: {
@@ -49,17 +57,28 @@ export class AgencyHRStatsUseCase {
           employee: { agencyId },
           period,
         },
-        select: { id: true, isPaid: true, netSalary: true },
+        select: { id: true, isPaid: true, netSalary: true, paidAmount: true },
       }),
     ]);
 
-    const byEmployee: Record<string, { present: number; late: number; absent: number; onLeave: number }> = {};
+    const byEmployee: Record<string, {
+      present: number; late: number; absent: number; onLeave: number;
+      lateMinutes: number; earlyDepartureMinutes: number; overtimeMinutes: number; undertimeMinutes: number;
+    }> = {};
     for (const a of attendances) {
-      byEmployee[a.employeeId] ??= { present: 0, late: 0, absent: 0, onLeave: 0 };
-      if (a.status === 'PRESENT') byEmployee[a.employeeId].present += 1;
-      else if (a.status === 'LATE') byEmployee[a.employeeId].late += 1;
-      else if (a.status === 'ABSENT') byEmployee[a.employeeId].absent += 1;
-      else if (a.status === 'ON_LEAVE') byEmployee[a.employeeId].onLeave += 1;
+      byEmployee[a.employeeId] ??= {
+        present: 0, late: 0, absent: 0, onLeave: 0,
+        lateMinutes: 0, earlyDepartureMinutes: 0, overtimeMinutes: 0, undertimeMinutes: 0,
+      };
+      const slot = byEmployee[a.employeeId];
+      if (a.status === 'PRESENT') slot.present += 1;
+      else if (a.status === 'LATE') slot.late += 1;
+      else if (a.status === 'ABSENT') slot.absent += 1;
+      else if (a.status === 'ON_LEAVE') slot.onLeave += 1;
+      slot.lateMinutes += a.lateMinutes ?? 0;
+      slot.earlyDepartureMinutes += a.earlyDepartureMinutes ?? 0;
+      slot.overtimeMinutes += a.overtimeMinutes ?? 0;
+      slot.undertimeMinutes += a.undertimeMinutes ?? 0;
     }
 
     const presentCount = attendances.filter((a) => a.status === 'PRESENT').length;
@@ -67,13 +86,25 @@ export class AgencyHRStatsUseCase {
     const absentCount = attendances.filter((a) => a.status === 'ABSENT').length;
     const onLeaveCount = attendances.filter((a) => a.status === 'ON_LEAVE').length;
     const totalLateMinutes = attendances.reduce((s, a) => s + (a.lateMinutes ?? 0), 0);
+    const totalEarlyDepartureMinutes = attendances.reduce((s, a) => s + (a.earlyDepartureMinutes ?? 0), 0);
+    const totalOvertimeMinutes = attendances.reduce((s, a) => s + (a.overtimeMinutes ?? 0), 0);
+    const totalUndertimeMinutes = attendances.reduce((s, a) => s + (a.undertimeMinutes ?? 0), 0);
 
-    const payrollPaid = payslips
-      .filter((p) => p.isPaid)
-      .reduce((s, p) => s + Number(p.netSalary), 0);
-    const payrollPending = payslips
-      .filter((p) => !p.isPaid)
-      .reduce((s, p) => s + Number(p.netSalary), 0);
+    // Masse salariale theorique = somme des salaires de base des employes
+    // actifs (identique a la charge auto "Masse salariale" sur l'agence).
+    // C'est ce chiffre qui sert de reference budgetaire, pas la somme des
+    // payslips emis (qui ne couvre que les periodes effectivement traitees).
+    const theoreticalMass = employees.reduce((s, e) => s + Number(e.baseSalary ?? 0), 0);
+
+    // Paid = somme cumulee des versements effectivement debites (gere les
+    // paiements partiels grace a paidAmount). Pending = reste a payer sur les
+    // payslips emis pour la periode. Total emis = somme des netSalary.
+    const payrollPaid = payslips.reduce((s, p) => s + Number(p.paidAmount ?? 0), 0);
+    const payrollPending = payslips.reduce(
+      (s, p) => s + Math.max(0, Number(p.netSalary) - Number(p.paidAmount ?? 0)),
+      0,
+    );
+    const payrollIssued = payslips.reduce((s, p) => s + Number(p.netSalary), 0);
 
     return {
       period,
@@ -85,6 +116,9 @@ export class AgencyHRStatsUseCase {
         absent: absentCount,
         onLeave: onLeaveCount,
         totalLateMinutes,
+        totalEarlyDepartureMinutes,
+        totalOvertimeMinutes,
+        totalUndertimeMinutes,
       },
       leaves: {
         approved: leaves.filter((l) => l.status === 'APPROVED').length,
@@ -93,16 +127,25 @@ export class AgencyHRStatsUseCase {
       },
       sanctionsCount: sanctions.length,
       payroll: {
+        // Reference budgetaire = masse salariale theorique mensuelle
+        // (== AgencyCharge SALARY auto-managee). C'est le meme chiffre que la
+        // tab Charges, garanti coherent.
+        theoreticalMass,
         paid: payrollPaid,
         pending: payrollPending,
-        total: payrollPaid + payrollPending,
+        issued: payrollIssued,
+        // Conserve pour compat affichage existant (total emis sur la periode).
+        total: payrollIssued,
         payslipsCount: payslips.length,
       },
       // Vue par employe (top contributeurs en retards/absences)
       byEmployee: employees.map((e) => ({
         id: e.id,
         fullName: e.fullName,
-        ...byEmployee[e.id] ?? { present: 0, late: 0, absent: 0, onLeave: 0 },
+        ...byEmployee[e.id] ?? {
+          present: 0, late: 0, absent: 0, onLeave: 0,
+          lateMinutes: 0, earlyDepartureMinutes: 0, overtimeMinutes: 0, undertimeMinutes: 0,
+        },
       })),
     };
   }

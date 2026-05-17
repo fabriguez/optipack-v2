@@ -76,7 +76,14 @@ function applyTheme(meta: TenantMeta) {
     document.documentElement.style.setProperty('--color-secondary', meta.secondaryColor);
     document.documentElement.style.setProperty('--color-accent', meta.accentColor);
 
-    // 3) Police effective : applique au body pour qu'elle se voie dans le
+    // 3) Palette sidebar derivee de la primary (assure que la sidebar
+    //    epouse les couleurs du tenant et non plus le vert hardcode).
+    document.documentElement.style.setProperty('--color-sidebar-bg', primary[900]);
+    document.documentElement.style.setProperty('--color-sidebar-hover', primary[800]);
+    document.documentElement.style.setProperty('--color-sidebar-active', primary[700]);
+    document.documentElement.style.setProperty('--color-sidebar-muted', primary[200]);
+
+    // 4) Police effective : applique au body pour qu'elle se voie dans le
     //    dashboard, pas seulement sur le site public.
     const fontBody = meta.skinCustomization?.fontBody;
     const fontHeading = meta.skinCustomization?.fontHeading;
@@ -86,6 +93,13 @@ function applyTheme(meta: TenantMeta) {
     }
     if (fontHeading) {
       document.documentElement.style.setProperty('--font-heading', fontHeading);
+    }
+
+    // 5) Titre document : remplace "TransitSoftServices" hardcode du layout
+    //    par le nom reel du tenant. Avant : tous les tenants affichaient
+    //    "TransitSoftServices" dans l'onglet du navigateur.
+    if (meta.name) {
+      document.title = meta.name;
     }
   }
 }

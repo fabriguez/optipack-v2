@@ -82,12 +82,17 @@ export function AgencyHRStatsTab({ agencyId }: { agencyId: string }) {
 
           <AppCard>
             <h3 className="mb-3 text-base font-semibold">Pointage du mois</h3>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Stat label="Presents" value={stats.attendance.present} accent="success" />
               <Stat label="Retards" value={stats.attendance.late} accent="warning" />
               <Stat label="Absents" value={stats.attendance.absent} accent="error" />
               <Stat label="Conges" value={stats.attendance.onLeave} />
-              <Stat label="Min retard" value={stats.attendance.totalLateMinutes} />
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <Stat label="Min retard cumule" value={stats.attendance.totalLateMinutes} accent="warning" />
+              <Stat label="Min depart anticipe" value={stats.attendance.totalEarlyDepartureMinutes} accent="error" />
+              <Stat label="Min heures sup" value={stats.attendance.totalOvertimeMinutes} accent="success" />
+              <Stat label="Min sous-temps" value={stats.attendance.totalUndertimeMinutes} accent="warning" />
             </div>
           </AppCard>
 
@@ -101,11 +106,15 @@ export function AgencyHRStatsTab({ agencyId }: { agencyId: string }) {
           </AppCard>
 
           <AppCard>
-            <h3 className="mb-3 text-base font-semibold">Masse salariale</h3>
-            <div className="grid grid-cols-3 gap-3">
-              <Stat label="Payee" value={formatAmount(stats.payroll.paid)} accent="success" raw />
-              <Stat label="En attente" value={formatAmount(stats.payroll.pending)} accent="warning" raw />
-              <Stat label="Total" value={formatAmount(stats.payroll.total)} raw />
+            <h3 className="mb-1 text-base font-semibold">Masse salariale</h3>
+            <p className="mb-3 text-xs text-gray-500">
+              Reference theorique = somme des salaires de base des employes actifs (identique a la charge auto sur l&apos;agence). Paye / restant suivent les versements effectifs (paiements partiels inclus).
+            </p>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <Stat label="Masse mensuelle (ref)" value={formatAmount(stats.payroll.theoreticalMass ?? 0)} raw />
+              <Stat label="Payee (versements)" value={formatAmount(stats.payroll.paid)} accent="success" raw />
+              <Stat label="Restant sur emis" value={formatAmount(stats.payroll.pending)} accent="warning" raw />
+              <Stat label="Total emis (bulletins)" value={formatAmount(stats.payroll.issued ?? stats.payroll.total)} raw />
             </div>
           </AppCard>
 
@@ -117,7 +126,9 @@ export function AgencyHRStatsTab({ agencyId }: { agencyId: string }) {
                   <tr>
                     <th className="pb-2">Employe</th>
                     <th className="pb-2 text-right">Presents</th>
-                    <th className="pb-2 text-right">Retards</th>
+                    <th className="pb-2 text-right">Retards (j / min)</th>
+                    <th className="pb-2 text-right">Depart anticipe (min)</th>
+                    <th className="pb-2 text-right">Heures sup (min)</th>
                     <th className="pb-2 text-right">Absents</th>
                     <th className="pb-2 text-right">Conges</th>
                   </tr>
@@ -127,7 +138,9 @@ export function AgencyHRStatsTab({ agencyId }: { agencyId: string }) {
                     <tr key={e.id}>
                       <td className="py-2 font-medium">{e.fullName}</td>
                       <td className="py-2 text-right text-green-600">{e.present}</td>
-                      <td className="py-2 text-right text-amber-600">{e.late}</td>
+                      <td className="py-2 text-right text-amber-600">{e.late} / {e.lateMinutes ?? 0}</td>
+                      <td className="py-2 text-right text-red-600">{e.earlyDepartureMinutes ?? 0}</td>
+                      <td className="py-2 text-right text-emerald-600">{e.overtimeMinutes ?? 0}</td>
                       <td className="py-2 text-right text-red-600">{e.absent}</td>
                       <td className="py-2 text-right text-gray-500">{e.onLeave}</td>
                     </tr>

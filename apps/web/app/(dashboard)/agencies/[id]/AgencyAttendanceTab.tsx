@@ -36,7 +36,11 @@ interface EmployeeRow {
     status: keyof typeof STATUS_LABEL;
     checkInTime: string | null;
     checkOutTime: string | null;
+    expectedStart: string | null;
+    expectedEnd: string | null;
     lateMinutes: number | null;
+    earlyDepartureMinutes: number | null;
+    overtimeMinutes: number | null;
     reason: string | null;
   }>;
 }
@@ -151,9 +155,11 @@ export function AgencyAttendanceTab({ agencyId }: { agencyId: string }) {
                 <th className="pb-2">Poste</th>
                 <th className="pb-2">Plage planifiee</th>
                 <th className="pb-2">Statut</th>
-                <th className="pb-2">Arrivee</th>
-                <th className="pb-2">Depart</th>
+                <th className="pb-2">Arrivee (prevu / pointe)</th>
+                <th className="pb-2">Depart (prevu / pointe)</th>
                 <th className="pb-2">Retard</th>
+                <th className="pb-2">Depart anticipe</th>
+                <th className="pb-2">Heures sup</th>
                 {isToday && <th className="pb-2 text-right">Actions</th>}
               </tr>
             </thead>
@@ -185,11 +191,27 @@ export function AgencyAttendanceTab({ agencyId }: { agencyId: string }) {
                         <span className="text-xs text-gray-400">Non pointe</span>
                       )}
                     </td>
-                    <td className="py-2 font-mono">{att?.checkInTime || '-'}</td>
-                    <td className="py-2 font-mono">{att?.checkOutTime || '-'}</td>
-                    <td className="py-2">
-                      {att?.lateMinutes != null ? `${att.lateMinutes} min` : '-'}
+                    <td className="py-2 font-mono text-xs">
+                      <span className="text-gray-400">{att?.expectedStart || shift?.startTime || '--:--'}</span>
+                      <span className="mx-1 text-gray-300">/</span>
+                      <span className={att?.lateMinutes ? 'text-amber-700 font-semibold' : 'text-gray-700'}>
+                        {att?.checkInTime || '-'}
+                      </span>
                     </td>
+                    <td className="py-2 font-mono text-xs">
+                      <span className="text-gray-400">{att?.expectedEnd || shift?.endTime || '--:--'}</span>
+                      <span className="mx-1 text-gray-300">/</span>
+                      <span className={
+                        att?.earlyDepartureMinutes ? 'text-red-700 font-semibold'
+                        : att?.overtimeMinutes ? 'text-emerald-700 font-semibold'
+                        : 'text-gray-700'
+                      }>
+                        {att?.checkOutTime || '-'}
+                      </span>
+                    </td>
+                    <td className="py-2 text-amber-700">{att?.lateMinutes ? `+${att.lateMinutes} min` : '-'}</td>
+                    <td className="py-2 text-red-700">{att?.earlyDepartureMinutes ? `-${att.earlyDepartureMinutes} min` : '-'}</td>
+                    <td className="py-2 text-emerald-700">{att?.overtimeMinutes ? `+${att.overtimeMinutes} min` : '-'}</td>
                     {isToday && (
                       <td className="py-2 text-right">
                         <div className="flex justify-end gap-1">

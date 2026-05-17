@@ -1,7 +1,7 @@
 import { inject, injectable } from 'tsyringe';
 import { EMPLOYEE_REPOSITORY, type IEmployeeRepository } from '../../interfaces/IEmployeeRepository';
 import { PayrollChargeService } from '../../services/PayrollChargeService';
-import { NotFoundError } from '../../../domain/errors/BusinessError';
+import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
 import { prisma } from '../../../config/database';
 
 @injectable()
@@ -14,6 +14,17 @@ export class UpdateEmployeeUseCase {
   async execute(id: string, data: any) {
     const existing = await this.employeeRepo.findById(id);
     if (!existing) throw new NotFoundError('Employe', id);
+
+    // Employe inactif (contrat rompu) : verrouille toute modification metier
+    // sauf reactivation explicite (isActive=true + endDate=null).
+    if (!existing.isActive) {
+      const isReactivation = data.isActive === true && data.endDate === null;
+      if (!isReactivation) {
+        throw new BusinessError(
+          'Employe inactif (contrat rompu). Aucune modification possible sans reactivation prealable.',
+        );
+      }
+    }
 
     // Invariant chef unique : si on promeut cet employe chef via update,
     // demote tout autre chef de l'agence (cible = nouvelle agence si change).

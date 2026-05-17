@@ -21,6 +21,10 @@ export class SetEmployeeManagerFlagUseCase {
       include: { user: true },
     });
     if (!employee) throw new NotFoundError('Employe', employeeId);
+    if (!employee.isActive) {
+      const { BusinessError } = await import('../../../domain/errors/BusinessError');
+      throw new BusinessError('Employe inactif (contrat rompu). Le statut chef ne peut etre modifie.');
+    }
 
     return prisma.$transaction(async (tx) => {
       // Si on promeut : demote tout autre chef de la meme agence (exclusivite).
