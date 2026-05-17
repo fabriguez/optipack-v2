@@ -2,7 +2,11 @@ import { Router } from 'express';
 import { WarehouseController } from '../../controllers/WarehouseController';
 import { authenticate, authorize } from '../../middleware/authMiddleware';
 import { validate } from '../../middleware/validate';
-import { paginationSchema } from '@transitsoftservices/shared';
+import {
+  paginationSchema,
+  createWarehouseStorageRuleSchema,
+  updateWarehouseStorageRuleSchema,
+} from '@transitsoftservices/shared';
 
 const router = Router();
 
@@ -70,6 +74,26 @@ router.post(
   '/parcels/:parcelId/restock',
   authorize('SUPER_ADMIN', 'ADMIN', 'AGENT', 'MAGASINIER'),
   WarehouseController.restockParcel,
+);
+
+// Regles de frais de magasinage (CRUD)
+router.get('/:id/storage-rules', WarehouseController.listStorageRules);
+router.post(
+  '/:id/storage-rules',
+  authorize('SUPER_ADMIN', 'ADMIN'),
+  validate(createWarehouseStorageRuleSchema),
+  WarehouseController.createStorageRule,
+);
+router.patch(
+  '/storage-rules/:ruleId',
+  authorize('SUPER_ADMIN', 'ADMIN'),
+  validate(updateWarehouseStorageRuleSchema),
+  WarehouseController.updateStorageRule,
+);
+router.delete(
+  '/storage-rules/:ruleId',
+  authorize('SUPER_ADMIN', 'ADMIN'),
+  WarehouseController.deleteStorageRule,
 );
 
 export default router;

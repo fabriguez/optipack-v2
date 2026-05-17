@@ -1,6 +1,7 @@
 export * from './auth.schema';
 export * from './agency.schema';
 export * from './warehouse.schema';
+export * from './warehouse-storage-rule.schema';
 export * from './client.schema';
 export * from './recipient.schema';
 export * from './transit-route.schema';

@@ -20,16 +20,34 @@ async function computeStorageFeesForInvoice(invoiceId: string): Promise<{
     where: { invoiceId },
     select: {
       id: true,
+      weight: true,
+      volume: true,
       warehouseEnteredAt: true,
       createdAt: true,
       lastContainerId: true,
-      warehouse: { select: { storageFreeDays: true, storageDailyRate: true } },
+      transitRouteId: true,
+      transitRoute: { select: { type: true } },
+      warehouse: {
+        select: {
+          storageFreeDays: true,
+          storageDailyRate: true,
+          storageFeeRules: true,
+        },
+      },
     },
   });
   const now = Date.now();
   const ONE_DAY = 24 * 60 * 60 * 1000;
   const perParcel = new Map<string, { fee: number; days: number }>();
   let total = 0;
+
+  const inRange = (val: number | null, min: number | null, max: number | null) => {
+    if (val == null) return min == null && max == null;
+    if (min != null && val < min) return false;
+    if (max != null && val > max) return false;
+    return true;
+  };
+
   for (const p of parcels) {
     if (!p.lastContainerId || !p.warehouse) {
       perParcel.set(p.id, { fee: 0, days: 0 });
@@ -37,8 +55,42 @@ async function computeStorageFeesForInvoice(invoiceId: string): Promise<{
     }
     const enteredAt = p.warehouseEnteredAt ?? p.createdAt;
     const days = Math.max(0, Math.floor((now - new Date(enteredAt).getTime()) / ONE_DAY));
-    const chargeable = Math.max(0, days - p.warehouse.storageFreeDays);
-    const rate = Number(p.warehouse.storageDailyRate);
+    const w = p.weight != null ? Number(p.weight) : null;
+    const v = p.volume != null ? Number(p.volume) : null;
+    const type = p.transitRoute?.type ?? null;
+
+    let rule: typeof p.warehouse.storageFeeRules[number] | null = null;
+    if (type) {
+      const candidates = p.warehouse.storageFeeRules.filter((r) => {
+        if (!r.isActive) return false;
+        if (r.transitType !== type) return false;
+        if (r.transitRouteId && r.transitRouteId !== p.transitRouteId) return false;
+        const minW = r.minWeight != null ? Number(r.minWeight) : null;
+        const maxW = r.maxWeight != null ? Number(r.maxWeight) : null;
+        const minV = r.minVolume != null ? Number(r.minVolume) : null;
+        const maxV = r.maxVolume != null ? Number(r.maxVolume) : null;
+        const hasW = minW != null || maxW != null;
+        const hasV = minV != null || maxV != null;
+        if (type === 'AIR') return hasW ? inRange(w, minW, maxW) : true;
+        if (type === 'SEA') return hasV ? inRange(v, minV, maxV) : true;
+        if (hasW && hasV) return inRange(w, minW, maxW) && inRange(v, minV, maxV);
+        if (hasW) return inRange(w, minW, maxW);
+        if (hasV) return inRange(v, minV, maxV);
+        return true;
+      });
+      candidates.sort((a, b) => {
+        const aScoped = a.transitRouteId === p.transitRouteId ? 1 : 0;
+        const bScoped = b.transitRouteId === p.transitRouteId ? 1 : 0;
+        if (aScoped !== bScoped) return bScoped - aScoped;
+        if (a.priority !== b.priority) return b.priority - a.priority;
+        return b.createdAt.getTime() - a.createdAt.getTime();
+      });
+      rule = candidates[0] ?? null;
+    }
+
+    const freeDays = rule ? rule.freeDays : p.warehouse.storageFreeDays;
+    const rate = rule ? Number(rule.dailyRate) : Number(p.warehouse.storageDailyRate);
+    const chargeable = Math.max(0, days - freeDays);
     const fee = chargeable * rate;
     perParcel.set(p.id, { fee, days: chargeable });
     total += fee;

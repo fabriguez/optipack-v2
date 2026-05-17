@@ -348,22 +348,68 @@ model Warehouse {
   agencyId         String
   name             String
   location         String
-  // Frais de magasinage : appliques uniquement aux colis issus d'un conteneur
-  // qui restent au-dela de `storageFreeDays`. Tarif journalier en devise de base.
+  // Fallback legacy (compat ascendante) : utilise UNIQUEMENT si aucune
+  // WarehouseStorageFeeRule ne matche le colis. Les nouvelles regles sont
+  // configurees par type de transit / route / intervalle masse-volume.
   storageFreeDays  Int      @default(7)
   storageDailyRate Decimal  @default(0) @db.Decimal(15, 2)
   isActive         Boolean  @default(true)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  agency          Agency               @relation(fields: [agencyId], references: [id])
-  parcels         Parcel[]             @relation("CurrentWarehouse")
-  originalParcels Parcel[]             @relation("OriginalWarehouse")
+  agency          Agency                    @relation(fields: [agencyId], references: [id])
+  parcels         Parcel[]                  @relation("CurrentWarehouse")
+  originalParcels Parcel[]                  @relation("OriginalWarehouse")
   inventories     WarehouseInventory[]
   spaces          WarehouseSpace[]
+  storageFeeRules WarehouseStorageFeeRule[]
 
   @@index([agencyId])
   @@map("warehouses")
+}
+
+// Regles de frais de magasinage par magasin. Une regle = un (type transit ou
+// route precise) + un intervalle [min, max] de masse OU de volume + un tarif
+// journalier + nb jours gratuits.
+//
+// Selection a l'application : pour un colis donne, on cherche la regle la
+// plus specifique active du magasin courant :
+//   1) transitRouteId == parcel.transitRouteId (sinon transitRouteId == null)
+//   2) transitType == parcel.transitRoute.type (toujours)
+//   3) intervalle valeur (masse pour AIR, volume pour SEA, l'un OU l'autre
+//      pour LAND) contient la valeur du colis
+// Si aucune regle ne matche, on retombe sur Warehouse.storageFreeDays /
+// storageDailyRate (legacy). Si ces deux derniers sont a 0, pas de frais.
+model WarehouseStorageFeeRule {
+  id             String      @id @default(uuid())
+  warehouseId    String
+  transitType    TransitType
+  // Si renseigne, regle scopee a cette route precise (overrides la regle
+  // generale du meme type). Sinon : applique a toutes les routes du type.
+  transitRouteId String?
+  // Intervalle masse en kg. Utilise pour AIR (obligatoire) et LAND (optionnel).
+  minWeight      Decimal?    @db.Decimal(15, 3)
+  maxWeight      Decimal?    @db.Decimal(15, 3)
+  // Intervalle volume en m3. Utilise pour SEA (obligatoire) et LAND (optionnel).
+  minVolume      Decimal?    @db.Decimal(15, 3)
+  maxVolume      Decimal?    @db.Decimal(15, 3)
+  freeDays       Int         @default(0)
+  dailyRate      Decimal     @db.Decimal(15, 2)
+  isActive       Boolean     @default(true)
+  // Priorite manuelle de tie-break quand plusieurs regles matchent
+  // simultanement (ex : intervalle AIR + LAND). Defaut 0 ; valeur la plus
+  // elevee gagne. La regle scopee a une route bat toujours la regle generale.
+  priority       Int         @default(0)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  warehouse    Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  transitRoute TransitRoute? @relation(fields: [transitRouteId], references: [id])
+
+  @@index([warehouseId])
+  @@index([transitType])
+  @@index([transitRouteId])
+  @@map("warehouse_storage_fee_rules")
 }
 
 // Espace de rangement physique dans un magasin (ex : "Allee A", "Etagere 3").
@@ -1223,10 +1269,11 @@ model TransitRoute {
   createdAt             DateTime    @default(now())
   updatedAt             DateTime    @updatedAt
 
-  organization    Organization     @relation(fields: [organizationId], references: [id])
-  parcels         Parcel[]
-  containers      Container[]
-  partnerPricings PartnerPricing[]
+  organization          Organization              @relation(fields: [organizationId], references: [id])
+  parcels               Parcel[]
+  containers            Container[]
+  partnerPricings       PartnerPricing[]
+  warehouseStorageRules WarehouseStorageFeeRule[]
 
   @@index([organizationId])
   @@map("transit_routes")

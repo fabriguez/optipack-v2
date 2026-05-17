@@ -18,6 +18,12 @@ import {
 } from '../../application/use-cases/warehouse/WarehouseSpaceUseCases';
 import { RegisterExtraInventoryParcelUseCase } from '../../application/use-cases/warehouse/RegisterExtraInventoryParcelUseCase';
 import { RestockParcelUseCase } from '../../application/use-cases/warehouse/RestockParcelUseCase';
+import {
+  ListWarehouseStorageRulesUseCase,
+  CreateWarehouseStorageRuleUseCase,
+  UpdateWarehouseStorageRuleUseCase,
+  DeleteWarehouseStorageRuleUseCase,
+} from '../../application/use-cases/warehouse/WarehouseStorageRuleUseCases';
 import { WAREHOUSE_REPOSITORY } from '../../application/interfaces/IWarehouseRepository';
 import { NotFoundError } from '../../domain/errors/BusinessError';
 
@@ -247,6 +253,48 @@ export class WarehouseController {
       const useCase = container.resolve(RestockParcelUseCase);
       const data = await useCase.execute(req.params.parcelId, req.body, req.user!.userId);
       res.json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  // ----- Storage fee rules -----
+
+  static async listStorageRules(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(ListWarehouseStorageRulesUseCase);
+      const data = await useCase.execute(req.params.id);
+      res.json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async createStorageRule(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(CreateWarehouseStorageRuleUseCase);
+      const data = await useCase.execute({ ...req.body, warehouseId: req.params.id });
+      res.status(201).json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async updateStorageRule(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(UpdateWarehouseStorageRuleUseCase);
+      const data = await useCase.execute(req.params.ruleId, req.body);
+      res.json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async deleteStorageRule(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(DeleteWarehouseStorageRuleUseCase);
+      await useCase.execute(req.params.ruleId);
+      res.json({ success: true });
     } catch (err) {
       next(err);
     }

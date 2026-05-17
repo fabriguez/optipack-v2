@@ -22,8 +22,6 @@ interface WarehouseLike {
   id: string;
   name: string;
   location: string;
-  storageFreeDays?: number | null;
-  storageDailyRate?: number | string | null;
   agency?: { id: string; name: string; city?: string | null } | null;
 }
 
@@ -82,14 +80,6 @@ export function WarehouseFormDialog({ open, onClose, defaultAgency, warehouse }:
         name: warehouse.name,
         agencyId: warehouse.agency?.id ?? '',
         location: warehouse.location,
-        storageFreeDays:
-          warehouse.storageFreeDays !== null && warehouse.storageFreeDays !== undefined
-            ? Number(warehouse.storageFreeDays)
-            : undefined,
-        storageDailyRate:
-          warehouse.storageDailyRate !== null && warehouse.storageDailyRate !== undefined
-            ? Number(warehouse.storageDailyRate)
-            : undefined,
       } as CreateWarehouseInput);
     } else {
       reset(defaultAgency ? ({ agencyId: defaultAgency.id } as CreateWarehouseInput) : ({} as CreateWarehouseInput));
@@ -153,37 +143,10 @@ export function WarehouseFormDialog({ open, onClose, defaultAgency, warehouse }:
 
         <AppInput label="Emplacement" {...register('location')} error={errors.location?.message} />
 
-        {/* Frais de magasinage : configuration du tarif applique aux colis qui
-            stagnent au-dela de la periode gratuite. Le calcul se fait cote
-            backend (ComputeStorageFeeUseCase). 0 = facturation desactivee. */}
-        <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 space-y-3">
-          <div>
-            <p className="text-sm font-medium text-gray-800">Frais de magasinage</p>
-            <p className="text-xs text-gray-500">
-              Applique aux colis recus apres dechargement d&apos;un conteneur. Tarif a 0 = pas de frais.
-            </p>
-          </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <AppInput
-              label="Jours gratuits"
-              type="number"
-              min="0"
-              step="1"
-              placeholder="7"
-              {...register('storageFreeDays', { valueAsNumber: true })}
-              error={(errors as any).storageFreeDays?.message}
-            />
-            <AppInput
-              label="Tarif par jour"
-              type="number"
-              min="0"
-              step="100"
-              placeholder="0"
-              {...register('storageDailyRate', { valueAsNumber: true })}
-              error={(errors as any).storageDailyRate?.message}
-            />
-          </div>
-        </div>
+        <p className="rounded-xl bg-primary-50 px-3 py-2 text-xs text-primary-800">
+          Les frais de magasinage se configurent apres creation, depuis l&apos;onglet
+          &quot;Frais magasinage&quot; du magasin (par type de transit / route / intervalle masse-volume).
+        </p>
       </form>
     </AppDialog>
   );
