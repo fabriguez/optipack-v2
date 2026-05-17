@@ -76,6 +76,19 @@ services:
       OPS_SELF_VPS_NAME: ${OPS_SELF_VPS_NAME:-self}
       OPS_BASE_DOMAIN: ${OPS_BASE_DOMAIN:-transitsoftservices.com}
       OPS_CADDY_EMAIL: ${OPS_CADDY_EMAIL:-admin@transitsoftservices.com}
+      # Token partage orchestrator <-> tenant API pour ops-sync + reset-pwd.
+      # Sans ce token, le sync silencieux + reset pwd renvoient 503.
+      OPS_TENANT_PROXY_TOKEN: ${OPS_TENANT_PROXY_TOKEN:?required for tenant ops-sync + reset-owner-password}
+      # Dir host pour fichiers compose/env/seed tenant (provisioning self).
+      OPS_TENANT_ENV_DIR: ${OPS_TENANT_ENV_DIR:-/home/brightky/.optipack}
+      # Resend partage (fallback si tenant n'a pas son propre provider).
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM: ${RESEND_FROM:-}
+      # Postgres pwd / Minio creds pour le compose tenant.
+      POSTGRES_USER: ${OPS_POSTGRES_USER:-opsadmin}
+      POSTGRES_PASSWORD: ${OPS_POSTGRES_PASSWORD:-}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-}
     ports:
       - "127.0.0.1:4020:4020"
     networks:
