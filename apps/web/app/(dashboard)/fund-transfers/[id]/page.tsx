@@ -43,13 +43,15 @@ export default function FundTransferDetailPage({ params }: { params: Promise<{ i
   });
 
   const confirmMutation = useMutation({
-    mutationFn: () => apiClient.patch(`/fund-transfers/${id}/confirm`).then((r) => r.data),
+    mutationFn: () => apiClient.post(`/fund-transfers/${id}/confirm`).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['fund-transfers'] });
+      qc.invalidateQueries({ queryKey: ['fund-transfers', id] });
+      qc.invalidateQueries({ queryKey: ['cash-register'] });
       toast.success('Transfert confirme');
       setShowConfirm(false);
     },
-    onError: () => toast.error('Erreur lors de la confirmation'),
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Erreur lors de la confirmation'),
   });
 
   const voidMutation = useMutation({
