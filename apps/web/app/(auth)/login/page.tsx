@@ -10,6 +10,7 @@ import { AppInput } from '@/components/ui/AppInput';
 import { Eye, EyeOff, LogIn, AlertCircle } from 'lucide-react';
 import { useLogin } from '@/lib/hooks/useAuth';
 import { readAuthLog, clearAuthLog, type AuthDebugEntry } from '@/lib/api/authDebug';
+import { useTenantMeta } from '@/lib/providers/TenantProvider';
 
 const REASON_LABELS: Record<string, string> = {
   'refresh-failed': "Votre session a expire (refresh token invalide).",
@@ -26,6 +27,9 @@ export default function LoginPage() {
   const search = useSearchParams();
   const reason = search.get('reason');
   const loginMutation = useLogin();
+  const { meta } = useTenantMeta();
+  const orgName = meta?.name?.trim() || 'TransitSoftServices';
+  const logoUrl = meta?.logoUrl ?? null;
 
   useEffect(() => {
     if (reason) setAuthLog(readAuthLog());
@@ -46,12 +50,23 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
       <div className="w-full max-w-md">
-        {/* Logo */}
+        {/* Logo + nom dynamique tenant */}
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary-500">
-            <span className="text-2xl font-bold text-white">OP</span>
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900">TransitSoftServices</h1>
+          {logoUrl && /^https?:\/\//.test(logoUrl) ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={logoUrl}
+              alt={orgName}
+              className="mx-auto mb-4 h-16 w-16 rounded-2xl object-contain"
+            />
+          ) : (
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary-500">
+              <span className="text-2xl font-bold text-white">
+                {orgName.slice(0, 2).toUpperCase()}
+              </span>
+            </div>
+          )}
+          <h1 className="text-2xl font-bold text-gray-900">{orgName}</h1>
           <p className="mt-1 text-sm text-gray-500">Connectez-vous a votre compte</p>
         </div>
 
@@ -161,6 +176,17 @@ export default function LoginPage() {
             </AppButton>
           </form>
         </div>
+        <p className="mt-6 text-center text-xs text-gray-400">
+          Powered by{' '}
+          <a
+            href="https://transitsoftservices.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold text-primary-700 hover:underline"
+          >
+            transitsoftservices.com
+          </a>
+        </p>
       </div>
     </div>
   );

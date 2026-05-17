@@ -105,6 +105,7 @@ router.get('/releases', authenticateOps, ReleaseController.list);
 router.post('/releases/sync', authenticateOps, requireSuperAdmin, ReleaseController.sync);
 router.get('/ghcr/tags', authenticateOps, ReleaseController.listGhcrTags);
 router.post('/releases', authenticateOps, requireSuperAdmin, ReleaseController.create);
+router.get('/releases/:id', authenticateOps, ReleaseController.getById);
 router.patch('/releases/:id', authenticateOps, requireSuperAdmin, ReleaseController.update);
 router.post('/releases/:id/publish', authenticateOps, requireSuperAdmin, ReleaseController.publish);
 

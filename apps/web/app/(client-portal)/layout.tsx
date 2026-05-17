@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { isClientAuthenticated, removeClientToken } from '@/lib/api/client-portal';
 import { cn } from '@/lib/utils';
+import { useTenantMeta } from '@/lib/providers/TenantProvider';
 
 const NAV_LINKS = [
   { href: '/portal/dashboard', label: 'Accueil', icon: Home },
@@ -30,6 +31,8 @@ export default function ClientPortalLayout({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const { meta } = useTenantMeta();
+  const orgName = meta?.name?.trim() || 'TransitSoftServices';
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const isLoginPage = pathname === '/portal';
@@ -60,7 +63,7 @@ export default function ClientPortalLayout({
             href="/portal/dashboard"
             className="text-xl font-bold text-primary-700"
           >
-            TransitSoftServices
+            {orgName}
           </Link>
 
           {/* Desktop nav */}

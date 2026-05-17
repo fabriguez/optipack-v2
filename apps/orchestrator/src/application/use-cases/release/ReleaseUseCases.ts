@@ -48,6 +48,12 @@ export class ReleaseUseCases {
     return r;
   }
 
+  async getById(id: string) {
+    const r = await prisma.release.findUnique({ where: { id } });
+    if (!r) throw new NotFoundError('Release', id);
+    return r;
+  }
+
   /**
    * Cree un record Release (suite a un tag GHCR detecte ou une saisie manuelle).
    * `isPublished = false` par defaut : le super-admin doit explicitement publier

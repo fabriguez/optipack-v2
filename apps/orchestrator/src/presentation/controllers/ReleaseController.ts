@@ -73,6 +73,15 @@ export class ReleaseController {
     }
   }
 
+  static async getById(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = await container.resolve(ReleaseUseCases).getById(req.params.id);
+      res.json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   static async list(req: Request, res: Response, next: NextFunction) {
     try {
       const p = parsePagination(req);

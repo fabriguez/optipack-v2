@@ -14,8 +14,10 @@ import { cn } from "@/lib/utils";
 
 const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
+// Titre placeholder cote serveur. Le vrai titre est override cote client
+// par TenantProvider.applyTheme(meta.name) une fois la meta tenant chargee.
 export const metadata: Metadata = {
-  title: 'TransitSoftServices - Gestion de Transit',
+  title: 'Chargement...',
   description: 'Application de gestion de transit aerien, maritime et terrestre',
 };
 

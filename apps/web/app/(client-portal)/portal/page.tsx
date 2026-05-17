@@ -6,6 +6,7 @@ import { AppButton } from '@/components/ui/AppButton';
 import { AppInput } from '@/components/ui/AppInput';
 import { AppPhoneInput } from '@/components/ui/AppPhoneInput';
 import { clientPortalApi, setClientToken } from '@/lib/api/client-portal';
+import { useTenantMeta } from '@/lib/providers/TenantProvider';
 
 export default function ClientPortalLoginPage() {
   const router = useRouter();
@@ -13,6 +14,8 @@ export default function ClientPortalLoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const { meta } = useTenantMeta();
+  const orgName = meta?.name?.trim() || 'TransitSoftServices';
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -43,7 +46,7 @@ export default function ClientPortalLoginPage() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold text-primary-700">TransitSoftServices</h1>
+          <h1 className="text-3xl font-bold text-primary-700">{orgName}</h1>
           <p className="mt-2 text-sm text-gray-500">
             Espace Client -- Suivez vos colis en temps reel
           </p>

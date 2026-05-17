@@ -62,8 +62,10 @@ export default function UpdatesFleetPage() {
   }, [releases.data]);
 
   const requestUpdate = useMutation({
+    // Backend attend `toVersion` (cf. RequestUpdateUseCase schema). Avant on
+    // envoyait `targetVersion` -> validation echouait avec "toVersion required".
     mutationFn: ({ tenantId, version }: { tenantId: string; version: string }) =>
-      api.post(`/tenants/${tenantId}/updates`, { targetVersion: version }),
+      api.post(`/tenants/${tenantId}/updates`, { toVersion: version }),
     onSuccess: () => {
       setConfirmTenant(null);
       qc.invalidateQueries({ queryKey: ['tenants'] });
