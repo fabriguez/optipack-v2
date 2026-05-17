@@ -73,9 +73,12 @@ export function emailLayout(content: string, branding?: { logoUrl?: string | nul
       </div>
     </div>
 
-    <!-- Unsubscribe -->
+    <!-- Unsubscribe + Powered by (lien vers le SaaS owner, quel que soit le tenant) -->
     <p style="text-align:center;margin-top:16px;${STYLES.muted}">
       Vous recevez cet email car vous etes client chez ${orgName}.
+    </p>
+    <p style="text-align:center;margin-top:8px;${STYLES.muted}">
+      Powered by <a href="https://transitsoftservices.com" style="${STYLES.footerLink}">transitsoftservices.com</a>
     </p>
   </div>
 </body>

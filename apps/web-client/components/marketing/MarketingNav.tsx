@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { motion, useScroll, useTransform } from 'framer-motion';
 import { Package, ArrowRight, Menu, X } from 'lucide-react';
 import { useState } from 'react';
+import { useTenantMeta } from '@/lib/providers/TenantMetaProvider';
 
 const LINKS = [
   { href: '#journey', label: 'Le voyage' },
@@ -14,6 +15,8 @@ const LINKS = [
 
 export function MarketingNav() {
   const [open, setOpen] = useState(false);
+  const { meta } = useTenantMeta();
+  const orgName = meta?.name?.trim() || 'TransitSoftServices';
   const { scrollY } = useScroll();
   const bg = useTransform(
     scrollY,
@@ -47,7 +50,7 @@ export function MarketingNav() {
             className="text-lg font-bold tracking-tight skin-font-heading"
             style={{ color: 'var(--skin-foreground)' }}
           >
-            Transit Soft Services
+            {orgName}
           </span>
         </Link>
 

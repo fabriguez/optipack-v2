@@ -23,6 +23,9 @@ export interface TenantMeta {
   defaultLanguage: string;
   skin?: SkinId;
   theme?: string | null;
+  /** True si ce tenant est le SaaS owner (transitsoftservices.com). Active
+   *  les bannieres d'invitation a creer son propre tenant. */
+  isMain?: boolean;
   skinCustomization?: SkinCustomization;
 }
 

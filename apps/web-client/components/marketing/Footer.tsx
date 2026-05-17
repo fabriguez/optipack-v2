@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { Package } from 'lucide-react';
+import { useTenantMeta } from '@/lib/providers/TenantMetaProvider';
 
 const SECTIONS = [
   {
@@ -43,6 +44,9 @@ const SECTIONS = [
 ];
 
 export function Footer() {
+  const { meta } = useTenantMeta();
+  const orgName = meta?.name?.trim() || 'TransitSoftServices';
+  const year = new Date().getFullYear();
   return (
     <footer
       className="relative mt-10 border-t pt-16 pb-10"
@@ -62,7 +66,7 @@ export function Footer() {
                 className="text-lg font-bold tracking-tight skin-font-heading"
                 style={{ color: 'var(--skin-foreground)' }}
               >
-                Transit Soft Services
+                {orgName}
               </span>
             </Link>
             <p
@@ -104,10 +108,19 @@ export function Footer() {
           style={{ borderColor: 'var(--skin-border)' }}
         >
           <p className="text-xs" style={{ color: 'var(--skin-muted)' }}>
-            (c) 2026 Transit Soft Services. Tous droits reserves.
+            (c) {year} {orgName}. Tous droits reserves.
           </p>
           <p className="text-xs" style={{ color: 'var(--skin-muted)' }}>
-            Construit avec amour depuis Yaounde.
+            Powered by{' '}
+            <a
+              href="https://transitsoftservices.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold underline-offset-2 hover:underline"
+              style={{ color: 'var(--skin-primary)' }}
+            >
+              transitsoftservices.com
+            </a>
           </p>
         </div>
       </div>

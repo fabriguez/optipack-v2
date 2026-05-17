@@ -1,25 +1,28 @@
 'use client';
 
 import { useSkin } from '@/lib/providers/SkinProvider';
+import { useTenantMeta } from '@/lib/providers/TenantMetaProvider';
 import { HOME_LAYOUTS, DEFAULT_HOME_LAYOUT } from '@/components/marketing/layouts';
+import { SaaSInvitation } from '@/components/marketing/SaaSInvitation';
 import type { LayoutVariant } from '@transitsoftservices/skins';
 
 /**
  * Page d'accueil du portail public. Le layout (composition + ordre des
- * sections) depend du `layoutVariant` du skin actif :
- *   - forest    -> ClassicLayout    (logistique mainstream)
- *   - sapphire  -> BoldLayout       (corporate B2B)
- *   - sunset    -> MagazineLayout   (B2C grand public, storytelling)
- *   - midnight  -> EditorialLayout  (dark premium asymetrique)
- *   - pastel    -> MinimalLayout    (B2C niche, less-is-more)
+ * sections) depend du `layoutVariant` du skin actif.
  *
- * Changer de skin dans le Studio change la disposition complete + les
- * couleurs/typo via les CSS vars `--skin-*` (gere par SkinProvider).
+ * Tenant principal (transitsoftservices.com) : ajoute en bas la section
+ * SaaSInvitation qui pitch la plateforme aux transitaires visiteurs.
  */
 export default function HomePage() {
   const { resolved } = useSkin();
+  const { meta } = useTenantMeta();
   const variant = ((resolved as { layoutVariant?: LayoutVariant } | undefined)?.layoutVariant ??
     'classic') as LayoutVariant;
   const Layout = HOME_LAYOUTS[variant] ?? DEFAULT_HOME_LAYOUT;
-  return <Layout />;
+  return (
+    <>
+      <Layout />
+      {meta?.isMain && <SaaSInvitation />}
+    </>
+  );
 }

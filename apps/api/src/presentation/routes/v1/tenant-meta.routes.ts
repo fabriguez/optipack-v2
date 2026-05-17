@@ -238,6 +238,11 @@ router.get('/', async (req, res, next) => {
         skin: (org as any).skinId ?? null,
         theme: (org as any).themeId ?? null,
         skinCustomization: (org as any).skinCustomization ?? null,
+        // Flag : ce tenant est le tenant principal "SaaS owner". Active la
+        // banniere d'invitation a creer son propre tenant sur la home publique.
+        // Provient de l'env OPS_IS_MAIN_TENANT injectee par l'orchestrator
+        // au provisioning du tenant principal.
+        isMain: process.env.OPS_IS_MAIN_TENANT === 'true',
         // Email config (secrets stripped).
         emailConfig: publicEmailConfig((org as any).emailConfig as EmailConfig | null),
         // Mobile app config (white-label).
