@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppInput } from '@/components/ui/AppInput';
-import { MonthYearPicker } from '@/components/ui/MonthYearPicker';
+import { DateRangePicker, type DateRange } from '@/components/ui/DateRangePicker';
 import { Wand2 } from 'lucide-react';
 import { formatDate } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
@@ -18,33 +18,27 @@ type AttendanceStats = AttendanceStatsLike & {
   totalDays: number;
 };
 
-/**
- * Resoud une periode libre (YYYY-MM ou autre) en intervalle [from, to].
- * Defaut : mois courant.
- */
-function resolvePeriodRange(period: string): { from: string; to: string } {
-  const match = period.trim().match(/^(\d{4})-(\d{2})$/);
+/** Defaut : mois courant. */
+function defaultRange(): DateRange {
   const today = new Date();
-  let year = today.getFullYear();
-  let month = today.getMonth() + 1;
-  if (match) {
-    year = Number(match[1]);
-    month = Number(match[2]);
-  }
-  const from = `${year}-${String(month).padStart(2, '0')}-01`;
-  const lastDay = new Date(year, month, 0).getDate();
-  const to = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-  return { from, to };
+  const y = today.getFullYear();
+  const m = today.getMonth() + 1;
+  const last = new Date(y, m, 0).getDate();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return { from: `${y}-${pad(m)}-01`, to: `${y}-${pad(m)}-${pad(last)}` };
 }
 
 export function EmployeeReviewsTab({ employeeId, agencyId }: { employeeId: string; agencyId?: string }) {
   const qc = useQueryClient();
-  const [period, setPeriod] = useState('');
+  const [range, setRange] = useState<DateRange>(defaultRange);
   const [summary, setSummary] = useState('');
   // Notes manuelles : Record<critereKey, number>
   const [manualScores, setManualScores] = useState<Record<string, string>>({});
 
-  const range = useMemo(() => resolvePeriodRange(period), [period]);
+  // Libelle period stocke = "YYYY-MM-DD -> YYYY-MM-DD" (libellement libre cote
+  // backend, voir EmployeeReview.period). Vide si dates incompletes.
+  const period = range.from && range.to ? `${range.from} -> ${range.to}` : '';
+  const rangeReady = Boolean(range.from && range.to);
 
   const { data: cfgData } = useQuery({
     queryKey: ['agency-review-config', agencyId],
@@ -59,7 +53,7 @@ export function EmployeeReviewsTab({ employeeId, agencyId }: { employeeId: strin
       apiClient
         .get(`/employees/${employeeId}/attendance/stats`, { params: { from: range.from, to: range.to } })
         .then((r) => r.data),
-    enabled: !!employeeId,
+    enabled: !!employeeId && rangeReady,
   });
   const stats: AttendanceStats | undefined = statsData?.data;
 
@@ -156,7 +150,7 @@ export function EmployeeReviewsTab({ employeeId, agencyId }: { employeeId: strin
       }),
     onSuccess: () => {
       toast.success('Evaluation enregistree');
-      setPeriod('');
+      setRange(defaultRange());
       setSummary('');
       setManualScores({});
       qc.invalidateQueries({ queryKey: ['employees', employeeId, 'reviews'] });
@@ -169,7 +163,7 @@ export function EmployeeReviewsTab({ employeeId, agencyId }: { employeeId: strin
       <AppCard>
         <h3 className="mb-3 text-base font-semibold">Nouvelle evaluation</h3>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <MonthYearPicker label="Periode" value={period} onChange={setPeriod} />
+          <DateRangePicker label="Periode evaluee" value={range} onChange={setRange} required />
           <AppInput label="Synthese" value={summary} onChange={(e) => setSummary(e.target.value)} />
         </div>
 
@@ -235,7 +229,7 @@ export function EmployeeReviewsTab({ employeeId, agencyId }: { employeeId: strin
         )}
 
         <div className="mt-4 flex justify-end">
-          <AppButton onClick={() => mutation.mutate()} loading={mutation.isPending} disabled={!period.trim()}>
+          <AppButton onClick={() => mutation.mutate()} loading={mutation.isPending} disabled={!rangeReady}>
             Enregistrer
           </AppButton>
         </div>

@@ -218,7 +218,13 @@ function ReportDetails({
 
   const printPDF = async () => {
     try {
-      await openAuthedFile(`/agencies/daily-reports/${reportId}/pdf`, `rapport-${reportId}.pdf`);
+      const res = await apiClient.get(`/agencies/daily-reports/${reportId}/pdf`, {
+        responseType: 'blob',
+      });
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch {
       toast.error('Echec du telechargement PDF');
     }
