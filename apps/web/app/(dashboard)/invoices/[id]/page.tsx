@@ -201,7 +201,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             {invoice.client?.phone && <p className="text-xs text-gray-500">{invoice.client.phone}</p>}
           </AppCard>
 
-          {/* Parcel card */}
+          {/* Parcels card */}
           <AppCard>
             <div className="flex items-center gap-3 mb-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50">
@@ -209,16 +209,29 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               </div>
               <div>
                 <p className="text-xs text-gray-400">Colis</p>
-                {invoice.parcel ? (
-                  <Link href={`/parcels/${invoice.parcel.id}`} className="font-mono text-sm font-medium text-primary-700 hover:underline">
-                    {invoice.parcel.trackingNumber}
-                  </Link>
-                ) : (
-                  <p className="text-sm font-medium text-gray-900">-</p>
-                )}
+                <p className="text-sm font-medium text-gray-900">{Array.isArray(invoice.parcels) ? invoice.parcels.length : 0}</p>
               </div>
             </div>
-            {invoice.parcel?.designation && <p className="text-xs text-gray-500">{invoice.parcel.designation}</p>}
+            {Array.isArray(invoice.parcels) && invoice.parcels.length > 0 && (
+              <ul className="space-y-1">
+                {invoice.parcels.slice(0, 3).map((p: any) => (
+                  <li key={p.id} className="flex items-center justify-between gap-2 text-xs">
+                    <Link href={`/parcels/${p.id}`} className="truncate font-mono text-primary-700 hover:underline">
+                      {p.trackingNumber}
+                    </Link>
+                    <span className="text-gray-500">
+                      {p.weight != null && Number(p.weight) > 0 ? `${Number(p.weight).toFixed(1)} kg` : null}
+                      {p.weight != null && Number(p.weight) > 0 && p.volume != null && Number(p.volume) > 0 ? ' / ' : null}
+                      {p.volume != null && Number(p.volume) > 0 ? `${Number(p.volume).toFixed(3)} m3` : null}
+                      {(!p.weight || Number(p.weight) === 0) && (!p.volume || Number(p.volume) === 0) ? '-' : null}
+                    </span>
+                  </li>
+                ))}
+                {invoice.parcels.length > 3 && (
+                  <li className="text-xs text-gray-400">+{invoice.parcels.length - 3} autre(s)...</li>
+                )}
+              </ul>
+            )}
           </AppCard>
 
           {/* Agency card */}

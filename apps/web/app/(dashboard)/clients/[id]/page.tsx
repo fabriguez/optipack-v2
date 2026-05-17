@@ -71,6 +71,17 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
       ),
     },
     { key: 'designation', label: 'Designation' },
+    {
+      key: 'weight',
+      label: 'Masse / Volume',
+      render: (row: any) => (
+        <div className="flex flex-col text-sm">
+          {row.weight != null && <span className="text-gray-900">{Number(row.weight).toFixed(1)} kg</span>}
+          {row.volume != null && <span className="text-xs text-gray-500">{Number(row.volume).toFixed(3)} m3</span>}
+          {row.weight == null && row.volume == null && <span className="text-xs text-gray-300">-</span>}
+        </div>
+      ),
+    },
     { key: 'price', label: 'Prix', render: (row: any) => formatAmount(Number(row.price)) },
     { key: 'status', label: 'Statut', render: (row: any) => <StatusBadge status={row.status} type="parcel" /> },
     { key: 'createdAt', label: 'Date', render: (row: any) => formatDate(row.createdAt) },

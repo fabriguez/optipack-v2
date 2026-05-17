@@ -430,8 +430,16 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
       ),
     },
     { key: 'designation', label: 'Designation' },
-    { key: 'weight', label: 'Pesee', render: (row: any) =>
-      row.weight ? `${Number(row.weight).toFixed(1)} kg` : row.volume ? `${Number(row.volume).toFixed(2)} m3` : '-',
+    {
+      key: 'weight',
+      label: 'Masse / Volume',
+      render: (row: any) => (
+        <div className="flex flex-col text-sm">
+          {row.weight != null && <span className="text-gray-900">{Number(row.weight).toFixed(1)} kg</span>}
+          {row.volume != null && <span className="text-xs text-gray-500">{Number(row.volume).toFixed(3)} m3</span>}
+          {row.weight == null && row.volume == null && <span className="text-xs text-gray-300">-</span>}
+        </div>
+      ),
     },
     { key: 'destination', label: 'Destination' },
     { key: 'client', label: 'Client', render: (row: any) => row.client?.fullName || '-' },

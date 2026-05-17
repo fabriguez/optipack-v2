@@ -20,7 +20,10 @@ interface InvoiceAgency {
 interface InvoiceParcel {
   trackingNumber: string;
   designation: string;
-  weight: number;
+  // Masse en kg, null pour les colis tarifes par volume uniquement.
+  weight: number | null;
+  // Volume en m3, null pour les colis tarifes par masse uniquement.
+  volume?: number | null;
   destination: string;
   price: number;
   // Frais de magasinage propres au colis (jours payants x tarif jour). Affiches
@@ -265,11 +268,11 @@ export class PDFService {
 
     const cols = [
       { label: '#', width: 25 },
-      { label: 'Designation', width: 140 },
-      { label: 'Tracking', width: 100 },
-      { label: 'Poids (kg)', width: 65 },
+      { label: 'Designation', width: 130 },
+      { label: 'Tracking', width: 90 },
+      { label: 'Masse / Volume', width: 80 },
       { label: 'Destination', width: 90 },
-      { label: 'Prix', width: 75 },
+      { label: 'Prix', width: 80 },
     ];
 
     // Table header
@@ -294,11 +297,14 @@ export class PDFService {
 
       xCol = 55;
       doc.fillColor(COLORS.dark);
+      const massVol: string[] = [];
+      if (p.weight != null && Number(p.weight) > 0) massVol.push(`${Number(p.weight).toFixed(1)} kg`);
+      if (p.volume != null && Number(p.volume) > 0) massVol.push(`${Number(p.volume).toFixed(3)} m3`);
       const row = [
         String(i + 1),
         p.designation || '-',
         p.trackingNumber || '-',
-        String(p.weight ?? '-'),
+        massVol.length > 0 ? massVol.join(' / ') : '-',
         p.destination || '-',
         formatCurrency(Number(p.price) || 0),
       ];

@@ -106,7 +106,7 @@ router.get('/:id', async (req, res, next) => {
       include: {
         client: { select: { id: true, fullName: true, phone: true, email: true } },
         agency: { select: { id: true, name: true, code: true, address: true, phone: true } },
-        parcels: { select: { id: true, trackingNumber: true, designation: true, weight: true, destination: true, price: true } },
+        parcels: { select: { id: true, trackingNumber: true, designation: true, weight: true, volume: true, destination: true, price: true } },
         payments: { orderBy: { createdAt: 'asc' }, include: { agency: { select: { name: true } }, receivedBy: { select: { firstName: true, lastName: true } } } },
       },
     });
@@ -135,7 +135,7 @@ router.get('/:id/pdf', async (req, res, next) => {
       include: {
         client: { select: { id: true, fullName: true, phone: true, email: true } },
         agency: { select: { id: true, name: true, code: true, address: true, phone: true } },
-        parcels: { select: { id: true, trackingNumber: true, designation: true, weight: true, destination: true, price: true } },
+        parcels: { select: { id: true, trackingNumber: true, designation: true, weight: true, volume: true, destination: true, price: true } },
         payments: {
           orderBy: { createdAt: 'asc' },
           include: {
@@ -173,7 +173,8 @@ router.get('/:id/pdf', async (req, res, next) => {
         return {
           trackingNumber: p.trackingNumber,
           designation: p.designation,
-          weight: Number(p.weight),
+          weight: p.weight != null ? Number(p.weight) : null,
+          volume: p.volume != null ? Number(p.volume) : null,
           destination: p.destination,
           price: Number(p.price),
           storageFee: s?.fee ?? 0,
@@ -220,7 +221,7 @@ router.get('/:id/xlsx', async (req, res, next) => {
       include: {
         client: { select: { fullName: true, phone: true, email: true } },
         agency: { select: { name: true, code: true } },
-        parcels: { select: { id: true, trackingNumber: true, designation: true, weight: true, destination: true, price: true } },
+        parcels: { select: { id: true, trackingNumber: true, designation: true, weight: true, volume: true, destination: true, price: true } },
         payments: { orderBy: { createdAt: 'asc' }, select: { createdAt: true, paymentMethod: true, amount: true } },
       },
     });
