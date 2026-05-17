@@ -41,6 +41,8 @@ import permissionRoutes from './permission.routes';
 import holidayRoutes from './holiday.routes';
 import workScheduleRoutes from './work-schedule.routes';
 import publicTrackingRoutes from './public-tracking.routes';
+import financeRoutes from './finance.routes';
+import headOfficeRoutes from './head-office.routes';
 
 const router = Router();
 
@@ -76,6 +78,8 @@ router.use('/fund-transfers', fundTransferRoutes);
 router.use('/expenses', expenseRoutes);
 router.use('/debts', debtRoutes);
 router.use('/carriers', carrierRoutes);
+router.use('/finance', financeRoutes);
+router.use('/head-office', headOfficeRoutes);
 
 // Systeme
 router.use('/loyalty', loyaltyRoutes);

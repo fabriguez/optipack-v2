@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { apiClient } from '@/lib/api/client';
-import type { SkinCustomization, SkinId } from '@transitsoftservices/skins';
+import { applyThemeById, isKnownThemeId, type SkinCustomization, type SkinId } from '@transitsoftservices/skins';
 
 /**
  * Per-tenant public metadata loaded from the API.
@@ -22,6 +22,7 @@ export interface TenantMeta {
   defaultCurrency: string;
   defaultLanguage: string;
   skin?: SkinId;
+  theme?: string | null;
   skinCustomization?: SkinCustomization;
 }
 
@@ -58,10 +59,15 @@ export function TenantMetaProvider({ children }: { children: ReactNode }) {
       const r = await apiClient.get('/tenant-meta');
       const m = (r.data?.data as TenantMeta) ?? FALLBACK;
       setMeta(m);
-      // Titre + branding : applique le nom du tenant comme document.title
-      // (et pas le hardcode "Transit Soft Services" du layout).
-      if (typeof document !== 'undefined' && m.name) {
-        document.title = m.name;
+      if (typeof document !== 'undefined') {
+        if (m.name) document.title = m.name;
+        // Theme : applique la palette du theme par-dessus le skin. Le skin
+        // est applique par le SkinProvider (qui consomme aussi useTenantMeta
+        // par convention). On override ici pour garantir que le theme ait
+        // priorite meme si SkinProvider re-trigger applySkinById.
+        if (m.theme && isKnownThemeId(m.theme)) {
+          applyThemeById(m.theme);
+        }
       }
     } catch {
       setMeta(FALLBACK);

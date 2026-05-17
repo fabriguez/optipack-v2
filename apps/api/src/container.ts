@@ -15,6 +15,7 @@ import { CASH_REGISTER_REPOSITORY } from './application/interfaces/ICashRegister
 import { JOURNAL_ENTRY_REPOSITORY } from './application/interfaces/IJournalEntryRepository';
 import { DISBURSEMENT_REPOSITORY } from './application/interfaces/IDisbursementRepository';
 import { FUND_TRANSFER_REPOSITORY } from './application/interfaces/IFundTransferRepository';
+import { HEAD_OFFICE_CASH_REGISTER_REPOSITORY } from './application/interfaces/IHeadOfficeCashRegisterRepository';
 import { EXPENSE_REPOSITORY } from './application/interfaces/IExpenseRepository';
 import { DEBT_REPOSITORY } from './application/interfaces/IDebtRepository';
 import { LOYALTY_REPOSITORY } from './application/interfaces/ILoyaltyRepository';
@@ -41,6 +42,7 @@ import { PrismaCashRegisterRepository } from './infrastructure/database/reposito
 import { PrismaJournalEntryRepository } from './infrastructure/database/repositories/PrismaJournalEntryRepository';
 import { PrismaDisbursementRepository } from './infrastructure/database/repositories/PrismaDisbursementRepository';
 import { PrismaFundTransferRepository } from './infrastructure/database/repositories/PrismaFundTransferRepository';
+import { PrismaHeadOfficeCashRegisterRepository } from './infrastructure/database/repositories/PrismaHeadOfficeCashRegisterRepository';
 import { PrismaExpenseRepository } from './infrastructure/database/repositories/PrismaExpenseRepository';
 import { PrismaDebtRepository } from './infrastructure/database/repositories/PrismaDebtRepository';
 import { PrismaLoyaltyRepository } from './infrastructure/database/repositories/PrismaLoyaltyRepository';
@@ -67,6 +69,7 @@ container.register(CASH_REGISTER_REPOSITORY, { useClass: PrismaCashRegisterRepos
 container.register(JOURNAL_ENTRY_REPOSITORY, { useClass: PrismaJournalEntryRepository });
 container.register(DISBURSEMENT_REPOSITORY, { useClass: PrismaDisbursementRepository });
 container.register(FUND_TRANSFER_REPOSITORY, { useClass: PrismaFundTransferRepository });
+container.register(HEAD_OFFICE_CASH_REGISTER_REPOSITORY, { useClass: PrismaHeadOfficeCashRegisterRepository });
 container.register(EXPENSE_REPOSITORY, { useClass: PrismaExpenseRepository });
 container.register(DEBT_REPOSITORY, { useClass: PrismaDebtRepository });
 container.register(LOYALTY_REPOSITORY, { useClass: PrismaLoyaltyRepository });

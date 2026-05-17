@@ -16,6 +16,21 @@ export type ShadowFlavor = 'soft' | 'sharp' | 'glow' | 'flat';
 export type SkinMood = 'natural' | 'corporate' | 'warm' | 'dark' | 'minimal' | string;
 
 /**
+ * Layout du site public (web-client home page). Chaque skin choisit une
+ * disposition + composition de sections. Pas juste les couleurs.
+ *  - classic   : Hero centre + features grid + stats + pricing cards + CTA
+ *  - bold      : Hero split + features tabs + pricing table + CTA full-bleed
+ *  - magazine  : Hero fullbleed + features cards alternees + stats inline
+ *  - minimal   : Hero typographique + features list + pricing minimal
+ *  - editorial : Hero video/image + sections en colonnes asymetriques
+ *
+ * Web-client mappe layoutVariant -> composant React via registry. Pour ajouter
+ * un nouveau layout, etendre l'union ici + creer le composant cote web-client
+ * + l'enregistrer dans HOME_LAYOUTS.
+ */
+export type LayoutVariant = 'classic' | 'bold' | 'magazine' | 'minimal' | 'editorial';
+
+/**
  * Image slots used by the web-client. Each skin can override any subset.
  * Slots that are not provided fall back to the global DEFAULT_SKIN_IMAGES.
  */
@@ -53,6 +68,8 @@ export interface SkinTokens {
   radius: number;
   shadowFlavor: ShadowFlavor;
   mood: SkinMood;
+  /** Layout du site public (compose differente de sections). Defaut classic. */
+  layoutVariant: LayoutVariant;
   /** Per-skin images (preview, hero, journey steps, avatars...). Optional - falls back to defaults. */
   images: SkinImages;
 }

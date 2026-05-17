@@ -22,9 +22,14 @@ model Organization {
   primaryColor       String   @default("#1B5E20") // primary-900 (vert fonce)
   secondaryColor     String   @default("#4CAF50") // primary-500 (vert moyen)
   accentColor        String   @default("#E8F5E9") // primary-50 (vert clair)
-  // Theme du site public (web-client) : id de peau choisie + overrides
-  // Valides cote serveur via @transitsoftservices/skins.isKnownSkinId().
+  // Skin = layout du site web public (composition de sections, position des
+  // CTA, presence/absence de stats/journey/pricing). 5 layouts dispo via
+  // @transitsoftservices/skins (classic/bold/magazine/editorial/minimal).
   skinId             String?
+  // Theme = palette de couleurs appliquee partout (dashboard, mails, web).
+  // Independant du skin -> n'importe quel theme avec n'importe quel skin.
+  // 8 themes dispo via @transitsoftservices/skins/themes.
+  themeId            String?
   skinCustomization  Json?
   // Credentials de paiement par provider (chiffres au repos cote app).
   // Forme : { 'mtn-momo': { apiKey, apiUser, subscriptionKey }, 'stripe': { secretKey, publishableKey, webhookSecret }, ... }
@@ -71,6 +76,12 @@ model Organization {
   debts         Debt[]
   // Transporteurs tiers utilises par l'organisation.
   carriers      Carrier[]
+  // Caisse du siege (une seule par organisation, solde courant cumule).
+  headOfficeCashRegister HeadOfficeCashRegister?
+  // Bons de decaissement emis depuis le siege.
+  headOfficeDisbursements HeadOfficeDisbursementVoucher[]
+  // Transferts de fond initie depuis le siege.
+  headOfficeFundTransfers FundTransfer[] @relation("HeadOfficeSourceTransfers")
 
   @@map("organizations")
 }
@@ -470,6 +481,10 @@ model User {
   // optionnel : un ordonnateur peut etre un employe non-user, dans ce cas
   // seul le champ texte `orderer` est rempli).
   disbursementsOrdered       DisbursementVoucher[]         @relation("OrdererUser")
+  // Decaissements siege
+  headOfficeDisbursementsIssued   HeadOfficeDisbursementVoucher[] @relation("HeadOfficeIssuedByUser")
+  headOfficeDisbursementsApproved HeadOfficeDisbursementVoucher[] @relation("HeadOfficeApprovedByUser")
+  headOfficeDisbursementsOrdered  HeadOfficeDisbursementVoucher[] @relation("HeadOfficeOrdererUser")
   transfersInitiated         FundTransfer[]                @relation("InitiatedByUser")
   transfersConfirmed         FundTransfer[]                @relation("ConfirmedByUser")
   closedCashRegisters        AgencyCashRegister[]
@@ -1140,6 +1155,7 @@ model Client {
   employee            Employee?             @relation("EmployeeClient")
   // Decaissements rembourses a ce client (cas remboursement client).
   disbursements       DisbursementVoucher[]
+  headOfficeDisbursements HeadOfficeDisbursementVoucher[] @relation("HeadOfficeDisbursementClient")
 
   @@index([organizationId])
   @@index([agencyId])
@@ -1265,6 +1281,7 @@ model Container {
   expenses         Expense[]
   // Decaissements imputes a ce conteneur (frais transit, douane, surcout).
   disbursements    DisbursementVoucher[]
+  headOfficeDisbursements HeadOfficeDisbursementVoucher[] @relation("HeadOfficeDisbursementContainer")
   routingSource    InterAgencyRouting[]  @relation("SourceContainer")
   routingTarget    InterAgencyRouting[]  @relation("TargetContainer")
   discrepancies    ManifestDiscrepancy[]
@@ -1386,6 +1403,7 @@ model Parcel {
   inventoryItems WarehouseInventoryItem[]
   // Decaissements imputes a ce colis (frais douane, remboursement, indemnite).
   disbursements  DisbursementVoucher[]
+  headOfficeDisbursements HeadOfficeDisbursementVoucher[] @relation("HeadOfficeDisbursementParcel")
   // Dettes liees a ce colis (retrait sans paiement, paiement partiel,
   // remboursement client). Une dette CLIENT typique a un parcelId.
   debts          Debt[]
@@ -1734,7 +1752,11 @@ model DisbursementVoucher {
 model FundTransfer {
   id                       String                  @id @default(uuid())
   reference                String                  @unique
-  sourceAgencyId           String
+  // Source : agence (defaut) ou siege. Si HQ, sourceOrganizationId est requis
+  // et sourceAgencyId est NULL. Validation au niveau use-case.
+  sourceType               TransferSourceType      @default(AGENCY)
+  sourceAgencyId           String?
+  sourceOrganizationId     String?
   destinationType          TransferDestinationType
   destinationAgencyId      String?
   destinationLabel         String?
@@ -1758,14 +1780,16 @@ model FundTransfer {
   createdAt DateTime @default(now())
   // PAS de updatedAt -- immutable
 
-  sourceAgency      Agency        @relation("SourceAgency", fields: [sourceAgencyId], references: [id])
-  destinationAgency Agency?       @relation("DestinationAgencyRel", fields: [destinationAgencyId], references: [id])
-  initiatedBy       User          @relation("InitiatedByUser", fields: [initiatedByUserId], references: [id])
-  confirmedBy       User?         @relation("ConfirmedByUser", fields: [confirmedByUserId], references: [id])
-  reverseEntry      FundTransfer? @relation("ReverseTransfer", fields: [reverseEntryId], references: [id])
-  reversedBy        FundTransfer? @relation("ReverseTransfer")
+  sourceAgency       Agency?       @relation("SourceAgency", fields: [sourceAgencyId], references: [id])
+  sourceOrganization Organization? @relation("HeadOfficeSourceTransfers", fields: [sourceOrganizationId], references: [id])
+  destinationAgency  Agency?       @relation("DestinationAgencyRel", fields: [destinationAgencyId], references: [id])
+  initiatedBy        User          @relation("InitiatedByUser", fields: [initiatedByUserId], references: [id])
+  confirmedBy        User?         @relation("ConfirmedByUser", fields: [confirmedByUserId], references: [id])
+  reverseEntry       FundTransfer? @relation("ReverseTransfer", fields: [reverseEntryId], references: [id])
+  reversedBy         FundTransfer? @relation("ReverseTransfer")
 
   @@index([sourceAgencyId])
+  @@index([sourceOrganizationId])
   @@index([status])
   @@map("fund_transfers")
 }
@@ -1776,10 +1800,89 @@ enum TransferDestinationType {
   AGENCY
 }
 
+enum TransferSourceType {
+  AGENCY
+  HQ
+}
+
 enum TransferStatus {
   PENDING
   CONFIRMED
   VOIDED
+}
+
+// ============================================================
+// CAISSE SIEGE (HEAD OFFICE) — UN SEUL REGISTRE PERSISTANT PAR ORG
+// ============================================================
+// Pas de cloture journaliere : solde cumule depuis le 1er mouvement.
+// Alimentee par les transferts depuis les agences (FundTransfer dest=HQ
+// confirme) et debitee par les decaissements/paiements siege ainsi que
+// les transferts sortants du siege (vers agence ou banque).
+model HeadOfficeCashRegister {
+  id             String   @id @default(uuid())
+  organizationId String   @unique
+  currentBalance Decimal  @default(0) @db.Decimal(15, 2)
+  totalEntries   Decimal  @default(0) @db.Decimal(15, 2)
+  totalExits     Decimal  @default(0) @db.Decimal(15, 2)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization  Organization                    @relation(fields: [organizationId], references: [id])
+  disbursements HeadOfficeDisbursementVoucher[]
+  expenses      Expense[]                       @relation("HeadOfficeExpense")
+
+  @@map("head_office_cash_registers")
+}
+
+// ============================================================
+// BONS DE DECAISSEMENT SIEGE (IMMUTABLE)
+// ============================================================
+model HeadOfficeDisbursementVoucher {
+  id                       String  @id @default(uuid())
+  reference                String  @unique
+  organizationId           String
+  headOfficeCashRegisterId String
+  reason                   String
+  description              String?
+  orderer                  String
+  ordererUserId            String?
+  amount                   Decimal @db.Decimal(15, 2)
+  amountInWords            String
+  proofUrl                 String?
+  proofKey                 String?
+  justificationDescription String?
+  // Liens optionnels vers une entite metier.
+  containerId      String?
+  parcelId         String?
+  clientId         String?
+  issuedByUserId   String
+  approvedByUserId String?
+
+  // Immutabilite
+  isVoided       Boolean   @default(false)
+  voidedAt       DateTime?
+  voidReason     String?
+  reverseEntryId String?   @unique
+
+  createdAt DateTime @default(now())
+
+  organization     Organization                   @relation(fields: [organizationId], references: [id])
+  cashRegister     HeadOfficeCashRegister         @relation(fields: [headOfficeCashRegisterId], references: [id])
+  ordererUser      User?                          @relation("HeadOfficeOrdererUser", fields: [ordererUserId], references: [id])
+  container        Container?                     @relation("HeadOfficeDisbursementContainer", fields: [containerId], references: [id])
+  parcel           Parcel?                        @relation("HeadOfficeDisbursementParcel", fields: [parcelId], references: [id])
+  client           Client?                        @relation("HeadOfficeDisbursementClient", fields: [clientId], references: [id])
+  issuedBy         User                           @relation("HeadOfficeIssuedByUser", fields: [issuedByUserId], references: [id])
+  approvedBy       User?                          @relation("HeadOfficeApprovedByUser", fields: [approvedByUserId], references: [id])
+  reverseEntry     HeadOfficeDisbursementVoucher? @relation("HeadOfficeReverseVoucher", fields: [reverseEntryId], references: [id])
+  reversedBy       HeadOfficeDisbursementVoucher? @relation("HeadOfficeReverseVoucher")
+
+  @@index([organizationId])
+  @@index([headOfficeCashRegisterId])
+  @@index([containerId])
+  @@index([parcelId])
+  @@index([clientId])
+  @@map("head_office_disbursement_vouchers")
 }
 
 // ============================================================
@@ -1809,20 +1912,26 @@ model Expense {
   // Caisse depuis laquelle le paiement a ete effectue. Permet de remonter
   // depuis l'Expense vers le compte qui a ete debite, et inversement.
   cashRegisterId   String?
+  // Caisse siege quand la depense est payee depuis le siege au lieu de
+  // l'agence. Mutuellement exclusif avec cashRegisterId (au plus l'un des
+  // deux est defini).
+  headOfficeCashRegisterId String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  agency             Agency              @relation(fields: [agencyId], references: [id])
-  container          Container?          @relation(fields: [containerId], references: [id])
-  approvedBy         User?               @relation(fields: [approvedByUserId], references: [id])
-  agencyCharge       AgencyCharge?       @relation(fields: [agencyChargeId], references: [id])
-  cashRegister       AgencyCashRegister? @relation(fields: [cashRegisterId], references: [id])
-  paidPayslip        Payslip?            @relation("PayslipPaidExpense")
-  payslipInstallment PayslipPayment?     @relation("PayslipInstallmentExpense")
+  agency                 Agency                  @relation(fields: [agencyId], references: [id])
+  container              Container?              @relation(fields: [containerId], references: [id])
+  approvedBy             User?                   @relation(fields: [approvedByUserId], references: [id])
+  agencyCharge           AgencyCharge?           @relation(fields: [agencyChargeId], references: [id])
+  cashRegister           AgencyCashRegister?     @relation(fields: [cashRegisterId], references: [id])
+  headOfficeCashRegister HeadOfficeCashRegister? @relation("HeadOfficeExpense", fields: [headOfficeCashRegisterId], references: [id])
+  paidPayslip            Payslip?                @relation("PayslipPaidExpense")
+  payslipInstallment     PayslipPayment?         @relation("PayslipInstallmentExpense")
 
   @@index([agencyId])
   @@index([agencyChargeId, period])
   @@index([cashRegisterId])
+  @@index([headOfficeCashRegisterId])
   @@map("expenses")
 }
 

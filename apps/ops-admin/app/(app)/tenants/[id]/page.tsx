@@ -40,6 +40,7 @@ interface TenantDetail {
   pinnedVersion: string | null;
   autoUpdatePolicy: string | null;
   skinId?: string | null;
+  themeId?: string | null;
   skinCustomization?: Record<string, unknown> | null;
 }
 
@@ -299,6 +300,7 @@ export default function TenantDetailPage({
             autoUpdatePolicy: t.autoUpdatePolicy,
             customDomain: t.customDomain,
             skinId: t.skinId ?? null,
+            themeId: t.themeId ?? null,
             skinCustomization: (t.skinCustomization as never) ?? null,
           }}
         />

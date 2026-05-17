@@ -117,8 +117,35 @@ interface StudioInput {
   autoUpdatePolicy: string | null;
   customDomain: string | null;
   skinId: string | null;
+  themeId: string | null;
   skinCustomization: SkinCustomization | null;
 }
+
+interface ThemeTokens {
+  id: string;
+  name: string;
+  description: string;
+  primary: string;
+  secondary: string;
+  accent: string;
+  mood: string;
+}
+
+/**
+ * Catalogue statique des themes (palettes) -- DOIT rester aligne avec
+ * packages/skins/src/themes.ts (BUILTIN_THEMES). 8 palettes preset
+ * independantes du skin (layout).
+ */
+const THEME_CATALOG: ThemeTokens[] = [
+  { id: 'emerald', name: 'Emeraude', description: 'Vert naturel, logistique mainstream', primary: '#1B5E20', secondary: '#4CAF50', accent: '#A5D6A7', mood: 'natural' },
+  { id: 'sapphire', name: 'Saphir', description: 'Bleu corporate, B2B / finance', primary: '#1E40AF', secondary: '#3B82F6', accent: '#93C5FD', mood: 'corporate' },
+  { id: 'amber', name: 'Ambre', description: 'Orange chaleureux, B2C grand public', primary: '#C2410C', secondary: '#F97316', accent: '#FDBA74', mood: 'warm' },
+  { id: 'midnight', name: 'Minuit', description: 'Violet profond, dark editorial', primary: '#A78BFA', secondary: '#7C3AED', accent: '#F0ABFC', mood: 'dark' },
+  { id: 'rose', name: 'Rose', description: 'Pastel doux, B2C niche', primary: '#EC4899', secondary: '#A855F7', accent: '#F0ABFC', mood: 'minimal' },
+  { id: 'ocean', name: 'Ocean', description: 'Teal frais, SaaS / data', primary: '#0F766E', secondary: '#14B8A6', accent: '#5EEAD4', mood: 'ocean' },
+  { id: 'royal', name: 'Royal', description: 'Indigo + or, premium institutionnel', primary: '#312E81', secondary: '#6366F1', accent: '#FBBF24', mood: 'royal' },
+  { id: 'graphite', name: 'Graphite', description: 'Gris monochrome, ultra-minimal', primary: '#1F2937', secondary: '#4B5563', accent: '#9CA3AF', mood: 'minimal' },
+];
 
 interface Props {
   tenantId: string;
@@ -207,6 +234,7 @@ export function TenantStudio({ tenantId, initial }: Props) {
       autoUpdatePolicy: form.autoUpdatePolicy,
       customDomain: form.customDomain,
       skinId: form.skinId,
+      themeId: form.themeId,
       skinCustomization: form.skinCustomization,
     });
   }
@@ -359,14 +387,73 @@ export function TenantStudio({ tenantId, initial }: Props) {
         </div>
       </div>
 
-      {/* Skin / Studio site public */}
+      {/* Theme (palette de couleurs) -- independant du skin/layout */}
       <div>
         <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
-          <Palette className="h-3.5 w-3.5" /> Peau du site public
+          <Palette className="h-3.5 w-3.5" /> Theme (palette de couleurs)
         </h3>
         <p className="mt-1 text-xs text-gray-500">
-          Le skin pilote palette etendue, fonts et radius. Combine avec la
-          customisation ci-dessous pour des overrides ponctuels.
+          La palette s&apos;applique partout : site public, dashboard staff, mails.
+          Independante du skin (layout).
+        </p>
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          <button
+            type="button"
+            onClick={() => update('themeId', null)}
+            className={
+              'flex flex-col overflow-hidden rounded-lg border text-left transition ' +
+              (!form.themeId
+                ? 'border-primary-400 ring-2 ring-primary-200'
+                : 'border-gray-200 hover:border-gray-300')
+            }
+          >
+            <div className="h-12 w-full bg-gradient-to-br from-gray-200 to-gray-100" />
+            <div className="flex-1 p-2">
+              <p className="text-xs font-semibold">Aucun</p>
+              <p className="line-clamp-2 text-[11px] text-gray-500">
+                Palette par defaut du skin selectionne.
+              </p>
+            </div>
+          </button>
+          {THEME_CATALOG.map((t) => {
+            const active = t.id === form.themeId;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => update('themeId', t.id)}
+                className={
+                  'flex flex-col overflow-hidden rounded-lg border text-left transition ' +
+                  (active
+                    ? 'border-primary-400 ring-2 ring-primary-200'
+                    : 'border-gray-200 hover:border-gray-300')
+                }
+              >
+                <div
+                  className="h-12 w-full"
+                  style={{ background: `linear-gradient(135deg, ${t.primary}, ${t.secondary} 60%, ${t.accent})` }}
+                />
+                <div className="flex-1 p-2">
+                  <p className="text-xs font-semibold">{t.name}</p>
+                  <p className="line-clamp-2 text-[11px] text-gray-500">{t.description}</p>
+                  <p className="mt-1 text-[10px] uppercase tracking-wide text-gray-400">
+                    {t.mood}
+                  </p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Skin / layout du site public */}
+      <div>
+        <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
+          <Palette className="h-3.5 w-3.5" /> Peau (layout du site public)
+        </h3>
+        <p className="mt-1 text-xs text-gray-500">
+          La peau definit la composition du site web : disposition, format,
+          presence/absence de sections. Le theme (couleurs) reste applique.
         </p>
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           <button

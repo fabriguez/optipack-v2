@@ -52,6 +52,8 @@ export const updateTenantSchema = z.object({
   pinnedVersion: z.string().optional().nullable(),
   autoUpdatePolicy: z.enum(['MANUAL', 'AUTO_STABLE', 'AUTO_CRITICAL_ONLY']).optional(),
   skinId: z.string().nullable().optional(),
+  // Theme = palette de couleurs (independant du skin/layout).
+  themeId: z.string().nullable().optional(),
   skinCustomization: skinCustomizationSchema.nullable().optional(),
 });
 export type UpdateTenantInput = z.infer<typeof updateTenantSchema>;

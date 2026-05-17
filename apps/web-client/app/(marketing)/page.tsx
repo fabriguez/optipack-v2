@@ -1,19 +1,25 @@
-import { Hero } from '@/components/marketing/Hero';
-import { ParcelJourney } from '@/components/marketing/ParcelJourney';
-import { Features } from '@/components/marketing/Features';
-import { Stats } from '@/components/marketing/Stats';
-import { Pricing } from '@/components/marketing/Pricing';
-import { CTA } from '@/components/marketing/CTA';
+'use client';
 
+import { useSkin } from '@/lib/providers/SkinProvider';
+import { HOME_LAYOUTS, DEFAULT_HOME_LAYOUT } from '@/components/marketing/layouts';
+import type { LayoutVariant } from '@transitsoftservices/skins';
+
+/**
+ * Page d'accueil du portail public. Le layout (composition + ordre des
+ * sections) depend du `layoutVariant` du skin actif :
+ *   - forest    -> ClassicLayout    (logistique mainstream)
+ *   - sapphire  -> BoldLayout       (corporate B2B)
+ *   - sunset    -> MagazineLayout   (B2C grand public, storytelling)
+ *   - midnight  -> EditorialLayout  (dark premium asymetrique)
+ *   - pastel    -> MinimalLayout    (B2C niche, less-is-more)
+ *
+ * Changer de skin dans le Studio change la disposition complete + les
+ * couleurs/typo via les CSS vars `--skin-*` (gere par SkinProvider).
+ */
 export default function HomePage() {
-  return (
-    <>
-      <Hero />
-      <ParcelJourney />
-      <Features />
-      <Stats />
-      <Pricing />
-      <CTA />
-    </>
-  );
+  const { resolved } = useSkin();
+  const variant = ((resolved as { layoutVariant?: LayoutVariant } | undefined)?.layoutVariant ??
+    'classic') as LayoutVariant;
+  const Layout = HOME_LAYOUTS[variant] ?? DEFAULT_HOME_LAYOUT;
+  return <Layout />;
 }

@@ -43,6 +43,12 @@ export type {
 } from '../schemas/fund-transfer.schema';
 
 export type {
+  CreateHeadOfficeDisbursementInput,
+  VoidHeadOfficeDisbursementInput,
+  PayEmployeeFromHeadOfficeInput,
+} from '../schemas/head-office.schema';
+
+export type {
   PaginationInput,
   IdParam,
   DateRangeInput,

@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { applyPaletteToDocument, generatePalette } from '@/lib/theme/palette-generator';
-import { applySkinById, type SkinCustomization, isKnownSkinId } from '@transitsoftservices/skins';
+import { applySkinById, applyThemeById, type SkinCustomization, isKnownSkinId, isKnownThemeId, getTheme } from '@transitsoftservices/skins';
 
 export interface TenantMeta {
   id: string;
@@ -17,6 +17,7 @@ export interface TenantMeta {
   defaultCurrency: string;
   defaultLanguage: string;
   skin?: string | null;
+  theme?: string | null;
   skinCustomization?: SkinCustomization | null;
 }
 
@@ -61,15 +62,41 @@ async function fetchTenantMeta(): Promise<TenantMeta> {
 }
 
 function applyTheme(meta: TenantMeta) {
-  // 1) Skin (police, radius, palette etendue) si configure. La peau ecrit
-  //    aussi --color-primary-* donc on l'applique en premier, puis on laisse
-  //    la palette generee depuis primaryColor surcharger si necessaire.
+  // 1) Skin (police, radius, palette par defaut, images) si configure.
+  //    Skin = layout cote web-client, mais expose aussi des CSS vars
+  //    pour les couleurs/typo. On applique en premier, le theme passera
+  //    dessus.
   if (meta.skin && isKnownSkinId(meta.skin)) {
     applySkinById(meta.skin, (meta.skinCustomization ?? undefined) as SkinCustomization | undefined);
   }
 
-  // 2) Palette tenant (sur-couche : la couleur primaire choisie par l'admin
-  //    a priorite sur celle de la peau).
+  // 2) Theme (palette de couleurs) -- independant du skin. Si defini,
+  //    surcharge les --skin-* couleurs ecrites par le skin. C'est le
+  //    nouveau canal recommande pour la palette tenant (vs primary/
+  //    secondary/accentColor legacy qui restent compatibles).
+  const themeId = meta.theme;
+  if (themeId && isKnownThemeId(themeId)) {
+    applyThemeById(themeId);
+    // Synchronise aussi la palette Tailwind primary-* avec la couleur
+    // primaire du theme : sans ca, le dashboard garde l'ancien vert.
+    const theme = getTheme(themeId);
+    const palette = generatePalette(theme.primary);
+    applyPaletteToDocument(palette, 'color-primary');
+    if (typeof document !== 'undefined') {
+      document.documentElement.style.setProperty('--color-secondary', theme.secondary);
+      document.documentElement.style.setProperty('--color-accent', theme.accent);
+      // Sidebar : derive du theme primary (pas plus l'hardcode vert).
+      document.documentElement.style.setProperty('--color-sidebar-bg', palette[900]);
+      document.documentElement.style.setProperty('--color-sidebar-hover', palette[800]);
+      document.documentElement.style.setProperty('--color-sidebar-active', palette[700]);
+      document.documentElement.style.setProperty('--color-sidebar-muted', palette[200]);
+      document.title = meta.name || 'TransitSoftServices';
+    }
+    return;
+  }
+
+  // 3) Fallback legacy : palette derivee de meta.primaryColor (avant
+  //    introduction des themes nommes). Conserve la compat ascendante.
   const primary = generatePalette(meta.primaryColor);
   applyPaletteToDocument(primary, 'color-primary');
   if (typeof document !== 'undefined') {

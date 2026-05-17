@@ -1,54 +1,45 @@
 import { inject, injectable } from 'tsyringe';
 import { generateReference } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
-import { CASH_REGISTER_REPOSITORY, type ICashRegisterRepository } from '../../interfaces/ICashRegisterRepository';
+import { HEAD_OFFICE_CASH_REGISTER_REPOSITORY, type IHeadOfficeCashRegisterRepository } from '../../interfaces/IHeadOfficeCashRegisterRepository';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
 
-interface PayEmployeeInput {
-  /** Periode au format YYYY-MM. Defaut : mois courant. */
+interface PayEmployeeFromHeadOfficeInput {
+  organizationId: string;
   period?: string;
-  /** Montant brut DE REFERENCE pour cette periode (sert a calculer le net du
-   *  payslip lors du PREMIER versement). Defaut : baseSalary. */
   amount?: number;
-  /** Montant a verser MAINTENANT (tranche). Defaut : solde restant a payer
-   *  (paiement integral). Permet les avances / acomptes / soldes. */
   installmentAmount?: number;
-  /** Caisse depuis laquelle on paye. Defaut : caisse du jour de l'agence. */
-  cashRegisterId?: string;
   description?: string;
-  /** Note libre stockee sur le versement (motif : "avance", "acompte", ...). */
   note?: string;
-  /** IDs des retenues a appliquer. Ignore si payslip deja cree (retenues
-   *  appliquees au 1er versement uniquement). */
   applyDeductionIds?: string[];
 }
 
 /**
- * Paye un employe -- supporte les versements partiels.
- *
- * Comportement :
- *  - Premier appel pour la periode : cree le Payslip (calcule netSalary apres
- *    retenues), cree un PayslipPayment et un Expense pour la tranche, debite
- *    la caisse. Si `installmentAmount` est omis ou egal au net, on solde
- *    directement (isPaid=true).
- *  - Appels suivants : ajoute un PayslipPayment, additionne paidAmount,
- *    debite la caisse, marque isPaid=true des que paidAmount >= netSalary.
- *
- * Cas d'usage :
- *  - Caisse insuffisante : paye une fraction maintenant, le reste plus tard.
- *  - Avance avant date de salaire : `installmentAmount` < net, paidAt n'est
- *    pas la fin de mois.
+ * Paye un employe depuis la caisse siege. Mirror de
+ * PayEmployeeFromCashRegisterUseCase mais le debit s'effectue sur la caisse
+ * siege au lieu de la caisse agence. L'Expense reste rattachee a l'agence
+ * de l'employe (centre de cout) mais headOfficeCashRegisterId est rempli
+ * pour tracer la source des fonds.
  */
 @injectable()
-export class PayEmployeeFromCashRegisterUseCase {
+export class PayEmployeeFromHeadOfficeUseCase {
   constructor(
-    @inject(CASH_REGISTER_REPOSITORY) private cashRegisterRepo: ICashRegisterRepository,
+    @inject(HEAD_OFFICE_CASH_REGISTER_REPOSITORY) private hqRegisterRepo: IHeadOfficeCashRegisterRepository,
   ) {}
 
-  async execute(employeeId: string, input: PayEmployeeInput, userId: string) {
+  async execute(employeeId: string, input: PayEmployeeFromHeadOfficeInput, userId: string) {
     const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
     if (!employee) throw new NotFoundError('Employe', employeeId);
     if (!employee.isActive) throw new BusinessError('Employe inactif, paiement impossible.');
+
+    // Verifie que l'employe appartient bien a l'organisation.
+    const agency = await prisma.agency.findUnique({
+      where: { id: employee.agencyId },
+      select: { organizationId: true },
+    });
+    if (!agency || agency.organizationId !== input.organizationId) {
+      throw new BusinessError("L'employe n'appartient pas a cette organisation.");
+    }
 
     const period = input.period ?? this.currentPeriod();
     const grossAmount = input.amount ?? Number(employee.baseSalary);
@@ -56,9 +47,6 @@ export class PayEmployeeFromCashRegisterUseCase {
 
     const existingPayslip = await prisma.payslip.findFirst({ where: { employeeId, period } });
 
-    // Calcul des retenues : appliquees uniquement au PREMIER versement
-    // (creation du payslip). Pour les versements suivants, les retenues sont
-    // deja fixees dans payslip.deductionsTotal.
     let deductionsTotal = 0;
     let pendingDeductions: { id: string; amount: any }[] = [];
     let netSalary: number;
@@ -72,7 +60,6 @@ export class PayEmployeeFromCashRegisterUseCase {
       pendingDeductions = await prisma.salaryDeduction.findMany({ where: deductionsQuery });
       deductionsTotal = pendingDeductions.reduce((sum, d) => sum + Number(d.amount), 0);
       netSalary = Math.max(0, grossAmount - deductionsTotal);
-
       if (netSalary <= 0 && deductionsTotal > 0) {
         throw new BusinessError(
           `Les retenues (${deductionsTotal}) atteignent ou depassent le brut (${grossAmount}). Ajustez les retenues.`,
@@ -91,8 +78,7 @@ export class PayEmployeeFromCashRegisterUseCase {
       throw new BusinessError(`Aucun montant restant a payer pour ${period}.`);
     }
 
-    // Tranche a verser : par defaut le solde restant (paiement integral).
-    let installment = input.installmentAmount ?? remaining;
+    const installment = input.installmentAmount ?? remaining;
     if (installment <= 0) throw new BusinessError('Le montant a verser doit etre positif.');
     if (installment > remaining) {
       throw new BusinessError(
@@ -100,23 +86,14 @@ export class PayEmployeeFromCashRegisterUseCase {
       );
     }
 
-    let cashRegister = input.cashRegisterId
-      ? await prisma.agencyCashRegister.findUnique({ where: { id: input.cashRegisterId } })
-      : await this.cashRegisterRepo.findOrCreateForToday(employee.agencyId);
-    if (!cashRegister) throw new NotFoundError('Caisse', input.cashRegisterId ?? '(default)');
-
-    if (cashRegister.isClosed) {
-      cashRegister = await this.cashRegisterRepo.findOrCreateForToday(cashRegister.agencyId);
-    }
-
-    if (Number(cashRegister.currentBalance) < installment) {
+    const hqRegister = await this.hqRegisterRepo.findOrCreate(input.organizationId);
+    if (Number(hqRegister.currentBalance) < installment) {
       throw new BusinessError(
-        `Solde caisse insuffisant (${Number(cashRegister.currentBalance)} dispo) pour verser ${installment}.`,
+        `Solde caisse siege insuffisant (${Number(hqRegister.currentBalance)} dispo) pour verser ${installment}.`,
       );
     }
 
     return prisma.$transaction(async (tx) => {
-      // Cree ou recupere le payslip de la periode.
       const payslip = existingPayslip
         ? existingPayslip
         : await tx.payslip.create({
@@ -125,11 +102,11 @@ export class PayEmployeeFromCashRegisterUseCase {
               period,
               baseSalary: employee.baseSalary,
               grossSalary: grossAmount,
-              netSalary: netSalary,
+              netSalary,
               isPaid: false,
               paidAmount: 0,
               paymentNote: input.note ?? null,
-              deductionsTotal: deductionsTotal,
+              deductionsTotal,
             },
           });
 
@@ -143,35 +120,33 @@ export class PayEmployeeFromCashRegisterUseCase {
       const expense = await tx.expense.create({
         data: {
           agencyId: employee.agencyId,
-          title: `${installmentLabel} - ${employee.fullName}`,
+          title: `${installmentLabel} (siege) - ${employee.fullName}`,
           reason: `${installmentLabel} ${period}`,
           description: [
             input.description ?? '',
             input.note ? `Note: ${input.note}` : '',
+            `Payee depuis la caisse siege.`,
             `Versement ${installment} / Net ${netSalary} (deja paye ${alreadyPaid})`,
             isFirstInstallment && deductionsTotal > 0
               ? `Retenues appliquees: ${deductionsTotal} (${pendingDeductions.length} ligne(s))`
               : '',
-          ]
-            .filter(Boolean)
-            .join('\n') || null,
+          ].filter(Boolean).join('\n') || null,
           category: 'SALARY',
           amount: installment,
           approvedByUserId: userId,
           period,
-          cashRegisterId: cashRegister!.id,
+          headOfficeCashRegisterId: hqRegister.id,
         },
       });
 
-      // Bon de decaissement (DisbursementVoucher) par tranche.
-      const disbursementCount = await tx.disbursementVoucher.count({
-        where: { agencyId: employee.agencyId },
+      const disbursementCount = await tx.headOfficeDisbursementVoucher.count({
+        where: { organizationId: input.organizationId },
       });
-      const disbursement = await tx.disbursementVoucher.create({
+      const disbursement = await tx.headOfficeDisbursementVoucher.create({
         data: {
-          reference: generateReference('DEC-SAL', disbursementCount + 1),
-          agencyId: employee.agencyId,
-          cashRegisterId: cashRegister!.id,
+          reference: generateReference('DEC-HQ-SAL', disbursementCount + 1),
+          organizationId: input.organizationId,
+          headOfficeCashRegisterId: hqRegister.id,
           reason: `${installmentLabel} ${period} - ${employee.fullName}`,
           description: input.note ?? input.description ?? null,
           orderer: 'RH',
@@ -182,7 +157,6 @@ export class PayEmployeeFromCashRegisterUseCase {
         },
       });
 
-      // Enregistre la tranche.
       await tx.payslipPayment.create({
         data: {
           payslipId: payslip.id,
@@ -193,8 +167,6 @@ export class PayEmployeeFromCashRegisterUseCase {
         },
       });
 
-      // Met a jour le payslip : paidAmount cumulatif, isPaid si solde atteint,
-      // paidExpenseId pointe sur le dernier versement (back-compat).
       const updatedPayslip = await tx.payslip.update({
         where: { id: payslip.id },
         data: {
@@ -206,7 +178,6 @@ export class PayEmployeeFromCashRegisterUseCase {
         },
       });
 
-      // Retenues appliquees au 1er versement uniquement.
       if (isFirstInstallment && pendingDeductions.length > 0) {
         await tx.salaryDeduction.updateMany({
           where: { id: { in: pendingDeductions.map((d) => d.id) } },
@@ -219,48 +190,14 @@ export class PayEmployeeFromCashRegisterUseCase {
         });
       }
 
-      // Debit caisse.
-      await tx.agencyCashRegister.update({
-        where: { id: cashRegister!.id },
+      // Debit caisse siege.
+      await tx.headOfficeCashRegister.update({
+        where: { id: hqRegister.id },
         data: {
           totalExits: { increment: installment },
           currentBalance: { decrement: installment },
         },
       });
-
-      // Trace le versement comme une "avance sur la charge masse salariale"
-      // auto-geree de l'agence : chaque tranche apparait dans l'historique de
-      // la charge SALARY, ce qui permet de suivre les avances cumulees du mois
-      // sans alterer le defaultAmount (qui reste la reference budgetaire).
-      const salaryCharge = await tx.agencyCharge.findFirst({
-        where: { agencyId: employee.agencyId, type: 'SALARY', isAutoManaged: true },
-        select: { id: true },
-      });
-      if (salaryCharge) {
-        await tx.agencyChargeHistory.create({
-          data: {
-            chargeId: salaryCharge.id,
-            action: 'ADVANCE_PAID',
-            userId,
-            comment: `${installmentLabel} ${period} - ${employee.fullName} (${installment})`,
-            changes: {
-              employeeId,
-              employeeName: employee.fullName,
-              period,
-              amount: installment,
-              netSalary,
-              alreadyPaid: newPaidAmount,
-              remaining: Math.max(0, netSalary - newPaidAmount),
-              payslipId: payslip.id,
-              expenseId: expense.id,
-              disbursementId: disbursement.id,
-              cashRegisterId: cashRegister!.id,
-              isFirstInstallment,
-              isFullyPaid: willBeFullyPaid,
-            },
-          },
-        });
-      }
 
       return {
         expense,

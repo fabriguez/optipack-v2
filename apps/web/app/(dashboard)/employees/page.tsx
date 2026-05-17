@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Upload, Eye, Edit } from 'lucide-react';
+import { Plus, Upload, Eye, Edit, Trash2 } from 'lucide-react';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
@@ -14,7 +14,8 @@ import { FilterDialog } from '@/components/shared/FilterDialog';
 import { ExportButton } from '@/components/shared/ExportButton';
 import { CsvImportDialog } from '@/components/shared/CsvImportDialog';
 import { RowActions } from '@/components/shared/RowActions';
-import { useQuery } from '@tanstack/react-query';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { searchers } from '@/lib/api/searchers';
 import { formatAmount } from '@transitsoftservices/shared';
@@ -28,7 +29,21 @@ export default function EmployeesPage() {
   const [showImport, setShowImport] = useState(false);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [toDelete, setToDelete] = useState<{ id: string; fullName: string } | null>(null);
   const agencyIdFilter = searchParams.get('agencyId') || '';
+  const queryClient = useQueryClient();
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiClient.delete(`/employees/${id}`),
+    onSuccess: () => {
+      toast.success('Employe supprime');
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      setToDelete(null);
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.message || 'Suppression impossible');
+    },
+  });
 
   const { data, isLoading } = useQuery({
     queryKey: ['employees', agencyIdFilter, page, search],
@@ -89,6 +104,12 @@ export default function EmployeesPage() {
         <RowActions actions={[
           { label: 'Voir details', icon: <Eye className="h-4 w-4" />, onClick: () => router.push(`/employees/${row.id}`) },
           { label: 'Modifier', icon: <Edit className="h-4 w-4" />, onClick: () => router.push(`/employees/${row.id}`) },
+          ...(row.isActive ? [{
+            label: 'Supprimer',
+            icon: <Trash2 className="h-4 w-4" />,
+            variant: 'destructive' as const,
+            onClick: () => setToDelete({ id: row.id, fullName: row.fullName }),
+          }] : []),
         ]} />
       ),
     },
@@ -136,6 +157,16 @@ export default function EmployeesPage() {
         </AppCard>
       </div>
       <EmployeeFormDialog open={showCreate} onClose={() => setShowCreate(false)} />
+      <ConfirmDialog
+        open={!!toDelete}
+        onClose={() => setToDelete(null)}
+        onConfirm={() => toDelete && deleteMutation.mutate(toDelete.id)}
+        title="Supprimer l'employe"
+        message={`Confirmer la suppression de ${toDelete?.fullName ?? ''} ? Il sera retire de la liste et de la masse salariale. Action reversible cote base (soft delete).`}
+        confirmLabel="Supprimer"
+        variant="destructive"
+        loading={deleteMutation.isPending}
+      />
       <CsvImportDialog
         open={showImport}
         onClose={() => setShowImport(false)}

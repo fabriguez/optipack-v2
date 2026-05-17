@@ -26,6 +26,7 @@ import {
   Bell,
   MessageSquare,
   BarChart3,
+  History,
   Settings,
   Shield,
   ShieldCheck,
@@ -69,6 +70,7 @@ const financeNav: NavItem[] = [
   { label: 'Comptabilite', href: '/accounting', icon: BookOpen, module: 'accounting' },
   { label: 'Depenses', href: '/expenses', icon: HandCoins, module: 'expenses' },
   { label: 'Dettes', href: '/debts', icon: AlertTriangle, module: 'debts' },
+  { label: 'Historique financier', href: '/finance-history', icon: History },
 ];
 
 const adminNav: NavItem[] = [

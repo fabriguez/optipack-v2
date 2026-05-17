@@ -25,6 +25,7 @@ export const BUILTIN_SKINS: Record<string, SkinTokens> = {
     radius: 0.75,
     shadowFlavor: 'soft',
     mood: 'natural',
+    layoutVariant: 'classic',
     images: {
       preview:
         'https://images.unsplash.com/photo-1494412519320-aa613dfb7738?auto=format&fit=crop&w=800&q=70',
@@ -59,6 +60,7 @@ export const BUILTIN_SKINS: Record<string, SkinTokens> = {
     radius: 0.5,
     shadowFlavor: 'sharp',
     mood: 'corporate',
+    layoutVariant: 'bold',
     images: {
       preview:
         'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=800&q=70',
@@ -93,6 +95,7 @@ export const BUILTIN_SKINS: Record<string, SkinTokens> = {
     radius: 1.25,
     shadowFlavor: 'glow',
     mood: 'warm',
+    layoutVariant: 'magazine',
     images: {
       preview:
         'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=800&q=70',
@@ -127,6 +130,7 @@ export const BUILTIN_SKINS: Record<string, SkinTokens> = {
     radius: 1,
     shadowFlavor: 'glow',
     mood: 'dark',
+    layoutVariant: 'editorial',
     images: {
       preview:
         'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=800&q=70',
@@ -161,6 +165,7 @@ export const BUILTIN_SKINS: Record<string, SkinTokens> = {
     radius: 1.5,
     shadowFlavor: 'flat',
     mood: 'minimal',
+    layoutVariant: 'minimal',
     images: {
       preview:
         'https://images.unsplash.com/photo-1620207418302-439b387441b0?auto=format&fit=crop&w=800&q=70',

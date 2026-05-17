@@ -59,7 +59,20 @@ interface TenantMeta {
   slug: string;
   name: string;
   skin: string | null;
+  theme: string | null;
   skinCustomization: SkinCustomization | null;
+}
+
+interface ThemeTokens {
+  id: string;
+  name: string;
+  description: string;
+  primary: string;
+  secondary: string;
+  accent: string;
+  background: string;
+  foreground: string;
+  mood: string;
 }
 
 const FONT_OPTIONS = [
@@ -109,6 +122,7 @@ function AdminGate({ children }: { children: React.ReactNode }) {
 function SiteStudioContent() {
   const qc = useQueryClient();
   const [skinId, setSkinId] = useState<string | null>(null);
+  const [themeId, setThemeId] = useState<string | null>(null);
   const [custom, setCustom] = useState<SkinCustomization>({});
   const [hasChanges, setHasChanges] = useState(false);
 
@@ -122,9 +136,15 @@ function SiteStudioContent() {
     queryFn: async () => (await apiClient.get('/tenant-meta/skins')).data?.data ?? [],
   });
 
+  const themes = useQuery<ThemeTokens[]>({
+    queryKey: ['tenant-meta', 'themes'],
+    queryFn: async () => (await apiClient.get('/tenant-meta/themes')).data?.data ?? [],
+  });
+
   useEffect(() => {
     if (meta.data) {
       setSkinId(meta.data.skin ?? null);
+      setThemeId(meta.data.theme ?? null);
       setCustom(meta.data.skinCustomization ?? {});
       setHasChanges(false);
     }
@@ -133,7 +153,8 @@ function SiteStudioContent() {
   const save = useMutation({
     mutationFn: () =>
       apiClient.patch('/tenant-meta/skin', {
-        skinId: skinId,
+        skinId,
+        themeId,
         skinCustomization: custom,
       }),
     onSuccess: () => {
@@ -162,9 +183,15 @@ function SiteStudioContent() {
   function reset() {
     if (meta.data) {
       setSkinId(meta.data.skin ?? null);
+      setThemeId(meta.data.theme ?? null);
       setCustom(meta.data.skinCustomization ?? {});
       setHasChanges(false);
     }
+  }
+
+  function changeTheme(id: string | null) {
+    setThemeId(id);
+    setHasChanges(true);
   }
 
   const selectedSkin = useMemo(
@@ -221,11 +248,61 @@ function SiteStudioContent() {
           </a>
         </div>
 
-        {/* Skin picker */}
+        {/* Theme picker -- palette de couleurs (independante du skin/layout) */}
         <AppCard>
           <AppCardHeader
-            title="Peau de base"
-            description="Chaque peau definit un trio de couleurs + des images d'ambiance. Tu peux ensuite affiner."
+            title="Theme (palette de couleurs)"
+            description="La palette est appliquee partout : site public, dashboard staff, mails. Independante du layout (skin)."
+          />
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {(themes.data ?? []).map((t) => {
+              const active = t.id === themeId;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => changeTheme(t.id)}
+                  className={
+                    'group flex flex-col overflow-hidden rounded-xl border text-left transition ' +
+                    (active
+                      ? 'border-primary-400 ring-2 ring-primary-200'
+                      : 'border-gray-200 hover:border-gray-300')
+                  }
+                >
+                  <div
+                    className="h-16 w-full"
+                    style={{ background: `linear-gradient(135deg, ${t.primary}, ${t.secondary} 60%, ${t.accent})` }}
+                  />
+                  <div className="flex-1 space-y-1 p-3">
+                    <p className="text-sm font-semibold">{t.name}</p>
+                    <p className="line-clamp-2 text-xs text-gray-500">{t.description}</p>
+                    <div className="flex items-center gap-1 pt-1">
+                      {[t.primary, t.secondary, t.accent].map((c) => (
+                        <span
+                          key={c}
+                          className="h-3 w-3 rounded-full border"
+                          style={{ background: c }}
+                        />
+                      ))}
+                      <span className="ml-auto text-[10px] uppercase tracking-wide text-gray-400">
+                        {t.mood}
+                      </span>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+            {themes.isLoading && (
+              <p className="col-span-full text-xs text-gray-400">Chargement themes...</p>
+            )}
+          </div>
+        </AppCard>
+
+        {/* Skin picker -- layout du site public (5 dispositions) */}
+        <AppCard>
+          <AppCardHeader
+            title="Peau (layout du site public)"
+            description="La peau definit la composition du site web public : disposition des sections, hero, format. Le theme (couleurs) reste applique."
           />
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {(skins.data ?? []).map((s) => {

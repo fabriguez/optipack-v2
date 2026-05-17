@@ -253,6 +253,7 @@ export class TenantUseCases {
         ...(input.pinnedVersion !== undefined && { pinnedVersion: input.pinnedVersion }),
         ...(input.autoUpdatePolicy !== undefined && { autoUpdatePolicy: input.autoUpdatePolicy }),
         ...((input as any).skinId !== undefined && { skinId: (input as any).skinId } as any),
+        ...((input as any).themeId !== undefined && { themeId: (input as any).themeId } as any),
         ...((input as any).skinCustomization !== undefined && {
           skinCustomization: (input as any).skinCustomization,
         } as any),
@@ -289,6 +290,7 @@ export class TenantUseCases {
     if (input.accentColor !== undefined) payload.accentColor = input.accentColor;
     if (input.enabledModules !== undefined) payload.enabledModules = input.enabledModules;
     if ((input as any).skinId !== undefined) payload.skinId = (input as any).skinId;
+    if ((input as any).themeId !== undefined) payload.themeId = (input as any).themeId;
     if ((input as any).skinCustomization !== undefined) {
       payload.skinCustomization = (input as any).skinCustomization;
     }

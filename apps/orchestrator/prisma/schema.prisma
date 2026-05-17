@@ -133,9 +133,12 @@ model Tenant {
   webClientPort   Int?         // Public client-facing site (web-client app) - subdomain www.{slug}.{base}
   dbName          String?      // ex: "tenant_acme_db"
 
-  // Theming du site public (web-client) : peau preset + overrides
-  // Si null/vide, on retombe sur les valeurs par defaut du SkinProvider.
-  skinId             String?   // 'forest' | 'sapphire' | 'sunset' | 'midnight' | 'pastel'
+  // Theming du site public (web-client) :
+  //   skinId  = layout du site (classic / bold / magazine / editorial / minimal)
+  //   themeId = palette de couleurs (emerald / sapphire / amber / midnight / rose / ocean / royal / graphite)
+  // Les 2 sont independants : n'importe quel theme avec n'importe quel skin.
+  skinId             String?
+  themeId            String?
   skinCustomization  Json?     // { primary?, accent?, radius?, fontBody?, fontHeading? }
 
   // Etat actuel

@@ -11,6 +11,8 @@ export class PrismaFundTransferRepository implements IFundTransferRepository {
       where: { id },
       include: {
         sourceAgency: { select: { id: true, name: true, code: true } },
+        sourceOrganization: { select: { id: true, name: true } },
+        destinationAgency: { select: { id: true, name: true, code: true } },
         initiatedBy: { select: { id: true, firstName: true, lastName: true } },
         confirmedBy: { select: { id: true, firstName: true, lastName: true } },
       },
@@ -20,6 +22,8 @@ export class PrismaFundTransferRepository implements IFundTransferRepository {
   async findAll(
     filters: {
       sourceAgencyId?: string;
+      sourceOrganizationId?: string;
+      sourceType?: 'AGENCY' | 'HQ';
       destinationAgencyId?: string;
       agencyIds?: string[];
       reference?: string;
@@ -46,8 +50,10 @@ export class PrismaFundTransferRepository implements IFundTransferRepository {
 
     const where: Prisma.FundTransferWhereInput = {
       ...(filters.sourceAgencyId && { sourceAgencyId: filters.sourceAgencyId }),
+      ...(filters.sourceOrganizationId && { sourceOrganizationId: filters.sourceOrganizationId }),
+      ...(filters.sourceType && { sourceType: filters.sourceType }),
       ...(filters.destinationAgencyId && { destinationAgencyId: filters.destinationAgencyId }),
-      ...(filters.agencyIds?.length && !filters.sourceAgencyId && { sourceAgencyId: { in: filters.agencyIds } }),
+      ...(filters.agencyIds?.length && !filters.sourceAgencyId && !filters.sourceOrganizationId && { sourceAgencyId: { in: filters.agencyIds } }),
       ...(filters.status && { status: filters.status }),
       ...(filters.sourcePaymentMethod && { sourcePaymentMethod: filters.sourcePaymentMethod }),
       ...(filters.destinationPaymentMethod && { destinationPaymentMethod: filters.destinationPaymentMethod }),
@@ -64,6 +70,7 @@ export class PrismaFundTransferRepository implements IFundTransferRepository {
         orderBy: { createdAt: 'desc' },
         include: {
           sourceAgency: { select: { id: true, name: true, code: true } },
+          sourceOrganization: { select: { id: true, name: true } },
           destinationAgency: { select: { id: true, name: true, code: true } },
           initiatedBy: { select: { id: true, firstName: true, lastName: true } },
           confirmedBy: { select: { id: true, firstName: true, lastName: true } },

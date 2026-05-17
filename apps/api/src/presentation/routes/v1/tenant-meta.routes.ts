@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../../../config/database';
 import { authenticate, authorize } from '../../middleware/authMiddleware';
 import { tenantGuard, getOrgId } from '../../middleware/tenantGuard';
-import { isKnownSkinId, listSkins } from '@transitsoftservices/skins';
+import { isKnownSkinId, listSkins, isKnownThemeId, listThemes } from '@transitsoftservices/skins';
 import {
   emailConfigSchema,
   mobileAppConfigSchema,
@@ -66,6 +66,7 @@ router.patch('/ops-sync', requireServiceToken, async (req, res, next) => {
       accentColor?: string;
       enabledModules?: string[];
       skinId?: string | null;
+      themeId?: string | null;
       skinCustomization?: unknown;
     };
 
@@ -85,6 +86,9 @@ router.patch('/ops-sync', requireServiceToken, async (req, res, next) => {
     if (body.skinId && !isKnownSkinId(body.skinId)) {
       return res.status(400).json({ success: false, message: `skinId inconnu : ${body.skinId}` });
     }
+    if (body.themeId && !isKnownThemeId(body.themeId)) {
+      return res.status(400).json({ success: false, message: `themeId inconnu : ${body.themeId}` });
+    }
 
     const updated = await prisma.organization.update({
       where: { id: org.id },
@@ -96,6 +100,7 @@ router.patch('/ops-sync', requireServiceToken, async (req, res, next) => {
         ...(body.accentColor !== undefined && { accentColor: body.accentColor }),
         ...(body.enabledModules !== undefined && { enabledModules: body.enabledModules }),
         ...(body.skinId !== undefined && { skinId: body.skinId } as any),
+        ...(body.themeId !== undefined && { themeId: body.themeId } as any),
         ...(body.skinCustomization !== undefined && {
           skinCustomization: body.skinCustomization,
         } as any),
@@ -228,9 +233,10 @@ router.get('/', async (req, res, next) => {
         supportEmail: org.supportEmail,
         defaultCurrency: org.defaultCurrency,
         defaultLanguage: org.defaultLanguage,
-        // Theme du site public (web-client). Si null, le frontend retombe
-        // sur le defaut du SkinProvider.
+        // Skin = layout du site public. Theme = palette. Independants :
+        // n'importe quel theme avec n'importe quel skin.
         skin: (org as any).skinId ?? null,
+        theme: (org as any).themeId ?? null,
         skinCustomization: (org as any).skinCustomization ?? null,
         // Email config (secrets stripped).
         emailConfig: publicEmailConfig((org as any).emailConfig as EmailConfig | null),
@@ -331,9 +337,17 @@ router.get('/skins', (_req, res) => {
 });
 
 /**
+ * GET /api/v1/tenant-meta/themes
+ * PUBLIC : liste des themes (palettes) disponibles. Independant des skins.
+ */
+router.get('/themes', (_req, res) => {
+  res.json({ success: true, data: listThemes() });
+});
+
+/**
  * PATCH /api/v1/tenant-meta/skin
- * AUTH admin du tenant. Persiste la peau choisie + overrides depuis le Studio.
- * Le `skinId` est valide cote serveur via isKnownSkinId().
+ * AUTH admin. Persiste skinId (layout) + themeId (palette) + overrides.
+ * Les 2 sont independants : skin = layout du site, theme = couleurs.
  */
 router.patch(
   '/skin',
@@ -345,6 +359,7 @@ router.patch(
       const orgId = getOrgId(req);
       const body = req.body as {
         skinId?: string | null;
+        themeId?: string | null;
         skinCustomization?: unknown;
       };
 
@@ -353,23 +368,27 @@ router.patch(
           .status(400)
           .json({ success: false, message: `skinId inconnu : ${body.skinId}` });
       }
+      if (body.themeId && !isKnownThemeId(body.themeId)) {
+        return res
+          .status(400)
+          .json({ success: false, message: `themeId inconnu : ${body.themeId}` });
+      }
 
       const updated = await prisma.organization.update({
         where: { id: orgId },
         data: {
           ...(body.skinId !== undefined && { skinId: body.skinId } as any),
+          ...(body.themeId !== undefined && { themeId: body.themeId } as any),
           ...(body.skinCustomization !== undefined && {
             skinCustomization: body.skinCustomization,
           } as any),
         },
       });
 
-      // Broadcast realtime aux clients web/web-client : applique skin sans
-      // reload. Voir handler ops-sync pour le meme pattern.
       try {
         realtimeService.toOrganization(updated.id, 'tenant:meta:updated', {
           organizationId: updated.id,
-          changedFields: ['skin', 'skinCustomization'],
+          changedFields: ['skin', 'theme', 'skinCustomization'],
         });
       } catch {
         // non bloquant
@@ -380,6 +399,7 @@ router.patch(
         data: {
           id: updated.id,
           skin: (updated as any).skinId ?? null,
+          theme: (updated as any).themeId ?? null,
           skinCustomization: (updated as any).skinCustomization ?? null,
         },
       });

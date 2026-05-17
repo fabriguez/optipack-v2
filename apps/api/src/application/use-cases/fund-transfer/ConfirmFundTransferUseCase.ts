@@ -1,8 +1,11 @@
 import { inject, injectable } from 'tsyringe';
 import { FUND_TRANSFER_REPOSITORY, type IFundTransferRepository } from '../../interfaces/IFundTransferRepository';
+import { HEAD_OFFICE_CASH_REGISTER_REPOSITORY, type IHeadOfficeCashRegisterRepository } from '../../interfaces/IHeadOfficeCashRegisterRepository';
+import { CASH_REGISTER_REPOSITORY, type ICashRegisterRepository } from '../../interfaces/ICashRegisterRepository';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
 import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 import { createChildLogger } from '../../../config/logger';
+import { prisma } from '../../../config/database';
 
 const logger = createChildLogger('ConfirmFundTransfer');
 
@@ -17,6 +20,8 @@ interface ConfirmOptions {
 export class ConfirmFundTransferUseCase {
   constructor(
     @inject(FUND_TRANSFER_REPOSITORY) private transferRepo: IFundTransferRepository,
+    @inject(HEAD_OFFICE_CASH_REGISTER_REPOSITORY) private hqRegisterRepo: IHeadOfficeCashRegisterRepository,
+    @inject(CASH_REGISTER_REPOSITORY) private cashRegisterRepo: ICashRegisterRepository,
   ) {}
 
   async execute(id: string, userId: string, options: ConfirmOptions = {}) {
@@ -58,14 +63,41 @@ export class ConfirmFundTransferUseCase {
       'Confirmation transfert de fonds',
     );
 
+    const amount = Number(transfer.amount);
+
     const confirmed = await this.transferRepo.update(id, {
       status: 'CONFIRMED',
       confirmedBy: { connect: { id: userId } },
     });
 
+    // Effets caisse cote destination, deduits lors de la confirmation pour
+    // garantir que tant qu'un transfert est PENDING, ni le siege ni l'agence
+    // destinataire ne voient l'argent.
+    if (transfer.destinationType === 'HQ') {
+      // Source agence -> siege : credit le siege de l'organisation de l'agence.
+      // (Source HQ -> HQ est interdit a la creation.)
+      if (transfer.sourceAgencyId) {
+        const sourceAgency = await prisma.agency.findUnique({
+          where: { id: transfer.sourceAgencyId },
+          select: { organizationId: true },
+        });
+        if (!sourceAgency) {
+          throw new NotFoundError('Agence source', transfer.sourceAgencyId);
+        }
+        const hqRegister = await this.hqRegisterRepo.findOrCreate(sourceAgency.organizationId);
+        await this.hqRegisterRepo.addEntry(hqRegister.id, amount);
+      }
+    } else if (transfer.destinationType === 'AGENCY' && transfer.destinationAgencyId) {
+      // Credit la caisse du jour de l'agence destinataire (typique pour les
+      // transferts inter-agences et les redotations depuis le siege).
+      const destRegister = await this.cashRegisterRepo.findOrCreateForToday(transfer.destinationAgencyId);
+      await this.cashRegisterRepo.addEntry(destRegister.id, amount);
+    }
+    // destinationType === 'BANK' : pas de registre interne a crediter.
+
     eventBus.emit({
       type: DomainEvents.FUND_TRANSFER_CONFIRMED,
-      payload: { transferId: id, amount: Number(transfer.amount) },
+      payload: { transferId: id, amount },
       timestamp: new Date(),
       userId,
     });

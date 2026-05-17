@@ -6,6 +6,8 @@ export interface IFundTransferRepository {
   findAll(
     filters: {
       sourceAgencyId?: string;
+      sourceOrganizationId?: string;
+      sourceType?: 'AGENCY' | 'HQ';
       destinationAgencyId?: string;
       agencyIds?: string[];
       reference?: string;
