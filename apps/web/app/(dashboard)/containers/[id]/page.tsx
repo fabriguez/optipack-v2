@@ -37,10 +37,8 @@ import { toast } from 'sonner';
 import { ComparisonDialog } from './ComparisonDialog';
 import { ParcelFormDialog } from '@/app/(dashboard)/parcels/ParcelFormDialog';
 import { QRScannerDialog } from '@/components/shared/QRScannerDialog';
-import { BatchScanCollector } from '@/components/shared/BatchScanCollector';
+import { LiveScanCollector } from '@/components/shared/LiveScanCollector';
 import { ParcelPickerList } from '@/components/shared/ParcelPickerList';
-import { normalizeScannedTracking } from '@/lib/utils/scanNormalize';
-import { scanSound } from '@/lib/utils/scanSound';
 import { AgencyAvatar } from '@/components/shared/AgencyAvatar';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
@@ -136,12 +134,8 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
   const [scanInput, setScanInput] = useState('');
   const [scanBusy, setScanBusy] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
-  // Batch scan : accumule des trackings a charger en une seule operation.
-  const [batchLoadCodes, setBatchLoadCodes] = useState<string[]>([]);
-  const [batchLoadBusy, setBatchLoadBusy] = useState(false);
-  // Batch scan dechargement : tout en "received" vers un magasin selectionne.
+  // Scan live dechargement : tout en "received" vers un magasin selectionne.
   const [showBatchUnload, setShowBatchUnload] = useState(false);
-  const [batchUnloadCodes, setBatchUnloadCodes] = useState<string[]>([]);
   // IDs selectionnes manuellement (cas etiquettes defectueuses).
   const [batchUnloadManualIds, setBatchUnloadManualIds] = useState<string[]>([]);
   const [batchUnloadWarehouseId, setBatchUnloadWarehouseId] = useState<string | null>(null);
@@ -278,33 +272,18 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
 
   const handleScan = () => submitScan(scanInput);
 
-  // Batch chargement : execute loadByQr en serie. On continue si un code echoue
-  // (les autres restent valides). Bilan affiche a la fin.
-  const handleBatchLoad = async (codes: string[]) => {
-    setBatchLoadBusy(true);
-    let ok = 0;
-    const failed: string[] = [];
-    for (const rawCode of codes) {
-      const code = normalizeScannedTracking(rawCode);
-      try {
-        const res = await containersApi.loadByQr(id, code);
-        if (res?.data?.success) ok++;
-        else failed.push(`${code}: ${res?.data?.reason || 'echec'}`);
-      } catch (e: any) {
-        failed.push(`${code}: ${e?.response?.data?.message || 'introuvable'}`);
-      }
+  // Scan live chargement : un appel reseau par scan, anti-doublon 2 min dans
+  // LiveScanCollector. Retourne { ok, label, reason } -- les sons/toasts sont
+  // joues par le collector lui-meme.
+  const handleLiveLoad = async (code: string) => {
+    const res = await containersApi.loadByQr(id, code);
+    const success = !!res?.data?.success;
+    if (success) {
+      qc.invalidateQueries({ queryKey: ['containers', id] });
+      qc.invalidateQueries({ queryKey: ['containers', id, 'parcels'] });
+      qc.invalidateQueries({ queryKey: ['containers', id, 'loadable'] });
     }
-    // Verdict sonore final : succes si tout est passe, erreur si au moins un
-    // echec, warning si tout est tombe en echec (cas pathologique).
-    if (ok > 0 && failed.length === 0) scanSound.success();
-    else if (failed.length > 0) scanSound.error();
-    setBatchLoadBusy(false);
-    setBatchLoadCodes(failed.length === 0 ? [] : codes.filter((c) => failed.some((f) => f.startsWith(`${c}:`))));
-    if (ok > 0) toast.success(`${ok} colis charge${ok > 1 ? 's' : ''}`);
-    if (failed.length > 0) toast.error(`${failed.length} echec(s) : ${failed[0]}`);
-    qc.invalidateQueries({ queryKey: ['containers', id] });
-    qc.invalidateQueries({ queryKey: ['containers', id, 'parcels'] });
-    qc.invalidateQueries({ queryKey: ['containers', id, 'loadable'] });
+    return { ok: success, label: res?.data?.trackingNumber, reason: res?.data?.reason };
   };
 
   // Variante "by IDs" pour la selection manuelle dans la liste paginee
@@ -345,55 +324,27 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
     }
   };
 
-  // Batch dechargement : tout les codes vers un magasin (action received).
-  const handleBatchUnload = async (codes: string[]) => {
+  // Scan live dechargement : un appel reseau par scan. Resout tracking ->
+  // parcelId via la liste des colis presents dans le conteneur (les QR
+  // encodent une URL, deja normalisee par LiveScanCollector).
+  const handleLiveUnload = async (code: string) => {
     if (!batchUnloadWarehouseId) {
-      scanSound.error();
-      toast.error('Selectionnez un magasin de destination');
-      return;
+      return { ok: false, reason: 'Selectionnez un magasin de destination' };
     }
-    setBatchUnloadBusy(true);
-    let ok = 0;
-    const failed: string[] = [];
-    // On doit d'abord resoudre tracking -> parcelId puisque l'API unload prend
-    // un parcelId. On utilise les colis charges actuellement dans le conteneur.
-    // BUG FIX : les QR encodent une URL ("https://.../tracking/TST-XXX"),
-    // pas le tracking nu. On normalise avant comparaison.
-    for (const rawCode of codes) {
-      const code = normalizeScannedTracking(rawCode);
-      const match = parcels.find((p: any) => p.trackingNumber === code);
-      if (!match) {
-        failed.push(`${code}: non present dans ce conteneur`);
-        continue;
-      }
-      try {
-        await containersApi.unload(id, {
-          parcelId: match.id,
-          action: 'received',
-          warehouseId: batchUnloadWarehouseId,
-        });
-        ok++;
-      } catch (e: any) {
-        failed.push(`${code}: ${e?.response?.data?.message || 'echec'}`);
-      }
+    const match = parcels.find((p: any) => p.trackingNumber === code);
+    if (!match) {
+      return { ok: false, reason: 'Non present dans ce conteneur' };
     }
-    setBatchUnloadBusy(false);
-    // On compare via la version normalisee (failed[] pousse `${code}:` ou
-    // code est la valeur extraite du QR/URL).
-    setBatchUnloadCodes(
-      failed.length === 0
-        ? []
-        : codes.filter((c) => failed.some((f) => f.startsWith(`${normalizeScannedTracking(c)}:`))),
-    );
-    if (ok > 0 && failed.length === 0) scanSound.success();
-    else if (failed.length > 0) scanSound.error();
-    if (ok > 0) toast.success(`${ok} colis decharge${ok > 1 ? 's' : ''}`);
-    if (failed.length > 0) toast.error(`${failed.length} echec(s) : ${failed[0]}`);
+    await containersApi.unload(id, {
+      parcelId: match.id,
+      action: 'received',
+      warehouseId: batchUnloadWarehouseId,
+    });
     qc.invalidateQueries({ queryKey: ['containers', id] });
     qc.invalidateQueries({ queryKey: ['containers', id, 'parcels'] });
     qc.invalidateQueries({ queryKey: ['containers', id, 'history'] });
     qc.invalidateQueries({ queryKey: ['parcels'] });
-    if (failed.length === 0) setShowBatchUnload(false);
+    return { ok: true, label: code };
   };
 
   const handleRemoveConfirm = async () => {
@@ -981,14 +932,10 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
                   {' '}Les colis a destination de l&apos;agence de depart sont masques. Ordre : payes en priorite, puis les non-payes du plus ancien au plus recent.
                 </p>
                 <div className="rounded-xl border border-primary-100 bg-primary-50/40 p-3">
-                  <BatchScanCollector
-                    codes={batchLoadCodes}
-                    onChange={setBatchLoadCodes}
-                    submitLabel={`Charger ${batchLoadCodes.length || ''} colis par scan`}
-                    onSubmit={handleBatchLoad}
-                    submitting={batchLoadBusy}
+                  <LiveScanCollector
+                    onScan={handleLiveLoad}
                     placeholder="Scanner ou coller un QR / tracking..."
-                    helperText="Scannez plusieurs colis en chaine puis confirmez le chargement."
+                    helperText="Chaque scan est envoye immediatement. Re-scan du meme colis ignore pendant 2 minutes."
                     cameraTitle="Scanner pour charger"
                   />
                 </div>
@@ -1197,7 +1144,6 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
           open={showBatchUnload}
           onClose={() => {
             setShowBatchUnload(false);
-            setBatchUnloadCodes([]);
             setBatchUnloadManualIds([]);
             setBatchUnloadWarehouseId(null);
           }}
@@ -1226,48 +1172,30 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
               Tous les colis seront decharges comme &quot;bien recus&quot; vers le magasin selectionne.
               Pour signaler un colis modifie ou introuvable, utilisez le dechargement individuel.
             </p>
-            {/* Highlight rouge + message si l'utilisateur a deja scanne mais
-                oublie de choisir le magasin -- evite le toast generique
-                "Selectionnez un magasin" et pointe l'oeil sur le champ
-                manquant. */}
-            <div
-              className={
-                !batchUnloadWarehouseId && batchUnloadCodes.length > 0
-                  ? 'rounded-xl ring-2 ring-red-300 ring-offset-2 animate-pulse'
-                  : ''
+            <AppSearchSelect
+              label="Magasin de destination"
+              value={batchUnloadWarehouseId}
+              onChange={setBatchUnloadWarehouseId}
+              // Restreint aux magasins de l'agence d'arrivee : evite qu'un
+              // operateur range les colis d'un conteneur dans un magasin
+              // d'une autre agence par erreur de selection.
+              search={(q, limit) =>
+                searchers.warehouses(q, limit, {
+                  agencyId: container.arrivalAgencyId || container.arrivalAgency?.id,
+                })
               }
-            >
-              <AppSearchSelect
-                label="Magasin de destination"
-                value={batchUnloadWarehouseId}
-                onChange={setBatchUnloadWarehouseId}
-                // Restreint aux magasins de l'agence d'arrivee : evite qu'un
-                // operateur range les colis d'un conteneur dans un magasin
-                // d'une autre agence par erreur de selection.
-                search={(q, limit) =>
-                  searchers.warehouses(q, limit, {
-                    agencyId: container.arrivalAgencyId || container.arrivalAgency?.id,
-                  })
-                }
-                placeholder={`Magasin de ${container.arrivalAgency?.name || "l'agence d'arrivee"}`}
-                required
-              />
-              {!batchUnloadWarehouseId && batchUnloadCodes.length > 0 && (
-                <p className="mt-1 text-xs font-medium text-red-600">
-                  Selectionnez le magasin de destination avant de valider le dechargement.
-                </p>
-              )}
-            </div>
+              placeholder={`Magasin de ${container.arrivalAgency?.name || "l'agence d'arrivee"}`}
+              required
+            />
 
             <div className="rounded-xl border border-primary-100 bg-primary-50/40 p-3">
               <p className="mb-2 text-xs font-semibold text-primary-900">Par scan QR / code-barres</p>
-              <BatchScanCollector
-                codes={batchUnloadCodes}
-                onChange={setBatchUnloadCodes}
-                submitLabel={`Decharger ${batchUnloadCodes.length || ''} colis`}
-                onSubmit={handleBatchUnload}
-                submitting={batchUnloadBusy}
+              <LiveScanCollector
+                onScan={handleLiveUnload}
+                disabled={!batchUnloadWarehouseId}
+                disabledReason="Selectionnez le magasin de destination avant de scanner."
                 placeholder="Scanner ou coller un tracking..."
+                helperText="Chaque scan decharge le colis immediatement. Re-scan du meme colis ignore pendant 2 minutes."
                 cameraTitle="Scanner pour decharger"
               />
             </div>

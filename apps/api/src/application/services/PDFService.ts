@@ -126,10 +126,11 @@ function formatDate(d: Date | string): string {
 }
 
 function formatCurrency(n: number): string {
-  return new Intl.NumberFormat('fr-FR', {
+  const formatted = new Intl.NumberFormat('fr-FR', {
     style: 'decimal',
     minimumFractionDigits: 0,
-  }).format(n) + ' FCFA';
+  }).format(n).replace(/[  ]/g, ' ');
+  return `${formatted} FCFA`;
 }
 
 const COLORS = {
