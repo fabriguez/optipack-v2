@@ -54,8 +54,15 @@ COPY --from=builder /app/apps/orchestrator/prisma ./apps/orchestrator/prisma
 COPY --from=builder /app/apps/orchestrator/package.json ./apps/orchestrator/package.json
 COPY --from=builder /app/packages ./packages
 
-# Outils runtime : SSH (push Caddy via SSH sur VPS distants), pg_isready/pg_dump (BDD)
-RUN apk add --no-cache openssh-client postgresql-client
+# Outils runtime :
+#  - openssh-client : push Caddy via SSH sur VPS distants
+#  - postgresql-client : pg_isready / pg_dump (BDD orchestrator)
+#  - docker-cli + docker-cli-compose : provisioning sur le VPS "self" (host
+#    127.0.0.1). Le container orchestrator parle au docker daemon de l'host
+#    via le socket monte (-v /var/run/docker.sock:/var/run/docker.sock).
+#    Sans la CLI -> ENOENT au premier `docker login ghcr.io`.
+#  - curl : healthchecks tenant API + Caddy admin /load fallback
+RUN apk add --no-cache openssh-client postgresql-client docker-cli docker-cli-compose curl
 
 # Install Prisma CLI + tsx globally so the entrypoint can run `prisma migrate
 # deploy` et le seed (devDeps prunes, et pnpm symlinks vers .pnpm fragiles

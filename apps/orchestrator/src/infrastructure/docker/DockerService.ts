@@ -28,9 +28,25 @@ export class DockerService {
   constructor(@inject(SSH_SERVICE) private ssh: SSHService) {}
 
   async loginGhcr(creds: SshConnection, username: string, token: string): Promise<void> {
+    // Diag : longueur/prefix des creds (jamais le token complet en clair).
+    // Aide a diagnostiquer rapidement "token vide" vs "mauvais user" vs
+    // "docker CLI absent" (ENOENT).
+    const tokenPreview = token
+      ? `${token.length} chars (prefix='${token.slice(0, 4)}...')`
+      : '(vide)';
+    const userPreview = username || '(vide)';
     if (!username || !token) {
       throw new Error(
-        'docker login ghcr.io impossible : OPS_GHCR_USERNAME ou OPS_GHCR_TOKEN absent cote orchestrator.',
+        `docker login ghcr.io impossible : OPS_GHCR_USERNAME='${userPreview}' OPS_GHCR_TOKEN=${tokenPreview}. Configure ces env vars sur l'orchestrator.`,
+      );
+    }
+    // Verifie d'abord que la CLI docker existe -- sinon ENOENT cryptique.
+    const probe = await this.ssh.exec(creds, 'command -v docker >/dev/null 2>&1 && echo OK || echo MISSING');
+    if (probe.stdout.trim() !== 'OK') {
+      throw new Error(
+        `docker login ghcr.io impossible : CLI docker absente sur ${creds.host}. ` +
+          `Self : installer docker-cli dans l'image orchestrator + monter /var/run/docker.sock. ` +
+          `VPS distant : installer docker via VpsBootstrapService (POST /vps/:id/bootstrap).`,
       );
     }
     // Echappement minimal - le token est cense etre alphanumerique
@@ -39,7 +55,7 @@ export class DockerService {
     if (r.code !== 0) {
       const detail = (r.stderr || r.stdout || '').trim();
       throw new Error(
-        `docker login ghcr.io echoue (exit=${r.code}) : ${detail || '(no stderr/stdout -- docker CLI absent du container ? socket non monte ? user/token vides ?)'}`,
+        `docker login ghcr.io echoue (exit=${r.code}) user='${userPreview}' token=${tokenPreview} : ${detail || '(no output)'}`,
       );
     }
   }

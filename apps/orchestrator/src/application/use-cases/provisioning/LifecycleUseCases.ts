@@ -1,5 +1,6 @@
 import { inject, injectable } from 'tsyringe';
 import { prisma } from '../../../config/database';
+import { config } from '../../../config';
 import { DockerService, DOCKER_SERVICE } from '../../../infrastructure/docker/DockerService';
 import { CaddyService, CADDY_SERVICE, type TenantCaddyEntry } from '../../../infrastructure/caddy/CaddyService';
 import { SSHService, SSH_SERVICE, type SshConnection } from '../../../infrastructure/ssh/SSHService';
@@ -172,7 +173,7 @@ export class DeleteTenantUseCase {
     await log(`[delete] start tenant=${tenant.slug}`);
 
     const slug = tenant.slug;
-    const composeFilePath = `/tmp/tenant-${slug}-compose.yml`;
+    const composeFilePath = `${config.vpsWorkDir}/tenant-${slug}-compose.yml`;
     const composeProjectName = `tenant-${slug}`;
     const envFile = `~/.optipack/tenant-${slug}.env`;
     const allContainers = [
@@ -225,7 +226,7 @@ export class DeleteTenantUseCase {
     await this.ssh
       .exec(
         creds,
-        `rm -f ${composeFilePath} ${envFile} /tmp/seed-${slug}.js /tmp/seed-${slug}.json 2>/dev/null || true`,
+        `rm -f ${composeFilePath} ${envFile} ${config.vpsWorkDir}/seed-${slug}.js ${config.vpsWorkDir}/seed-${slug}.json 2>/dev/null || true`,
       )
       .catch(() => {/* noop */});
     await log(`[delete] files cleaned (compose + env + seed)`);
@@ -281,7 +282,7 @@ export class PurgeTenantUseCase {
     await log(`[purge] start tenant=${tenant.slug} (HARD DELETE)`);
 
     const slug = tenant.slug;
-    const composeFilePath = `/tmp/tenant-${slug}-compose.yml`;
+    const composeFilePath = `${config.vpsWorkDir}/tenant-${slug}-compose.yml`;
     const composeProjectName = `tenant-${slug}`;
     const envFile = `~/.optipack/tenant-${slug}.env`;
     const containers = [
@@ -334,7 +335,7 @@ export class PurgeTenantUseCase {
     await log(`[purge] cleanup files (compose + env)`);
     await this.ssh.exec(
       creds,
-      `rm -f ${composeFilePath} ${envFile} /tmp/seed-${slug}.js /tmp/seed-${slug}.json 2>/dev/null || true`,
+      `rm -f ${composeFilePath} ${envFile} ${config.vpsWorkDir}/seed-${slug}.js ${config.vpsWorkDir}/seed-${slug}.json 2>/dev/null || true`,
     );
 
     // 6. Update Caddy (retire le tenant de la config full-replace)

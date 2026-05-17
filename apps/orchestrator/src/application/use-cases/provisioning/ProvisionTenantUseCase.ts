@@ -61,6 +61,14 @@ export class ProvisionTenantUseCase {
 
     await log(`[provision] start tenant=${tenant.slug} vps=${tenant.vps.host}`);
 
+    // Garantit l'existence du dir de travail (compose/env/seed). Idempotent.
+    // Sur self, ce dir DOIT etre un bind-mount commun host<->container
+    // (voir OPS_VPS_WORK_DIR + docker-compose.control-plane.yml).
+    await this.ssh.exec(
+      { host: tenant.vps.host, port: tenant.vps.port, username: tenant.vps.username, sshKeyEncrypted: tenant.vps.sshKeyEncrypted },
+      `mkdir -p ${config.vpsWorkDir}`,
+    ).catch(() => {/* noop, best-effort */});
+
     const creds: SshConnection = {
       host: tenant.vps.host,
       port: tenant.vps.port,
@@ -209,7 +217,7 @@ export class ProvisionTenantUseCase {
     const apiName = `tenant-${tenant.slug}-api`;
     const webName = `tenant-${tenant.slug}-web`;
     const webClientName = `tenant-${tenant.slug}-web-client`;
-    const composeFilePath = `/tmp/tenant-${tenant.slug}-compose.yml`;
+    const composeFilePath = `${config.vpsWorkDir}/tenant-${tenant.slug}-compose.yml`;
     const composeProjectName = `tenant-${tenant.slug}`;
     await log(`[provision] cleanup anciens containers (rejouabilite)`);
     await this.ssh.exec(
@@ -489,8 +497,8 @@ const p = new PrismaClient();
     // ('SEED_EOF' avec quotes -> aucune expansion shell), puis on docker cp
     // dans le container, puis on exec node. Aucun escape a faire : tout
     // contenu utilisateur reste litteral.
-    const tmpScript = `/tmp/seed-${tenant.slug}.js`;
-    const tmpData = `/tmp/seed-${tenant.slug}.json`;
+    const tmpScript = `${config.vpsWorkDir}/seed-${tenant.slug}.js`;
+    const tmpData = `${config.vpsWorkDir}/seed-${tenant.slug}.json`;
     const sshSeedCmd = `set -e
 cat > ${tmpScript} <<'OPTIPACK_SEED_SCRIPT_EOF'
 ${seedScript}

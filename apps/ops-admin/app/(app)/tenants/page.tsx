@@ -2,12 +2,13 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Search, ExternalLink, Trash2 } from 'lucide-react';
+import { Search, ExternalLink, Archive, Snowflake, Play, Flame } from 'lucide-react';
 import { api } from '@/lib/api';
 import { StatusBadge } from '@/components/StatusBadge';
 import { formatDate } from '@/lib/utils';
 import { Pagination } from '@/components/Pagination';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { ActionMenu, type ActionMenuItem } from '@/components/ActionMenu';
 
 interface Tenant {
   id: string;
@@ -29,9 +30,11 @@ export default function TenantsPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [q, setQ] = useState('');
-  // Cible de suppression : on stocke le tenant complet pour pouvoir afficher
-  // son slug dans le requireText (DELETE <slug>) et son nom dans le titre.
-  const [deleteTarget, setDeleteTarget] = useState<Tenant | null>(null);
+  // Actions destructives : on memorise la cible courante pour confirmation.
+  // 'purge' = suppression definitive (containers + volumes + record DB).
+  // 'archive' = soft (record garde, infra detruite, status=ARCHIVED).
+  const [purgeTarget, setPurgeTarget] = useState<Tenant | null>(null);
+  const [archiveTarget, setArchiveTarget] = useState<Tenant | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['tenants', { page, pageSize, q }],
@@ -40,15 +43,23 @@ export default function TenantsPage() {
     placeholderData: (prev) => prev,
   });
 
-  // Suppression = archive cote backend : pipeline `DeleteTenantUseCase` (stop
-  // containers + DROP DATABASE + Caddy reload + status=ARCHIVED). On reutilise
-  // l'endpoint /archive existant -- pas de nouvelle route a creer.
-  const deleteMutation = useMutation({
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['tenants'] });
+
+  const purgeMutation = useMutation({
+    mutationFn: (tenantId: string) => api.delete(`/tenants/${tenantId}/purge`),
+    onSuccess: () => { invalidate(); setPurgeTarget(null); },
+  });
+  const archiveMutation = useMutation({
     mutationFn: (tenantId: string) => api.post(`/tenants/${tenantId}/archive`),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['tenants'] });
-      setDeleteTarget(null);
-    },
+    onSuccess: () => { invalidate(); setArchiveTarget(null); },
+  });
+  const freezeMutation = useMutation({
+    mutationFn: (tenantId: string) => api.post(`/tenants/${tenantId}/freeze`),
+    onSuccess: invalidate,
+  });
+  const unfreezeMutation = useMutation({
+    mutationFn: (tenantId: string) => api.post(`/tenants/${tenantId}/unfreeze`),
+    onSuccess: invalidate,
   });
 
   return (
@@ -164,19 +175,16 @@ export default function TenantsPage() {
                       <ExternalLink className="h-3 w-3" />
                       Ouvrir
                     </Link>
-                    {/* Bouton supprimer : cache sur le tenant principal
-                        (isMain) et sur les tenants deja archives. */}
-                    {!t.isMain && t.status !== 'ARCHIVED' && (
-                      <button
-                        type="button"
-                        onClick={() => setDeleteTarget(t)}
-                        className="inline-flex items-center gap-1 rounded border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
-                        title="Supprimer le tenant (destructif)"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                        Supprimer
-                      </button>
-                    )}
+                    <ActionMenu
+                      ariaLabel={`Actions ${t.slug}`}
+                      items={buildTenantActions({
+                        tenant: t,
+                        onFreeze: () => freezeMutation.mutate(t.id),
+                        onUnfreeze: () => unfreezeMutation.mutate(t.id),
+                        onArchive: () => setArchiveTarget(t),
+                        onPurge: () => setPurgeTarget(t),
+                      })}
+                    />
                   </div>
                 </td>
               </tr>
@@ -196,30 +204,110 @@ export default function TenantsPage() {
       </div>
 
       <ConfirmDialog
-        open={!!deleteTarget}
-        title={deleteTarget ? `SUPPRIMER ${deleteTarget.slug} ? Action irreversible.` : ''}
+        open={!!archiveTarget}
+        title={archiveTarget ? `Archiver ${archiveTarget.slug} ?` : ''}
         description={
-          deleteTarget ? (
+          archiveTarget ? (
             <div className="whitespace-pre-line">
-              {`Cette action va :
-- Arreter et supprimer les conteneurs du tenant
-- Drop la base de donnees du tenant (DESTRUCTIF)
-- Retirer les routes Caddy
-- Marquer le tenant ARCHIVED
+              {`Archivage du tenant :
+- Arret + suppression des conteneurs du tenant
+- Suppression des volumes (donnees PG / Redis / MinIO)
+- Retrait des routes Caddy
+- Statut -> ARCHIVED (record garde, billing arrete)
 
-Aucun retour en arriere automatique.`}
+Reprovisioning possible plus tard (les ressources sont recreees).`}
+            </div>
+          ) : null
+        }
+        destructive
+        confirmLabel="Archiver"
+        requireText={archiveTarget ? `ARCHIVE ${archiveTarget.slug}` : undefined}
+        loading={archiveMutation.isPending}
+        onConfirm={() => {
+          if (archiveTarget) archiveMutation.mutate(archiveTarget.id);
+        }}
+        onCancel={() => setArchiveTarget(null)}
+      />
+
+      <ConfirmDialog
+        open={!!purgeTarget}
+        title={purgeTarget ? `SUPPRIMER DEFINITIVEMENT ${purgeTarget.slug} ?` : ''}
+        description={
+          purgeTarget ? (
+            <div className="whitespace-pre-line">
+              {`Suppression DEFINITIVE :
+- Conteneurs + images locales + volumes + network
+- Fichiers compose/env/seed sur le VPS
+- Record tenant + jobs + subscriptions dans la DB orchestrator
+
+Aucun retour en arriere possible. Aucun archivage.`}
             </div>
           ) : null
         }
         destructive
         confirmLabel="Supprimer definitivement"
-        requireText={deleteTarget ? `DELETE ${deleteTarget.slug}` : undefined}
-        loading={deleteMutation.isPending}
+        requireText={purgeTarget ? `PURGE ${purgeTarget.slug}` : undefined}
+        loading={purgeMutation.isPending}
         onConfirm={() => {
-          if (deleteTarget) deleteMutation.mutate(deleteTarget.id);
+          if (purgeTarget) purgeMutation.mutate(purgeTarget.id);
         }}
-        onCancel={() => setDeleteTarget(null)}
+        onCancel={() => setPurgeTarget(null)}
       />
     </div>
   );
+}
+
+/**
+ * Construit la liste des actions disponibles pour un tenant selon son statut.
+ *   ACTIVE        -> Freeze, Archiver, Purger
+ *   FROZEN        -> Unfreeze, Archiver, Purger
+ *   PROVISIONING  -> (en cours, rien)
+ *   ARCHIVED      -> Purger uniquement (pas de unarchive : infra detruite)
+ *   isMain=true   -> ni archive ni purge (tenant principal protege)
+ */
+function buildTenantActions({
+  tenant,
+  onFreeze,
+  onUnfreeze,
+  onArchive,
+  onPurge,
+}: {
+  tenant: Tenant;
+  onFreeze: () => void;
+  onUnfreeze: () => void;
+  onArchive: () => void;
+  onPurge: () => void;
+}): ActionMenuItem[] {
+  const isMain = !!tenant.isMain;
+  const status = tenant.status;
+  return [
+    {
+      label: 'Freezer',
+      icon: <Snowflake className="h-3.5 w-3.5" />,
+      onClick: onFreeze,
+      hidden: status !== 'ACTIVE',
+    },
+    {
+      label: 'Defreezer',
+      icon: <Play className="h-3.5 w-3.5" />,
+      onClick: onUnfreeze,
+      hidden: status !== 'FROZEN',
+    },
+    {
+      label: 'Archiver',
+      icon: <Archive className="h-3.5 w-3.5" />,
+      onClick: onArchive,
+      destructive: true,
+      hidden: isMain || status === 'ARCHIVED' || status === 'PROVISIONING',
+      separatorBefore: true,
+    },
+    {
+      label: 'Supprimer definitivement',
+      icon: <Flame className="h-3.5 w-3.5" />,
+      onClick: onPurge,
+      destructive: true,
+      hidden: isMain,
+      separatorBefore: status !== 'ARCHIVED',
+    },
+  ];
 }

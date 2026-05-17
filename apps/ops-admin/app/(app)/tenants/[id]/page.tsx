@@ -8,6 +8,7 @@ import {
   PauseCircle,
   PlayCircle,
   Archive,
+  Flame,
   Loader2,
 } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -58,7 +59,7 @@ interface UpdateJob {
   startedAt: string | null;
 }
 
-type ActionKind = 'freeze' | 'unfreeze' | 'archive' | 'migrate' | null;
+type ActionKind = 'freeze' | 'unfreeze' | 'archive' | 'purge' | 'migrate' | null;
 
 export default function TenantDetailPage({
   params,
@@ -105,6 +106,17 @@ export default function TenantDetailPage({
   const freeze = actionMutation('freeze');
   const unfreeze = actionMutation('unfreeze');
   const archive = actionMutation('archive');
+  // Purge utilise DELETE (pas POST) sur endpoint dedie.
+  const purge = useMutation({
+    mutationFn: () => api.delete(`/tenants/${id}/purge`),
+    onSuccess: (r) => {
+      const job = r.data?.data?.job ?? r.data?.data;
+      if (job?.jobId) setActiveJobId(job.jobId);
+      qc.invalidateQueries({ queryKey: ['tenant', id] });
+      qc.invalidateQueries({ queryKey: ['tenant-jobs', id] });
+      setConfirm(null);
+    },
+  });
 
   if (tenant.isLoading || !tenant.data) {
     return <div className="text-sm text-gray-500">Chargement...</div>;
@@ -134,13 +146,23 @@ export default function TenantDetailPage({
         };
       case 'archive':
         return {
-          title: `ARCHIVER ${t.slug} ? Action quasi-irreversible.`,
-          description: `Cela va :\n- Stopper + supprimer les conteneurs\n- Drop la BDD du tenant (DESTRUCTIF)\n- Retirer les routes Caddy\n- Marquer tenant ARCHIVED\n\nAucun retour en arriere automatique apres ca.`,
+          title: `Archiver ${t.slug} ?`,
+          description: `Archivage :\n- Stop + suppression des conteneurs\n- Suppression des volumes (PG/Redis/MinIO)\n- Retrait routes Caddy\n- Statut -> ARCHIVED (record garde, billing arrete)\n\nReprovisioning possible plus tard.`,
           destructive: true,
-          confirmLabel: 'Archiver definitivement',
-          requireText: `DELETE ${t.slug}`,
+          confirmLabel: 'Archiver',
+          requireText: `ARCHIVE ${t.slug}`,
           onConfirm: () => archive.mutate(),
           loading: archive.isPending,
+        };
+      case 'purge':
+        return {
+          title: `SUPPRIMER DEFINITIVEMENT ${t.slug} ?`,
+          description: `Suppression DEFINITIVE :\n- Conteneurs + images locales + volumes + network\n- Fichiers compose/env/seed sur le VPS\n- Record tenant + jobs + subscriptions dans la DB orchestrator\n\nAucun retour en arriere. Aucun archivage.`,
+          destructive: true,
+          confirmLabel: 'Supprimer definitivement',
+          requireText: `PURGE ${t.slug}`,
+          onConfirm: () => purge.mutate(),
+          loading: purge.isPending,
         };
       default:
         return null;
@@ -210,6 +232,18 @@ export default function TenantDetailPage({
             >
               <Archive className="h-4 w-4" />
               Archiver
+            </button>
+          )}
+          {!t.isMain && (
+            <button
+              type="button"
+              onClick={() => setConfirm('purge')}
+              disabled={purge.isPending}
+              className="inline-flex items-center gap-1.5 rounded-md border border-red-300 bg-red-50 px-3 py-1.5 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50"
+              title="Suppression definitive (containers + volumes + record DB)"
+            >
+              <Flame className="h-4 w-4" />
+              Supprimer
             </button>
           )}
         </div>

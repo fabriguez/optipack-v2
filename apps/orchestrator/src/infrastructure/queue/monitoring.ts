@@ -16,12 +16,15 @@ import { ReleaseUseCases } from '../../application/use-cases/release/ReleaseUseC
 import { BackupTenantUseCase } from '../../application/use-cases/backup/BackupTenantUseCase';
 import { NotificationService } from '../notifications/NotificationService';
 import { DiskQuotaCheckUseCase } from '../../application/use-cases/monitoring/DiskQuotaCheckUseCase';
+import { purgeQueue } from './queues';
 
 const MONITOR_QUEUE = 'monitoring';
 const MONITOR_INTERVAL_MS = 5 * 60 * 1000; // 5 min
 const AUTOFREEZE_INTERVAL_MS = 60 * 60 * 1000; // 1h
 const RELEASE_SYNC_INTERVAL_MS = 60 * 60 * 1000; // 1h - poll GHCR pour nouvelles versions
 const BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h - backups nightly
+const PURGE_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h - check ARCHIVED > 30j
+const ARCHIVED_RETENTION_DAYS = Number(process.env.OPS_ARCHIVED_RETENTION_DAYS ?? '30');
 
 /**
  * VPS local (meme machine que l'orchestrator) : pas de SSH a faire. Le nom est
@@ -132,12 +135,17 @@ interface BackupNightlyPayload {
   type: 'BACKUP_NIGHTLY';
 }
 
+interface AutoPurgePayload {
+  type: 'AUTO_PURGE_ARCHIVED';
+}
+
 type MonitorPayload =
   | VpsMonitorPayload
   | TenantHealthPayload
   | AutoFreezePayload
   | ReleaseSyncPayload
-  | BackupNightlyPayload;
+  | BackupNightlyPayload
+  | AutoPurgePayload;
 
 /**
  * Cron toutes les 5 minutes :
@@ -386,6 +394,50 @@ async function runBackupNightly() {
   }
 }
 
+/**
+ * Purge automatique des tenants ARCHIVED depuis plus de N jours.
+ * Defaut N = 30j (override via OPS_ARCHIVED_RETENTION_DAYS).
+ * Enqueue un job PURGE par tenant eligible. Le worker PURGE applique
+ * PurgeTenantUseCase (containers + volumes + record DB definitivement).
+ */
+async function runAutoPurgeArchived() {
+  if (ARCHIVED_RETENTION_DAYS <= 0) {
+    logger.debug('[auto-purge] OPS_ARCHIVED_RETENTION_DAYS<=0 -> disabled');
+    return;
+  }
+  const cutoff = new Date(Date.now() - ARCHIVED_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  const eligible = await prisma.tenant.findMany({
+    where: {
+      status: 'ARCHIVED',
+      archivedAt: { not: null, lte: cutoff },
+    },
+    select: { id: true, slug: true, archivedAt: true },
+  });
+  if (eligible.length === 0) {
+    logger.debug({ cutoff }, '[auto-purge] aucun tenant eligible');
+    return;
+  }
+  logger.warn({ count: eligible.length, retentionDays: ARCHIVED_RETENTION_DAYS }, '[auto-purge] purge ARCHIVED tenants');
+  for (const t of eligible) {
+    try {
+      const job = await prisma.provisioningJob.create({
+        data: { tenantId: t.id, type: 'PURGE', payload: { auto: true }, status: 'queued' },
+      });
+      await purgeQueue.add(
+        'purge',
+        { tenantId: t.id, provisioningJobId: job.id },
+        { jobId: job.id },
+      );
+      logger.info({ tenantId: t.id, slug: t.slug, archivedAt: t.archivedAt }, '[auto-purge] enqueued');
+    } catch (err) {
+      logger.error(
+        { tenantId: t.id, err: err instanceof Error ? err.message : String(err) },
+        '[auto-purge] enqueue failed',
+      );
+    }
+  }
+}
+
 export async function scheduleMonitoringJobs(): Promise<void> {
   // BullMQ repeatable jobs : se replanifient automatiquement toutes les N ms
   await monitoringQueue.add(
@@ -438,6 +490,16 @@ export async function scheduleMonitoringJobs(): Promise<void> {
       removeOnFail: 100,
     },
   );
+  await monitoringQueue.add(
+    'auto-purge-archived',
+    { type: 'AUTO_PURGE_ARCHIVED' } satisfies AutoPurgePayload,
+    {
+      repeat: { every: PURGE_INTERVAL_MS },
+      jobId: 'recurring-auto-purge-archived',
+      removeOnComplete: true,
+      removeOnFail: 100,
+    },
+  );
   logger.info(
     {
       monitorMs: MONITOR_INTERVAL_MS,
@@ -463,6 +525,8 @@ export function startMonitoringWorker(): Worker {
         await runReleaseSync();
       } else if (job.data.type === 'BACKUP_NIGHTLY') {
         await runBackupNightly();
+      } else if (job.data.type === 'AUTO_PURGE_ARCHIVED') {
+        await runAutoPurgeArchived();
       }
     },
     {
