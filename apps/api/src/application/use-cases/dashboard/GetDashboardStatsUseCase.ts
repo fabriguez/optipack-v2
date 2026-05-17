@@ -114,12 +114,18 @@ export class GetDashboardStatsUseCase {
       revenueChart.push({ day: dayName, date: dateStr, revenue: revenueDay?.total || 0 });
     }
 
-    // Revenue by agency with names
+    // Revenue by agency with names. `sourceAgencyId` est non-null en base mais
+    // Prisma le type comme nullable dans groupBy : on filtre par securite.
+    const transferAgencyIds = transfersByAgency
+      .map((t) => t.sourceAgencyId)
+      .filter((id): id is string => !!id);
     const agencyNames = await prisma.agency.findMany({
-      where: { id: { in: transfersByAgency.map((t) => t.sourceAgencyId) } },
+      where: { id: { in: transferAgencyIds } },
       select: { id: true, name: true },
     });
-    const agencyNameMap = Object.fromEntries(agencyNames.map((a) => [a.id, a.name]));
+    const agencyNameMap: Record<string, string> = Object.fromEntries(
+      agencyNames.map((a) => [a.id, a.name]),
+    );
 
     return {
       totalParcels,
@@ -129,11 +135,13 @@ export class GetDashboardStatsUseCase {
       totalPaymentsAmount: Number(totalPayments._sum.amount || 0),
       parcelsByStatus: statusMap,
       totalRevenue: Number(confirmedTransfers._sum.amount || 0),
-      revenueByAgency: transfersByAgency.map((t) => ({
-        agencyId: t.sourceAgencyId,
-        agencyName: agencyNameMap[t.sourceAgencyId] || t.sourceAgencyId,
-        total: Number(t._sum.amount || 0),
-      })),
+      revenueByAgency: transfersByAgency
+        .filter((t): t is typeof t & { sourceAgencyId: string } => !!t.sourceAgencyId)
+        .map((t) => ({
+          agencyId: t.sourceAgencyId,
+          agencyName: agencyNameMap[t.sourceAgencyId] || t.sourceAgencyId,
+          total: Number(t._sum.amount || 0),
+        })),
       cashInAgencies: cashRegisters.map((cr) => ({
         agencyId: cr.agency.id,
         agencyName: cr.agency.name,
