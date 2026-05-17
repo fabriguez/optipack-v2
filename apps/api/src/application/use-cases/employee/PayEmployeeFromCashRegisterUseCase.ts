@@ -7,26 +7,37 @@ import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessErr
 interface PayEmployeeInput {
   /** Periode au format YYYY-MM. Defaut : mois courant. */
   period?: string;
-  /** Montant brut verse (par defaut : baseSalary de l'employe). Les retenues
-   *  PENDING sont automatiquement appliquees et deduites de ce montant. */
+  /** Montant brut DE REFERENCE pour cette periode (sert a calculer le net du
+   *  payslip lors du PREMIER versement). Defaut : baseSalary. */
   amount?: number;
-  /** Caisse depuis laquelle on paye. Defaut : caisse du jour de l'agence de l'employe. */
+  /** Montant a verser MAINTENANT (tranche). Defaut : solde restant a payer
+   *  (paiement integral). Permet les avances / acomptes / soldes. */
+  installmentAmount?: number;
+  /** Caisse depuis laquelle on paye. Defaut : caisse du jour de l'agence. */
   cashRegisterId?: string;
   description?: string;
-  /** Note libre stockee sur le payslip (motif, contexte). */
+  /** Note libre stockee sur le versement (motif : "avance", "acompte", ...). */
   note?: string;
-  /** IDs des retenues a appliquer (defaut: toutes les retenues PENDING de l'employe). */
+  /** IDs des retenues a appliquer. Ignore si payslip deja cree (retenues
+   *  appliquees au 1er versement uniquement). */
   applyDeductionIds?: string[];
 }
 
 /**
- * Effectue le paiement effectif d'un employe :
- *  - debite la caisse choisie
- *  - cree un Expense (ledger immuable) avec lien vers la caisse
- *  - cree (ou marque comme paye) un Payslip pour la periode, lie a l'Expense
- *  - re-synchronise la masse salariale (PayrollChargeService) pour refleter
- *    les eventuels paiements partiels (le defaultAmount reste base sur les
- *    salaires de base ; l'historique des paiements est dans les Expenses).
+ * Paye un employe -- supporte les versements partiels.
+ *
+ * Comportement :
+ *  - Premier appel pour la periode : cree le Payslip (calcule netSalary apres
+ *    retenues), cree un PayslipPayment et un Expense pour la tranche, debite
+ *    la caisse. Si `installmentAmount` est omis ou egal au net, on solde
+ *    directement (isPaid=true).
+ *  - Appels suivants : ajoute un PayslipPayment, additionne paidAmount,
+ *    debite la caisse, marque isPaid=true des que paidAmount >= netSalary.
+ *
+ * Cas d'usage :
+ *  - Caisse insuffisante : paye une fraction maintenant, le reste plus tard.
+ *  - Avance avant date de salaire : `installmentAmount` < net, paidAt n'est
+ *    pas la fin de mois.
  */
 @injectable()
 export class PayEmployeeFromCashRegisterUseCase {
@@ -43,19 +54,49 @@ export class PayEmployeeFromCashRegisterUseCase {
     const grossAmount = input.amount ?? Number(employee.baseSalary);
     if (grossAmount <= 0) throw new BusinessError('Le montant doit etre superieur a zero.');
 
-    // Resolution des retenues a appliquer
-    const deductionsQuery = {
-      employeeId,
-      status: 'PENDING' as const,
-      ...(input.applyDeductionIds?.length && { id: { in: input.applyDeductionIds } }),
-    };
-    const pendingDeductions = await prisma.salaryDeduction.findMany({ where: deductionsQuery });
-    const deductionsTotal = pendingDeductions.reduce((sum, d) => sum + Number(d.amount), 0);
-    const netAmount = Math.max(0, grossAmount - deductionsTotal);
+    const existingPayslip = await prisma.payslip.findFirst({ where: { employeeId, period } });
 
-    if (netAmount <= 0 && deductionsTotal > 0) {
+    // Calcul des retenues : appliquees uniquement au PREMIER versement
+    // (creation du payslip). Pour les versements suivants, les retenues sont
+    // deja fixees dans payslip.deductionsTotal.
+    let deductionsTotal = 0;
+    let pendingDeductions: { id: string; amount: any }[] = [];
+    let netSalary: number;
+
+    if (!existingPayslip) {
+      const deductionsQuery = {
+        employeeId,
+        status: 'PENDING' as const,
+        ...(input.applyDeductionIds?.length && { id: { in: input.applyDeductionIds } }),
+      };
+      pendingDeductions = await prisma.salaryDeduction.findMany({ where: deductionsQuery });
+      deductionsTotal = pendingDeductions.reduce((sum, d) => sum + Number(d.amount), 0);
+      netSalary = Math.max(0, grossAmount - deductionsTotal);
+
+      if (netSalary <= 0 && deductionsTotal > 0) {
+        throw new BusinessError(
+          `Les retenues (${deductionsTotal}) atteignent ou depassent le brut (${grossAmount}). Ajustez les retenues.`,
+        );
+      }
+    } else {
+      netSalary = Number(existingPayslip.netSalary);
+      if (existingPayslip.isPaid) {
+        throw new BusinessError(`Le salaire ${period} est deja entierement paye.`);
+      }
+    }
+
+    const alreadyPaid = existingPayslip ? Number(existingPayslip.paidAmount) : 0;
+    const remaining = Math.max(0, netSalary - alreadyPaid);
+    if (remaining <= 0) {
+      throw new BusinessError(`Aucun montant restant a payer pour ${period}.`);
+    }
+
+    // Tranche a verser : par defaut le solde restant (paiement integral).
+    let installment = input.installmentAmount ?? remaining;
+    if (installment <= 0) throw new BusinessError('Le montant a verser doit etre positif.');
+    if (installment > remaining) {
       throw new BusinessError(
-        `Les retenues (${deductionsTotal}) atteignent ou depassent le brut (${grossAmount}). Ajustez les retenues a appliquer.`,
+        `Versement (${installment}) superieur au reste a payer (${remaining}).`,
       );
     }
 
@@ -68,35 +109,61 @@ export class PayEmployeeFromCashRegisterUseCase {
       cashRegister = await this.cashRegisterRepo.findOrCreateForToday(cashRegister.agencyId);
     }
 
-    if (Number(cashRegister.currentBalance) < netAmount) {
+    if (Number(cashRegister.currentBalance) < installment) {
       throw new BusinessError(
-        `Solde caisse insuffisant (${Number(cashRegister.currentBalance)} dispo) pour payer ${netAmount}.`,
+        `Solde caisse insuffisant (${Number(cashRegister.currentBalance)} dispo) pour verser ${installment}.`,
       );
     }
 
     return prisma.$transaction(async (tx) => {
+      // Cree ou recupere le payslip de la periode.
+      const payslip = existingPayslip
+        ? existingPayslip
+        : await tx.payslip.create({
+            data: {
+              employeeId,
+              period,
+              baseSalary: employee.baseSalary,
+              grossSalary: grossAmount,
+              netSalary: netSalary,
+              isPaid: false,
+              paidAmount: 0,
+              paymentNote: input.note ?? null,
+              deductionsTotal: deductionsTotal,
+            },
+          });
+
+      const isFirstInstallment = !existingPayslip;
+      const newPaidAmount = alreadyPaid + installment;
+      const willBeFullyPaid = newPaidAmount >= netSalary;
+      const installmentLabel = willBeFullyPaid
+        ? (isFirstInstallment ? 'Salaire' : 'Solde salaire')
+        : (isFirstInstallment ? 'Avance salaire' : 'Acompte salaire');
+
       const expense = await tx.expense.create({
         data: {
           agencyId: employee.agencyId,
-          title: `Salaire - ${employee.fullName}`,
-          reason: `Paiement salaire ${period}`,
+          title: `${installmentLabel} - ${employee.fullName}`,
+          reason: `${installmentLabel} ${period}`,
           description: [
             input.description ?? '',
             input.note ? `Note: ${input.note}` : '',
-            deductionsTotal > 0 ? `Retenues appliquees: ${deductionsTotal} (${pendingDeductions.length} ligne(s))` : '',
+            `Versement ${installment} / Net ${netSalary} (deja paye ${alreadyPaid})`,
+            isFirstInstallment && deductionsTotal > 0
+              ? `Retenues appliquees: ${deductionsTotal} (${pendingDeductions.length} ligne(s))`
+              : '',
           ]
             .filter(Boolean)
             .join('\n') || null,
           category: 'SALARY',
-          amount: netAmount,
+          amount: installment,
           approvedByUserId: userId,
           period,
           cashRegisterId: cashRegister!.id,
         },
       });
 
-      // Bon de decaissement (DisbursementVoucher) immuable pour tracabilite
-      // financiere (chaque mouvement de caisse a son bon).
+      // Bon de decaissement (DisbursementVoucher) par tranche.
       const disbursementCount = await tx.disbursementVoucher.count({
         where: { agencyId: employee.agencyId },
       });
@@ -105,48 +172,42 @@ export class PayEmployeeFromCashRegisterUseCase {
           reference: generateReference('DEC-SAL', disbursementCount + 1),
           agencyId: employee.agencyId,
           cashRegisterId: cashRegister!.id,
-          reason: `Salaire ${period} - ${employee.fullName}`,
+          reason: `${installmentLabel} ${period} - ${employee.fullName}`,
           description: input.note ?? input.description ?? null,
           orderer: 'RH',
-          amount: netAmount,
-          amountInWords: String(netAmount),
+          amount: installment,
+          amountInWords: String(installment),
           issuedByUserId: userId,
           approvedByUserId: userId,
         },
       });
 
-      // Upsert payslip pour la periode (1 par employe/periode)
-      const existing = await tx.payslip.findFirst({ where: { employeeId, period } });
-      const payslip = existing
-        ? await tx.payslip.update({
-            where: { id: existing.id },
-            data: {
-              isPaid: true,
-              paidAt: new Date(),
-              paidExpenseId: expense.id,
-              paymentNote: input.note ?? null,
-              deductionsTotal: deductionsTotal,
-              grossSalary: grossAmount,
-              netSalary: netAmount,
-            },
-          })
-        : await tx.payslip.create({
-            data: {
-              employeeId,
-              period,
-              baseSalary: employee.baseSalary,
-              grossSalary: grossAmount,
-              netSalary: netAmount,
-              isPaid: true,
-              paidAt: new Date(),
-              paidExpenseId: expense.id,
-              paymentNote: input.note ?? null,
-              deductionsTotal: deductionsTotal,
-            },
-          });
+      // Enregistre la tranche.
+      await tx.payslipPayment.create({
+        data: {
+          payslipId: payslip.id,
+          expenseId: expense.id,
+          amount: installment,
+          paidByUserId: userId,
+          note: input.note ?? null,
+        },
+      });
 
-      // Marque les retenues comme APPLIED (ponctuelles)
-      if (pendingDeductions.length > 0) {
+      // Met a jour le payslip : paidAmount cumulatif, isPaid si solde atteint,
+      // paidExpenseId pointe sur le dernier versement (back-compat).
+      const updatedPayslip = await tx.payslip.update({
+        where: { id: payslip.id },
+        data: {
+          paidAmount: newPaidAmount,
+          isPaid: willBeFullyPaid,
+          paidAt: new Date(),
+          paidExpenseId: expense.id,
+          paymentNote: input.note ?? payslip.paymentNote,
+        },
+      });
+
+      // Retenues appliquees au 1er versement uniquement.
+      if (isFirstInstallment && pendingDeductions.length > 0) {
         await tx.salaryDeduction.updateMany({
           where: { id: { in: pendingDeductions.map((d) => d.id) } },
           data: {
@@ -158,21 +219,24 @@ export class PayEmployeeFromCashRegisterUseCase {
         });
       }
 
-      // Debit caisse
+      // Debit caisse.
       await tx.agencyCashRegister.update({
         where: { id: cashRegister!.id },
         data: {
-          totalExits: { increment: netAmount },
-          currentBalance: { decrement: netAmount },
+          totalExits: { increment: installment },
+          currentBalance: { decrement: installment },
         },
       });
 
       return {
         expense,
         disbursement,
-        payslip,
-        deductionsApplied: pendingDeductions.length,
-        deductionsTotal,
+        payslip: updatedPayslip,
+        installmentAmount: installment,
+        remainingAmount: Math.max(0, netSalary - newPaidAmount),
+        isFullyPaid: willBeFullyPaid,
+        deductionsApplied: isFirstInstallment ? pendingDeductions.length : 0,
+        deductionsTotal: isFirstInstallment ? deductionsTotal : Number(payslip.deductionsTotal ?? 0),
       };
     });
   }

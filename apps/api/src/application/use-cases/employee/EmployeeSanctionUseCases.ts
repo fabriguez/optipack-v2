@@ -1,6 +1,7 @@
 import { injectable } from 'tsyringe';
 import { prisma } from '../../../config/database';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
+import { PayrollChargeService } from '../../services/PayrollChargeService';
 
 type SanctionType = 'WARNING' | 'SUSPENSION' | 'PAY_FREEZE' | 'DEMOTION';
 type TerminationType = 'RESIGNATION' | 'DISMISSAL' | 'END_OF_CONTRACT' | 'MUTUAL_AGREEMENT' | 'RETIREMENT' | 'OTHER';
@@ -59,6 +60,8 @@ interface TerminationInput {
 
 @injectable()
 export class TerminateEmployeeContractUseCase {
+  constructor(private payrollCharge: PayrollChargeService) {}
+
   async execute(input: TerminationInput, userId: string) {
     const employee = await prisma.employee.findUnique({ where: { id: input.employeeId } });
     if (!employee) throw new NotFoundError('Employe', input.employeeId);
@@ -66,7 +69,7 @@ export class TerminateEmployeeContractUseCase {
 
     const date = new Date(input.effectiveDate);
 
-    return prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       const term = await tx.contractTermination.upsert({
         where: { employeeId: input.employeeId },
         create: {
@@ -86,13 +89,19 @@ export class TerminateEmployeeContractUseCase {
         },
       });
 
-      // Desactive l'employe + set endDate
+      // Desactive l'employe + set endDate. Si c'etait le chef d'agence, on
+      // libere le flag (l'agence pourra promouvoir un autre chef).
       await tx.employee.update({
         where: { id: input.employeeId },
-        data: { isActive: false, endDate: date },
+        data: { isActive: false, endDate: date, isAgencyManager: false },
       });
 
       return term;
     });
+
+    // Resync masse salariale (l'employe inactif/endDate != null sort du calcul).
+    await this.payrollCharge.syncForAgency(employee.agencyId);
+
+    return result;
   }
 }

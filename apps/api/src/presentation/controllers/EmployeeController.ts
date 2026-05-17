@@ -207,7 +207,13 @@ export class EmployeeController {
       const items = await (await import('../../config/database')).prisma.payslip.findMany({
         where: { employeeId: req.params.id },
         orderBy: { generatedAt: 'desc' },
-        include: { paidExpense: { select: { id: true, cashRegisterId: true, createdAt: true } } },
+        include: {
+          paidExpense: { select: { id: true, cashRegisterId: true, createdAt: true } },
+          payments: {
+            orderBy: { paidAt: 'desc' },
+            include: { expense: { select: { id: true, cashRegisterId: true } } },
+          },
+        },
       });
       res.json({ success: true, data: items });
     } catch (err) {

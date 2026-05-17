@@ -47,6 +47,32 @@ export class CreateEmployeeUseCase {
   ) {}
 
   async execute(input: CreateEmployeeInput, organizationId?: string) {
+    // 0) Invariant chef unique : si on cree un nouveau chef, demote tout
+    //    autre chef actif de l'agence (flag + role User si CHEF_AGENCE).
+    if (input.isAgencyManager) {
+      const others = await prisma.employee.findMany({
+        where: { agencyId: input.agencyId, isAgencyManager: true },
+        include: { user: true },
+      });
+      if (others.length > 0) {
+        await prisma.$transaction(async (tx) => {
+          await tx.employee.updateMany({
+            where: { id: { in: others.map((o) => o.id) } },
+            data: { isAgencyManager: false },
+          });
+          const userIds = others
+            .filter((o) => o.user && o.user.role === 'CHEF_AGENCE')
+            .map((o) => o.user!.id);
+          if (userIds.length > 0) {
+            await tx.user.updateMany({
+              where: { id: { in: userIds } },
+              data: { role: 'PERSONNEL' as any },
+            });
+          }
+        });
+      }
+    }
+
     // 1) Cree d'abord l'employe
     const employee = await this.employeeRepo.create({
       fullName: input.fullName,

@@ -459,55 +459,56 @@ model User {
 
   organization Organization @relation(fields: [organizationId], references: [id])
 
-  userAgencies            UserAgency[]
-  responsibleAgencies     Agency[]                      @relation("AgencyResponsible")
-  refreshTokens           RefreshToken[]
-  paymentsReceived        Payment[]
-  voidedPayments          Payment[]                     @relation("VoidedByUser")
-  disbursementsIssued     DisbursementVoucher[]         @relation("IssuedByUser")
-  disbursementsApproved   DisbursementVoucher[]         @relation("ApprovedByUser")
+  userAgencies               UserAgency[]
+  responsibleAgencies        Agency[]                      @relation("AgencyResponsible")
+  refreshTokens              RefreshToken[]
+  paymentsReceived           Payment[]
+  voidedPayments             Payment[]                     @relation("VoidedByUser")
+  disbursementsIssued        DisbursementVoucher[]         @relation("IssuedByUser")
+  disbursementsApproved      DisbursementVoucher[]         @relation("ApprovedByUser")
   // Decaissements pour lesquels cet utilisateur a ete l'ordonnateur (lien
   // optionnel : un ordonnateur peut etre un employe non-user, dans ce cas
   // seul le champ texte `orderer` est rempli).
-  disbursementsOrdered    DisbursementVoucher[]         @relation("OrdererUser")
-  transfersInitiated      FundTransfer[]                @relation("InitiatedByUser")
-  transfersConfirmed      FundTransfer[]                @relation("ConfirmedByUser")
-  closedCashRegisters     AgencyCashRegister[]
-  journalEntriesCreated   JournalEntry[]
-  expensesApproved        Expense[]
-  parcelHistories         ParcelHistory[]
-  containerHistories      ContainerHistory[]
-  auditLogs               AuditLog[]
-  chatMessagesAgent       ChatMessage[]
-  assignedConversations   ChatConversation[]
-  inventoriesStarted      WarehouseInventory[]          @relation("InventoryStartedBy")
-  inventoriesClosed       WarehouseInventory[]          @relation("InventoryClosedBy")
-  inventoryItemsScanned   WarehouseInventoryItem[]      @relation("InventoryItemScannedBy")
-  chargeDocsUploaded      AgencyChargeDocument[]        @relation("ChargeDocUploader")
-  chargeHistoryActions    AgencyChargeHistory[]         @relation("ChargeHistoryUser")
-  dailyReportsClosed      AgencyDailyReport[]           @relation("DailyReportClosedBy")
-  dailyReportAttachments  AgencyDailyReportAttachment[] @relation("DailyReportAttachmentBy")
+  disbursementsOrdered       DisbursementVoucher[]         @relation("OrdererUser")
+  transfersInitiated         FundTransfer[]                @relation("InitiatedByUser")
+  transfersConfirmed         FundTransfer[]                @relation("ConfirmedByUser")
+  closedCashRegisters        AgencyCashRegister[]
+  journalEntriesCreated      JournalEntry[]
+  expensesApproved           Expense[]
+  payslipPaymentsIssued      PayslipPayment[]              @relation("PayslipPaymentIssuer")
+  parcelHistories            ParcelHistory[]
+  containerHistories         ContainerHistory[]
+  auditLogs                  AuditLog[]
+  chatMessagesAgent          ChatMessage[]
+  assignedConversations      ChatConversation[]
+  inventoriesStarted         WarehouseInventory[]          @relation("InventoryStartedBy")
+  inventoriesClosed          WarehouseInventory[]          @relation("InventoryClosedBy")
+  inventoryItemsScanned      WarehouseInventoryItem[]      @relation("InventoryItemScannedBy")
+  chargeDocsUploaded         AgencyChargeDocument[]        @relation("ChargeDocUploader")
+  chargeHistoryActions       AgencyChargeHistory[]         @relation("ChargeHistoryUser")
+  dailyReportsClosed         AgencyDailyReport[]           @relation("DailyReportClosedBy")
+  dailyReportAttachments     AgencyDailyReportAttachment[] @relation("DailyReportAttachmentBy")
   // Lien optionnel 1-1 avec un Employee (pour la connexion personnel/chef d'agence)
-  employee                Employee?                     @relation("EmployeeUser")
-  salaryDeductionsCreated SalaryDeduction[]             @relation("SalaryDeductionCreator")
-  attendancesMarked       Attendance[]                  @relation("AttendanceMarker")
-  leavesValidated         EmployeeLeave[]               @relation("LeaveValidator")
-  leavesRequested         EmployeeLeave[]               @relation("LeaveRequester")
-  sanctionsDecided        EmployeeSanction[]            @relation("SanctionDecider")
-  terminationsDecided     ContractTermination[]         @relation("TerminationDecider")
-  reviewsAuthored         EmployeeReview[]              @relation("ReviewAuthor")
-  passwordResetTokens     PasswordResetToken[]
+  employee                   Employee?                     @relation("EmployeeUser")
+  salaryDeductionsCreated    SalaryDeduction[]             @relation("SalaryDeductionCreator")
+  attendancesMarked          Attendance[]                  @relation("AttendanceMarker")
+  leavesValidated            EmployeeLeave[]               @relation("LeaveValidator")
+  leavesRequested            EmployeeLeave[]               @relation("LeaveRequester")
+  sanctionsDecided           EmployeeSanction[]            @relation("SanctionDecider")
+  terminationsDecided        ContractTermination[]         @relation("TerminationDecider")
+  reviewsAuthored            EmployeeReview[]              @relation("ReviewAuthor")
+  passwordResetTokens        PasswordResetToken[]
   // Dettes : creation, annulation, encaissement paiements (cote agent).
-  debtsCreated            Debt[]                        @relation("DebtCreatedBy")
-  debtsVoided             Debt[]                        @relation("DebtVoidedBy")
-  debtPaymentsReceived    DebtPayment[]                 @relation("DebtPaymentReceivedBy")
-  debtPaymentsVoided      DebtPayment[]                 @relation("DebtPaymentVoidedBy")
-  debtHistoryActions      DebtHistory[]
-  paymentAttachmentsUploaded PaymentAttachment[]        @relation("PaymentAttachmentUploader")
-  permissionOverrides     UserPermissionOverride[]
-  justificationsSubmitted AttendanceJustification[]     @relation("JustificationSubmitter")
-  justificationsReviewed  AttendanceJustification[]     @relation("JustificationReviewer")
-  leavesEnded             EmployeeLeave[]               @relation("LeaveEndedBy")
+  debtsCreated               Debt[]                        @relation("DebtCreatedBy")
+  debtsVoided                Debt[]                        @relation("DebtVoidedBy")
+  debtPaymentsReceived       DebtPayment[]                 @relation("DebtPaymentReceivedBy")
+  debtPaymentsVoided         DebtPayment[]                 @relation("DebtPaymentVoidedBy")
+  debtHistoryActions         DebtHistory[]
+  paymentAttachmentsUploaded PaymentAttachment[]           @relation("PaymentAttachmentUploader")
+  permissionOverrides        UserPermissionOverride[]
+  justificationsSubmitted    AttendanceJustification[]     @relation("JustificationSubmitter")
+  justificationsReviewed     AttendanceJustification[]     @relation("JustificationReviewer")
+  leavesEnded                EmployeeLeave[]               @relation("LeaveEndedBy")
 
   @@index([organizationId])
   @@index([email])
@@ -1027,26 +1028,53 @@ model Payslip {
   socialContributions Decimal   @default(0) @db.Decimal(15, 2)
   grossSalary         Decimal   @db.Decimal(15, 2)
   netSalary           Decimal   @db.Decimal(15, 2)
+  // Total deja verse (somme des PayslipPayment.amount). Permet le paiement
+  // en plusieurs tranches (avance, acompte, solde) quand la caisse n'a pas
+  // assez ou que l'employe demande une avance avant la date de salaire.
+  paidAmount          Decimal   @default(0) @db.Decimal(15, 2)
+  // True quand paidAmount >= netSalary (solde acquitte). On le maintient
+  // explicitement pour permettre les filtres rapides et la retrocompat.
   isPaid              Boolean   @default(false)
-  // Date effective du paiement (nul tant que isPaid=false). Mise a jour
-  // lorsqu'on declenche PayEmployeeFromCashRegisterUseCase.
+  // Date du dernier versement effectif (nul tant qu'aucun versement).
   paidAt              DateTime?
-  // Reference vers l'Expense de paiement (immutable). Permet de remonter
-  // depuis le payslip vers la caisse qui a ete debitee.
+  // Reference vers le DERNIER Expense de paiement (back-compat). L'historique
+  // complet est dans Payslip.payments[].
   paidExpenseId       String?   @unique
 
   // Note libre saisie au paiement (motif, contexte, ...).
   paymentNote     String?
-  // Total des retenues effectivement appliquees au moment du paiement (resume).
+  // Total des retenues effectivement appliquees (cumul sur tous les
+  // versements pour cette periode).
   deductionsTotal Decimal? @db.Decimal(15, 2)
 
   generatedAt DateTime @default(now())
 
-  employee    Employee @relation(fields: [employeeId], references: [id])
-  paidExpense Expense? @relation("PayslipPaidExpense", fields: [paidExpenseId], references: [id])
+  employee    Employee         @relation(fields: [employeeId], references: [id])
+  paidExpense Expense?         @relation("PayslipPaidExpense", fields: [paidExpenseId], references: [id])
+  payments    PayslipPayment[]
 
   @@index([employeeId])
   @@map("payslips")
+}
+
+// Versement individuel (tranche) d'un payslip. Un payslip peut accumuler
+// plusieurs PayslipPayment jusqu'a atteindre netSalary. Chaque versement
+// est lie a un Expense (ledger immuable) qui debite la caisse.
+model PayslipPayment {
+  id           String   @id @default(uuid())
+  payslipId    String
+  expenseId    String   @unique
+  amount       Decimal  @db.Decimal(15, 2)
+  paidAt       DateTime @default(now())
+  paidByUserId String?
+  note         String?
+
+  payslip Payslip @relation(fields: [payslipId], references: [id], onDelete: Cascade)
+  expense Expense @relation("PayslipInstallmentExpense", fields: [expenseId], references: [id])
+  paidBy  User?   @relation("PayslipPaymentIssuer", fields: [paidByUserId], references: [id])
+
+  @@index([payslipId])
+  @@map("payslip_payments")
 }
 
 // ============================================================
@@ -1578,14 +1606,14 @@ model Payment {
 // (caisse capture la cession), des PDF (recus virement, ordres MoMo) ou
 // d'autres documents. L'URL pointe sur MinIO via /uploads/object/<key>.
 model PaymentAttachment {
-  id          String   @id @default(uuid())
-  paymentId   String
-  url         String
-  key         String
-  kind        String   // 'IMAGE' | 'PDF' | 'OTHER'
-  caption     String?
+  id               String   @id @default(uuid())
+  paymentId        String
+  url              String
+  key              String
+  kind             String // 'IMAGE' | 'PDF' | 'OTHER'
+  caption          String?
   uploadedByUserId String?
-  createdAt   DateTime @default(now())
+  createdAt        DateTime @default(now())
 
   payment    Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
   uploadedBy User?   @relation("PaymentAttachmentUploader", fields: [uploadedByUserId], references: [id])
@@ -1704,22 +1732,22 @@ model DisbursementVoucher {
 // ============================================================
 
 model FundTransfer {
-  id                  String                  @id @default(uuid())
-  reference           String                  @unique
-  sourceAgencyId      String
-  destinationType     TransferDestinationType
-  destinationAgencyId String?
-  destinationLabel    String?
-  amount              Decimal                 @db.Decimal(15, 2)
-  transferMethod      String
+  id                       String                  @id @default(uuid())
+  reference                String                  @unique
+  sourceAgencyId           String
+  destinationType          TransferDestinationType
+  destinationAgencyId      String?
+  destinationLabel         String?
+  amount                   Decimal                 @db.Decimal(15, 2)
+  transferMethod           String
   // Methodes de paiement granulaires (canal cote source / cote destination)
   // Optionnels : nullable pour conserver les transferts historiques.
   sourcePaymentMethod      String?
   destinationPaymentMethod String?
-  proofImageUrl       String?
-  initiatedByUserId   String
-  confirmedByUserId   String?
-  status              TransferStatus          @default(PENDING)
+  proofImageUrl            String?
+  initiatedByUserId        String
+  confirmedByUserId        String?
+  status                   TransferStatus          @default(PENDING)
 
   // Immutabilite
   isVoided       Boolean   @default(false)
@@ -1784,12 +1812,13 @@ model Expense {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  agency       Agency              @relation(fields: [agencyId], references: [id])
-  container    Container?          @relation(fields: [containerId], references: [id])
-  approvedBy   User?               @relation(fields: [approvedByUserId], references: [id])
-  agencyCharge AgencyCharge?       @relation(fields: [agencyChargeId], references: [id])
-  cashRegister AgencyCashRegister? @relation(fields: [cashRegisterId], references: [id])
-  paidPayslip  Payslip?            @relation("PayslipPaidExpense")
+  agency             Agency              @relation(fields: [agencyId], references: [id])
+  container          Container?          @relation(fields: [containerId], references: [id])
+  approvedBy         User?               @relation(fields: [approvedByUserId], references: [id])
+  agencyCharge       AgencyCharge?       @relation(fields: [agencyChargeId], references: [id])
+  cashRegister       AgencyCashRegister? @relation(fields: [cashRegisterId], references: [id])
+  paidPayslip        Payslip?            @relation("PayslipPaidExpense")
+  payslipInstallment PayslipPayment?     @relation("PayslipInstallmentExpense")
 
   @@index([agencyId])
   @@index([agencyChargeId, period])
