@@ -15,6 +15,7 @@ import { DeleteAgencyImageUseCase } from '../../application/use-cases/agency/Del
 import { SetAgencyOpeningHoursUseCase } from '../../application/use-cases/agency/SetAgencyOpeningHoursUseCase';
 import { AgencyBreakdownUseCase } from '../../application/use-cases/agency/AgencyBreakdownUseCase';
 import { DailyReportService } from '../../application/services/DailyReportService';
+import { DailyReportPDFService } from '../../application/services/DailyReportPDFService';
 import { StorageService } from '../../infrastructure/storage/StorageService';
 import { prisma } from '../../config/database';
 import { NotFoundError } from '../../domain/errors/BusinessError';
@@ -261,6 +262,68 @@ export class AgencyController {
     }
   }
 
+  static async getDailyReportPDF(req: Request, res: Response, next: NextFunction) {
+    try {
+      const report = await prisma.agencyDailyReport.findUnique({
+        where: { id: req.params.reportId },
+        include: {
+          attachments: { orderBy: { createdAt: 'asc' } },
+          closedByUser: { select: { firstName: true, lastName: true } },
+        },
+      });
+      if (!report) throw new NotFoundError('Rapport journalier', req.params.reportId);
+
+      // Recupere le logo organisation depuis MinIO si dispo (le payload n'a
+      // que l'URL ; le PDF a besoin du buffer pour l'embarquer).
+      const payload = report.payload as any;
+      let logoBuffer: Buffer | null = null;
+      const logoUrl: string | undefined = payload?.organization?.logoUrl;
+      if (logoUrl) {
+        try {
+          const storage = container.resolve(StorageService);
+          // logoUrl peut etre une URL absolue ou une key MinIO ; on tente la key.
+          const key = logoUrl.split('/uploads/object/').pop() ?? logoUrl;
+          const obj = await storage.getObject(key);
+          if (obj) {
+            const chunks: Buffer[] = [];
+            for await (const ch of obj.stream as any) chunks.push(ch as Buffer);
+            logoBuffer = Buffer.concat(chunks);
+          }
+        } catch { /* logo optionnel */ }
+      }
+
+      const pdfService = container.resolve(DailyReportPDFService);
+      const buffer = await pdfService.generate({
+        reportDate: report.date,
+        status: report.status,
+        observation: report.observation,
+        closedAt: report.closedAt,
+        closedByName: report.closedByUser
+          ? `${report.closedByUser.firstName} ${report.closedByUser.lastName}`
+          : null,
+        payload,
+        attachments: report.attachments.map((a) => ({
+          id: a.id,
+          fileName: a.fileName,
+          caption: a.caption,
+          contentType: a.contentType,
+          createdAt: a.createdAt.toISOString(),
+        })),
+        logoBuffer,
+      });
+
+      const filename = `rapport-${new Date(report.date).toISOString().slice(0, 10)}.pdf`;
+      res.set({
+        'Content-Type': 'application/pdf',
+        'Content-Length': String(buffer.length),
+        'Content-Disposition': `inline; filename="${filename}"`,
+      });
+      res.end(buffer);
+    } catch (err) {
+      next(err);
+    }
+  }
+
   static async addDailyReportAttachment(req: Request, res: Response, next: NextFunction) {
     try {
       const { url, storageKey, fileName, contentType, size, caption } = req.body;
@@ -278,6 +341,25 @@ export class AgencyController {
         },
       });
       res.status(201).json({ success: true, data: att });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async updateDailyReportAttachment(req: Request, res: Response, next: NextFunction) {
+    try {
+      const att = await prisma.agencyDailyReportAttachment.findUnique({
+        where: { id: req.params.attachmentId },
+      });
+      if (!att || att.reportId !== req.params.reportId) {
+        return res.status(404).json({ success: false, message: 'Piece jointe introuvable' });
+      }
+      const caption = typeof req.body?.caption === 'string' ? req.body.caption.trim() : null;
+      const updated = await prisma.agencyDailyReportAttachment.update({
+        where: { id: att.id },
+        data: { caption: caption || null },
+      });
+      res.json({ success: true, data: updated });
     } catch (err) {
       next(err);
     }

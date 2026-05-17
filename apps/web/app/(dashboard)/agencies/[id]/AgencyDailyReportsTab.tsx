@@ -10,7 +10,7 @@ import { ImageInput } from '@/components/shared/ImageInput';
 import { uploadImage, uploadFile } from '@/lib/api/uploads';
 import { openAuthedFile } from '@/components/shared/AuthedImage';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
-import { ChevronDown, ChevronRight, FileText, Lock, Paperclip, RefreshCw, Save, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, FileText, Lock, Paperclip, Printer, RefreshCw, Save, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface DailyReport {
@@ -179,6 +179,8 @@ function ReportDetails({
     }
   };
 
+  const [pendingCaption, setPendingCaption] = useState('');
+
   const handleAttachment = async (file: File) => {
     setUploading(true);
     try {
@@ -191,7 +193,9 @@ function ReportDetails({
         fileName: file.name,
         contentType: uploaded.contentType,
         size: uploaded.size,
+        caption: pendingCaption.trim() || null,
       });
+      setPendingCaption('');
       qc.invalidateQueries({ queryKey: ['daily-reports', reportId] });
       onChange();
       toast.success('Piece jointe ajoutee');
@@ -199,6 +203,24 @@ function ReportDetails({
       toast.error(e?.response?.data?.message || "Echec de l'upload");
     } finally {
       setUploading(false);
+    }
+  };
+
+  const updateCaption = async (attId: string, caption: string) => {
+    try {
+      await apiClient.patch(`/agencies/daily-reports/${reportId}/attachments/${attId}`, { caption });
+      qc.invalidateQueries({ queryKey: ['daily-reports', reportId] });
+      toast.success('Libelle mis a jour');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Echec mise a jour libelle');
+    }
+  };
+
+  const printPDF = async () => {
+    try {
+      await openAuthedFile(`/agencies/daily-reports/${reportId}/pdf`, `rapport-${reportId}.pdf`);
+    } catch {
+      toast.error('Echec du telechargement PDF');
     }
   };
 
@@ -214,49 +236,99 @@ function ReportDetails({
 
   return (
     <div className="mt-4 space-y-4 border-t border-gray-100 pt-4">
-      {/* Synthese chiffres */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat label="Colis recus" value={String(payload.totalParcels ?? 0)} />
-        <Stat label="Reste a payer" value={formatAmount(payload.totalRemainingAmount ?? 0)} />
-        <Stat label="Paiements" value={'+' + formatAmount(payload.paymentsTotal ?? 0)} positive />
-        <Stat label="Decaissements" value={'-' + formatAmount(payload.disbursementsTotal ?? 0)} negative />
+      {/* Bouton imprimer PDF */}
+      <div className="flex justify-end">
+        <AppButton size="sm" variant="outline" onClick={printPDF}>
+          <Printer className="h-3.5 w-3.5" />
+          Imprimer en PDF
+        </AppButton>
       </div>
 
-      {/* Par categorie */}
-      {payload.byCategory && Object.keys(payload.byCategory).length > 0 && (
-        <div>
-          <p className="text-xs font-medium text-gray-500 mb-1">Par categorie</p>
+      {/* Synthese chiffres */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Stat label="Recettes" value={'+' + formatAmount(payload.recetteTotal ?? 0)} positive />
+        <Stat label="Avances" value={'+' + formatAmount(payload.advancesTotal ?? 0)} />
+        <Stat label="Depenses" value={'-' + formatAmount(payload.expensesTotal ?? 0)} negative />
+        <Stat label="Benefice" value={formatAmount(payload.profit ?? 0)} positive={Number(payload.profit ?? 0) >= 0} negative={Number(payload.profit ?? 0) < 0} />
+      </div>
+
+      {/* Entrees par mode transit + methode */}
+      {payload.entriesByTransitMethod && Object.keys(payload.entriesByTransitMethod).length > 0 && (
+        <Section title="Entrees du jour par mode de transit et de paiement">
           <table className="w-full text-xs">
+            <thead className="text-left text-gray-500">
+              <tr><th className="py-1">Mode transit</th><th className="py-1">Methodes</th><th className="py-1 text-right">Total</th></tr>
+            </thead>
             <tbody className="divide-y divide-gray-50">
-              {Object.entries(payload.byCategory as Record<string, { count: number; totalRemaining: number }>).map(([cat, v]) => (
-                <tr key={cat}>
-                  <td className="py-1.5">{cat}</td>
-                  <td className="py-1.5 text-right font-medium">{v.count}</td>
-                  <td className="py-1.5 text-right text-primary-700">{formatAmount(v.totalRemaining)}</td>
+              {Object.values(payload.entriesByTransitMethod as Record<string, any>).map((e: any) => (
+                <tr key={e.type}>
+                  <td className="py-1.5">{e.type}</td>
+                  <td className="py-1.5 text-gray-600">{Object.entries(e.methods as Record<string, number>).map(([m, v]) => `${m}: ${formatAmount(v)}`).join(' / ')}</td>
+                  <td className="py-1.5 text-right font-medium text-primary-700">{formatAmount(e.total)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
+        </Section>
       )}
 
-      {/* Par route de transit */}
-      {payload.byTransitRoute && Object.keys(payload.byTransitRoute).length > 0 && (
-        <div>
-          <p className="text-xs font-medium text-gray-500 mb-1">Par route de transit</p>
+      {/* Recettes vs Avances */}
+      <PaymentBreakdown title="Recettes (colis en stock destination)" data={payload.recetteByRouteAndMethod} total={payload.recetteTotal} positive />
+      <PaymentBreakdown title="Paiements en avance (avant arrivee en stock destination)" data={payload.advancesByRouteAndMethod} total={payload.advancesTotal} />
+
+      {/* Masse / volume colis enregistres */}
+      <RouteMassVolume title="Colis enregistres du jour" data={payload.registeredByRoute} />
+
+      {/* Conteneurs recus / envoyes */}
+      <ContainerList title="Conteneurs recus du jour" containers={payload.receivedContainers} dateLabel="Arrive le" dateField="arrivalDate" />
+      <ContainerList title="Conteneurs envoyes du jour" containers={payload.sentContainers} dateLabel="Parti le" dateField="departureDate" />
+
+      {/* Mouvements stock */}
+      <RouteMassVolume title="Entrees en stock par route" data={payload.stockIn?.byRoute} totalWeight={payload.stockIn?.totalWeight} totalVolume={payload.stockIn?.totalVolume} />
+      <RouteMassVolume title="Sorties de stock par route" data={payload.stockOut?.byRoute} totalWeight={payload.stockOut?.totalWeight} totalVolume={payload.stockOut?.totalVolume} />
+      <RouteMassVolume
+        title={`Etat de stock actuel - valeur totale ${formatAmount(payload.stockState?.totalValue ?? 0)}`}
+        data={payload.stockState?.byRoute}
+        totalWeight={payload.stockState?.totalWeight}
+        totalVolume={payload.stockState?.totalVolume}
+      />
+
+      {/* Inventaires */}
+      {Array.isArray(payload.inventories) && payload.inventories.length > 0 && (
+        <Section title="Inventaire(s) du jour">
           <table className="w-full text-xs">
+            <thead className="text-left text-gray-500">
+              <tr><th>Magasin</th><th>Statut</th><th className="text-right">Attendus</th><th className="text-right">Scannes</th><th className="text-right">Manquants</th></tr>
+            </thead>
             <tbody className="divide-y divide-gray-50">
-              {Object.values(payload.byTransitRoute as Record<string, any>).map((r: any) => (
-                <tr key={r.routeId ?? r.routeName}>
-                  <td className="py-1.5">{r.routeName} {r.type ? `(${r.type})` : ''}</td>
-                  <td className="py-1.5 text-right font-medium">{r.count}</td>
-                  <td className="py-1.5 text-right text-primary-700">{formatAmount(r.totalRemaining)}</td>
+              {(payload.inventories as any[]).map((i) => (
+                <tr key={i.id}>
+                  <td className="py-1.5">{i.warehouse}</td>
+                  <td className="py-1.5">{i.status}</td>
+                  <td className="py-1.5 text-right">{i.expected}</td>
+                  <td className="py-1.5 text-right">{i.scanned}</td>
+                  <td className="py-1.5 text-right text-red-600">{i.missing}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
+        </Section>
       )}
+
+      {/* Solde caisse */}
+      {payload.cashRegister && (
+        <Section title="Solde caisse">
+          <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+            <KV label="Ouverture" value={formatAmount(payload.cashRegister.openingBalance ?? 0)} />
+            <KV label="Entrees" value={'+' + formatAmount(payload.cashRegister.totalEntries ?? 0)} positive />
+            <KV label="Sorties" value={'-' + formatAmount(payload.cashRegister.totalExits ?? 0)} negative />
+            <KV label="Solde courant" value={formatAmount(payload.cashRegister.currentBalance ?? 0)} bold />
+            {payload.cashRegister.closingBalance != null && <KV label="Solde cloture" value={formatAmount(payload.cashRegister.closingBalance)} bold />}
+            {payload.cashRegister.closedAt && <KV label="Cloturee le" value={new Date(payload.cashRegister.closedAt).toLocaleString('fr-FR')} />}
+          </div>
+        </Section>
+      )}
+
 
       {/* Observation */}
       <div>
@@ -287,6 +359,13 @@ function ReportDetails({
         <p className="text-xs font-medium text-gray-500 mb-1 flex items-center gap-1">
           <Paperclip className="h-3.5 w-3.5" /> Pieces jointes
         </p>
+        <input
+          type="text"
+          value={pendingCaption}
+          onChange={(e) => setPendingCaption(e.target.value)}
+          placeholder="Libelle de la prochaine piece jointe (ex: Recu MTN du 12/05)"
+          className="mb-3 w-full rounded-xl border border-gray-200 px-3 py-2 text-xs focus:border-primary-500 focus:outline-none"
+        />
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <ImageInput
             value={null}
@@ -302,25 +381,13 @@ function ReportDetails({
         {report.attachments && report.attachments.length > 0 && (
           <ul className="mt-3 space-y-2">
             {report.attachments.map((att) => (
-              <li key={att.id} className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-xs">
-                <button
-                  type="button"
-                  onClick={() => openAuthedFile(att.url, att.fileName ?? 'piece-jointe').catch(() => toast.error('Echec du telechargement'))}
-                  className="flex items-center gap-2 text-primary-700 hover:underline truncate"
-                >
-                  <FileText className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">{att.fileName ?? 'piece-jointe'}</span>
-                  {att.contentType && <span className="text-gray-400">({att.contentType})</span>}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => deleteAttachment(att.id)}
-                  className="rounded-lg p-1 text-red-500 hover:bg-red-50"
-                  aria-label="Supprimer"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </li>
+              <AttachmentRow
+                key={att.id}
+                att={att}
+                onOpen={() => openAuthedFile(att.url, att.fileName ?? 'piece-jointe').catch(() => toast.error('Echec du telechargement'))}
+                onSaveCaption={(c) => updateCaption(att.id, c)}
+                onDelete={() => deleteAttachment(att.id)}
+              />
             ))}
           </ul>
         )}
@@ -335,6 +402,157 @@ function Stat({ label, value, positive, negative }: { label: string; value: stri
       <p className="text-[11px] uppercase tracking-wider text-gray-500">{label}</p>
       <p className={`mt-1 text-base font-bold ${positive ? 'text-green-600' : negative ? 'text-red-600' : 'text-gray-900'}`}>{value}</p>
     </div>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">{title}</p>
+      <div className="rounded-xl border border-gray-100 bg-white p-3">{children}</div>
+    </div>
+  );
+}
+
+function KV({ label, value, positive, negative, bold }: { label: string; value: string; positive?: boolean; negative?: boolean; bold?: boolean }) {
+  return (
+    <div className="rounded-lg bg-gray-50 px-2 py-1.5">
+      <p className="text-[10px] uppercase tracking-wider text-gray-500">{label}</p>
+      <p className={`mt-0.5 text-sm ${bold ? 'font-bold' : 'font-medium'} ${positive ? 'text-green-600' : negative ? 'text-red-600' : 'text-gray-900'}`}>{value}</p>
+    </div>
+  );
+}
+
+function PaymentBreakdown({ title, data, total, positive }: { title: string; data: Record<string, any> | undefined; total: number | undefined; positive?: boolean }) {
+  const rows = Object.values(data ?? {});
+  if (rows.length === 0) return null;
+  return (
+    <Section title={title}>
+      <table className="w-full text-xs">
+        <thead className="text-left text-gray-500">
+          <tr><th className="py-1">Route</th><th className="py-1">Methodes</th><th className="py-1 text-right">Total</th></tr>
+        </thead>
+        <tbody className="divide-y divide-gray-50">
+          {rows.map((r: any) => (
+            <tr key={r.routeId ?? r.routeName}>
+              <td className="py-1.5">{r.routeName} {r.type ? `(${r.type})` : ''}</td>
+              <td className="py-1.5 text-gray-600">{Object.entries(r.methods as Record<string, number>).map(([m, v]) => `${m}: ${formatAmount(v)}`).join(' / ')}</td>
+              <td className={`py-1.5 text-right font-medium ${positive ? 'text-green-600' : 'text-primary-700'}`}>{formatAmount(r.total)}</td>
+            </tr>
+          ))}
+          <tr>
+            <td colSpan={2} className="pt-2 text-right text-xs font-semibold text-gray-600">Total</td>
+            <td className={`pt-2 text-right text-sm font-bold ${positive ? 'text-green-600' : 'text-primary-700'}`}>{formatAmount(total ?? 0)}</td>
+          </tr>
+        </tbody>
+      </table>
+    </Section>
+  );
+}
+
+function RouteMassVolume({ title, data, totalWeight, totalVolume }: { title: string; data: Record<string, any> | undefined; totalWeight?: number; totalVolume?: number }) {
+  const rows = Object.values(data ?? {});
+  if (rows.length === 0) return null;
+  return (
+    <Section title={title}>
+      <table className="w-full text-xs">
+        <thead className="text-left text-gray-500">
+          <tr><th className="py-1">Route</th><th className="py-1 text-right">Colis</th><th className="py-1 text-right">Masse</th><th className="py-1 text-right">Volume</th>{rows[0] && 'totalPrice' in (rows[0] as any) && <th className="py-1 text-right">Valeur</th>}</tr>
+        </thead>
+        <tbody className="divide-y divide-gray-50">
+          {rows.map((r: any) => (
+            <tr key={r.routeId ?? r.routeName}>
+              <td className="py-1.5">{r.routeName} {r.type ? `(${r.type})` : ''}</td>
+              <td className="py-1.5 text-right">{r.count}</td>
+              <td className="py-1.5 text-right">{Number(r.totalWeight ?? 0).toFixed(2)} kg</td>
+              <td className="py-1.5 text-right">{Number(r.totalVolume ?? 0).toFixed(3)} m3</td>
+              {'totalPrice' in r && <td className="py-1.5 text-right text-primary-700">{formatAmount(r.totalPrice ?? 0)}</td>}
+            </tr>
+          ))}
+          {(totalWeight != null || totalVolume != null) && (
+            <tr>
+              <td colSpan={2} className="pt-2 text-right text-xs font-semibold text-gray-600">Total</td>
+              <td className="pt-2 text-right text-sm font-bold">{Number(totalWeight ?? 0).toFixed(2)} kg</td>
+              <td className="pt-2 text-right text-sm font-bold">{Number(totalVolume ?? 0).toFixed(3)} m3</td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </Section>
+  );
+}
+
+function ContainerList({ title, containers, dateLabel, dateField }: { title: string; containers: any[] | undefined; dateLabel: string; dateField: string }) {
+  if (!containers || containers.length === 0) return null;
+  return (
+    <Section title={title}>
+      <div className="space-y-3">
+        {containers.map((c: any) => (
+          <div key={c.id} className="rounded-lg bg-gray-50 p-2">
+            <p className="text-xs font-semibold text-gray-800">
+              {c.designation} <span className="text-gray-500">- {c.type} - {c.routeName}</span>
+            </p>
+            <p className="text-[11px] text-gray-500">{dateLabel} {c[dateField] ? new Date(c[dateField]).toLocaleString('fr-FR') : '-'} - {c.parcels} colis - {Number(c.totalWeight ?? 0).toFixed(2)} kg - {Number(c.totalVolume ?? 0).toFixed(3)} m3</p>
+            {Object.keys(c.byRoute ?? {}).length > 0 && (
+              <table className="mt-1 w-full text-[11px]">
+                <tbody className="divide-y divide-gray-100">
+                  {Object.values(c.byRoute as Record<string, any>).map((r: any) => (
+                    <tr key={r.routeId ?? r.routeName}>
+                      <td className="py-1 pl-2">{r.routeName} {r.type ? `(${r.type})` : ''}</td>
+                      <td className="py-1 text-right">{r.count}</td>
+                      <td className="py-1 text-right">{Number(r.totalWeight).toFixed(2)} kg</td>
+                      <td className="py-1 text-right">{Number(r.totalVolume).toFixed(3)} m3</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        ))}
+      </div>
+    </Section>
+  );
+}
+
+function AttachmentRow({ att, onOpen, onSaveCaption, onDelete }: { att: Attachment; onOpen: () => void; onSaveCaption: (c: string) => void; onDelete: () => void }) {
+  const [caption, setCaption] = useState(att.caption ?? '');
+  const [editing, setEditing] = useState(false);
+  return (
+    <li className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-xs">
+      <div className="flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={onOpen}
+          className="flex flex-1 items-center gap-2 truncate text-primary-700 hover:underline"
+        >
+          <FileText className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">{att.caption || att.fileName || 'piece-jointe'}</span>
+          {att.fileName && att.caption && <span className="text-gray-400 truncate">({att.fileName})</span>}
+        </button>
+        <button type="button" onClick={() => setEditing((v) => !v)} className="rounded-lg px-2 py-1 text-gray-500 hover:bg-gray-100">Libelle</button>
+        <button type="button" onClick={onDelete} className="rounded-lg p-1 text-red-500 hover:bg-red-50" aria-label="Supprimer">
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      {editing && (
+        <div className="mt-2 flex items-center gap-2">
+          <input
+            type="text"
+            value={caption}
+            onChange={(e) => setCaption(e.target.value)}
+            placeholder="Libelle (ex: Facture electricite mars)"
+            className="flex-1 rounded-lg border border-gray-200 px-2 py-1 text-xs focus:border-primary-500 focus:outline-none"
+          />
+          <button
+            type="button"
+            onClick={() => { onSaveCaption(caption); setEditing(false); }}
+            className="rounded-lg bg-primary-700 px-2 py-1 text-xs font-medium text-white hover:bg-primary-900"
+          >
+            Sauver
+          </button>
+        </div>
+      )}
+    </li>
   );
 }
 

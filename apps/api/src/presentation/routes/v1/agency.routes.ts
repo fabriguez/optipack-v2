@@ -68,6 +68,16 @@ router.delete(
 );
 router.get('/charges/:chargeId/history', AgencyController.listChargeHistory);
 
+// PDF du rapport journalier (header + footer aux couleurs du tenant)
+router.get('/daily-reports/:reportId/pdf', AgencyController.getDailyReportPDF);
+
+// Mise a jour du libelle d'une piece jointe d'un rapport journalier.
+router.patch(
+  '/daily-reports/:reportId/attachments/:attachmentId',
+  authorize('SUPER_ADMIN', 'ADMIN', 'COMPTABLE'),
+  AgencyController.updateDailyReportAttachment,
+);
+
 // Breakdowns financiers (paiements par route+methode, decaissements par categorie)
 router.get('/:id/breakdown', AgencyController.breakdown);
 
