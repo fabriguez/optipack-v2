@@ -61,6 +61,9 @@ router.post('/tenants/:id/unfreeze', authenticateOps, TenantController.unfreeze)
 router.post('/tenants/:id/archive', authenticateOps, requireSuperAdmin, TenantController.archive);
 router.delete('/tenants/:id/purge', authenticateOps, requireSuperAdmin, TenantController.purge);
 router.post('/tenants/:id/reset-owner-password', authenticateOps, requireSuperAdmin, TenantController.resetOwnerPassword);
+router.get('/tenants/:id/containers', authenticateOps, TenantController.containers);
+router.get('/tenants/:id/containers/:name/logs', authenticateOps, TenantController.containerLogs);
+router.post('/tenants/:id/containers/:name/exec', authenticateOps, requireSuperAdmin, TenantController.containerExec);
 router.post('/tenants/:id/migrate', authenticateOps, requireSuperAdmin, TenantController.migrate);
 router.post('/tenants/:id/upgrade', authenticateOps, BillingController.requestUpgrade);
 router.get('/tenants/:id/jobs', authenticateOps, TenantController.listJobs);

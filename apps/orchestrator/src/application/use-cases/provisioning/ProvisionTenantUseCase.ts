@@ -345,6 +345,10 @@ export class ProvisionTenantUseCase {
     environment:
       TENANT_SLUG: ${JSON.stringify(tenant.slug)}
       NEXT_PUBLIC_API_URL: ${JSON.stringify(`https://api.${tenant.slug}.${BASE_DOMAIN}/api/v1`)}
+      # NextAuth v5 multi-tenant : Caddy forward le host public, container
+      # ne le connait pas a build time -> trust X-Forwarded-Host du proxy.
+      AUTH_TRUST_HOST: "true"
+      AUTH_URL: ${JSON.stringify(`https://app.${tenant.slug}.${BASE_DOMAIN}`)}
     ports:
       - "127.0.0.1:${webPort}:3000"
     restart: unless-stopped

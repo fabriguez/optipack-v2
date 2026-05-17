@@ -24,9 +24,76 @@ import {
 export { createTenantSchema, updateTenantSchema, migrateTenantSchema };
 export type { CreateTenantInput, UpdateTenantInput, MigrateTenantInput };
 
+import { DockerService, DOCKER_SERVICE } from '../../../infrastructure/docker/DockerService';
+
 @injectable()
 export class TenantUseCases {
-  constructor(@inject(SSH_SERVICE) private ssh: SSHService) {}
+  constructor(
+    @inject(SSH_SERVICE) private ssh: SSHService,
+    @inject(DOCKER_SERVICE) private docker: DockerService,
+  ) {}
+
+  /** Liste les containers du stack tenant via DockerService. */
+  async listContainers(id: string) {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id },
+      include: { vps: true },
+    });
+    if (!tenant || !tenant.vps) throw new NotFoundError('Tenant', id);
+    const creds = {
+      host: tenant.vps.host,
+      port: tenant.vps.port,
+      username: tenant.vps.username,
+      sshKeyEncrypted: tenant.vps.sshKeyEncrypted,
+    };
+    return this.docker.listTenantContainers(creds, tenant.slug);
+  }
+
+  /** docker logs <container> --tail N. Verifie que le container appartient au tenant. */
+  async containerLogs(id: string, containerName: string, tail = 200) {
+    const tenant = await this.assertTenantContainer(id, containerName);
+    const creds = {
+      host: tenant.vps!.host,
+      port: tenant.vps!.port,
+      username: tenant.vps!.username,
+      sshKeyEncrypted: tenant.vps!.sshKeyEncrypted,
+    };
+    const r = await this.docker.logs(creds, containerName, tail);
+    return { logs: r.stdout, code: r.code };
+  }
+
+  /** docker exec one-shot. Garde-fou : le container doit appartenir au tenant. */
+  async containerExec(id: string, containerName: string, cmd: string) {
+    const tenant = await this.assertTenantContainer(id, containerName);
+    const creds = {
+      host: tenant.vps!.host,
+      port: tenant.vps!.port,
+      username: tenant.vps!.username,
+      sshKeyEncrypted: tenant.vps!.sshKeyEncrypted,
+    };
+    const r = await this.docker.execShell(creds, containerName, cmd);
+    return { output: r.stdout, code: r.code };
+  }
+
+  /**
+   * Verifie que le container appartient au stack tenant (prefix tenant-<slug>-).
+   * Garde-fou contre attaque par injection de nom de container -> on ne laisse
+   * pas un admin lire les logs / exec dans le container d'un autre tenant.
+   */
+  private async assertTenantContainer(id: string, containerName: string) {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id },
+      include: { vps: true },
+    });
+    if (!tenant || !tenant.vps) throw new NotFoundError('Tenant', id);
+    const expectedPrefix = `tenant-${tenant.slug}-`;
+    if (!containerName.startsWith(expectedPrefix)) {
+      throw new BusinessError(
+        `Container ${containerName} n'appartient pas au tenant ${tenant.slug}`,
+      );
+    }
+    return tenant;
+  }
 
   /**
    * Cree le record du tenant (status PROVISIONING) + son abonnement.

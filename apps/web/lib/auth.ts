@@ -29,6 +29,12 @@ function decodeJwt(token: string): { exp?: number; permissions?: string[] } | nu
 
 export const { handlers, signIn, signOut, auth }: any = NextAuth({
   secret: process.env.AUTH_SECRET,
+  // Multi-tenant : le host arrive depuis Caddy en proxy (X-Forwarded-Host =
+  // app.<slug>.<base>) et NextAuth v5 refuse par defaut tous les hosts non
+  // listes -> UntrustedHost. On fait confiance au reverse proxy (Caddy
+  // valide deja le SAN du cert via Let's Encrypt). Override possible via
+  // AUTH_TRUST_HOST=false en env si proxy non-fiable.
+  trustHost: process.env.AUTH_TRUST_HOST !== 'false',
   providers: [
     Credentials({
       name: 'credentials',

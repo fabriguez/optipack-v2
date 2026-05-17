@@ -190,6 +190,60 @@ export class TenantController {
   }
 
   /**
+   * GET /ops/tenants/:id/containers -- liste les containers du stack tenant
+   * (api, web, web-client, postgres, redis, minio) avec etat + status.
+   */
+  static async containers(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = await container.resolve(TenantUseCases).listContainers(req.params.id);
+      res.json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * GET /ops/tenants/:id/containers/:name/logs?tail=200 -- docker logs.
+   */
+  static async containerLogs(req: Request, res: Response, next: NextFunction) {
+    try {
+      const tail = Number(req.query.tail ?? 200);
+      const data = await container
+        .resolve(TenantUseCases)
+        .containerLogs(req.params.id, req.params.name, Number.isFinite(tail) ? tail : 200);
+      res.json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * POST /ops/tenants/:id/containers/:name/exec  body={cmd}
+   * Exec one-shot dans le container. Timeout 30s. Output combine stdout+stderr.
+   */
+  static async containerExec(req: Request, res: Response, next: NextFunction) {
+    try {
+      const cmd = (req.body?.cmd as string | undefined)?.trim();
+      if (!cmd) {
+        res.status(400).json({ success: false, message: 'cmd requis' });
+        return;
+      }
+      const data = await container
+        .resolve(TenantUseCases)
+        .containerExec(req.params.id, req.params.name, cmd);
+      await container.resolve(AuditLogger).log(req, {
+        action: 'TENANT_CONTAINER_EXEC',
+        entityType: 'Tenant',
+        entityId: req.params.id,
+        payload: { container: req.params.name, cmd: cmd.slice(0, 200) } as Record<string, unknown>,
+      });
+      res.json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
    * POST /ops/tenants/:id/reset-owner-password -- regenere le pwd owner
    * (SUPER_ADMIN du tenant) + retourne email + plaintext one-shot.
    * Audit log capture seulement la date + email, JAMAIS la pwd.

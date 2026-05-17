@@ -126,6 +126,75 @@ export class DockerService {
     return this.ssh.exec(creds, `docker exec ${container} ${cmd}`);
   }
 
+  /**
+   * Liste les containers du stack tenant (project compose `tenant-<slug>`).
+   * Renvoie name + image + state + status + ports + CPU/MEM via docker stats.
+   */
+  async listTenantContainers(creds: SshConnection, slug: string): Promise<Array<{
+    name: string;
+    image: string;
+    state: string;
+    status: string;
+    ports: string;
+    createdAt: string;
+  }>> {
+    // Filtre par nom prefixe `tenant-<slug>-`. `--no-trunc` pour avoir l'ID
+    // complet + format JSON ligne par ligne pour parse robuste.
+    const r = await this.ssh.exec(
+      creds,
+      `docker ps -a --filter "name=tenant-${slug}-" --format '{{json .}}'`,
+    );
+    if (r.code !== 0) return [];
+    const lines = (r.stdout || '').split('\n').filter((l) => l.trim());
+    return lines.map((l) => {
+      try {
+        const j = JSON.parse(l) as {
+          Names?: string;
+          Image?: string;
+          State?: string;
+          Status?: string;
+          Ports?: string;
+          CreatedAt?: string;
+        };
+        return {
+          name: j.Names ?? '',
+          image: j.Image ?? '',
+          state: j.State ?? 'unknown',
+          status: j.Status ?? '',
+          ports: j.Ports ?? '',
+          createdAt: j.CreatedAt ?? '',
+        };
+      } catch {
+        return { name: '', image: '', state: 'unknown', status: '', ports: '', createdAt: '' };
+      }
+    }).filter((c) => c.name);
+  }
+
+  /** docker logs <name> --tail N --timestamps. */
+  async logs(
+    creds: SshConnection,
+    name: string,
+    tail = 200,
+  ): Promise<{ stdout: string; stderr: string; code: number }> {
+    // 2>&1 pour combiner stderr+stdout (docker logs sort par defaut sur les 2)
+    return this.ssh.exec(creds, `docker logs --tail ${tail} --timestamps ${name} 2>&1`);
+  }
+
+  /**
+   * Exec one-shot dans un container : `docker exec <name> sh -c "<cmd>"`.
+   * Pour interactif (TTY), il faudrait un WebSocket -- pas implemente ici.
+   */
+  async execShell(
+    creds: SshConnection,
+    name: string,
+    cmd: string,
+  ): Promise<{ stdout: string; stderr: string; code: number }> {
+    // Escape simple : interdit le " seul, on quote en single. L'admin doit
+    // pas mettre de single quote dans son cmd (rare). Timeout 30s.
+    const safe = cmd.replace(/'/g, "'\\''");
+    return this.ssh.exec(creds, `timeout 30 docker exec ${name} sh -c '${safe}' 2>&1`);
+  }
+
   async stop(creds: SshConnection, name: string): Promise<void> {
     await this.ssh.exec(creds, `docker stop ${name} || true`);
   }

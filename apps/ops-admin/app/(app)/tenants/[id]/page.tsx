@@ -278,6 +278,10 @@ export default function TenantDetailPage({
         <OwnerCredentials tenantId={t.id} ownerEmail={t.ownerEmail} />
       </Section>
 
+      <Section title="Containers (stack tenant)">
+        <TenantContainers tenantId={t.id} />
+      </Section>
+
       <Section title="Messagerie (Resend)">
         <TenantMail tenantId={t.id} />
       </Section>
@@ -603,6 +607,239 @@ function OwnerCredentials({ tenantId, ownerEmail }: { tenantId: string; ownerEma
             {(reset.error as Error | undefined)?.message ?? 'Echec'}
           </p>
         )}
+      </div>
+    </div>
+  );
+}
+
+interface ContainerInfo {
+  name: string;
+  image: string;
+  state: string;
+  status: string;
+  ports: string;
+  createdAt: string;
+}
+
+/**
+ * Section containers du stack tenant : liste + boutons Logs / Terminal par
+ * container. Logs = modal pre-rempli (200 dernieres lignes, refresh + copy).
+ * Terminal = exec one-shot (input cmd + output). Pas de TTY interactif --
+ * pour debug rapide uniquement, sinon `docker exec -it` SSH direct.
+ */
+function TenantContainers({ tenantId }: { tenantId: string }) {
+  const list = useQuery<ContainerInfo[]>({
+    queryKey: ['tenant', tenantId, 'containers'],
+    queryFn: async () =>
+      (await api.get(`/tenants/${tenantId}/containers`)).data?.data ?? [],
+    refetchInterval: 5000,
+  });
+  const [logsTarget, setLogsTarget] = useState<string | null>(null);
+  const [execTarget, setExecTarget] = useState<string | null>(null);
+
+  return (
+    <div className="space-y-3">
+      {list.isLoading && <p className="text-xs text-gray-400">Chargement...</p>}
+      {!list.isLoading && (list.data ?? []).length === 0 && (
+        <p className="text-xs text-gray-400">
+          Aucun container actif pour ce tenant. Le stack est peut-etre archive
+          ou pas encore provisionne.
+        </p>
+      )}
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead className="text-[10px] uppercase text-gray-500">
+            <tr>
+              <th className="px-2 py-1 text-left font-normal">Container</th>
+              <th className="px-2 py-1 text-left font-normal">Etat</th>
+              <th className="px-2 py-1 text-left font-normal">Status</th>
+              <th className="px-2 py-1 text-left font-normal">Image</th>
+              <th className="px-2 py-1 text-right font-normal">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(list.data ?? []).map((c) => (
+              <tr key={c.name} className="border-t">
+                <td className="px-2 py-1.5 font-mono">{c.name}</td>
+                <td className="px-2 py-1.5">
+                  <span
+                    className={
+                      'rounded px-1.5 py-0.5 text-[10px] ' +
+                      (c.state === 'running'
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : c.state === 'exited'
+                        ? 'bg-red-100 text-red-700'
+                        : 'bg-gray-100 text-gray-600')
+                    }
+                  >
+                    {c.state}
+                  </span>
+                </td>
+                <td className="px-2 py-1.5 text-gray-600">{c.status}</td>
+                <td className="px-2 py-1.5 truncate font-mono text-[10px] text-gray-500">{c.image}</td>
+                <td className="px-2 py-1.5 text-right">
+                  <button
+                    type="button"
+                    onClick={() => setLogsTarget(c.name)}
+                    className="mr-1 rounded border px-2 py-0.5 text-[11px] hover:bg-gray-50"
+                  >
+                    Logs
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setExecTarget(c.name)}
+                    className="rounded border px-2 py-0.5 text-[11px] hover:bg-gray-50"
+                  >
+                    Terminal
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {logsTarget && (
+        <ContainerLogsModal
+          tenantId={tenantId}
+          name={logsTarget}
+          onClose={() => setLogsTarget(null)}
+        />
+      )}
+      {execTarget && (
+        <ContainerExecModal
+          tenantId={tenantId}
+          name={execTarget}
+          onClose={() => setExecTarget(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function ContainerLogsModal({
+  tenantId,
+  name,
+  onClose,
+}: {
+  tenantId: string;
+  name: string;
+  onClose: () => void;
+}) {
+  const [tail, setTail] = useState(200);
+  const { data, isFetching, refetch } = useQuery<{ logs: string; code: number }>({
+    queryKey: ['tenant', tenantId, 'container-logs', name, tail],
+    queryFn: async () =>
+      (await api.get(`/tenants/${tenantId}/containers/${name}/logs`, { params: { tail } })).data
+        ?.data,
+    refetchInterval: 3000,
+  });
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(data?.logs ?? ''); } catch {/* */}
+  };
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="flex h-[80vh] w-full max-w-4xl flex-col rounded-lg bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b px-4 py-2">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold">Logs : <span className="font-mono">{name}</span></h3>
+            <select
+              value={tail}
+              onChange={(e) => setTail(Number(e.target.value))}
+              className="rounded border px-1.5 py-0.5 text-xs"
+            >
+              <option value={50}>50</option>
+              <option value={200}>200</option>
+              <option value={500}>500</option>
+              <option value={2000}>2000</option>
+            </select>
+            {isFetching && <span className="text-[10px] text-gray-400">refresh...</span>}
+          </div>
+          <div className="flex gap-1">
+            <button type="button" onClick={() => refetch()} className="rounded border px-2 py-1 text-[11px] hover:bg-gray-50">Refresh</button>
+            <button type="button" onClick={copy} className="rounded border px-2 py-1 text-[11px] hover:bg-gray-50">Copier</button>
+            <button type="button" onClick={onClose} className="rounded border px-2 py-1 text-[11px] hover:bg-gray-50">Fermer</button>
+          </div>
+        </div>
+        <pre className="flex-1 overflow-auto bg-gray-900 p-4 text-[11px] leading-relaxed text-gray-100">
+{data?.logs || '(vide)'}
+        </pre>
+      </div>
+    </div>
+  );
+}
+
+function ContainerExecModal({
+  tenantId,
+  name,
+  onClose,
+}: {
+  tenantId: string;
+  name: string;
+  onClose: () => void;
+}) {
+  const [cmd, setCmd] = useState('');
+  const [history, setHistory] = useState<Array<{ cmd: string; output: string; code: number }>>([]);
+  const exec = useMutation({
+    mutationFn: async (c: string) =>
+      (await api.post(`/tenants/${tenantId}/containers/${name}/exec`, { cmd: c })).data?.data as {
+        output: string;
+        code: number;
+      },
+    onSuccess: (data, variables) => {
+      setHistory((h) => [...h, { cmd: variables, output: data.output, code: data.code }]);
+      setCmd('');
+    },
+  });
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (cmd.trim()) exec.mutate(cmd.trim());
+  };
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="flex h-[80vh] w-full max-w-4xl flex-col rounded-lg bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b px-4 py-2">
+          <h3 className="text-sm font-semibold">
+            Terminal (exec one-shot) : <span className="font-mono">{name}</span>
+          </h3>
+          <button type="button" onClick={onClose} className="rounded border px-2 py-1 text-[11px] hover:bg-gray-50">
+            Fermer
+          </button>
+        </div>
+        <div className="flex-1 overflow-auto bg-gray-900 p-4 font-mono text-[12px] text-gray-100">
+          {history.length === 0 && (
+            <p className="text-[11px] text-gray-500">
+              Pas d&apos;historique. Lance une commande ci-dessous. Pas de TTY
+              interactif (timeout 30s par commande). Ex : <code>ls -la /app</code>,
+              <code>printenv | head</code>, <code>cat /etc/hosts</code>.
+            </p>
+          )}
+          {history.map((h, i) => (
+            <div key={i} className="mb-3">
+              <div className="text-emerald-400">$ {h.cmd}</div>
+              <pre className="whitespace-pre-wrap text-gray-200">{h.output}</pre>
+              <div className="text-[10px] text-gray-500">exit code : {h.code}</div>
+            </div>
+          ))}
+        </div>
+        <form onSubmit={submit} className="flex gap-2 border-t bg-gray-50 p-3">
+          <span className="font-mono text-sm text-gray-500">$</span>
+          <input
+            type="text"
+            value={cmd}
+            onChange={(e) => setCmd(e.target.value)}
+            placeholder="ls -la /app"
+            className="flex-1 rounded border bg-white px-2 py-1.5 font-mono text-xs"
+            autoFocus
+          />
+          <button
+            type="submit"
+            disabled={!cmd.trim() || exec.isPending}
+            className="rounded bg-primary-700 px-3 py-1.5 text-xs text-white hover:bg-primary-900 disabled:opacity-50"
+          >
+            {exec.isPending ? '...' : 'Run'}
+          </button>
+        </form>
       </div>
     </div>
   );
