@@ -502,6 +502,42 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
         </AppCard>
       </div>
 
+      {/* Liens M:N : conteneurs parents (acheminement) / acheminements (parent) */}
+      {container.isForwarding && Array.isArray(container.forwardingParents) && container.forwardingParents.length > 0 && (
+        <AppCard>
+          <AppCardHeader title="Conteneurs parents" description="Conteneurs sources dont des colis ont ete regroupes dans cet acheminement" />
+          <ul className="mt-2 space-y-1.5">
+            {container.forwardingParents.map((fp: any) => (
+              <li key={fp.id} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm">
+                <Link href={`/containers/${fp.parent.id}`} className="flex items-center gap-2 text-primary-700 hover:underline">
+                  <Link2 className="h-3.5 w-3.5" />
+                  <span className="font-mono text-xs">{fp.parent.designation}</span>
+                  <span className="text-[11px] text-gray-500">{fp.parent.type} - {fp.parent.status}</span>
+                </Link>
+                <span className="text-xs text-gray-500">{fp.parcelCount} colis</span>
+              </li>
+            ))}
+          </ul>
+        </AppCard>
+      )}
+      {!container.isForwarding && Array.isArray(container.forwardingChildren) && container.forwardingChildren.length > 0 && (
+        <AppCard>
+          <AppCardHeader title="Acheminements lies" description="Conteneurs d'acheminement qui contiennent des colis issus de ce conteneur" />
+          <ul className="mt-2 space-y-1.5">
+            {container.forwardingChildren.map((fp: any) => (
+              <li key={fp.id} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm">
+                <Link href={`/containers/${fp.forwarding.id}`} className="flex items-center gap-2 text-primary-700 hover:underline">
+                  <Link2 className="h-3.5 w-3.5" />
+                  <span className="font-mono text-xs">{fp.forwarding.designation}</span>
+                  <span className="text-[11px] text-gray-500">{fp.forwarding.type} - {fp.forwarding.status}</span>
+                </Link>
+                <span className="text-xs text-gray-500">{fp.parcelCount} colis</span>
+              </li>
+            ))}
+          </ul>
+        </AppCard>
+      )}
+
       <AppCard>
         <AppCardHeader
           title="Bordereaux"
