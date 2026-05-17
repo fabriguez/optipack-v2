@@ -82,6 +82,29 @@ export default function NewVpsPage() {
           via SSH a la creation (<code>nproc</code>, <code>/proc/meminfo</code>,
           <code>df</code>). Aucune saisie manuelle requise.
         </div>
+        <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 space-y-1">
+          <p className="font-semibold">VPS self (meme machine que l&apos;orchestrator)</p>
+          <p>
+            Host : <code>127.0.0.1</code>. Pre-requis sur la machine host :
+          </p>
+          <ul className="ml-4 list-disc space-y-0.5">
+            <li>
+              <code>sshd</code> actif sur le port choisi (<code>systemctl status ssh</code>)
+            </li>
+            <li>
+              User dedie (ex: <code>optipack</code>) avec acces SSH par cle (la pub correspondant a
+              la cle privee saisie ici doit etre dans <code>~/.ssh/authorized_keys</code>)
+            </li>
+            <li>
+              Sudo <strong>NOPASSWD</strong> pour ce user :<br/>
+              <code className="text-[10px]">echo &quot;optipack ALL=(ALL) NOPASSWD: ALL&quot; | sudo tee /etc/sudoers.d/optipack</code>
+            </li>
+            <li>
+              Docker + Caddy installes (sinon utiliser <code>POST /vps/:id/bootstrap</code> apres
+              creation)
+            </li>
+          </ul>
+        </div>
         {serverErr && <p className="text-sm text-red-600">{serverErr}</p>}
         <div className="flex justify-end gap-2">
           <button

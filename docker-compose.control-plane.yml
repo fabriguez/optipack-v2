@@ -57,19 +57,10 @@ services:
     # host.docker.internal mappe a la gateway grace a host-gateway.
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    # Mount du socket docker host : indispensable pour le provisioning des
-    # tenants sur le VPS "self" (host=127.0.0.1). Sans ca, la CLI docker
-    # dans le container orchestrator ne sait pas a quel daemon parler ->
-    # ENOENT au premier `docker login ghcr.io`. Le socket n'est pas
-    # necessaire pour les VPS distants (SSH s'en charge).
-    #
-    # Bind mount du repertoire de travail : les fichiers `compose.yml` /
-    # `tenant-X.env` / `seed.js` ecrits par l'orchestrator dans son container
-    # doivent etre visibles par le docker daemon HOST (pour `docker cp` +
-    # `docker compose -f`). Solution : meme path des deux cotes.
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ${OPS_VPS_WORK_DIR:-/var/lib/optipack/tenants}:${OPS_VPS_WORK_DIR:-/var/lib/optipack/tenants}
+    # Pas de mount socket docker ni de bind /host-ssh : le provisioning self
+    # passe par SSH normal (loopback). L'admin enregistre le VPS self avec
+    # une cle privee SSH dont la pub est dans ~/.ssh/authorized_keys du user
+    # host. Le user host doit avoir sudo NOPASSWD pour les commandes docker.
     environment:
       NODE_ENV: production
       OPS_PORT: 4020
@@ -85,9 +76,6 @@ services:
       OPS_SELF_VPS_NAME: ${OPS_SELF_VPS_NAME:-self}
       OPS_BASE_DOMAIN: ${OPS_BASE_DOMAIN:-transitsoftservices.com}
       OPS_CADDY_EMAIL: ${OPS_CADDY_EMAIL:-admin@transitsoftservices.com}
-      # Dir partage host<->orchestrator pour les fichiers compose/env/seed
-      # des tenants. Doit matcher le bind mount ci-dessus.
-      OPS_VPS_WORK_DIR: ${OPS_VPS_WORK_DIR:-/var/lib/optipack/tenants}
     ports:
       - "127.0.0.1:4020:4020"
     networks:

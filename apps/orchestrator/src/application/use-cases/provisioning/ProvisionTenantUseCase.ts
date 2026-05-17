@@ -61,20 +61,35 @@ export class ProvisionTenantUseCase {
 
     await log(`[provision] start tenant=${tenant.slug} vps=${tenant.vps.host}`);
 
-    // Garantit l'existence du dir de travail (compose/env/seed). Idempotent.
-    // Sur self, ce dir DOIT etre un bind-mount commun host<->container
-    // (voir OPS_VPS_WORK_DIR + docker-compose.control-plane.yml).
-    await this.ssh.exec(
-      { host: tenant.vps.host, port: tenant.vps.port, username: tenant.vps.username, sshKeyEncrypted: tenant.vps.sshKeyEncrypted },
-      `mkdir -p ${config.vpsWorkDir}`,
-    ).catch(() => {/* noop, best-effort */});
-
     const creds: SshConnection = {
       host: tenant.vps.host,
       port: tenant.vps.port,
       username: tenant.vps.username,
       sshKeyEncrypted: tenant.vps.sshKeyEncrypted,
     };
+
+    // 0.bis. Pre-flight SSH : on teste la connexion AVANT d'allouer ports,
+    // pull images, etc. Si le VPS n'est pas joignable (cle absente,
+    // placeholder, sshd down), on stoppe net avec un message actionnable.
+    // Specifique self : on suggere l'action /vps/:id/setup-self-ssh.
+    await log(`[provision] preflight SSH ${tenant.vps.username}@${tenant.vps.host}:${tenant.vps.port}`);
+    const sshTest = await this.ssh.testConnection(creds);
+    if (!sshTest.ok) {
+      const isSelf =
+        tenant.vps.host === '127.0.0.1' ||
+        tenant.vps.host === 'localhost' ||
+        tenant.vps.host === '::1';
+      const hint = isSelf
+        ? `Self : configure d'abord SSH via POST /ops/vps/${tenant.vps.id}/setup-self-ssh (ou bouton "Configurer SSH" dans l'UI VPS).`
+        : `Distant : verifie la cle SSH (PATCH /ops/vps/${tenant.vps.id} -> sshPrivateKey) et que sshd accepte ${tenant.vps.username}.`;
+      throw new BusinessError(
+        `Pre-flight SSH echoue (${tenant.vps.host}) : ${sshTest.message ?? 'inconnu'}. ${hint}`,
+      );
+    }
+    await log(`[provision] preflight SSH OK`);
+
+    // Garantit l'existence du dir de travail (compose/env/seed). Idempotent.
+    await this.ssh.exec(creds, `mkdir -p ${config.vpsWorkDir}`).catch(() => {/* noop */});
 
     // 0. Verification capacite du VPS (Phase 4)
     const limits = await this.capacity.getTenantLimits(tenantId);

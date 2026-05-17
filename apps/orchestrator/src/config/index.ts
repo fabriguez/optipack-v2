@@ -31,11 +31,9 @@ export const config = {
   // OPS_TENANT_ENV_DIR vers un repertoire utilisateur persistant.
   tenantEnvDir: process.env.OPS_TENANT_ENV_DIR ?? '~/.optipack',
   // Dir de travail pour les fichiers compose.yml + seed.js + JSON par
-  // tenant. Sur VPS distant : /tmp suffit (ecrit via SSH host = visible
-  // par docker host). Sur self avec orchestrator en container : DOIT etre
-  // un path bind-mount commun (cf. compose.control-plane :
-  // /var/lib/optipack/tenants -> /var/lib/optipack/tenants) sinon
-  // `docker cp` echoue car le daemon host lit src depuis SON filesystem.
+  // tenant, sur le filesystem du VPS (host). Tous les VPS (distants ET
+  // self) utilisent SSH pour ecrire ici -> meme path partout. Override
+  // possible via OPS_VPS_WORK_DIR.
   vpsWorkDir: process.env.OPS_VPS_WORK_DIR ?? '/tmp',
   // Resend (envoi transactionnel multi-tenant, 1 domaine par tenant)
   resend: {

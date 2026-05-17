@@ -55,14 +55,14 @@ COPY --from=builder /app/apps/orchestrator/package.json ./apps/orchestrator/pack
 COPY --from=builder /app/packages ./packages
 
 # Outils runtime :
-#  - openssh-client : push Caddy via SSH sur VPS distants
+#  - openssh-client : commandes provisioning (docker, compose, caddy, ...)
+#    sur TOUS les VPS via SSH (y compris self en loopback ssh).
 #  - postgresql-client : pg_isready / pg_dump (BDD orchestrator)
-#  - docker-cli + docker-cli-compose : provisioning sur le VPS "self" (host
-#    127.0.0.1). Le container orchestrator parle au docker daemon de l'host
-#    via le socket monte (-v /var/run/docker.sock:/var/run/docker.sock).
-#    Sans la CLI -> ENOENT au premier `docker login ghcr.io`.
 #  - curl : healthchecks tenant API + Caddy admin /load fallback
-RUN apk add --no-cache openssh-client postgresql-client docker-cli docker-cli-compose curl
+#
+# Pas besoin de docker-cli ici : c'est le VPS distant (ou self via sshd)
+# qui execute les commandes docker.
+RUN apk add --no-cache openssh-client postgresql-client curl
 
 # Install Prisma CLI + tsx globally so the entrypoint can run `prisma migrate
 # deploy` et le seed (devDeps prunes, et pnpm symlinks vers .pnpm fragiles

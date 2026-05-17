@@ -1,21 +1,6 @@
 import { injectable } from 'tsyringe';
 import { NodeSSH } from 'node-ssh';
-import { exec as nodeExec } from 'node:child_process';
-import { promisify } from 'node:util';
 import { SshKeyEncryption } from '../crypto/SshKeyEncryption';
-
-const execAsync = promisify(nodeExec);
-
-/**
- * Detecte le VPS "self" (meme machine que l'orchestrator). Sur ces hosts,
- * pas de SSH possible (la cle stockee est un placeholder) -- on bascule
- * sur execution locale via child_process. Necessite que le container
- * orchestrator ait acces au docker socket (`/var/run/docker.sock` mount)
- * pour que les commandes docker dans les scripts marchent.
- */
-function isSelfHost(host: string): boolean {
-  return host === '127.0.0.1' || host === 'localhost' || host === '::1';
-}
 
 export interface SshConnection {
   host: string;
@@ -69,15 +54,6 @@ export class SSHService {
    * Utilise par l'endpoint `/ops/vps/:id/test-connection`.
    */
   async testConnection(creds: SshConnection): Promise<{ ok: boolean; message?: string }> {
-    if (isSelfHost(creds.host)) {
-      // Self : on tente une commande locale ; pas de SSH a tester.
-      try {
-        await execAsync('echo ok');
-        return { ok: true };
-      } catch (e: unknown) {
-        return { ok: false, message: e instanceof Error ? e.message : String(e) };
-      }
-    }
     let ssh: NodeSSH | null = null;
     try {
       ssh = await this.connect(creds);
@@ -95,16 +71,12 @@ export class SSHService {
   }
 
   /**
-   * Execute une commande shell distante. Releve une erreur si code != 0.
-   * Pour le VPS self (127.0.0.1/localhost), bascule sur execution locale
-   * via child_process (la cle SSH stockee est un placeholder, pas de SSH
-   * possible). Requiert que l'orchestrator container ait /var/run/docker.sock
-   * monte pour que les commandes docker fonctionnent.
+   * Execute une commande shell distante via SSH. Releve une erreur si
+   * code != 0. Le VPS self (127.0.0.1) doit avoir un sshd qui ecoute en
+   * loopback + une cle authorized_keys correspondant a celle stockee.
+   * Voir doc VPS / formulaire Add VPS pour les pre-requis self.
    */
   async exec(creds: SshConnection, command: string): Promise<SshExecResult> {
-    if (isSelfHost(creds.host)) {
-      return this.localExec(command);
-    }
     const ssh = await this.connect(creds);
     try {
       const r = await ssh.execCommand(command);
@@ -112,23 +84,6 @@ export class SSHService {
     } finally {
       ssh.dispose();
     }
-  }
-
-  /**
-   * Execute une commande shell sur la machine locale. Utilise pour le VPS
-   * self. On utilise bash -c pour supporter heredocs / pipes / && comme
-   * `ssh.execCommand`. La sortie stderr et stdout sont separees.
-   */
-  private async localExec(command: string): Promise<SshExecResult> {
-    return new Promise((resolve) => {
-      nodeExec(command, { shell: '/bin/bash', maxBuffer: 50 * 1024 * 1024 }, (err, stdout, stderr) => {
-        resolve({
-          stdout: stdout?.toString() ?? '',
-          stderr: stderr?.toString() ?? '',
-          code: err ? (err as NodeJS.ErrnoException & { code?: number }).code ?? 1 : 0,
-        });
-      });
-    });
   }
 
   /**
@@ -142,19 +97,6 @@ export class SSHService {
    * Disque : df / .
    */
   async getUsage(creds: SshConnection): Promise<VpsUsage> {
-    if (isSelfHost(creds.host)) {
-      // Self : on lance les memes scripts mais en local.
-      const [cpu, mem, disk] = await Promise.all([
-        this.localExec('a=$(grep "^cpu " /proc/stat); sleep 1; b=$(grep "^cpu " /proc/stat); echo "$a"; echo "$b"'),
-        this.localExec("awk '/MemTotal:/ {t=$2} /MemAvailable:/ {a=$2} END {if (t>0) print (1 - a/t) * 100; else print 0}' /proc/meminfo"),
-        this.localExec("df / | tail -1 | awk '{print $5}' | tr -d '%'"),
-      ]);
-      return {
-        cpuUsagePct: this.parseCpuDelta(cpu.stdout),
-        ramUsagePct: this.parsePct(mem.stdout),
-        diskUsagePct: this.parsePct(disk.stdout),
-      };
-    }
     const ssh = await this.connect(creds);
     try {
       // Mesure CPU via delta /proc/stat sur 1s.
@@ -213,25 +155,6 @@ export class SSHService {
    * de les saisir manuellement.
    */
   async getSpecs(creds: SshConnection): Promise<VpsSpecs> {
-    if (isSelfHost(creds.host)) {
-      const [cpu, ramKb, diskKb, kernel, os] = await Promise.all([
-        this.localExec('nproc'),
-        this.localExec("grep MemTotal /proc/meminfo | awk '{print $2}'"),
-        this.localExec("df -k / | tail -1 | awk '{print $2}'"),
-        this.localExec('uname -r'),
-        this.localExec("sh -c '. /etc/os-release 2>/dev/null && printf %s \"$PRETTY_NAME\" || uname -s'"),
-      ]);
-      const totalCpu = parseInt(cpu.stdout.trim(), 10);
-      const ramKbN = parseInt(ramKb.stdout.trim(), 10);
-      const diskKbN = parseInt(diskKb.stdout.trim(), 10);
-      return {
-        totalCpu: Number.isFinite(totalCpu) ? totalCpu : 0,
-        totalRamMb: Number.isFinite(ramKbN) ? Math.round(ramKbN / 1024) : 0,
-        totalDiskGb: Number.isFinite(diskKbN) ? Math.round(diskKbN / 1024 / 1024) : 0,
-        kernel: kernel.stdout.trim() || undefined,
-        os: os.stdout.trim() || undefined,
-      };
-    }
     const ssh = await this.connect(creds);
     try {
       const [cpu, ramKb, diskKb, kernel, os] = await Promise.all([
