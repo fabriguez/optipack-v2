@@ -94,8 +94,16 @@ export default function VpsDetailPage({
     mutationFn: async () => (await api.post(`/vps/${id}/test-connection`)).data?.data,
   });
   const updateVps = useMutation({
-    mutationFn: async (patch: Partial<{ portRangeStart: number; portRangeEnd: number }>) =>
-      (await api.patch(`/vps/${id}`, patch)).data?.data,
+    mutationFn: async (
+      patch: Partial<{
+        portRangeStart: number;
+        portRangeEnd: number;
+        host: string;
+        port: number;
+        username: string;
+        sshPrivateKey: string;
+      }>,
+    ) => (await api.patch(`/vps/${id}`, patch)).data?.data,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['vps', id] });
     },
@@ -255,6 +263,7 @@ export default function VpsDetailPage({
         )}
       </section>
 
+      {v && <SshConnectionSection vps={v} loading={updateVps.isPending} onSave={(p) => updateVps.mutate(p)} />}
       {v && <PortRangeSection vps={v} loading={updateVps.isPending} onSave={(p) => updateVps.mutate(p)} />}
 
       <section className="rounded-lg border bg-white shadow-sm">
@@ -450,6 +459,126 @@ function PortRangeSection({
         Astuce : reduire la plage n&apos;impacte pas les tenants deja deployes (leurs ports sont
         persistes en BDD). Les futurs provisionings utiliseront la nouvelle plage.
       </p>
+    </section>
+  );
+}
+
+/**
+ * Edit la connexion SSH du VPS : host, port, username, cle privee. Le backend
+ * valide la nouvelle combinaison via testConnection avant de persister ->
+ * impossible de casser un VPS fonctionnel par erreur.
+ *
+ * Use case typique : VPS self pre-seede avec un placeholder. L'admin colle
+ * ici la vraie cle privee correspondant a une cle pub deja installee dans
+ * authorized_keys du user host.
+ */
+function SshConnectionSection({
+  vps,
+  loading,
+  onSave,
+}: {
+  vps: { host: string; port: number; username: string };
+  loading: boolean;
+  onSave: (patch: { host?: string; port?: number; username?: string; sshPrivateKey?: string }) => void;
+}) {
+  const [host, setHost] = useState<string>(vps.host);
+  const [port, setPort] = useState<number>(vps.port);
+  const [username, setUsername] = useState<string>(vps.username);
+  const [sshPrivateKey, setSshPrivateKey] = useState<string>('');
+
+  const isSelf = vps.host === '127.0.0.1' || vps.host === 'localhost';
+  const dirty =
+    host !== vps.host || port !== vps.port || username !== vps.username || sshPrivateKey.trim().length > 0;
+  const canSave = dirty && !loading;
+
+  const submit = () => {
+    const patch: { host?: string; port?: number; username?: string; sshPrivateKey?: string } = {};
+    if (host !== vps.host) patch.host = host;
+    if (port !== vps.port) patch.port = port;
+    if (username !== vps.username) patch.username = username;
+    if (sshPrivateKey.trim().length >= 20) patch.sshPrivateKey = sshPrivateKey;
+    onSave(patch);
+    setSshPrivateKey('');
+  };
+
+  return (
+    <section className="rounded-lg border bg-white p-4 shadow-sm">
+      <div className="mb-3">
+        <h2 className="text-sm font-semibold">Connexion SSH</h2>
+        <p className="text-xs text-gray-500">
+          Editez host / port / user / cle. Le backend teste la connexion avant de persister --
+          aucun risque de casser un VPS fonctionnel.
+        </p>
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <label className="block text-xs">
+          <span className="mb-1 block font-medium text-gray-700">Host</span>
+          <input
+            type="text"
+            value={host}
+            onChange={(e) => setHost(e.target.value)}
+            className="w-full rounded-md border bg-white px-3 py-1.5 text-sm font-mono"
+            placeholder="10.0.0.1 ou 127.0.0.1"
+          />
+        </label>
+        <label className="block text-xs">
+          <span className="mb-1 block font-medium text-gray-700">Port</span>
+          <input
+            type="number"
+            min={1}
+            max={65535}
+            value={port}
+            onChange={(e) => setPort(Number(e.target.value) || 22)}
+            className="w-full rounded-md border bg-white px-3 py-1.5 text-sm font-mono"
+          />
+        </label>
+        <label className="block text-xs">
+          <span className="mb-1 block font-medium text-gray-700">Username</span>
+          <input
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            className="w-full rounded-md border bg-white px-3 py-1.5 text-sm font-mono"
+          />
+        </label>
+      </div>
+      <div className="mt-3">
+        <label className="block text-xs">
+          <span className="mb-1 block font-medium text-gray-700">
+            Nouvelle cle SSH privee (laisser vide pour garder l&apos;actuelle)
+          </span>
+          <textarea
+            rows={5}
+            value={sshPrivateKey}
+            onChange={(e) => setSshPrivateKey(e.target.value)}
+            placeholder={'-----BEGIN OPENSSH PRIVATE KEY-----\n... (format PEM, min 20 chars)\n-----END OPENSSH PRIVATE KEY-----'}
+            className="w-full rounded-md border bg-white px-3 py-1.5 font-mono text-[11px]"
+          />
+        </label>
+      </div>
+      {isSelf && (
+        <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-900">
+          <p className="font-semibold">VPS self -- pre-requis sur l&apos;host</p>
+          <ul className="ml-4 mt-1 list-disc space-y-0.5">
+            <li><code>sshd</code> actif sur le port {port}</li>
+            <li>
+              User <code>{username}</code> existe + sa pub dans
+              <code className="ml-1">~/.ssh/authorized_keys</code>
+            </li>
+            <li>Sudo <strong>NOPASSWD</strong> pour <code>{username}</code></li>
+          </ul>
+        </div>
+      )}
+      <div className="mt-3 flex justify-end">
+        <button
+          type="button"
+          disabled={!canSave}
+          onClick={submit}
+          className="inline-flex items-center gap-1.5 rounded-md bg-primary-700 px-3 py-1.5 text-sm text-white hover:bg-primary-900 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {loading ? 'Test + enregistrement...' : 'Tester + enregistrer'}
+        </button>
+      </div>
     </section>
   );
 }

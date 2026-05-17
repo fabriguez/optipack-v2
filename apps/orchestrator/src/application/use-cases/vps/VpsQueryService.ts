@@ -7,6 +7,11 @@ import { BusinessError, NotFoundError } from '../../../domain/errors/BusinessErr
 
 export const updateVpsSchema = z.object({
   name: z.string().min(2).optional(),
+  // Connexion SSH : editables pour permettre de corriger un user/port mal
+  // saisis a la creation (ex: VPS self pre-seede avec creds placeholder).
+  host: z.string().min(2).optional(),
+  port: z.coerce.number().int().min(1).max(65535).optional(),
+  username: z.string().min(1).optional(),
   // Si fourni, rotate la cle SSH. Le service teste avant de persister.
   sshPrivateKey: z.string().min(20).optional(),
   region: z.string().optional().nullable(),
@@ -179,26 +184,41 @@ export class VpsQueryService {
     const vps = await prisma.vPS.findUnique({ where: { id } });
     if (!vps) throw new NotFoundError('VPS', id);
 
-    // Si rotation de la cle SSH : tester avant de persister
+    // Si modif des params SSH (host/port/username/cle), on teste la nouvelle
+    // combinaison AVANT de persister. Permet de corriger une mauvaise config
+    // sans casser un VPS deja fonctionnel (l'ancienne config reste en place
+    // si le test echoue).
     let sshKeyEncrypted: string | undefined;
-    if (input.sshPrivateKey) {
-      const newEncrypted = SshKeyEncryption.encrypt(input.sshPrivateKey);
+    const sshTouched =
+      input.sshPrivateKey !== undefined ||
+      input.host !== undefined ||
+      input.port !== undefined ||
+      input.username !== undefined;
+    if (sshTouched) {
+      const newEncrypted = input.sshPrivateKey
+        ? SshKeyEncryption.encrypt(input.sshPrivateKey)
+        : vps.sshKeyEncrypted;
       const test = await this.ssh.testConnection({
-        host: vps.host,
-        port: vps.port,
-        username: vps.username,
+        host: input.host ?? vps.host,
+        port: input.port ?? vps.port,
+        username: input.username ?? vps.username,
         sshKeyEncrypted: newEncrypted,
       });
       if (!test.ok) {
-        throw new BusinessError(`Nouvelle cle SSH invalide : ${test.message}`);
+        throw new BusinessError(
+          `Nouvelle config SSH invalide : ${test.message}. Verifie host/port/user/cle (correspond a une cle pub dans authorized_keys du user host ?).`,
+        );
       }
-      sshKeyEncrypted = newEncrypted;
+      if (input.sshPrivateKey) sshKeyEncrypted = newEncrypted;
     }
 
     const updated = await prisma.vPS.update({
       where: { id },
       data: {
         ...(input.name !== undefined && { name: input.name }),
+        ...(input.host !== undefined && { host: input.host }),
+        ...(input.port !== undefined && { port: input.port }),
+        ...(input.username !== undefined && { username: input.username }),
         ...(input.region !== undefined && { region: input.region }),
         ...(input.notes !== undefined && { notes: input.notes }),
         ...(input.totalCpu !== undefined && { totalCpu: input.totalCpu }),

@@ -17,6 +17,10 @@ export type CreateVpsInput = z.infer<typeof createVpsSchema>;
 
 export const updateVpsSchema = z.object({
   name: z.string().min(2).optional(),
+  // Editables pour corriger un VPS mal configure (notamment self pre-seede).
+  host: z.string().min(2).optional(),
+  port: z.coerce.number().int().min(1).max(65535).optional(),
+  username: z.string().min(1).optional(),
   region: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
   sshPrivateKey: z.string().min(20).optional(),
