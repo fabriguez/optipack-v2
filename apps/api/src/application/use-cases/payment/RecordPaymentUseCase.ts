@@ -51,13 +51,11 @@ export class RecordPaymentUseCase {
       );
     }
 
-    // 3. Generate reference
-    const paymentCount = await this.paymentRepo.sumByAgencyAndDate(input.agencyId, new Date());
-    const reference = generateReference('PAY', Math.floor(paymentCount) + 1);
-
-    // 4. Create IMMUTABLE payment (+ optional parcelId scope + attachments)
-    const payment = await this.paymentRepo.create({
-      reference,
+    // 3. Generate reference + create payment (race-safe : retry sur P2002).
+    // countByAgencyAndDate n'est pas atomique : deux requetes concurrentes
+    // peuvent produire la meme reference. On retente jusqu'a 5x en incrementant
+    // le compteur, puis on bascule sur un suffix aleatoire en dernier recours.
+    const baseData = {
       amount: input.amount,
       discount: input.discount ?? 0,
       discountReason: input.discountReason ?? null,
@@ -79,7 +77,26 @@ export class RecordPaymentUseCase {
           })),
         },
       }),
-    });
+    };
+
+    let baseCount = await this.paymentRepo.countByAgencyAndDate(input.agencyId, new Date());
+    let payment: Awaited<ReturnType<typeof this.paymentRepo.create>> | undefined;
+    let reference = '';
+    for (let attempt = 0; attempt < 5; attempt++) {
+      reference = generateReference('PAY', baseCount + 1 + attempt);
+      try {
+        payment = await this.paymentRepo.create({ reference, ...baseData });
+        break;
+      } catch (err: unknown) {
+        const code = (err as { code?: string })?.code;
+        if (code !== 'P2002') throw err;
+        baseCount = await this.paymentRepo.countByAgencyAndDate(input.agencyId, new Date());
+      }
+    }
+    if (!payment) {
+      reference = `${generateReference('PAY', baseCount + 1)}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+      payment = await this.paymentRepo.create({ reference, ...baseData });
+    }
 
     // 5. Update invoice
     const newPaidAmount = Number(invoice.paidAmount) + input.amount;

@@ -119,4 +119,18 @@ export class PrismaPaymentRepository implements IPaymentRepository {
 
     return Number(result._sum.amount || 0);
   }
+
+  async countByAgencyAndDate(agencyId: string, date: Date): Promise<number> {
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    return prisma.payment.count({
+      where: {
+        agencyId,
+        createdAt: { gte: startOfDay, lte: endOfDay },
+      },
+    });
+  }
 }

@@ -18,6 +18,7 @@ export interface IPaymentRepository {
   // PAS de update/delete -- paiement immutable, void seulement
   void(id: string, reason: string, voidedByUserId: string): Promise<Payment>;
   sumByAgencyAndDate(agencyId: string, date: Date): Promise<number>;
+  countByAgencyAndDate(agencyId: string, date: Date): Promise<number>;
 }
 
 export const PAYMENT_REPOSITORY = Symbol.for('IPaymentRepository');
