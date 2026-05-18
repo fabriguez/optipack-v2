@@ -52,7 +52,7 @@ export function TransitRouteFormDialog({ open, onClose, route }: Props) {
   const [arrCountryId, setArrCountryId] = useState<number>(0);
   const [arrStateId, setArrStateId] = useState<number>(0);
 
-  const { register, handleSubmit, reset, setValue, control, formState: { errors } } = useForm<CreateTransitRouteInput>({
+  const { register, handleSubmit, reset, setValue, unregister, control, formState: { errors } } = useForm<CreateTransitRouteInput>({
     // Validation cote client active en creation ET edition : sans elle, on
     // pouvait soumettre une route SEA sans prix au m3 (la regle metier est
     // dans le schema partage).
@@ -60,10 +60,19 @@ export function TransitRouteFormDialog({ open, onClose, route }: Props) {
   });
 
   // Surveille le type pour afficher les bons champs prix (AIR=kg, SEA=m3,
-  // LAND=les deux). Le champ inutilise est mis a 0 a la soumission.
+  // LAND=les deux). Le champ inutilise est mis a null a la soumission.
   const watchedType = useWatch({ control, name: 'type' }) as 'AIR' | 'SEA' | 'LAND' | undefined;
-  const showKg = watchedType === 'AIR' || watchedType === 'LAND' || !watchedType;
+  const showKg = watchedType === 'AIR' || watchedType === 'LAND';
   const showM3 = watchedType === 'SEA' || watchedType === 'LAND';
+
+  // Quand le type change, on nettoie le champ prix non pertinent dans le
+  // state RHF (shouldUnregister=false par defaut conserve les anciennes
+  // valeurs). Sans ca, switcher AIR -> SEA garde pricePerKg dans le payload
+  // et zod refine peut declencher des erreurs cote champ cache.
+  useEffect(() => {
+    if (watchedType === 'SEA') unregister('pricePerKg');
+    if (watchedType === 'AIR') unregister('pricePerVolume');
+  }, [watchedType, unregister]);
 
   useEffect(() => {
     if (open && route) {
