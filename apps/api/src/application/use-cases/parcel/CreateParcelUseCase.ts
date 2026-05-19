@@ -24,19 +24,10 @@ export class CreateParcelUseCase {
   ) {}
 
   async execute(input: CreateParcelInput, userId: string) {
-    // Au moins l'un de masse OU volume doit etre fourni
-    const hasWeight = input.weight !== undefined && input.weight !== null && Number(input.weight) > 0;
-    const hasVolume = input.volume !== undefined && input.volume !== null && Number(input.volume) > 0;
-    if (!hasWeight && !hasVolume) {
-      throw new BusinessError('Le colis doit avoir une masse ou un volume');
-    }
-
     const [client, warehouse, transitRoute, destinationAgency] = await Promise.all([
       this.clientRepo.findById(input.clientId),
       this.warehouseRepo.findById(input.warehouseId),
       this.transitRepo.findById(input.transitRouteId),
-      // L'agence de destination est obligatoire et porte le champ "destination"
-      // (ville) qui etait auparavant saisi a la main.
       prisma.agency.findUnique({
         where: { id: input.destinationAgencyId },
         select: { id: true, name: true, city: true },
@@ -47,6 +38,25 @@ export class CreateParcelUseCase {
     if (!warehouse) throw new NotFoundError('Magasin', input.warehouseId);
     if (!transitRoute) throw new NotFoundError('Route de transit', input.transitRouteId);
     if (!destinationAgency) throw new NotFoundError('Agence de destination', input.destinationAgencyId);
+
+    // Regle stricte par type de transit :
+    //   AIR  -> masse obligatoire, volume force a null
+    //   SEA  -> volume obligatoire, masse forcee a null
+    //   LAND -> les deux obligatoires
+    const wIn = input.weight !== undefined && input.weight !== null && Number(input.weight) > 0;
+    const vIn = input.volume !== undefined && input.volume !== null && Number(input.volume) > 0;
+    let hasWeight = false;
+    let hasVolume = false;
+    if (transitRoute.type === 'AIR') {
+      if (!wIn) throw new BusinessError('Route aerienne : la masse est obligatoire.');
+      hasWeight = true; hasVolume = false;
+    } else if (transitRoute.type === 'SEA') {
+      if (!vIn) throw new BusinessError('Route maritime : le volume est obligatoire.');
+      hasWeight = false; hasVolume = true;
+    } else if (transitRoute.type === 'LAND') {
+      if (!wIn || !vIn) throw new BusinessError('Route terrestre : masse et volume obligatoires.');
+      hasWeight = true; hasVolume = true;
+    }
     // destination = ville de l'agence d'arrivee (compat ascendante avec les
     // anciens consommateurs : PDFs, manifests, routings).
     const derivedDestination = destinationAgency.city;

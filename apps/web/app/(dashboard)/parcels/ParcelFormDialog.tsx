@@ -170,8 +170,27 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
   }, [open, parcel, reset, defaultWarehouse, defaultClient]);
 
   const onSubmit = async (data: CreateParcelInput) => {
+    // Selon le type de route, on force a null/undefined les champs non
+    // pertinents avant envoi. La validation finale est faite cote backend
+    // dans CreateParcelUseCase/UpdateParcelUseCase (qui a acces au type de
+    // route via DB et peut imposer la regle stricte).
     if (mode === 'weight') data.volume = undefined;
     if (mode === 'volume') data.weight = undefined;
+    if (mode === 'weight' && (data.weight == null || Number(data.weight) <= 0)) {
+      toast.error('La masse est obligatoire pour une route aerienne.');
+      return;
+    }
+    if (mode === 'volume' && (data.volume == null || Number(data.volume) <= 0)) {
+      toast.error('Le volume est obligatoire pour une route maritime.');
+      return;
+    }
+    if (mode === 'both' && (
+      data.weight == null || Number(data.weight) <= 0 ||
+      data.volume == null || Number(data.volume) <= 0
+    )) {
+      toast.error('Masse et volume obligatoires pour une route terrestre.');
+      return;
+    }
 
     // 1ere requete : create / update du colis. On recupere son id (pour l'upload).
     let parcelId: string | null = null;
@@ -280,50 +299,35 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
           </div>
 
           <div className="sm:col-span-2">
-            <div className="mb-2 inline-flex rounded-xl border border-gray-200 p-0.5 text-xs">
-              {(['weight', 'volume', 'both'] as Mode[]).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => {
-                    setMode(m);
-                    // Si la route courante n'est plus compatible avec le
-                    // nouveau mode, on la deselectionne pour forcer un
-                    // nouveau choix. AIR incompatible avec volume, SEA
-                    // incompatible avec weight.
-                    const t = selectedRoute?.sublabel;
-                    if (
-                      (m === 'weight' && t === 'SEA') ||
-                      (m === 'volume' && t === 'AIR')
-                    ) {
-                      setSelectedRoute(null);
-                      setValue('transitRouteId', '' as never);
-                    }
-                  }}
-                  className={`rounded-lg px-3 py-1.5 ${mode === m ? 'bg-primary-500 text-white' : 'text-gray-500'}`}
-                >
-                  {m === 'weight' ? 'Par masse' : m === 'volume' ? 'Par volume' : 'Les deux'}
-                </button>
-              ))}
-            </div>
+            <p className="rounded-xl bg-primary-50 px-3 py-2 text-xs text-primary-800">
+              {!selectedRoute
+                ? 'Selectionnez d\'abord une route de transit ci-dessous : le mode (masse, volume ou les deux) en decoule.'
+                : mode === 'weight'
+                  ? 'Route aerienne : masse (kg) obligatoire. Le volume sera ignore.'
+                  : mode === 'volume'
+                    ? 'Route maritime : volume (m3) obligatoire. La masse sera ignoree.'
+                    : 'Route terrestre : masse (kg) ET volume (m3) obligatoires.'}
+            </p>
           </div>
 
           {(mode === 'weight' || mode === 'both') && (
             <AppInput
-              label="Masse (kg)"
+              label={`Masse (kg)${mode === 'weight' || mode === 'both' ? ' *' : ''}`}
               type="number"
               step="0.1"
               {...register('weight', { valueAsNumber: true })}
               error={errors.weight?.message}
+              disabled={!selectedRoute}
             />
           )}
           {(mode === 'volume' || mode === 'both') && (
             <AppInput
-              label="Volume (m3)"
+              label={`Volume (m3)${mode === 'volume' || mode === 'both' ? ' *' : ''}`}
               type="number"
               step="0.01"
               {...register('volume', { valueAsNumber: true })}
               error={errors.volume?.message}
+              disabled={!selectedRoute}
             />
           )}
 

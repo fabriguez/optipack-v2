@@ -40,12 +40,38 @@ export class UpdateParcelUseCase {
       );
     }
 
-    // Validation masse OU volume si les deux sont effaces
+    // Validation stricte selon le type de la route (current ou nouvelle si
+    // l'update la change). AIR -> masse seule, SEA -> volume seul, LAND ->
+    // les deux. On force a null le champ non pertinent pour aligner DB.
+    const routeId = input.transitRouteId ?? parcel.transitRouteId;
+    let routeType: 'AIR' | 'SEA' | 'LAND' | null = null;
+    if (routeId) {
+      const route = await prisma.transitRoute.findUnique({
+        where: { id: routeId },
+        select: { type: true },
+      });
+      routeType = (route?.type ?? null) as typeof routeType;
+    }
+
     const finalWeight = input.weight !== undefined ? input.weight : parcel.weight ? Number(parcel.weight) : null;
     const finalVolume = input.volume !== undefined ? input.volume : parcel.volume ? Number(parcel.volume) : null;
     const hasMass = finalWeight !== null && Number(finalWeight) > 0;
     const hasVol = finalVolume !== null && Number(finalVolume) > 0;
-    if (!hasMass && !hasVol) {
+
+    if (routeType === 'AIR') {
+      if (!hasMass) throw new BusinessError('Route aerienne : la masse est obligatoire.');
+      // Force volume a null
+      if (input.volume !== undefined ? input.volume !== null : parcel.volume !== null) {
+        input.volume = null;
+      }
+    } else if (routeType === 'SEA') {
+      if (!hasVol) throw new BusinessError('Route maritime : le volume est obligatoire.');
+      if (input.weight !== undefined ? input.weight !== null : parcel.weight !== null) {
+        input.weight = null;
+      }
+    } else if (routeType === 'LAND') {
+      if (!hasMass || !hasVol) throw new BusinessError('Route terrestre : masse et volume obligatoires.');
+    } else if (!hasMass && !hasVol) {
       throw new BusinessError('Le colis doit conserver une masse ou un volume');
     }
 
