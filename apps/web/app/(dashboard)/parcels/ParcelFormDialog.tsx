@@ -338,7 +338,7 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
               type="number"
               step="0.1"
               {...register('weight', { valueAsNumber: true })}
-              error={errors.weight?.message}
+              error={(errors.weight as any)?.message}
             />
           )}
           {(mode === 'volume' || mode === 'both') && (
@@ -347,7 +347,7 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
               type="number"
               step="0.01"
               {...register('volume', { valueAsNumber: true })}
-              error={errors.volume?.message}
+              error={(errors.volume as any)?.message}
             />
           )}
 

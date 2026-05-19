@@ -10,13 +10,22 @@ export const ParcelCategoryValues = [
 ] as const;
 export type ParcelCategory = (typeof ParcelCategoryValues)[number];
 
+// Preprocess pour les champs numeriques RHF avec valueAsNumber : un input
+// vide produit NaN qui fait crasher z.number(). On mappe NaN/null/'' vers
+// undefined pour laisser .optional() le tolerer.
+const numNullish = (inner: z.ZodTypeAny) =>
+  z.preprocess(
+    (v) => (v === '' || v === null || v === undefined || (typeof v === 'number' && Number.isNaN(v)) ? undefined : v),
+    inner,
+  );
+
 const baseParcelFields = {
   designation: z.string().min(2, 'La designation doit contenir au moins 2 caracteres'),
   // Tracking interne fournisseur (code colis externe, ex: AliExpress, DHL).
   // Optionnel, pas d'unicite stricte au niveau DB.
   trackingFournisseur: z.string().min(1).optional().or(z.literal('')),
-  weight: z.number().positive('La masse doit etre positive').optional(),
-  volume: z.number().positive('Le volume doit etre positif').optional(),
+  weight: numNullish(z.number().positive('La masse doit etre positive').optional()),
+  volume: numNullish(z.number().positive('Le volume doit etre positif').optional()),
   // Destination structuree :
   // - destinationAgencyId : agence d'arrivee (obligatoire). Le champ "destination"
   //   (ville) est derive automatiquement cote backend depuis agency.city.
@@ -29,7 +38,7 @@ const baseParcelFields = {
   category: z.enum(ParcelCategoryValues).optional().default('STANDARD'),
   isFragile: z.boolean().optional().default(false),
   isHazardous: z.boolean().optional().default(false),
-  declaredValue: z.number().nonnegative().optional().nullable(),
+  declaredValue: numNullish(z.number().nonnegative().optional().nullable()),
   observation: z.string().optional().or(z.literal('')),
   clientId: z.string().uuid('ID client invalide'),
   recipientId: z.string().uuid('ID destinataire invalide').optional(),
@@ -40,7 +49,7 @@ const baseParcelFields = {
 export const createParcelSchema = z
   .object(baseParcelFields)
   .refine(
-    (data) => (data.weight !== undefined && data.weight > 0) || (data.volume !== undefined && data.volume > 0),
+    (data) => (data.weight != null && data.weight > 0) || (data.volume != null && data.volume > 0),
     { message: 'Le colis doit avoir une masse ou un volume', path: ['weight'] },
   );
 
@@ -72,8 +81,8 @@ export const createBatchParcelsSchema = z.object({
 export const updateParcelSchema = z.object({
   designation: z.string().min(2).optional(),
   trackingFournisseur: z.string().nullable().optional(),
-  weight: z.number().positive().nullable().optional(),
-  volume: z.number().positive().nullable().optional(),
+  weight: numNullish(z.number().positive().nullable().optional()),
+  volume: numNullish(z.number().positive().nullable().optional()),
   destinationAgencyId: z.string().uuid().optional(),
   destinationAddress: z.string().optional().nullable(),
   category: z.enum(ParcelCategoryValues).optional(),
