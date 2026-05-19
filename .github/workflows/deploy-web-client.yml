@@ -38,8 +38,9 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT || 22 }}
+          command_timeout: 30m
           script: |
             cd ~/optipack-v2
-            docker compose -f docker-compose.prod.yml build --no-cache web-client
+            docker compose -f docker-compose.prod.yml build web-client
             docker compose -f docker-compose.prod.yml up -d web-client
             docker image prune -f
