@@ -13,6 +13,7 @@ import { errorHandler } from './presentation/middleware/errorHandler';
 import { requestContext } from './presentation/middleware/requestContext';
 import { container } from './container';
 import { MetricsService } from './infrastructure/metrics/MetricsService';
+import { ReconcileCaddyUseCase } from './application/use-cases/caddy/ReconcileCaddyUseCase';
 import { startProvisioningWorkers, stopWorkers } from './infrastructure/queue/workers';
 import { closeQueues } from './infrastructure/queue/queues';
 import { redisConnection } from './infrastructure/queue/connection';
@@ -137,6 +138,25 @@ app.use(errorHandler);
 const server = app.listen(config.port, () => {
   logger.info({ port: config.port, env: config.env }, '[orchestrator] listening');
 });
+
+// Reconciliation Caddy au boot : reconstruit la config sur tous les VPS
+// actifs depuis la BDD. Indempotent. Non bloquant : si echec (ex: VPS
+// injoignable, Caddy admin pas pret), on log + continue. Skip via
+// OPS_DISABLE_BOOT_RECONCILE=1.
+const reconcileDisabled = process.env.OPS_DISABLE_BOOT_RECONCILE === '1';
+if (!reconcileDisabled) {
+  setTimeout(() => {
+    void (async () => {
+      try {
+        const useCase = container.resolve(ReconcileCaddyUseCase);
+        const results = await useCase.execute();
+        logger.info({ vpsCount: results.length, tenants: results.reduce((s, r) => s + r.tenantCount, 0) }, '[orchestrator] caddy boot reconcile done');
+      } catch (err) {
+        logger.warn({ err: (err as Error).message }, '[orchestrator] caddy boot reconcile failed (non-fatal)');
+      }
+    })();
+  }, 3000);
+}
 
 // Phase 2+3 : workers de provisioning + monitoring. OPS_DISABLE_WORKERS=1 pour
 // demarrer l'API seule (utile pour tests / migrations Prisma).
