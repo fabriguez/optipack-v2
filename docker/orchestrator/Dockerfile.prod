@@ -62,7 +62,23 @@ COPY --from=builder /app/packages ./packages
 #
 # Pas besoin de docker-cli ici : c'est le VPS distant (ou self via sshd)
 # qui execute les commandes docker.
-RUN apk add --no-cache openssh-client postgresql-client curl
+# Retry apk + fallback mirror : dl-cdn.alpinelinux.org peut renvoyer des
+# erreurs DNS transitoires sur certains VPS. On retente jusqu'a 5x ; a la
+# 3eme tentative on bascule sur le miroir uk.alpinelinux.org (version
+# detectee depuis /etc/alpine-release pour rester compat avec node:20-alpine
+# quelle que soit la sous-version alpine).
+RUN set -eux; \
+    for attempt in 1 2 3 4 5; do \
+      apk update && \
+      apk add --no-cache openssh-client postgresql-client curl && break || true; \
+      echo "apk attempt $attempt failed, retrying..."; sleep 5; \
+      if [ "$attempt" = "3" ]; then \
+        ALPINE_VERSION=$(cut -d. -f1,2 < /etc/alpine-release); \
+        echo "https://uk.alpinelinux.org/alpine/v${ALPINE_VERSION}/main" > /etc/apk/repositories; \
+        echo "https://uk.alpinelinux.org/alpine/v${ALPINE_VERSION}/community" >> /etc/apk/repositories; \
+      fi; \
+    done; \
+    apk info openssh-client >/dev/null 2>&1 || (echo "apk install failed after retries" && exit 1)
 
 # Install Prisma CLI + tsx globally so the entrypoint can run `prisma migrate
 # deploy` et le seed (devDeps prunes, et pnpm symlinks vers .pnpm fragiles
