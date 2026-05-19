@@ -299,35 +299,55 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
           </div>
 
           <div className="sm:col-span-2">
-            <p className="rounded-xl bg-primary-50 px-3 py-2 text-xs text-primary-800">
-              {!selectedRoute
-                ? 'Selectionnez d\'abord une route de transit ci-dessous : le mode (masse, volume ou les deux) en decoule.'
-                : mode === 'weight'
-                  ? 'Route aerienne : masse (kg) obligatoire. Le volume sera ignore.'
-                  : mode === 'volume'
-                    ? 'Route maritime : volume (m3) obligatoire. La masse sera ignoree.'
-                    : 'Route terrestre : masse (kg) ET volume (m3) obligatoires.'}
-            </p>
+            <div className="mb-2 inline-flex rounded-xl border border-gray-200 p-0.5 text-xs">
+              {(['weight', 'volume', 'both'] as Mode[]).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => {
+                    setMode(m);
+                    // Si la route courante n'est plus compatible avec le
+                    // nouveau mode, on la deselectionne pour forcer un
+                    // nouveau choix. AIR incompatible avec volume, SEA
+                    // incompatible avec weight.
+                    const t = selectedRoute?.sublabel;
+                    if (
+                      (m === 'weight' && t === 'SEA') ||
+                      (m === 'volume' && t === 'AIR')
+                    ) {
+                      setSelectedRoute(null);
+                      setValue('transitRouteId', '' as never);
+                    }
+                  }}
+                  className={`rounded-lg px-3 py-1.5 ${mode === m ? 'bg-primary-500 text-white' : 'text-gray-500'}`}
+                >
+                  {m === 'weight' ? 'Par masse' : m === 'volume' ? 'Par volume' : 'Les deux'}
+                </button>
+              ))}
+            </div>
+            {selectedRoute && (
+              <p className="text-[11px] text-primary-700">
+                Route {selectedRoute.sublabel} : {mode === 'weight' ? 'masse obligatoire' : mode === 'volume' ? 'volume obligatoire' : 'masse + volume obligatoires'}.
+              </p>
+            )}
           </div>
 
           {(mode === 'weight' || mode === 'both') && (
             <AppInput
-              label={`Masse (kg)${mode === 'weight' || mode === 'both' ? ' *' : ''}`}
+              label="Masse (kg) *"
               type="number"
               step="0.1"
               {...register('weight', { valueAsNumber: true })}
               error={errors.weight?.message}
-              disabled={!selectedRoute}
             />
           )}
           {(mode === 'volume' || mode === 'both') && (
             <AppInput
-              label={`Volume (m3)${mode === 'volume' || mode === 'both' ? ' *' : ''}`}
+              label="Volume (m3) *"
               type="number"
               step="0.01"
               {...register('volume', { valueAsNumber: true })}
               error={errors.volume?.message}
-              disabled={!selectedRoute}
             />
           )}
 
