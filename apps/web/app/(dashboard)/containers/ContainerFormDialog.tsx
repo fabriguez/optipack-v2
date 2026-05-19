@@ -40,7 +40,7 @@ export function ContainerFormDialog({ open, onClose }: ContainerFormDialogProps)
     const payload: CreateContainerInput = {
       ...data,
       isForwarding,
-      ...(isForwarding ? {} : { parentContainerId: undefined }),
+      parentContainerId: undefined,
     };
     await createMutation.mutateAsync(payload);
     reset();
@@ -96,40 +96,17 @@ export function ContainerFormDialog({ open, onClose }: ContainerFormDialogProps)
             onCheckedChange={(v) => {
               setIsForwarding(v);
               setValue('isForwarding', v);
-              if (!v) setValue('parentContainerId', undefined);
+              setValue('parentContainerId', undefined);
             }}
           />
         </div>
 
         {isForwarding && (
-          <Controller
-            control={control}
-            name="parentContainerId"
-            render={({ field }) => (
-              <AppSearchSelect
-                label="Conteneur parent"
-                value={field.value || null}
-                onChange={(v) => field.onChange(v ?? undefined)}
-                // Tous les conteneurs (peu importe le statut : EMPTY, LOADING,
-                // IN_TRANSIT, RECEIVED, UNLOADED) peuvent etre parents. On
-                // exclut uniquement les conteneurs d'acheminement (pas de
-                // nesting de forwarding) via isForwarding=false.
-                // searchKey distincte du tag par defaut : sinon collision
-                // de cache React Query avec d'autres consommateurs de
-                // `searchers.containers` (page disbursements, etc.), ce qui
-                // renvoie une liste vide ou incoherente avec le filtre
-                // isForwarding=false souhaite ici. Bug visible : "aucun
-                // conteneur parent" alors qu'il y en a plein cote API.
-                searchKey="searchers.containers.notForwarding"
-                search={(q, limit) =>
-                  searchers.containers(q, limit, { isForwarding: 'false' })
-                }
-                error={errors.parentContainerId?.message}
-                placeholder="Selectionner un conteneur parent"
-                required
-              />
-            )}
-          />
+          <p className="rounded-xl bg-primary-50 px-3 py-2 text-xs text-primary-800">
+            Les conteneurs parents sont detectes automatiquement : a chaque ajout
+            de colis dans ce conteneur, son conteneur d&apos;origine est associe
+            comme parent. Pas de selection manuelle requise.
+          </p>
         )}
 
         <AppInput

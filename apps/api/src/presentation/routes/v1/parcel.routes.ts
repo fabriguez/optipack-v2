@@ -150,6 +150,29 @@ router.get('/:id/history', async (req, res, next) => {
         include: {
           user: { select: { id: true, firstName: true, lastName: true } },
         },
+      }).then(async (rows) => {
+        // Enrichit chaque ligne avec details conteneur + agences (depart /
+        // arrivee) pour permettre rendu graphes (conteneurs + villes) dans
+        // l'UI sans hit DB cote frontend.
+        const containerIds = Array.from(new Set(rows.map((r) => r.containerId).filter(Boolean) as string[]));
+        const containers = containerIds.length > 0
+          ? await prisma.container.findMany({
+              where: { id: { in: containerIds } },
+              select: {
+                id: true,
+                designation: true,
+                type: true,
+                isForwarding: true,
+                departureAgency: { select: { id: true, name: true, city: true, country: true } },
+                arrivalAgency: { select: { id: true, name: true, city: true, country: true } },
+              },
+            })
+          : [];
+        const byId = new Map(containers.map((c) => [c.id, c]));
+        return rows.map((r) => ({
+          ...r,
+          container: r.containerId ? byId.get(r.containerId) ?? null : null,
+        }));
       }),
       prisma.parcel.findUnique({
         where: { id: parcelId },

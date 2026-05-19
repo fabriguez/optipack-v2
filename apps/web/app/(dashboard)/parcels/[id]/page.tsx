@@ -8,6 +8,7 @@ import {
   CreditCard, Edit, History, Warehouse, Route, Printer, ImageIcon, Plus, Trash2,
   Banknote,
 } from 'lucide-react';
+import { ParcelContainersGraph, ParcelCitiesGraph } from './ParcelGraphs';
 import { useQuery } from '@tanstack/react-query';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard, AppCardHeader } from '@/components/ui/AppCard';
@@ -473,6 +474,9 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
   );
 
   const historyTab = (
+    <div className="space-y-4">
+      <ParcelContainersGraph history={history} parcel={parcel} />
+      <ParcelCitiesGraph history={history} parcel={parcel} />
     <AppCard>
       <AppCardHeader title={`Historique (${history.length} evenement${history.length > 1 ? 's' : ''})`} />
       {history.length === 0 ? (
@@ -542,6 +546,7 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
         </div>
       )}
     </AppCard>
+    </div>
   );
 
   return (
