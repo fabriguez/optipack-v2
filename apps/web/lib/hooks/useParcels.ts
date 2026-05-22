@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { parcelsApi } from '@/lib/api/parcels';
 import type { CreateParcelInput, UpdateParcelInput, PaginationInput } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
+import { extractApiError } from '@/lib/api/errorMessage';
 
 export function useParcels(
   params?: Partial<PaginationInput> & {
@@ -79,7 +80,7 @@ export function useCreateParcel() {
       qc.invalidateQueries({ queryKey: ['dashboard'] });
       toast.success('Colis enregistre avec succes');
     },
-    onError: () => toast.error("Erreur lors de l'enregistrement"),
+    onError: (e) => toast.error(extractApiError(e, "Erreur lors de l'enregistrement")),
   });
 }
 
@@ -92,7 +93,7 @@ export function useUpdateParcelStatus() {
       qc.invalidateQueries({ queryKey: ['dashboard'] });
       toast.success('Statut mis a jour');
     },
-    onError: () => toast.error('Erreur lors du changement de statut'),
+    onError: (e) => toast.error(extractApiError(e, 'Erreur lors du changement de statut')),
   });
 }
 
@@ -136,7 +137,7 @@ export function useAddParcelImage(id: string) {
       qc.invalidateQueries({ queryKey: ['parcels', id, 'history'] });
       toast.success('Image ajoutee');
     },
-    onError: () => toast.error("Erreur lors de l'ajout de l'image"),
+    onError: (e) => toast.error(extractApiError(e, "Erreur lors de l'ajout de l'image")),
   });
 }
 
@@ -149,6 +150,6 @@ export function useRemoveParcelImage(id: string) {
       qc.invalidateQueries({ queryKey: ['parcels', id, 'history'] });
       toast.success('Image retiree');
     },
-    onError: () => toast.error('Erreur lors de la suppression'),
+    onError: (e) => toast.error(extractApiError(e, 'Erreur lors de la suppression')),
   });
 }

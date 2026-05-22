@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { chatApi } from '@/lib/api/chat';
 import type { PaginationInput } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
+import { extractApiError } from '@/lib/api/errorMessage';
 
 export function useConversations(params?: Partial<PaginationInput> & { status?: string; clientId?: string }) {
   return useQuery({
@@ -36,7 +37,7 @@ export function useCreateConversation() {
       qc.invalidateQueries({ queryKey: ['chat-conversations'] });
       toast.success('Conversation creee');
     },
-    onError: () => toast.error('Erreur lors de la creation de la conversation'),
+    onError: (e) => toast.error(extractApiError(e, 'Erreur lors de la creation de la conversation')),
   });
 }
 
@@ -49,7 +50,7 @@ export function useCloseConversation() {
       qc.invalidateQueries({ queryKey: ['chat-conversation'] });
       toast.success('Conversation fermee');
     },
-    onError: () => toast.error('Erreur lors de la fermeture'),
+    onError: (e) => toast.error(extractApiError(e, 'Erreur lors de la fermeture')),
   });
 }
 
@@ -62,7 +63,7 @@ export function useSendMessage() {
       qc.invalidateQueries({ queryKey: ['chat-messages', variables.conversationId] });
       qc.invalidateQueries({ queryKey: ['chat-conversations'] });
     },
-    onError: () => toast.error('Erreur lors de l\'envoi du message'),
+    onError: (e) => toast.error(extractApiError(e, 'Erreur lors de l\'envoi du message')),
   });
 }
 

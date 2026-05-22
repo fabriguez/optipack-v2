@@ -151,34 +151,55 @@ export class RecordPaymentUseCase {
     const cashRegister = await this.cashRegisterRepo.findOrCreateForToday(input.agencyId);
     await this.cashRegisterRepo.addEntry(cashRegister.id, input.amount);
 
-    // 7. Create journal entry (double-entry bookkeeping)
-    const journalCount = await this.journalRepo.countByDate(input.agencyId, new Date());
-    const journalRef = generateReference('JRN', journalCount + 1);
-
-    await this.journalRepo.create({
-      reference: journalRef,
-      description: `Paiement ${reference} - Facture ${invoice.reference}`,
-      sourceType: 'PAYMENT',
-      sourceId: payment.id,
-      agency: { connect: { id: input.agencyId } },
-      createdBy: { connect: { id: userId } },
-      lines: {
-        create: [
-          {
-            debitAccount: { connect: { code: '101000' } },  // Caisse
-            debitAmount: input.amount,
-            creditAmount: 0,
-            description: `Encaissement ${reference}`,
-          },
-          {
-            creditAccount: { connect: { code: '301000' } }, // Creances clients
-            debitAmount: 0,
-            creditAmount: input.amount,
-            description: `Reglement facture ${invoice.reference}`,
-          },
-        ],
-      },
-    });
+    // 7. Create journal entry (double-entry bookkeeping). Reference race-safe :
+    // countByDate non atomique -> retry sur P2002, suffix random en dernier
+    // recours (meme pattern que la reference de paiement).
+    const journalLines = {
+      create: [
+        {
+          debitAccount: { connect: { code: '101000' } },  // Caisse
+          debitAmount: input.amount,
+          creditAmount: 0,
+          description: `Encaissement ${reference}`,
+        },
+        {
+          creditAccount: { connect: { code: '301000' } }, // Creances clients
+          debitAmount: 0,
+          creditAmount: input.amount,
+          description: `Reglement facture ${invoice.reference}`,
+        },
+      ],
+    };
+    let journalBase = await this.journalRepo.countByDate(input.agencyId, new Date());
+    let journalCreated = false;
+    for (let attempt = 0; attempt < 5 && !journalCreated; attempt++) {
+      try {
+        await this.journalRepo.create({
+          reference: generateReference('JRN', journalBase + 1 + attempt),
+          description: `Paiement ${reference} - Facture ${invoice.reference}`,
+          sourceType: 'PAYMENT',
+          sourceId: payment.id,
+          agency: { connect: { id: input.agencyId } },
+          createdBy: { connect: { id: userId } },
+          lines: journalLines,
+        });
+        journalCreated = true;
+      } catch (err: unknown) {
+        if ((err as { code?: string })?.code !== 'P2002') throw err;
+        journalBase = await this.journalRepo.countByDate(input.agencyId, new Date());
+      }
+    }
+    if (!journalCreated) {
+      await this.journalRepo.create({
+        reference: `${generateReference('JRN', journalBase + 1)}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
+        description: `Paiement ${reference} - Facture ${invoice.reference}`,
+        sourceType: 'PAYMENT',
+        sourceId: payment.id,
+        agency: { connect: { id: input.agencyId } },
+        createdBy: { connect: { id: userId } },
+        lines: journalLines,
+      });
+    }
 
     // 8. Attribution loyalty points (audit fix #12) -- conditionnelle :
     // si la politique de fidelite est desactivee par l'admin, on n'accumule

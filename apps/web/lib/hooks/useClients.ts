@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { clientsApi } from '@/lib/api/clients';
 import type { CreateClientInput, UpdateClientInput, PaginationInput } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
+import { extractApiError } from '@/lib/api/errorMessage';
 
 export function useClients(params?: Partial<PaginationInput> & { agencyId?: string }) {
   return useQuery({
@@ -26,7 +27,7 @@ export function useCreateClient() {
       qc.invalidateQueries({ queryKey: ['clients'] });
       toast.success('Client cree avec succes');
     },
-    onError: () => toast.error('Erreur lors de la creation'),
+    onError: (e) => toast.error(extractApiError(e, 'Erreur lors de la creation')),
   });
 }
 
@@ -38,7 +39,7 @@ export function useUpdateClient() {
       qc.invalidateQueries({ queryKey: ['clients'] });
       toast.success('Client mis a jour');
     },
-    onError: () => toast.error('Erreur lors de la mise a jour'),
+    onError: (e) => toast.error(extractApiError(e, 'Erreur lors de la mise a jour')),
   });
 }
 

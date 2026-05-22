@@ -8,7 +8,8 @@ import { AppButton } from '@/components/ui/AppButton';
 import { AppBadge } from '@/components/ui/AppBadge';
 import { CardSkeleton } from '@/components/ui/AppSkeleton';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
-import { formatAmount } from '@transitsoftservices/shared';
+import { formatAmount, formatDateTime } from '@transitsoftservices/shared';
+import { ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { cashRegisterApi } from '@/lib/api/finance';
 import { apiClient } from '@/lib/api/client';
@@ -34,6 +35,14 @@ export default function CashRegisterPage() {
     queryFn: () => apiClient.get(`/agencies/${agencyId}/breakdown`).then((r) => r.data),
     enabled: !!agencyId,
   });
+
+  const { data: movementsData, isLoading: movementsLoading } = useQuery({
+    queryKey: ['cash-register', agencyId, 'movements'],
+    queryFn: () => apiClient.get(`/cash-registers/${agencyId}/movements`).then((r) => r.data),
+    enabled: !!agencyId,
+  });
+  const movements: any[] = movementsData?.data?.movements ?? [];
+  const movSummary = movementsData?.data?.summary;
 
   const closeMutation = useMutation({
     mutationFn: () => cashRegisterApi.close(agencyId),
@@ -148,6 +157,67 @@ export default function CashRegisterPage() {
                 )}
               </AppCard>
             )}
+            {/* Historique detaille entrees / sorties de la caisse */}
+            <AppCard>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-base font-semibold text-gray-900">
+                  Historique des mouvements ({movements.length})
+                </h3>
+                {movSummary && (
+                  <div className="flex gap-3 text-sm">
+                    <span className="text-green-600">Entrees : +{formatAmount(movSummary.totalIn)}</span>
+                    <span className="text-red-600">Sorties : -{formatAmount(movSummary.totalOut)}</span>
+                  </div>
+                )}
+              </div>
+              {movementsLoading ? (
+                <p className="text-sm text-gray-400">Chargement...</p>
+              ) : movements.length === 0 ? (
+                <p className="text-sm text-gray-400">Aucun mouvement sur cette caisse.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-xs text-gray-500">
+                        <th className="pb-2">Type</th>
+                        <th className="pb-2">Operation</th>
+                        <th className="pb-2">Reference</th>
+                        <th className="pb-2">Par</th>
+                        <th className="pb-2">Date</th>
+                        <th className="pb-2 text-right">Montant</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {movements.map((m: any) => (
+                        <tr key={m.id} className={m.voided ? 'opacity-50' : ''}>
+                          <td className="py-2">
+                            {m.direction === 'IN' ? (
+                              <span className="inline-flex items-center gap-1 text-green-600">
+                                <ArrowDownLeft className="h-3.5 w-3.5" /> Entree
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-red-600">
+                                <ArrowUpRight className="h-3.5 w-3.5" /> Sortie
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2 text-gray-800">
+                            {m.label}
+                            {m.voided && <span className="ml-1 text-[10px] text-red-500">(annule)</span>}
+                          </td>
+                          <td className="py-2 font-mono text-xs text-gray-500">{m.reference || '-'}</td>
+                          <td className="py-2 text-gray-600">{m.userName || '-'}</td>
+                          <td className="py-2 text-xs text-gray-500">{formatDateTime(m.date)}</td>
+                          <td className={`py-2 text-right font-semibold ${m.direction === 'IN' ? 'text-green-600' : 'text-red-600'}`}>
+                            {m.direction === 'IN' ? '+' : '-'}{formatAmount(Number(m.amount))}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </AppCard>
           </>
         ) : null}
 

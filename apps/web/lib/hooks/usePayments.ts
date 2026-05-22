@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { paymentsApi } from '@/lib/api/payments';
 import type { RecordPaymentInput, PaginationInput } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
+import { extractApiError } from '@/lib/api/errorMessage';
 
 export function usePayments(params?: Partial<PaginationInput> & { agencyId?: string }) {
   return useQuery({
@@ -28,7 +29,7 @@ export function useRecordPayment() {
       qc.invalidateQueries({ queryKey: ['dashboard'] });
       toast.success('Paiement enregistre');
     },
-    onError: () => toast.error("Erreur lors de l'enregistrement du paiement"),
+    onError: (e) => toast.error(extractApiError(e, "Erreur lors de l'enregistrement du paiement")),
   });
 }
 
@@ -41,6 +42,6 @@ export function useVoidPayment() {
       qc.invalidateQueries({ queryKey: ['cash-register'] });
       toast.success('Paiement annule');
     },
-    onError: () => toast.error("Erreur lors de l'annulation"),
+    onError: (e) => toast.error(extractApiError(e, "Erreur lors de l'annulation")),
   });
 }

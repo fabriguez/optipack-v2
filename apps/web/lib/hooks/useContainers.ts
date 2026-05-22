@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { containersApi } from '@/lib/api/containers';
 import type { CreateContainerInput, PaginationInput } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
+import { extractApiError } from '@/lib/api/errorMessage';
 
 export function useContainers(params?: Partial<PaginationInput> & { status?: string }) {
   return useQuery({
@@ -34,7 +35,7 @@ export function useCreateContainer() {
       qc.invalidateQueries({ queryKey: ['containers'] });
       toast.success('Conteneur cree');
     },
-    onError: () => toast.error('Erreur lors de la creation'),
+    onError: (e) => toast.error(extractApiError(e, 'Erreur lors de la creation')),
   });
 }
 
@@ -48,7 +49,7 @@ export function useLoadParcels() {
       qc.invalidateQueries({ queryKey: ['parcels'] });
       toast.success(`${data.data.loaded} colis charges`);
     },
-    onError: () => toast.error('Erreur lors du chargement'),
+    onError: (e) => toast.error(extractApiError(e, 'Erreur lors du chargement')),
   });
 }
 
@@ -61,7 +62,7 @@ export function useDepartContainer() {
       qc.invalidateQueries({ queryKey: ['parcels'] });
       toast.success('Conteneur en transit');
     },
-    onError: () => toast.error('Erreur lors du depart'),
+    onError: (e) => toast.error(extractApiError(e, 'Erreur lors du depart')),
   });
 }
 
@@ -74,6 +75,6 @@ export function useArriveContainer() {
       qc.invalidateQueries({ queryKey: ['parcels'] });
       toast.success('Conteneur arrive');
     },
-    onError: () => toast.error("Erreur lors de l'arrivee"),
+    onError: (e) => toast.error(extractApiError(e, "Erreur lors de l'arrivee")),
   });
 }

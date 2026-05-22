@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { agenciesApi } from '@/lib/api/agencies';
 import type { CreateAgencyInput, UpdateAgencyInput, PaginationInput } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
+import { extractApiError } from '@/lib/api/errorMessage';
 
 export function useAgencies(params?: Partial<PaginationInput>) {
   return useQuery({
@@ -26,7 +27,7 @@ export function useCreateAgency() {
       qc.invalidateQueries({ queryKey: ['agencies'] });
       toast.success('Agence creee avec succes');
     },
-    onError: () => toast.error('Erreur lors de la creation'),
+    onError: (e) => toast.error(extractApiError(e, 'Erreur lors de la creation')),
   });
 }
 
@@ -38,7 +39,7 @@ export function useUpdateAgency() {
       qc.invalidateQueries({ queryKey: ['agencies'] });
       toast.success('Agence mise a jour');
     },
-    onError: () => toast.error('Erreur lors de la mise a jour'),
+    onError: (e) => toast.error(extractApiError(e, 'Erreur lors de la mise a jour')),
   });
 }
 
@@ -50,6 +51,6 @@ export function useDeleteAgency() {
       qc.invalidateQueries({ queryKey: ['agencies'] });
       toast.success('Agence desactivee');
     },
-    onError: () => toast.error('Erreur lors de la suppression'),
+    onError: (e) => toast.error(extractApiError(e, 'Erreur lors de la suppression')),
   });
 }

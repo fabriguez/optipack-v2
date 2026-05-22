@@ -60,11 +60,76 @@ export function errorHandler(err: Error, _req: Request, res: Response, _next: Ne
     return;
   }
 
-  // Unexpected errors
+  // Erreurs Prisma connues : on les traduit en messages clairs plutot que
+  // de renvoyer un 500 generique. Detection par name + code (pas d'import
+  // @prisma/client pour garder le handler leger).
+  if (anyErr?.name === 'PrismaClientKnownRequestError' && typeof anyErr.code === 'string') {
+    const target = Array.isArray(anyErr.meta?.target)
+      ? anyErr.meta.target.join(', ')
+      : anyErr.meta?.target ?? '';
+    const model = anyErr.meta?.modelName ?? '';
+    switch (anyErr.code) {
+      case 'P2002': // contrainte d'unicite
+        logger.warn({ code: anyErr.code, target, model }, 'Prisma unique constraint');
+        res.status(409).json({
+          success: false,
+          message: `Conflit : une entree existe deja avec la meme valeur${target ? ` (${target})` : ''}. Reessayez.`,
+          code: 'DUPLICATE',
+        });
+        return;
+      case 'P2025': // enregistrement introuvable
+        res.status(404).json({
+          success: false,
+          message: `Ressource introuvable${model ? ` (${model})` : ''}.`,
+          code: 'NOT_FOUND',
+        });
+        return;
+      case 'P2003': // contrainte de cle etrangere
+        res.status(400).json({
+          success: false,
+          message: 'Operation impossible : reference liee invalide ou enregistrement encore utilise.',
+          code: 'FK_CONSTRAINT',
+        });
+        return;
+      case 'P2000': // valeur trop longue
+        res.status(400).json({
+          success: false,
+          message: 'Une valeur saisie est trop longue pour le champ concerne.',
+          code: 'VALUE_TOO_LONG',
+        });
+        return;
+      default:
+        logger.error({ err }, 'Prisma error');
+        res.status(400).json({
+          success: false,
+          message: 'Operation rejetee par la base de donnees. Verifiez les donnees saisies.',
+          code: `PRISMA_${anyErr.code}`,
+        });
+        return;
+    }
+  }
+
+  if (anyErr?.name === 'PrismaClientValidationError') {
+    logger.error({ err }, 'Prisma validation error');
+    res.status(400).json({
+      success: false,
+      message: 'Donnees invalides envoyees a la base. Verifiez le formulaire.',
+      code: 'PRISMA_VALIDATION',
+    });
+    return;
+  }
+
+  // Unexpected errors -- on log tout, et on surface le message reel quand il
+  // est exploitable (evite le "Erreur interne" opaque cote UI).
   logger.error({ err }, 'Unhandled error');
+  const rawMessage = typeof anyErr?.message === 'string' ? anyErr.message.trim() : '';
+  const safeMessage =
+    rawMessage && rawMessage.length < 300 && !/prisma|invocation|\bat\b.*\(/i.test(rawMessage)
+      ? rawMessage
+      : 'Erreur interne du serveur';
   res.status(500).json({
     success: false,
-    message: 'Erreur interne du serveur',
+    message: safeMessage,
     code: 'INTERNAL_ERROR',
   });
 }
