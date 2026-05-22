@@ -29,6 +29,7 @@ export default function EmployeesPage() {
   const [showImport, setShowImport] = useState(false);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [statusTab, setStatusTab] = useState<'active' | 'former'>('active');
   const [toDelete, setToDelete] = useState<{ id: string; fullName: string } | null>(null);
   const agencyIdFilter = searchParams.get('agencyId') || '';
   const queryClient = useQueryClient();
@@ -46,13 +47,14 @@ export default function EmployeesPage() {
   });
 
   const { data, isLoading } = useQuery({
-    queryKey: ['employees', agencyIdFilter, page, search],
+    queryKey: ['employees', agencyIdFilter, page, search, statusTab],
     queryFn: () => apiClient.get('/employees', {
       params: {
         page,
         limit: 20,
         search: search || undefined,
         agencyId: agencyIdFilter || undefined,
+        status: statusTab,
       },
     }).then((r) => r.data),
   });
@@ -130,6 +132,26 @@ export default function EmployeesPage() {
             </AppButton>
             <AppButton onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" />Nouvel employe</AppButton>
           </div>
+        </div>
+
+        <div className="flex gap-1 rounded-lg bg-gray-100 p-1">
+          {([
+            { value: 'active', label: 'Employes actifs' },
+            { value: 'former', label: 'Anciens employes' },
+          ] as const).map((t) => (
+            <button
+              key={t.value}
+              onClick={() => { setStatusTab(t.value); setPage(1); }}
+              className={
+                'px-3 py-1.5 text-sm font-medium rounded-md transition-colors ' +
+                (statusTab === t.value
+                  ? 'bg-white text-primary-700 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900')
+              }
+            >
+              {t.label}
+            </button>
+          ))}
         </div>
 
         <div className="flex items-center justify-between gap-3">

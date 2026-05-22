@@ -4,6 +4,19 @@ import type { IEmployeeRepository } from '../../../application/interfaces/IEmplo
 import type { PaginationInput, PaginatedResponse } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
 
+/**
+ * Filtre isActive selon le param `status` de la requete liste :
+ *  - 'active' (defaut) : employes actifs uniquement
+ *  - 'former'          : anciens employes (contrat rompu / supprime)
+ *  - 'all'             : tous
+ */
+function employeeStatusFilter(pagination: PaginationInput): Prisma.EmployeeWhereInput {
+  const status = (pagination as { status?: string }).status;
+  if (status === 'former') return { isActive: false };
+  if (status === 'all') return {};
+  return { isActive: true };
+}
+
 @injectable()
 export class PrismaEmployeeRepository implements IEmployeeRepository {
   async findById(id: string): Promise<Employee | null> {
@@ -25,7 +38,7 @@ export class PrismaEmployeeRepository implements IEmployeeRepository {
 
     const where: Prisma.EmployeeWhereInput = {
       agencyId,
-      isActive: true,
+      ...employeeStatusFilter(pagination),
       ...(search && {
         OR: [
           { fullName: { contains: search, mode: 'insensitive' } },
@@ -56,7 +69,7 @@ export class PrismaEmployeeRepository implements IEmployeeRepository {
 
     const where: Prisma.EmployeeWhereInput = {
       agencyId: agencyId ? { equals: agencyId, in: agencyIds } : { in: agencyIds },
-      isActive: true,
+      ...employeeStatusFilter(pagination),
       ...(search && {
         OR: [
           { fullName: { contains: search, mode: 'insensitive' } },

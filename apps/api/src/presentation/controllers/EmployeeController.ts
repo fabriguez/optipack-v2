@@ -224,12 +224,34 @@ export class EmployeeController {
   static async payslipPdf(req: Request, res: Response, next: NextFunction) {
     try {
       const { prisma } = await import('../../config/database');
-      const { PDFService } = await import('../../application/services/PDFService');
+      const { PayslipPDFService } = await import('../../application/services/PayslipPDFService');
+      const { StorageService } = await import('../../infrastructure/storage/StorageService');
+
       const payslip = await prisma.payslip.findUnique({
         where: { id: req.params.payslipId },
         include: {
           employee: {
-            include: { agency: { select: { name: true, address: true, phone: true } } },
+            include: {
+              agency: {
+                select: {
+                  name: true,
+                  address: true,
+                  phone: true,
+                  organization: {
+                    select: {
+                      name: true,
+                      address: true,
+                      phone: true,
+                      email: true,
+                      logoUrl: true,
+                      primaryColor: true,
+                      secondaryColor: true,
+                      accentColor: true,
+                    },
+                  },
+                },
+              },
+            },
           },
           payments: { orderBy: { paidAt: 'asc' } },
         },
@@ -238,14 +260,55 @@ export class EmployeeController {
         res.status(404).json({ success: false, message: 'Bulletin introuvable' });
         return;
       }
-      const buf = await PDFService.generatePayslipPDF({
+
+      // Retenues detaillees : SalaryDeduction appliquees a ce bulletin.
+      const appliedDeductions = await prisma.salaryDeduction.findMany({
+        where: { appliedToPayslipId: payslip.id },
+        select: { reason: true, amount: true },
+      });
+      const deductionLines: Array<{ label: string; amount: number }> = [];
+      if (Number(payslip.socialContributions) > 0) {
+        deductionLines.push({ label: 'CNPS / cotisations sociales', amount: Number(payslip.socialContributions) });
+      }
+      for (const d of appliedDeductions) {
+        deductionLines.push({ label: d.reason || 'Retenue', amount: Number(d.amount) });
+      }
+
+      const org = payslip.employee.agency?.organization ?? null;
+
+      // Logo organisation en buffer (embarque dans le PDF).
+      let logoBuffer: Buffer | null = null;
+      if (org?.logoUrl) {
+        try {
+          const storage = container.resolve(StorageService);
+          const key = org.logoUrl.split('/uploads/object/').pop() ?? org.logoUrl;
+          const obj = await storage.getObject(key);
+          if (obj) {
+            const chunks: Buffer[] = [];
+            for await (const ch of obj.stream as any) chunks.push(ch as Buffer);
+            logoBuffer = Buffer.concat(chunks);
+          }
+        } catch { /* logo optionnel */ }
+      }
+
+      const lastPayment = payslip.payments[payslip.payments.length - 1];
+      const pdfService = container.resolve(PayslipPDFService);
+      const buf = await pdfService.generate({
         period: payslip.period,
         generatedAt: payslip.generatedAt,
-        agency: payslip.employee.agency,
+        paidAt: payslip.paidAt,
+        organization: org,
+        agency: payslip.employee.agency
+          ? {
+              name: payslip.employee.agency.name,
+              address: payslip.employee.agency.address,
+              phone: payslip.employee.agency.phone,
+            }
+          : null,
         employee: {
           fullName: payslip.employee.fullName,
+          matricule: payslip.employee.idNumber,
           position: payslip.employee.position,
-          idNumber: payslip.employee.idNumber,
           contractType: payslip.employee.contractType,
         },
         baseSalary: Number(payslip.baseSalary),
@@ -255,13 +318,10 @@ export class EmployeeController {
         grossSalary: Number(payslip.grossSalary),
         netSalary: Number(payslip.netSalary),
         deductionsTotal: payslip.deductionsTotal ? Number(payslip.deductionsTotal) : 0,
-        paymentNote: payslip.paymentNote,
-        payments: payslip.payments.map((p) => ({
-          amount: Number(p.amount),
-          paidAt: p.paidAt,
-          note: p.note,
-        })),
+        deductionLines: deductionLines.length > 0 ? deductionLines : undefined,
+        bankInfo: lastPayment?.note ?? payslip.paymentNote ?? null,
       });
+
       res.set({
         'Content-Type': 'application/pdf',
         'Content-Disposition': `inline; filename="bulletin-${payslip.period}-${payslip.employee.fullName.replace(/\s+/g, '_')}.pdf"`,
