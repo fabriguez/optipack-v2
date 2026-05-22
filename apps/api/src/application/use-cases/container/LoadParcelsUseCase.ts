@@ -81,9 +81,13 @@ export class LoadParcelsUseCase {
         continue;
       }
 
-      // Verification capacite (si poids defini)
-      const parcelWeight = parcel.weight ? Number(parcel.weight) : 0;
-      const newLoad = runningLoad + parcelWeight;
+      // Verification capacite : dimension selon type conteneur.
+      // SEA -> volume (m3), sinon -> masse (kg).
+      const useVolume = container.type === 'SEA';
+      const parcelLoad = useVolume
+        ? (parcel.volume ? Number(parcel.volume) : 0)
+        : (parcel.weight ? Number(parcel.weight) : 0);
+      const newLoad = runningLoad + parcelLoad;
       if (newLoad > Number(container.capacity)) {
         errors.push({ parcelId, reason: 'Capacite du conteneur depassee' });
         continue;

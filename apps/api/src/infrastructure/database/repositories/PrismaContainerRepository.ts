@@ -28,17 +28,22 @@ const CONTAINER_INCLUDE = {
 };
 
 /**
- * Audit fix #4 : `currentLoad` peut driver (transactions a moitie executees,
- * weight de colis modifies, etc.). On recalcule a la volee a chaque lecture
- * via SUM(parcels.weight). Le champ snapshot reste en DB pour requetes filtrees.
+ * Audit fix #4 : `currentLoad` peut driver. On recalcule a la volee a chaque
+ * lecture. La dimension agregee depend du type de conteneur :
+ *  - AIR  -> somme des masses (kg)
+ *  - SEA  -> somme des volumes (m3)
+ *  - LAND -> somme des masses (kg) par defaut (capacite exprimee en kg)
+ * Sans ca, un conteneur SEA charge de colis tarifes au volume affichait
+ * toujours 0 (les colis volume ont weight=null).
  */
 async function refreshCurrentLoad(container: Container | null): Promise<Container | null> {
   if (!container) return null;
+  const useVolume = container.type === 'SEA';
   const result = await prisma.parcel.aggregate({
-    _sum: { weight: true },
+    _sum: { weight: true, volume: true },
     where: { containerId: container.id, isDeleted: false },
   });
-  const real = Number(result._sum.weight ?? 0);
+  const real = Number((useVolume ? result._sum.volume : result._sum.weight) ?? 0);
   if (Math.abs(Number(container.currentLoad) - real) > 0.001) {
     // Drift detecte : on update silencieusement et on retourne la vraie valeur
     await prisma.container.update({
