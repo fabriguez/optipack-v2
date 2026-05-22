@@ -7,6 +7,7 @@ import { AppCard } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppCheckbox } from '@/components/ui/AppCheckbox';
 import { AppInput } from '@/components/ui/AppInput';
+import { AppTimePicker } from '@/components/ui/AppTimePicker';
 import { Save } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -100,18 +101,14 @@ export function EmployeeShiftsTab({ employeeId }: { employeeId: string }) {
             </label>
             {cfg.isWorking ? (
               <div className="flex items-center gap-2">
-                <AppInput
-                  type="time"
+                <AppTimePicker
                   value={cfg.startTime}
-                  onChange={(e) => updateDay(d.value, { startTime: e.target.value })}
-                  className="w-32"
+                  onChange={(v) => updateDay(d.value, { startTime: v })}
                 />
                 <span className="text-gray-400">a</span>
-                <AppInput
-                  type="time"
+                <AppTimePicker
                   value={cfg.endTime}
-                  onChange={(e) => updateDay(d.value, { endTime: e.target.value })}
-                  className="w-32"
+                  onChange={(v) => updateDay(d.value, { endTime: v })}
                 />
               </div>
             ) : (

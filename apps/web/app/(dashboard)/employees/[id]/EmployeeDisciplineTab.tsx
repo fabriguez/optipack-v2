@@ -152,7 +152,7 @@ export function EmployeeDisciplineTab({ employeeId, employee }: { employeeId: st
             uploading={uploading}
             allowClear={!!sAttachment}
             onClear={() => setSAttachment(null)}
-            height={120}
+            height={320}
             hint="Photographiez ou uploadez le PV / courrier"
           />
         </div>

@@ -6,6 +6,7 @@ import { apiClient } from '@/lib/api/client';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppCheckbox } from '@/components/ui/AppCheckbox';
 import { AppInput } from '@/components/ui/AppInput';
+import { AppTimePicker } from '@/components/ui/AppTimePicker';
 import { Save } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -106,18 +107,14 @@ export function AgencyOpeningHoursEditor({ agencyId }: Props) {
               </label>
               {cfg.isOpen ? (
                 <div className="flex items-center gap-2">
-                  <AppInput
-                    type="time"
+                  <AppTimePicker
                     value={cfg.openTime}
-                    onChange={(e) => updateDay(d.value, { openTime: e.target.value })}
-                    className="w-32"
+                    onChange={(v) => updateDay(d.value, { openTime: v })}
                   />
                   <span className="text-gray-400">a</span>
-                  <AppInput
-                    type="time"
+                  <AppTimePicker
                     value={cfg.closeTime}
-                    onChange={(e) => updateDay(d.value, { closeTime: e.target.value })}
-                    className="w-32"
+                    onChange={(v) => updateDay(d.value, { closeTime: v })}
                   />
                 </div>
               ) : (

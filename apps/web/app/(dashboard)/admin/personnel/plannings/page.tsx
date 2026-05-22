@@ -9,6 +9,7 @@ import { AppDialog } from '@/components/ui/AppDialog';
 import { AppBadge } from '@/components/ui/AppBadge';
 import { AppAlertDialog } from '@/components/ui/AppAlertDialog';
 import { AppCheckbox } from '@/components/ui/AppCheckbox';
+import { AppTimePicker } from '@/components/ui/AppTimePicker';
 import { Can } from '@/lib/components/Can';
 import {
   useWorkSchedules,
@@ -184,19 +185,15 @@ function ScheduleDaysEditor({
               />
               {d.isWorking ? 'Ouvre' : 'Repos'}
             </label>
-            <AppInput
-              type="time"
+            <AppTimePicker
               value={d.startTime ?? ''}
-              onChange={(e) => setDay(idx, { startTime: e.target.value || null })}
+              onChange={(v) => setDay(idx, { startTime: v || null })}
               disabled={!d.isWorking}
-              placeholder="Debut"
             />
-            <AppInput
-              type="time"
+            <AppTimePicker
               value={d.endTime ?? ''}
-              onChange={(e) => setDay(idx, { endTime: e.target.value || null })}
+              onChange={(v) => setDay(idx, { endTime: v || null })}
               disabled={!d.isWorking}
-              placeholder="Fin"
             />
             <AppInput
               type="number"
