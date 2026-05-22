@@ -319,6 +319,7 @@ export class EmployeeController {
         netSalary: Number(payslip.netSalary),
         deductionsTotal: payslip.deductionsTotal ? Number(payslip.deductionsTotal) : 0,
         deductionLines: deductionLines.length > 0 ? deductionLines : undefined,
+        paymentMethod: lastPayment?.paymentMethod ?? null,
         bankInfo: lastPayment?.note ?? payslip.paymentNote ?? null,
       });
 

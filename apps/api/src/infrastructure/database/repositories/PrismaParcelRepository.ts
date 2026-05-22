@@ -41,6 +41,17 @@ const PARCEL_INCLUDE = {
   },
   transitRoute: { select: { id: true, name: true, type: true } },
   invoice: { select: { id: true, reference: true, status: true } },
+  // Premier conteneur traverse par le colis : derive du 1er evenement
+  // d'historique portant un containerId (ordre chronologique asc). Sert a
+  // l'affichage "conteneur d'origine" dans les listes magasin.
+  histories: {
+    where: { containerId: { not: null } },
+    orderBy: { createdAt: 'asc' as const },
+    take: 1,
+    select: {
+      container: { select: { id: true, designation: true } },
+    },
+  },
 };
 
 @injectable()

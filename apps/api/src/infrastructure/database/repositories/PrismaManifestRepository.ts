@@ -122,15 +122,19 @@ export class PrismaManifestRepository implements IManifestRepository {
       );
     }
 
-    // SEULEMENT les colis effectivement RECUS (pas les disparus / non livres).
-    // Statuts post-arrivee qui indiquent reception physique :
-    // ARRIVED, RECEIVED, DELIVERED. Les colis en LOST ou toujours IN_TRANSIT
-    // sont exclus (ils figurent dans le bordereau de comparaison).
-    const RECEIVED_STATUSES = ['ARRIVED', 'RECEIVED', 'DELIVERED'];
+    // Bordereau de reception = colis effectivement DECHARGES de ce conteneur,
+    // peu importe l'agence ou ils ont ete recus (destination finale OU agence
+    // de transit intermediaire -> statut IN_STOCK).
+    //
+    // Marqueur de "decharge" : lastContainerId == containerId (pose au
+    // dechargement) ET le colis n'est plus charge dans CE conteneur
+    // (containerId != containerId, ou null). Les colis LOST sont exclus :
+    // ils figurent dans le bordereau de comparaison (manquants).
     const parcels = await this.loadParcelsWithFinancials(
       {
-        OR: [{ containerId }, { lastContainerId: containerId }],
-        status: { in: RECEIVED_STATUSES as never },
+        lastContainerId: containerId,
+        OR: [{ containerId: null }, { containerId: { not: containerId } }],
+        status: { not: 'LOST' as never },
       },
       container.departureAgency.city,
       container.arrivalAgency.city,

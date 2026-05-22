@@ -18,6 +18,7 @@ import { FilterDialog } from '@/components/shared/FilterDialog';
 import { XlsxExportButton } from '@/components/shared/XlsxExportButton';
 import { CsvImportDialog } from '@/components/shared/CsvImportDialog';
 import { RowActions } from '@/components/shared/RowActions';
+import { useQuery } from '@tanstack/react-query';
 import { useServerPagination } from '@/lib/hooks/useServerPagination';
 import { useParcels, useArchiveParcels, useUnarchiveParcels } from '@/lib/hooks/useParcels';
 import { AppCheckbox } from '@/components/ui/AppCheckbox';
@@ -39,6 +40,14 @@ function ParcelsContent() {
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   // Onglet : actifs (par defaut) ou archives.
   const [tab, setTab] = useState<'active' | 'archived'>('active');
+  // Vue : colis individuels ou groupes de colis.
+  const [view, setView] = useState<'parcels' | 'groups'>('parcels');
+
+  const { data: groupsData, isLoading: groupsLoading } = useQuery({
+    queryKey: ['parcel-groups'],
+    queryFn: () => apiClient.get('/parcel-groups').then((r) => r.data),
+    enabled: view === 'groups',
+  });
   // Selection multi-lignes : Set d'IDs (compatible header "tout cocher").
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -330,6 +339,41 @@ function ParcelsContent() {
     },
   ];
 
+  const groupColumns = [
+    {
+      key: 'reference',
+      label: 'Reference',
+      render: (row: any) => <span className="font-mono text-xs font-bold text-primary-700">{row.reference}</span>,
+    },
+    { key: 'label', label: 'Libelle', render: (row: any) => row.label || '-' },
+    { key: 'client', label: 'Client', render: (row: any) => row.client?.fullName || '-' },
+    { key: 'agency', label: 'Agence', render: (row: any) => row.agency?.name || '-' },
+    {
+      key: 'parcels',
+      label: 'Colis',
+      render: (row: any) => <AppBadge variant="info">{row._count?.parcels ?? 0}</AppBadge>,
+    },
+    {
+      key: 'invoice',
+      label: 'Facture groupe',
+      render: (row: any) =>
+        row.invoice ? (
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold">{formatAmount(Number(row.invoice.totalAmount))}</span>
+            <StatusBadge status={row.invoice.status} type="invoice" />
+          </div>
+        ) : (
+          <span className="text-xs text-gray-300">-</span>
+        ),
+    },
+    {
+      key: 'status',
+      label: 'Statut',
+      render: (row: any) => <AppBadge variant="default">{row.status}</AppBadge>,
+    },
+    { key: 'createdAt', label: 'Date', render: (row: any) => <span className="text-xs text-gray-500">{formatDate(row.createdAt)}</span> },
+  ];
+
   return (
     <PageTransition>
       <div className="space-y-5">
@@ -361,6 +405,37 @@ function ParcelsContent() {
           </div>
         </div>
 
+        {/* Bascule vue : Colis individuels / Groupes de colis */}
+        <div className="flex gap-1 rounded-lg bg-gray-100 p-1 w-fit">
+          {([
+            { value: 'parcels', label: 'Colis', icon: <Package className="h-3.5 w-3.5" /> },
+            { value: 'groups', label: 'Groupes de colis', icon: <Boxes className="h-3.5 w-3.5" /> },
+          ] as const).map((v) => (
+            <button
+              key={v.value}
+              onClick={() => setView(v.value)}
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                view === v.value ? 'bg-white text-primary-700 shadow-sm' : 'text-gray-600 hover:text-gray-900',
+              )}
+            >
+              {v.icon}
+              {v.label}
+            </button>
+          ))}
+        </div>
+
+        {view === 'groups' ? (
+          <AppCard padding="sm">
+            <AppDataTable
+              columns={groupColumns}
+              data={groupsData?.data || []}
+              isLoading={groupsLoading}
+              onRowClick={(row) => router.push(`/parcel-groups/${row.id}`)}
+            />
+          </AppCard>
+        ) : (
+        <>
         {/* Onglets : Actifs / Archives */}
         <nav className="flex flex-wrap gap-1 border-b border-gray-200">
           <button
@@ -454,6 +529,8 @@ function ParcelsContent() {
             onRowClick={(row) => router.push(`/parcels/${row.id}`)}
           />
         </AppCard>
+        </>
+        )}
 
         <ParcelFormDialog open={showCreate} onClose={() => setShowCreate(false)} />
         <ParcelGroupFormDialog open={showCreateGroup} onClose={() => setShowCreateGroup(false)} />

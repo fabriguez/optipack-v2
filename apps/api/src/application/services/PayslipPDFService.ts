@@ -12,8 +12,13 @@ function collectBuffer(doc: PDFKit.PDFDocument): Promise<Buffer> {
 }
 
 function fmtMoney(n: number): string {
-  const v = Number.isFinite(n) ? n : 0;
-  return `${new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(v).replace(/[  ]/g, ' ')} FCFA`;
+  // Groupement millier manuel avec espace ASCII : Intl + locale fr utilise un
+  // espace fine insecable (U+202F) que la police pdfkit Helvetica rend par un
+  // glyphe parasite ("2/000"). On evite le probleme en formatant a la main.
+  const v = Math.round(Number.isFinite(n) ? n : 0);
+  const sign = v < 0 ? '-' : '';
+  const grouped = String(Math.abs(v)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return `${sign}${grouped} FCFA`;
 }
 
 function fmtDate(d: Date | string | null | undefined): string {

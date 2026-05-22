@@ -11,9 +11,19 @@ function collectBuffer(doc: PDFKit.PDFDocument): Promise<Buffer> {
   });
 }
 
+/** Groupement millier manuel (espace ASCII) -- evite le glyphe parasite
+ *  U+202F de Intl/locale-fr non rendu par la police pdfkit Helvetica. */
+function groupThousands(n: number, decimals = 0): string {
+  const fixed = (Number.isFinite(n) ? n : 0).toFixed(decimals);
+  const [intPart, decPart] = fixed.split('.');
+  const sign = intPart.startsWith('-') ? '-' : '';
+  const digits = sign ? intPart.slice(1) : intPart;
+  const grouped = digits.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return `${sign}${grouped}${decPart ? ',' + decPart : ''}`;
+}
+
 function formatCurrency(n: number): string {
-  const v = Number.isFinite(n) ? n : 0;
-  return `${new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(v).replace(/[  ]/g, ' ')} FCFA`;
+  return `${groupThousands(Math.round(Number.isFinite(n) ? n : 0))} FCFA`;
 }
 
 function formatDate(d: Date | string): string {
@@ -27,11 +37,11 @@ function formatDateTime(d: Date | string): string {
 }
 
 function fmtWeight(n: number): string {
-  return `${new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 }).format(n || 0)} kg`;
+  return `${groupThousands(n || 0, 2)} kg`;
 }
 
 function fmtVolume(n: number): string {
-  return `${new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 3 }).format(n || 0)} m3`;
+  return `${groupThousands(n || 0, 3)} m3`;
 }
 
 const METHOD_LABELS: Record<string, string> = {

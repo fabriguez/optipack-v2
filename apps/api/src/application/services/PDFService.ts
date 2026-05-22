@@ -129,11 +129,12 @@ function formatDate(d: Date | string): string {
 }
 
 function formatCurrency(n: number): string {
-  const formatted = new Intl.NumberFormat('fr-FR', {
-    style: 'decimal',
-    minimumFractionDigits: 0,
-  }).format(n).replace(/[  ]/g, ' ');
-  return `${formatted} FCFA`;
+  // Groupement millier manuel (espace ASCII) : U+202F de Intl-fr rend un
+  // glyphe parasite dans la police pdfkit Helvetica.
+  const v = Math.round(Number.isFinite(n) ? n : 0);
+  const sign = v < 0 ? "-" : "";
+  const grouped = String(Math.abs(v)).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  return `${sign}${grouped} FCFA`;
 }
 
 const COLORS = {

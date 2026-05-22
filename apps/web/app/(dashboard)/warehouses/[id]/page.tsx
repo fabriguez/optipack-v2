@@ -467,23 +467,25 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
     },
     { key: 'destination', label: 'Destination' },
     {
-      key: 'lastContainer',
+      key: 'firstContainer',
       label: 'Conteneur de livraison',
-      // lastContainer = conteneur d'ou vient le colis (set au dechargement),
-      // persiste apres mise en stock. Si absent, le colis n'a jamais transite
-      // par un conteneur (cree directement en magasin).
-      render: (row: any) =>
-        row.lastContainer ? (
+      // Affichage : 1er conteneur traverse par le colis (histories[0].container).
+      // Fallback sur lastContainer si aucun historique conteneur. La logique
+      // metier (lastContainer pour provenance/dechargement) reste inchangee.
+      render: (row: any) => {
+        const c = row.histories?.[0]?.container ?? row.lastContainer ?? null;
+        return c ? (
           <Link
-            href={`/containers/${row.lastContainer.id}`}
+            href={`/containers/${c.id}`}
             onClick={(e) => e.stopPropagation()}
             className="text-xs text-primary-700 hover:underline"
           >
-            {row.lastContainer.designation}
+            {c.designation}
           </Link>
         ) : (
           <span className="text-xs text-gray-300">-</span>
-        ),
+        );
+      },
     },
     { key: 'price', label: 'Prix', render: (row: any) => formatAmount(Number(row.price)) },
     { key: 'status', label: 'Statut', render: (row: any) => <StatusBadge status={row.status} type="parcel" /> },

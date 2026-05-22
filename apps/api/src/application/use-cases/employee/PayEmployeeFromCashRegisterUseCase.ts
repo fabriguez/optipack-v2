@@ -18,6 +18,8 @@ interface PayEmployeeInput {
   description?: string;
   /** Note libre stockee sur le versement (motif : "avance", "acompte", ...). */
   note?: string;
+  /** Mode de paiement : CASH | BANK_TRANSFER | MOBILE_MONEY | CARD | CHECK. */
+  paymentMethod?: string;
   /** IDs des retenues a appliquer. Ignore si payslip deja cree (retenues
    *  appliquees au 1er versement uniquement). */
   applyDeductionIds?: string[];
@@ -190,6 +192,7 @@ export class PayEmployeeFromCashRegisterUseCase {
           amount: installment,
           paidByUserId: userId,
           note: input.note ?? null,
+          paymentMethod: input.paymentMethod ?? null,
         },
       });
 

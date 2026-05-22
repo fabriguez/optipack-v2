@@ -1123,13 +1123,16 @@ model Payslip {
 // plusieurs PayslipPayment jusqu'a atteindre netSalary. Chaque versement
 // est lie a un Expense (ledger immuable) qui debite la caisse.
 model PayslipPayment {
-  id           String   @id @default(uuid())
-  payslipId    String
-  expenseId    String   @unique
-  amount       Decimal  @db.Decimal(15, 2)
-  paidAt       DateTime @default(now())
-  paidByUserId String?
-  note         String?
+  id            String   @id @default(uuid())
+  payslipId     String
+  expenseId     String   @unique
+  amount        Decimal  @db.Decimal(15, 2)
+  paidAt        DateTime @default(now())
+  paidByUserId  String?
+  note          String?
+  // Mode de paiement du versement : CASH | BANK_TRANSFER | MOBILE_MONEY |
+  // CARD | CHECK. Affiche sur le bulletin de paie (case cochee).
+  paymentMethod String?
 
   payslip Payslip @relation(fields: [payslipId], references: [id], onDelete: Cascade)
   expense Expense @relation("PayslipInstallmentExpense", fields: [expenseId], references: [id])
@@ -1336,6 +1339,7 @@ model Container {
   parcels                 Parcel[]                        @relation("CurrentContainer")
   lastContainerFor        Parcel[]                        @relation("LastContainer")
   histories               ContainerHistory[]
+  parcelHistories         ParcelHistory[]
   manifests               ShippingManifest[]
   expenses                Expense[]
   // Decaissements imputes a ce conteneur (frais transit, douane, surcout).
@@ -2474,8 +2478,9 @@ model ParcelHistory {
   metadata                  Json?
   createdAt                 DateTime @default(now())
 
-  parcel Parcel @relation(fields: [parcelId], references: [id])
-  user   User?  @relation(fields: [userId], references: [id])
+  parcel    Parcel     @relation(fields: [parcelId], references: [id])
+  user      User?      @relation(fields: [userId], references: [id])
+  container Container? @relation(fields: [containerId], references: [id])
 
   @@index([parcelId])
   @@index([createdAt])

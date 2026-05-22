@@ -5,6 +5,8 @@ import { generateReference } from '@transitsoftservices/shared';
 import { emailService } from '../../../infrastructure/email/EmailService';
 import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 import { config } from '../../../config';
+import { PricingService } from '../../services/PricingService';
+import { GroupInvoiceService } from '../../services/GroupInvoiceService';
 
 interface ParcelInGroupInput {
   designation: string;
@@ -89,6 +91,24 @@ export class CreateParcelGroupUseCase {
       : [];
     const cityByAgency = new Map(agencies.map((a) => [a.id, a.city]));
 
+    // Pre-charge les routes de transit referencees pour calculer le prix
+    // de chaque colis via PricingService (meme regle que les colis simples).
+    const routeIds = Array.from(
+      new Set(
+        input.parcels
+          .map((p) => p.transitRouteId ?? input.transitRouteId)
+          .filter((x): x is string => !!x),
+      ),
+    );
+    const routes = routeIds.length
+      ? await prisma.transitRoute.findMany({ where: { id: { in: routeIds } } })
+      : [];
+    const routeById = new Map(routes.map((r) => [r.id, r]));
+    // Tarifs partenaires actifs du client (override eventuel du tarif route).
+    const partnerPricings = await prisma.partnerPricing.findMany({
+      where: { clientId: input.clientId, isActive: true },
+    });
+
     return prisma.$transaction(async (tx) => {
       const count = await tx.parcelGroup.count({ where: { agencyId: resolvedAgencyId } });
       const reference = generateReference('GRP', count + 1);
@@ -105,10 +125,49 @@ export class CreateParcelGroupUseCase {
         },
       });
 
+      let invoiceSeq = await tx.invoice.count({ where: { agencyId: resolvedAgencyId! } });
       const createdParcels = [];
+      let groupTotal = 0;
+
       for (const p of input.parcels) {
         const derivedDestination =
           p.destination ?? (p.destinationAgencyId ? cityByAgency.get(p.destinationAgencyId) : null) ?? '';
+        const routeId = p.transitRouteId ?? input.transitRouteId ?? null;
+        const route = routeId ? routeById.get(routeId) : null;
+
+        // Calcul du prix : si route + (poids ou volume), on applique
+        // PricingService. Sinon on retombe sur p.price fourni (ou 0).
+        let price = p.price ?? 0;
+        if (route && (p.weight || p.volume)) {
+          const partner =
+            partnerPricings.find((pp) => pp.transitRouteId === route.id) ??
+            partnerPricings.find((pp) => pp.transitRouteId === null) ??
+            null;
+          const pricing = PricingService.calculate(
+            p.weight ? Number(p.weight) : 0,
+            p.volume ? Number(p.volume) : undefined,
+            route,
+            client,
+            partner,
+          );
+          price = pricing.finalPrice;
+        }
+        groupTotal += price;
+
+        // Facture individuelle du colis (chaque colis du groupe est payable
+        // separement -- voir GroupInvoiceService).
+        invoiceSeq += 1;
+        const parcelInvoice = await tx.invoice.create({
+          data: {
+            reference: generateReference('FAC', invoiceSeq),
+            clientId: input.clientId,
+            agencyId: resolvedAgencyId!,
+            totalAmount: price,
+            netAmount: price,
+            balance: price,
+          },
+        });
+
         const parcel = await tx.parcel.create({
           data: {
             organizationId: input.organizationId,
@@ -129,21 +188,33 @@ export class CreateParcelGroupUseCase {
             observation: p.observation ?? null,
             status: 'IN_STOCK',
             isPresent: true,
-            price: p.price ?? 0,
+            price,
             clientId: input.clientId,
-            // Magasin et route propages depuis le contexte du groupe en
-            // priorite ; chaque colis peut neanmoins surcharger localement
-            // (cas rares de groupes heterogenes).
             warehouseId: p.warehouseId ?? input.warehouseId ?? null,
             originalWarehouseId: p.warehouseId ?? input.warehouseId ?? null,
             spaceId: p.spaceId ?? null,
-            transitRouteId: p.transitRouteId ?? input.transitRouteId ?? null,
+            transitRouteId: routeId,
             warehouseEnteredAt: (p.warehouseId ?? input.warehouseId) ? new Date() : null,
             parcelGroupId: group.id,
+            invoiceId: parcelInvoice.id,
           },
         });
         createdParcels.push(parcel);
       }
+
+      // Facture agregat du groupe : montants = somme des factures membres.
+      invoiceSeq += 1;
+      await tx.invoice.create({
+        data: {
+          reference: generateReference('FCT-GRP', invoiceSeq),
+          clientId: input.clientId,
+          agencyId: resolvedAgencyId!,
+          totalAmount: groupTotal,
+          netAmount: groupTotal,
+          balance: groupTotal,
+          parcelGroupId: group.id,
+        },
+      });
 
       return tx.parcelGroup.findUnique({
         where: { id: group.id },
@@ -153,6 +224,7 @@ export class CreateParcelGroupUseCase {
           parcels: { orderBy: { createdAt: 'asc' } },
           client: true,
           agency: true,
+          invoice: true,
         },
       });
     });
@@ -161,32 +233,80 @@ export class CreateParcelGroupUseCase {
 
 @injectable()
 export class AddParcelToGroupUseCase {
+  constructor(private groupInvoice: GroupInvoiceService) {}
+
   async execute(groupId: string, parcel: ParcelInGroupInput, organizationId: string) {
     const group = await prisma.parcelGroup.findUnique({ where: { id: groupId } });
     if (!group) throw new NotFoundError('Groupe', groupId);
     if (group.status !== 'DRAFT') {
       throw new BusinessError('Le groupe est finalise, on ne peut plus y ajouter de colis');
     }
-    return prisma.parcel.create({
-      data: {
-        organizationId,
-        trackingNumber: genTracking(),
-        designation: parcel.designation,
-        weight: parcel.weight ?? null,
-        volume: parcel.volume ?? null,
-        destination: parcel.destination ?? '',
-        category: (parcel.category as any) ?? 'STANDARD',
-        status: 'IN_STOCK',
-        isPresent: true,
-        price: parcel.price ?? 0,
-        clientId: group.clientId,
-        warehouseId: parcel.warehouseId ?? null,
-        originalWarehouseId: parcel.warehouseId ?? null,
-        spaceId: parcel.spaceId ?? null,
-        warehouseEnteredAt: parcel.warehouseId ? new Date() : null,
-        parcelGroupId: groupId,
-      },
+
+    const client = await prisma.client.findUnique({ where: { id: group.clientId } });
+
+    // Prix : PricingService si route + dimension, sinon prix fourni.
+    let price = parcel.price ?? 0;
+    const routeId = parcel.transitRouteId ?? null;
+    if (routeId && client && (parcel.weight || parcel.volume)) {
+      const route = await prisma.transitRoute.findUnique({ where: { id: routeId } });
+      if (route) {
+        const partner = await prisma.partnerPricing.findFirst({
+          where: {
+            clientId: group.clientId,
+            isActive: true,
+            OR: [{ transitRouteId: route.id }, { transitRouteId: null }],
+          },
+          orderBy: { transitRouteId: 'desc' },
+        });
+        price = PricingService.calculate(
+          parcel.weight ? Number(parcel.weight) : 0,
+          parcel.volume ? Number(parcel.volume) : undefined,
+          route,
+          client,
+          partner,
+        ).finalPrice;
+      }
+    }
+
+    const created = await prisma.$transaction(async (tx) => {
+      const seq = await tx.invoice.count({ where: { agencyId: group.agencyId } });
+      const parcelInvoice = await tx.invoice.create({
+        data: {
+          reference: generateReference('FAC', seq + 1),
+          clientId: group.clientId,
+          agencyId: group.agencyId,
+          totalAmount: price,
+          netAmount: price,
+          balance: price,
+        },
+      });
+      return tx.parcel.create({
+        data: {
+          organizationId,
+          trackingNumber: genTracking(),
+          designation: parcel.designation,
+          weight: parcel.weight ?? null,
+          volume: parcel.volume ?? null,
+          destination: parcel.destination ?? '',
+          category: (parcel.category as any) ?? 'STANDARD',
+          status: 'IN_STOCK',
+          isPresent: true,
+          price,
+          clientId: group.clientId,
+          warehouseId: parcel.warehouseId ?? null,
+          originalWarehouseId: parcel.warehouseId ?? null,
+          spaceId: parcel.spaceId ?? null,
+          transitRouteId: routeId,
+          warehouseEnteredAt: parcel.warehouseId ? new Date() : null,
+          parcelGroupId: groupId,
+          invoiceId: parcelInvoice.id,
+        },
+      });
     });
+
+    // Resync facture agregat du groupe (nouveau colis -> total + eleve).
+    await this.groupInvoice.sync(groupId);
+    return created;
   }
 }
 
@@ -327,9 +447,11 @@ export class GetParcelGroupUseCase {
         agency: { select: { id: true, name: true } },
         invoice: true,
         parcels: {
+          orderBy: { createdAt: 'asc' },
           include: {
             warehouse: { select: { id: true, name: true } },
             transitRoute: { select: { id: true, name: true, type: true } },
+            invoice: { select: { id: true, reference: true, status: true, totalAmount: true, paidAmount: true, balance: true } },
           },
         },
       },

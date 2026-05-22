@@ -89,6 +89,7 @@ export function PayEmployeeDialog({ open, onClose, employee, defaultCashRegister
   });
 
   const [note, setNote] = useState<string>('');
+  const [paymentMethod, setPaymentMethod] = useState<string>('CASH');
   const [applyDeductionIds, setApplyDeductionIds] = useState<string[]>([]);
 
   const { data: deductionsData } = useQuery({
@@ -153,6 +154,7 @@ export function PayEmployeeDialog({ open, onClose, employee, defaultCashRegister
         cashRegisterId: cashRegisterId || undefined,
         description: description || undefined,
         note: note || undefined,
+        paymentMethod,
         applyDeductionIds,
       }),
     onSuccess: (res: any) => {
@@ -312,6 +314,18 @@ export function PayEmployeeDialog({ open, onClose, employee, defaultCashRegister
           value={cashRegisterId}
           onValueChange={setCashRegisterId}
           placeholder="Caisse du jour de l'agence de l'employe (defaut)"
+        />
+        <AppSelect
+          label="Mode de paiement"
+          value={paymentMethod}
+          onValueChange={setPaymentMethod}
+          options={[
+            { value: 'CASH', label: 'Especes' },
+            { value: 'BANK_TRANSFER', label: 'Virement bancaire' },
+            { value: 'MOBILE_MONEY', label: 'Mobile Money' },
+            { value: 'CARD', label: 'Carte' },
+            { value: 'CHECK', label: 'Cheque' },
+          ]}
         />
         <AppInput
           label="Note (motif, contexte) - sera trace sur le versement"

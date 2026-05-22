@@ -9,6 +9,7 @@ import { BusinessError, NotFoundError } from '../../../domain/errors/BusinessErr
 import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 import { prisma } from '../../../config/database';
 import { LoyaltyConfigService } from '../../services/LoyaltyConfigService';
+import { GroupInvoiceService } from '../../services/GroupInvoiceService';
 
 function tierFor(
   points: number,
@@ -28,15 +29,45 @@ export class RecordPaymentUseCase {
     @inject(CASH_REGISTER_REPOSITORY) private cashRegisterRepo: ICashRegisterRepository,
     @inject(JOURNAL_ENTRY_REPOSITORY) private journalRepo: IJournalEntryRepository,
     private loyaltyConfig: LoyaltyConfigService,
+    private groupInvoice: GroupInvoiceService,
   ) {}
 
-  async execute(input: RecordPaymentInput, userId: string) {
+  async execute(input: RecordPaymentInput, userId: string): Promise<any> {
     // 1. Validate invoice
     const invoice = await this.invoiceRepo.findById(input.invoiceId);
     if (!invoice) throw new NotFoundError('Facture', input.invoiceId);
 
     if (invoice.status === 'PAID') {
       throw new BusinessError('Cette facture est deja soldee');
+    }
+
+    // Paiement d'une facture AGREGAT de groupe : on ne paye pas la facture
+    // agregat directement (elle n'a pas de colis lies). On distribue le
+    // montant sur les factures membres non soldees, proportionnellement a
+    // leur solde, puis on resynchronise l'agregat.
+    if ((invoice as { parcelGroupId?: string | null }).parcelGroupId) {
+      const groupId = (invoice as { parcelGroupId: string }).parcelGroupId;
+      const splits = await this.groupInvoice.splitAmountAcrossMembers(groupId, input.amount);
+      if (splits.length === 0) {
+        throw new BusinessError('Aucune facture de colis a payer dans ce groupe.');
+      }
+      const subPayments = [];
+      for (const s of splits) {
+        const r = await this.execute(
+          { ...input, invoiceId: s.invoiceId, amount: s.amount },
+          userId,
+        );
+        subPayments.push(r);
+      }
+      await this.groupInvoice.sync(groupId);
+      const refreshed = await this.invoiceRepo.findById(invoice.id);
+      return {
+        groupPayment: true,
+        distributed: splits,
+        invoiceStatus: refreshed?.status,
+        invoiceBalance: refreshed ? Number(refreshed.balance) : 0,
+        subPayments,
+      };
     }
 
     if (invoice.status === 'CANCELLED') {
@@ -108,6 +139,13 @@ export class RecordPaymentUseCase {
       balance: Math.max(0, newBalance),
       status: newStatus,
     });
+
+    // Si cette facture est celle d'un colis appartenant a un groupe, on
+    // resynchronise la facture agregat du groupe (montants + statut).
+    const groupId = await this.groupInvoice.resolveGroupId(invoice.id);
+    if (groupId) {
+      await this.groupInvoice.sync(groupId);
+    }
 
     // 6. Update cash register (auto)
     const cashRegister = await this.cashRegisterRepo.findOrCreateForToday(input.agencyId);
