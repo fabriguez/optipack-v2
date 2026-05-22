@@ -38,6 +38,7 @@ interface ParcelLike {
   recipient?: { id: string; fullName: string; phone?: string } | null;
   warehouse?: { id: string; name: string; agency?: { name: string } } | null;
   transitRoute?: { id: string; name: string; type?: string } | null;
+  status?: string;
 }
 
 interface Props {
@@ -467,19 +468,27 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
             control={control}
             name="destinationAgencyId"
             render={({ field }) => (
-              <AppSearchSelect
-                label="Agence de destination"
-                value={field.value || null}
-                onChange={(v) => {
-                  field.onChange(v ?? '');
-                  if (!v) setSelectedDestAgency(null);
-                }}
-                search={searchers.agencies}
-                selectedOption={selectedDestAgency}
-                error={(errors as any).destinationAgencyId?.message}
-                required
-                placeholder="Selectionner l'agence d'arrivee"
-              />
+              <div>
+                <AppSearchSelect
+                  label="Agence de destination"
+                  value={field.value || null}
+                  onChange={(v) => {
+                    field.onChange(v ?? '');
+                    if (!v) setSelectedDestAgency(null);
+                  }}
+                  search={searchers.agencies}
+                  selectedOption={selectedDestAgency}
+                  error={(errors as any).destinationAgencyId?.message}
+                  required
+                  disabled={parcel?.status === 'RECEIVED'}
+                  placeholder="Selectionner l'agence d'arrivee"
+                />
+                {parcel?.status === 'RECEIVED' && (
+                  <p className="mt-1 text-xs text-amber-700">
+                    Colis deja receptionne : la destination n&apos;est plus modifiable.
+                  </p>
+                )}
+              </div>
             )}
           />
           <AppInput

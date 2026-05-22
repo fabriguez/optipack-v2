@@ -98,6 +98,13 @@ export class UpdateParcelUseCase {
       }
     }
     if (input.destinationAgencyId !== undefined && input.destinationAgencyId !== parcel.destinationAgencyId) {
+      // Un colis deja receptionne a atteint sa destination : on ne peut plus
+      // la modifier (cela fausserait les bordereaux et le routage).
+      if (parcel.status === 'RECEIVED') {
+        throw new BusinessError(
+          'Colis deja receptionne : la destination ne peut plus etre modifiee.',
+        );
+      }
       const agency = await prisma.agency.findUnique({
         where: { id: input.destinationAgencyId },
         select: { id: true, city: true },
