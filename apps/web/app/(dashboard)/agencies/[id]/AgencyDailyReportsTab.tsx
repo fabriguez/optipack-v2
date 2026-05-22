@@ -283,7 +283,18 @@ function ReportDetails({
       <PaymentBreakdown title="Paiements en avance (avant arrivee en stock destination)" data={payload.advancesByRouteAndMethod} total={payload.advancesTotal} />
 
       {/* Masse / volume colis enregistres */}
-      <RouteMassVolume title="Colis enregistres du jour" data={payload.registeredByRoute} />
+      <RouteMassVolume
+        title="Flux du jour - Entrees (colis enregistres / receptionnes)"
+        data={payload.flow?.in?.byRoute ?? payload.registeredByRoute}
+        totalWeight={payload.flow?.in?.totalWeight}
+        totalVolume={payload.flow?.in?.totalVolume}
+      />
+      <RouteMassVolume
+        title="Flux du jour - Sorties (colis charges / expedies)"
+        data={payload.flow?.out?.byRoute}
+        totalWeight={payload.flow?.out?.totalWeight}
+        totalVolume={payload.flow?.out?.totalVolume}
+      />
 
       {/* Conteneurs recus / envoyes */}
       <ContainerList title="Conteneurs recus du jour" containers={payload.receivedContainers} dateLabel="Arrive le" dateField="arrivalDate" />

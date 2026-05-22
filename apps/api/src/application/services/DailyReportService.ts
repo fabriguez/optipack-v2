@@ -212,11 +212,13 @@ export class DailyReportService {
     }
 
     // ------------------------------------------------------------------
-    // 2) Masse et volume total des colis enregistres dans la journee
-    //    (createdAt dans la fenetre, agence d'enregistrement = agence en
-    //    cours, identifiee via warehouse.agencyId ou destinationAgencyId).
+    // 2) Flux de colis du jour par route : ENTREES (colis enregistres /
+    //    receptionnes dans l'agence) et SORTIES (colis charges dans un
+    //    conteneur partant de l'agence). Masse + volume par route.
     // ------------------------------------------------------------------
-    const newParcels = await prisma.parcel.findMany({
+    // Entrees : colis crees ce jour, rattaches a l'agence (magasin ou
+    // destination).
+    const flowInParcels = await prisma.parcel.findMany({
       where: {
         isDeleted: false,
         createdAt: windowFilter,
@@ -234,22 +236,67 @@ export class DailyReportService {
       },
     });
 
-    const registeredByRoute: Record<RouteKey, ParcelMassVolAgg> = {};
-    let registeredTotalWeight = 0;
-    let registeredTotalVolume = 0;
-    for (const p of newParcels) {
-      const key = bumpRoute(registeredByRoute as any, p.transitRoute);
-      const slot = registeredByRoute[key] as ParcelMassVolAgg;
-      if (!('count' in slot)) {
-        Object.assign(slot, { count: 0, totalWeight: 0, totalVolume: 0, totalPrice: 0 });
+    // Sorties : colis charges dans un conteneur partant de cette agence ce
+    // jour. On lit l'historique colis (action LOADED_INTO_CONTAINER) borne a
+    // la fenetre, filtre sur les conteneurs dont l'agence de depart = agence.
+    const loadEvents = await prisma.parcelHistory.findMany({
+      where: {
+        action: 'LOADED_INTO_CONTAINER',
+        createdAt: windowFilter,
+        container: { departureAgencyId: agencyId },
+      },
+      select: {
+        parcel: {
+          select: {
+            id: true,
+            weight: true,
+            volume: true,
+            price: true,
+            transitRoute: { select: { id: true, name: true, type: true } },
+          },
+        },
+      },
+    });
+
+    const aggregateFlow = (
+      items: Array<{
+        weight: unknown;
+        volume: unknown;
+        price?: unknown;
+        transitRoute: { id: string; name: string; type: string } | null;
+      }>,
+    ) => {
+      const byRoute: Record<RouteKey, ParcelMassVolAgg> = {};
+      let totalWeight = 0;
+      let totalVolume = 0;
+      for (const p of items) {
+        const key = bumpRoute(byRoute as any, p.transitRoute);
+        const slot = byRoute[key] as ParcelMassVolAgg;
+        if (!('count' in slot)) {
+          Object.assign(slot, { count: 0, totalWeight: 0, totalVolume: 0, totalPrice: 0 });
+        }
+        slot.count += 1;
+        slot.totalWeight += Number(p.weight ?? 0);
+        slot.totalVolume += Number(p.volume ?? 0);
+        slot.totalPrice += Number(p.price ?? 0);
+        totalWeight += Number(p.weight ?? 0);
+        totalVolume += Number(p.volume ?? 0);
       }
-      slot.count += 1;
-      slot.totalWeight += Number(p.weight ?? 0);
-      slot.totalVolume += Number(p.volume ?? 0);
-      slot.totalPrice += Number(p.price ?? 0);
-      registeredTotalWeight += Number(p.weight ?? 0);
-      registeredTotalVolume += Number(p.volume ?? 0);
-    }
+      return { byRoute, totalWeight, totalVolume, count: items.length };
+    };
+
+    const flowIn = aggregateFlow(flowInParcels);
+    const flowOut = aggregateFlow(
+      // Dedup : un colis peut avoir plusieurs evenements de chargement.
+      Array.from(
+        new Map(loadEvents.map((e) => [e.parcel.id, e.parcel])).values(),
+      ),
+    );
+    // Compat ascendante : l'ancien champ registeredByRoute = entrees du flux.
+    const registeredByRoute = flowIn.byRoute;
+    const registeredTotalWeight = flowIn.totalWeight;
+    const registeredTotalVolume = flowIn.totalVolume;
+    const newParcels = flowInParcels;
 
     // ------------------------------------------------------------------
     // 3) Conteneurs RECUS dans la journee a cette agence (actualArrivalDate
@@ -538,7 +585,22 @@ export class DailyReportService {
       // --- Section 1 : Entrees par transit + methode ---
       entriesByTransitMethod,
 
-      // --- Section 2 : Masse/volume colis enregistres par route ---
+      // --- Section 2 : Flux de colis du jour par route (entrees + sorties) ---
+      flow: {
+        in: {
+          byRoute: flowIn.byRoute,
+          count: flowIn.count,
+          totalWeight: flowIn.totalWeight,
+          totalVolume: flowIn.totalVolume,
+        },
+        out: {
+          byRoute: flowOut.byRoute,
+          count: flowOut.count,
+          totalWeight: flowOut.totalWeight,
+          totalVolume: flowOut.totalVolume,
+        },
+      },
+      // Compat ascendante : ancien champ = entrees du flux.
       registeredByRoute,
       registeredTotal: {
         count: newParcels.length,

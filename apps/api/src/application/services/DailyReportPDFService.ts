@@ -263,31 +263,38 @@ export class DailyReportPDFService {
     }
 
     // ------------------------------------------------------------------
-    // IV. Masse / volume des colis enregistres par route
+    // IV. Flux de colis du jour par route (entrees + sorties)
     // ------------------------------------------------------------------
-    sectionTitle('IV. COLIS ENREGISTRES DU JOUR - MASSE / VOLUME PAR ROUTE');
-    const registered = Object.values((p.registeredByRoute ?? {}) as Record<string, any>);
-    if (registered.length === 0) writeLine('Aucun colis enregistre.', { color: gray });
-    else {
+    sectionTitle('IV. FLUX DE COLIS DU JOUR - MASSE / VOLUME PAR ROUTE');
+    const renderFlowSide = (title: string, side: any) => {
+      writeLine(title, { bold: true });
+      const rows = Object.values((side?.byRoute ?? {}) as Record<string, any>);
+      if (rows.length === 0) {
+        writeLine('Aucun mouvement.', { color: gray, indent: 10 });
+        return;
+      }
       drawTable(
         [
           { label: 'Route', width: 180 },
           { label: 'Nombre', width: 70, align: 'right' },
-          { label: 'Masse', width: 110, align: 'right' },
-          { label: 'Volume', width: 110, align: 'right' },
-          { label: 'Valeur', width: pageWidth - 470, align: 'right' },
+          { label: 'Masse', width: 130, align: 'right' },
+          { label: 'Volume', width: pageWidth - 380, align: 'right' },
         ],
-        registered.map((r: any) => [
+        rows.map((r: any) => [
           `${r.routeName}${r.type ? ' (' + (TRANSIT_LABELS[r.type] ?? r.type) + ')' : ''}`,
           String(r.count),
           fmtWeight(r.totalWeight),
           fmtVolume(r.totalVolume),
-          formatCurrency(r.totalPrice ?? 0),
         ]),
       );
-      const tot = p.registeredTotal ?? {};
-      writeKV('TOTAL ENREGISTRE', `${tot.count ?? 0} colis - ${fmtWeight(tot.totalWeight ?? 0)} - ${fmtVolume(tot.totalVolume ?? 0)}`);
-    }
+      writeKV(
+        `Sous-total ${title.toLowerCase()}`,
+        `${side?.count ?? 0} colis - ${fmtWeight(side?.totalWeight ?? 0)} - ${fmtVolume(side?.totalVolume ?? 0)}`,
+      );
+    };
+    const flow = p.flow ?? { in: p.registeredByRoute ? { byRoute: p.registeredByRoute, ...p.registeredTotal } : null, out: null };
+    renderFlowSide('Entrees (colis enregistres / receptionnes)', flow.in);
+    renderFlowSide('Sorties (colis charges / expedies)', flow.out);
 
     // ------------------------------------------------------------------
     // V. Conteneurs recus

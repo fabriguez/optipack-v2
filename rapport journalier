@@ -1,0 +1,13 @@
+Le rapport journalier des activités d’une agence doit comporter :
+
+1. Les entrées du jour par mode de transit et par mode de paiement
+2. La masse totale et le volume total de colis enregistré au courant de la journée dans l’agence par route de transit
+3. La liste de conteneurs reçus au courant de la journée avec la repartition de masse et de volume des colis de chaque conteneur par route de transit
+4. La liste de conteneurs envoyés au courant de la journée avec la repartition de masse et de volume des colis de chaque conteneur par route de transit
+5. La masse et le volume total de colis entrés et sorti du stock par route de transtit
+6. L’état de stock par route de transit et la valeur totale du stock
+7. Le rapport d’inventaire de la journée s’il y’en a eu
+8. Les paiements en avance (il s’agit des paiements effectués sur un colis n’etant par en stock dans son agence de destination) repartis par route de transit et par mode de paiement
+9. Les bénéfices réalisés
+10. Le solde de caisse apres entrés et sorties de caisse.
+11. Après fermeture de la caisse, toutes les entrée et sorties enregistrés ferons partir du rapport du jour suivant
