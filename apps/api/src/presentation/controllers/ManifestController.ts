@@ -7,6 +7,7 @@ import { PDFService } from '../../application/services/PDFService';
 import { ExcelService } from '../../infrastructure/excel/ExcelService';
 import { HistoryService } from '../../application/services/HistoryService';
 import { RegisterExtraManifestParcelUseCase } from '../../application/use-cases/manifest/RegisterExtraManifestParcelUseCase';
+import { MarkParcelMissingUseCase } from '../../application/use-cases/manifest/MarkParcelMissingUseCase';
 
 function getRepo(): IManifestRepository {
   return container.resolve<IManifestRepository>(MANIFEST_REPOSITORY);
@@ -161,6 +162,21 @@ export class ManifestController {
       const useCase = container.resolve(RegisterExtraManifestParcelUseCase);
       const parcel = await useCase.execute(req.params.containerId, req.body, req.user!.userId);
       res.status(201).json({ success: true, data: parcel });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async markParcelMissing(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(MarkParcelMissingUseCase);
+      const result = await useCase.execute(
+        req.params.containerId,
+        req.params.parcelId,
+        req.user!.userId,
+        req.body?.comment,
+      );
+      res.status(201).json({ success: true, data: result });
     } catch (err) {
       next(err);
     }

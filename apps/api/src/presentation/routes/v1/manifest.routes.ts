@@ -29,6 +29,12 @@ router.post(
   authorize('SUPER_ADMIN', 'ADMIN', 'AGENT', 'MAGASINIER'),
   ManifestController.registerExtraParcel,
 );
+// Marque un colis declare comme NON RECU physiquement (MISSING_PHYSICAL).
+router.post(
+  '/discrepancies/:containerId/parcels/:parcelId/missing',
+  authorize('SUPER_ADMIN', 'ADMIN', 'AGENT', 'MAGASINIER'),
+  ManifestController.markParcelMissing,
+);
 router.get('/:id', ManifestController.getById);
 router.get('/:id/pdf', ManifestController.getPDF);
 router.get('/:id/xlsx', ManifestController.getXLSX);

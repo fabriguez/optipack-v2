@@ -39,6 +39,20 @@ export function useCreateContainer() {
   });
 }
 
+export function useUpdateContainer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) =>
+      containersApi.update(id, data),
+    onSuccess: (_res, vars) => {
+      qc.invalidateQueries({ queryKey: ['containers'] });
+      qc.invalidateQueries({ queryKey: ['containers', vars.id] });
+      toast.success('Conteneur mis a jour');
+    },
+    onError: (e) => toast.error(extractApiError(e, 'Erreur lors de la mise a jour')),
+  });
+}
+
 export function useLoadParcels() {
   const qc = useQueryClient();
   return useMutation({

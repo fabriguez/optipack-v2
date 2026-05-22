@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { container } from '../../container';
 import { CreateContainerUseCase } from '../../application/use-cases/container/CreateContainerUseCase';
+import { UpdateContainerUseCase } from '../../application/use-cases/container/UpdateContainerUseCase';
 import { ListContainersUseCase } from '../../application/use-cases/container/ListContainersUseCase';
 import { LoadParcelsUseCase } from '../../application/use-cases/container/LoadParcelsUseCase';
 import { ListLoadableParcelsUseCase } from '../../application/use-cases/container/ListLoadableParcelsUseCase';
@@ -20,6 +21,16 @@ export class ContainerController {
       const useCase = container.resolve(CreateContainerUseCase);
       const result = await useCase.execute(req.body, req.user!.userId);
       res.status(201).json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async update(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(UpdateContainerUseCase);
+      const result = await useCase.execute(req.params.id, req.body, req.user!.userId);
+      res.json({ success: true, data: result });
     } catch (err) {
       next(err);
     }

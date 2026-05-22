@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowLeft, Package, Play, PackageCheck, Plus, Eye, PackageMinus,
-  FileText, FileCheck, FileDiff, Printer, History, AlertCircle, Truck, Camera, QrCode, ChevronDown, FileSpreadsheet,
+  FileText, FileCheck, FileDiff, Printer, History, AlertCircle, Truck, Camera, QrCode, ChevronDown, FileSpreadsheet, Edit,
 } from 'lucide-react';
+import { ContainerFormDialog } from '@/app/(dashboard)/containers/ContainerFormDialog';
 import { AppDropdownMenu } from '@/components/ui/AppDropdownMenu';
 import { ParcelQRDialog } from '@/components/shared/ParcelQRDialog';
 import { PageTransition } from '@/components/shared/PageTransition';
@@ -116,6 +117,7 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
   const loadMutation = useLoadParcels();
 
   const [showDepart, setShowDepart] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
   const [showArrive, setShowArrive] = useState(false);
   const [showLoadDialog, setShowLoadDialog] = useState(false);
   const [unloadTarget, setUnloadTarget] = useState<{ id: string; designation: string } | null>(null);
@@ -124,6 +126,8 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
   const [unloadWeight, setUnloadWeight] = useState('');
   const [unloadComment, setUnloadComment] = useState('');
   const [unloading, setUnloading] = useState(false);
+  const [missingTarget, setMissingTarget] = useState<{ id: string; designation: string } | null>(null);
+  const [markingMissing, setMarkingMissing] = useState(false);
   const [selectedParcelIds, setSelectedParcelIds] = useState<string[]>([]);
   const [parcelSearch, setParcelSearch] = useState('');
   const [parcelPage, setParcelPage] = useState(1);
@@ -372,6 +376,22 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
     setRemoving(false);
   };
 
+  const handleMarkMissingConfirm = async () => {
+    if (!missingTarget) return;
+    setMarkingMissing(true);
+    try {
+      await apiClient.post(`/manifests/discrepancies/${id}/parcels/${missingTarget.id}/missing`, {});
+      toast.success('Colis marque non recu (manquant physique)');
+      setMissingTarget(null);
+      qc.invalidateQueries({ queryKey: ['containers', id] });
+      qc.invalidateQueries({ queryKey: ['containers', id, 'parcels'] });
+      qc.invalidateQueries({ queryKey: ['containers', id, 'history'] });
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Operation impossible');
+    }
+    setMarkingMissing(false);
+  };
+
   // Le manifest record est independant du format de telechargement : on
   // genere une fois cote backend (cree le snapshot des lignes) puis on
   // propose au choix le PDF ou le XLSX. Les deux versions restent
@@ -464,6 +484,14 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
               : []),
             ...(canUnload
               ? [{ label: 'Decharger', icon: <PackageMinus className="h-4 w-4" />, onClick: () => setUnloadTarget({ id: row.id, designation: row.designation }) }]
+              : []),
+            ...((container.status === 'IN_TRANSIT' || container.status === 'RECEIVED') && row.status !== 'LOST'
+              ? [{
+                  label: 'Marquer non recu',
+                  icon: <AlertCircle className="h-4 w-4" />,
+                  variant: 'destructive' as const,
+                  onClick: () => setMissingTarget({ id: row.id, designation: row.designation }),
+                }]
               : []),
           ]}
         />
@@ -848,6 +876,12 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
             </div>
           </div>
           <div className="flex gap-2">
+            {(container.status === 'EMPTY' || container.status === 'LOADING') && (
+              <AppButton variant="outline" onClick={() => setShowEdit(true)}>
+                <Edit className="h-4 w-4" />
+                Modifier
+              </AppButton>
+            )}
             {container.status === 'LOADING' && (
               <AppButton onClick={() => setShowDepart(true)}>
                 <Play className="h-4 w-4" />
@@ -1263,6 +1297,21 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
           </div>
         </AppDialog>
 
+        <ContainerFormDialog
+          open={showEdit}
+          onClose={() => setShowEdit(false)}
+          container={container}
+        />
+        <ConfirmDialog
+          open={!!missingTarget}
+          onClose={() => setMissingTarget(null)}
+          onConfirm={handleMarkMissingConfirm}
+          title="Marquer le colis non recu"
+          message={`Le colis ${missingTarget?.designation ?? ''} sera marque comme NON RECU physiquement (manquant). Il apparaitra dans le bordereau de comparaison comme present virtuellement mais absent physiquement, et passera au statut Perdu.`}
+          confirmLabel="Marquer non recu"
+          variant="destructive"
+          loading={markingMissing}
+        />
         <ConfirmDialog
           open={showDepart}
           onClose={() => setShowDepart(false)}

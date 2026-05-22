@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { createContainerSchema, type CreateContainerInput } from '@transitsoftservices/shared';
@@ -10,16 +10,35 @@ import { AppButton } from '@/components/ui/AppButton';
 import { AppSelect } from '@/components/ui/AppSelect';
 import { AppSearchSelect } from '@/components/ui/AppSearchSelect';
 import { AppSwitch } from '@/components/ui/AppSwitch';
-import { useCreateContainer } from '@/lib/hooks/useContainers';
+import { useCreateContainer, useUpdateContainer } from '@/lib/hooks/useContainers';
 import { searchers } from '@/lib/api/searchers';
+
+interface ContainerLike {
+  id: string;
+  designation: string;
+  type: 'AIR' | 'SEA' | 'LAND';
+  isForwarding: boolean;
+  carrier?: string | null;
+  capacity: number | string;
+  departureAgencyId?: string;
+  arrivalAgencyId?: string;
+  transitRouteId?: string | null;
+  departureAgency?: { id: string; name: string } | null;
+  arrivalAgency?: { id: string; name: string } | null;
+  transitRoute?: { id: string; name: string } | null;
+}
 
 interface ContainerFormDialogProps {
   open: boolean;
   onClose: () => void;
+  /** Si fourni : mode edition (PATCH). Possible tant que statut EMPTY/LOADING. */
+  container?: ContainerLike | null;
 }
 
-export function ContainerFormDialog({ open, onClose }: ContainerFormDialogProps) {
+export function ContainerFormDialog({ open, onClose, container: editTarget }: ContainerFormDialogProps) {
   const createMutation = useCreateContainer();
+  const updateMutation = useUpdateContainer();
+  const isEdit = !!editTarget;
   const [isForwarding, setIsForwarding] = useState(false);
 
   const {
@@ -35,8 +54,43 @@ export function ContainerFormDialog({ open, onClose }: ContainerFormDialogProps)
     defaultValues: { isForwarding: false },
   });
 
+  useEffect(() => {
+    if (!open) return;
+    if (editTarget) {
+      reset({
+        designation: editTarget.designation,
+        type: editTarget.type,
+        isForwarding: editTarget.isForwarding,
+        carrier: editTarget.carrier ?? undefined,
+        capacity: Number(editTarget.capacity),
+        departureAgencyId: editTarget.departureAgency?.id ?? editTarget.departureAgencyId ?? '',
+        arrivalAgencyId: editTarget.arrivalAgency?.id ?? editTarget.arrivalAgencyId ?? '',
+        transitRouteId: editTarget.transitRoute?.id ?? editTarget.transitRouteId ?? undefined,
+      } as CreateContainerInput);
+      setIsForwarding(editTarget.isForwarding);
+    } else {
+      reset({ isForwarding: false } as CreateContainerInput);
+      setIsForwarding(false);
+    }
+  }, [open, editTarget, reset]);
+
   const onSubmit = async (data: CreateContainerInput) => {
-    // si on coupe le mode acheminement, on retire le parent
+    if (isEdit && editTarget) {
+      await updateMutation.mutateAsync({
+        id: editTarget.id,
+        data: {
+          designation: data.designation || undefined,
+          type: data.type,
+          carrier: data.carrier || null,
+          capacity: data.capacity,
+          departureAgencyId: data.departureAgencyId,
+          arrivalAgencyId: data.arrivalAgencyId,
+          transitRouteId: data.transitRouteId || undefined,
+        },
+      });
+      onClose();
+      return;
+    }
     const payload: CreateContainerInput = {
       ...data,
       isForwarding,
@@ -58,15 +112,19 @@ export function ContainerFormDialog({ open, onClose }: ContainerFormDialogProps)
     <AppDialog
       open={open}
       onClose={onClose}
-      title="Nouveau conteneur"
+      title={isEdit ? 'Modifier le conteneur' : 'Nouveau conteneur'}
       size="md"
       footer={
         <>
           <AppButton variant="ghost" type="button" onClick={onClose}>
             Annuler
           </AppButton>
-          <AppButton type="submit" form="container-form" loading={createMutation.isPending}>
-            Creer
+          <AppButton
+            type="submit"
+            form="container-form"
+            loading={createMutation.isPending || updateMutation.isPending}
+          >
+            {isEdit ? 'Enregistrer' : 'Creer'}
           </AppButton>
         </>
       }
@@ -93,6 +151,7 @@ export function ContainerFormDialog({ open, onClose }: ContainerFormDialogProps)
           </div>
           <AppSwitch
             checked={isForwarding}
+            disabled={isEdit}
             onCheckedChange={(v) => {
               setIsForwarding(v);
               setValue('isForwarding', v);

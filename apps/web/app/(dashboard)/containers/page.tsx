@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Upload, Container, Eye, Package } from 'lucide-react';
+import { Plus, Upload, Container, Eye, Package, Edit } from 'lucide-react';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
@@ -25,6 +25,7 @@ export default function ContainersPage() {
   const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [editContainer, setEditContainer] = useState<any | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -145,6 +146,9 @@ export default function ContainersPage() {
         <RowActions actions={[
           { label: 'Voir details', icon: <Eye className="h-4 w-4" />, onClick: () => router.push(`/containers/${row.id}`) },
           { label: 'Voir les colis', icon: <Package className="h-4 w-4" />, onClick: () => router.push(`/containers/${row.id}`) },
+          ...(row.status === 'EMPTY' || row.status === 'LOADING'
+            ? [{ label: 'Modifier', icon: <Edit className="h-4 w-4" />, onClick: () => setEditContainer(row) }]
+            : []),
         ]} />
       ),
     },
@@ -195,6 +199,11 @@ export default function ContainersPage() {
         </AppCard>
 
         <ContainerFormDialog open={showCreate} onClose={() => setShowCreate(false)} />
+        <ContainerFormDialog
+          open={!!editContainer}
+          onClose={() => setEditContainer(null)}
+          container={editContainer}
+        />
         <CsvImportDialog
           open={showImport}
           onClose={() => setShowImport(false)}
