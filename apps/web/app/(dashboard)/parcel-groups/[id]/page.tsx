@@ -3,27 +3,21 @@
 import { use, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Boxes, CreditCard, Package, FileText } from 'lucide-react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft, Boxes, CreditCard } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard, AppCardHeader } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppBadge } from '@/components/ui/AppBadge';
-import { AppDialog } from '@/components/ui/AppDialog';
-import { AppInput } from '@/components/ui/AppInput';
-import { AppSelect } from '@/components/ui/AppSelect';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
-import { formatAmount, formatDate } from '@transitsoftservices/shared';
-import { toast } from 'sonner';
+import { PaymentFormDialog } from '@/app/(dashboard)/payments/PaymentFormDialog';
+import { formatAmount } from '@transitsoftservices/shared';
 
 interface PayTarget {
   invoiceId: string;
-  agencyId: string;
-  label: string;
-  balance: number;
-  isGroup?: boolean;
+  parcelTracking?: string;
 }
 
 export default function ParcelGroupDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -81,15 +75,7 @@ export default function ParcelGroupDetailPage({ params }: { params: Promise<{ id
                 {groupInvoice.status !== 'PAID' && (
                   <AppButton
                     size="sm"
-                    onClick={() =>
-                      setPayTarget({
-                        invoiceId: groupInvoice.id,
-                        agencyId: group.agencyId,
-                        label: `Facture groupe ${group.reference}`,
-                        balance: Number(groupInvoice.balance),
-                        isGroup: true,
-                      })
-                    }
+                    onClick={() => setPayTarget({ invoiceId: groupInvoice.id })}
                   >
                     <CreditCard className="h-3.5 w-3.5" />
                     Payer le groupe
@@ -141,12 +127,7 @@ export default function ParcelGroupDetailPage({ params }: { params: Promise<{ id
                             size="sm"
                             variant="outline"
                             onClick={() =>
-                              setPayTarget({
-                                invoiceId: inv.id,
-                                agencyId: group.agencyId,
-                                label: `Colis ${p.trackingNumber}`,
-                                balance: Number(inv.balance),
-                              })
+                              setPayTarget({ invoiceId: inv.id, parcelTracking: p.trackingNumber })
                             }
                           >
                             <CreditCard className="h-3.5 w-3.5" />
@@ -163,13 +144,14 @@ export default function ParcelGroupDetailPage({ params }: { params: Promise<{ id
         </AppCard>
       </div>
 
-      <PayDialog
-        target={payTarget}
-        onClose={() => setPayTarget(null)}
-        onPaid={() => {
-          qc.invalidateQueries({ queryKey: ['parcel-groups', id] });
+      <PaymentFormDialog
+        open={!!payTarget}
+        onClose={() => {
           setPayTarget(null);
+          qc.invalidateQueries({ queryKey: ['parcel-groups', id] });
         }}
+        invoiceId={payTarget?.invoiceId}
+        parcelTracking={payTarget?.parcelTracking}
       />
     </PageTransition>
   );
@@ -181,75 +163,5 @@ function Kv({ label, value, mono }: { label: string; value: string; mono?: boole
       <p className="text-[11px] uppercase tracking-wider text-gray-400">{label}</p>
       <p className={`mt-0.5 font-medium text-gray-900 ${mono ? 'font-mono text-xs' : ''}`}>{value}</p>
     </div>
-  );
-}
-
-function PayDialog({ target, onClose, onPaid }: { target: PayTarget | null; onClose: () => void; onPaid: () => void }) {
-  const [amount, setAmount] = useState('');
-  const [method, setMethod] = useState('CASH');
-
-  const mutation = useMutation({
-    mutationFn: () =>
-      apiClient.post('/payments', {
-        invoiceId: target!.invoiceId,
-        agencyId: target!.agencyId,
-        amount: Number(amount),
-        paymentMethod: method,
-      }),
-    onSuccess: () => {
-      toast.success(target?.isGroup ? 'Paiement groupe reparti sur les colis' : 'Paiement enregistre');
-      setAmount('');
-      onPaid();
-    },
-    onError: (e: any) => toast.error(e?.response?.data?.message || 'Echec du paiement'),
-  });
-
-  return (
-    <AppDialog
-      open={!!target}
-      onClose={onClose}
-      title={target ? `Payer - ${target.label}` : 'Payer'}
-      size="sm"
-      footer={
-        <>
-          <AppButton variant="ghost" onClick={onClose}>Annuler</AppButton>
-          <AppButton
-            onClick={() => mutation.mutate()}
-            loading={mutation.isPending}
-            disabled={!amount || Number(amount) <= 0}
-          >
-            <CreditCard className="h-4 w-4" />
-            Encaisser
-          </AppButton>
-        </>
-      }
-    >
-      <div className="space-y-3">
-        <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">
-          Solde restant : <span className="font-semibold">{formatAmount(target?.balance ?? 0)}</span>
-          {target?.isGroup && ' - le montant est reparti proportionnellement sur les factures des colis non soldes.'}
-        </p>
-        <AppInput
-          label="Montant"
-          type="number"
-          min={0}
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          required
-        />
-        <AppSelect
-          label="Mode de paiement"
-          value={method}
-          onValueChange={setMethod}
-          options={[
-            { value: 'CASH', label: 'Especes' },
-            { value: 'MOBILE_MONEY', label: 'Mobile Money' },
-            { value: 'BANK_TRANSFER', label: 'Virement' },
-            { value: 'CARD', label: 'Carte' },
-            { value: 'CHECK', label: 'Cheque' },
-          ]}
-        />
-      </div>
-    </AppDialog>
   );
 }

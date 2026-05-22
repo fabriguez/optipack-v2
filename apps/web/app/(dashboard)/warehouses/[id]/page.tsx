@@ -3,7 +3,7 @@
 import { use, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Package, Plus, Eye, Edit, Trash2, ArrowRightLeft, ClipboardCheck, PlayCircle, QrCode, HandCoins, MapPin, Camera, ScanLine } from 'lucide-react';
+import { ArrowLeft, Package, Plus, Eye, Edit, Trash2, ArrowRightLeft, ClipboardCheck, PlayCircle, QrCode, HandCoins, MapPin, Camera, ScanLine, Boxes } from 'lucide-react';
 import { BatchScanCollector } from '@/components/shared/BatchScanCollector';
 import { ParcelPickerList } from '@/components/shared/ParcelPickerList';
 import { normalizeScannedTracking } from '@/lib/utils/scanNormalize';
@@ -39,6 +39,7 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
   const router = useRouter();
   const qc = useQueryClient();
   const [parcelPage, setParcelPage] = useState(1);
+  const [parcelView, setParcelView] = useState<'parcels' | 'groups'>('parcels');
   const [showCreateParcel, setShowCreateParcel] = useState(false);
   const [editParcel, setEditParcel] = useState<any>(null);
   const [deleteParcel, setDeleteParcel] = useState<any>(null);
@@ -77,6 +78,7 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
     queryFn: () => apiClient.get(`/warehouses/${id}`).then((r) => r.data),
     enabled: !!id,
   });
+  const warehouseAgencyId: string | undefined = data?.data?.agency?.id;
 
   const { data: summaryData } = useQuery({
     queryKey: ['warehouses', id, 'summary'],
@@ -98,6 +100,17 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
     limit: 20,
     page: parcelPage,
   } as any);
+
+  // Groupes de colis de l'agence du magasin (un groupe n'a pas de magasin
+  // propre : il est scope a l'agence). Charge uniquement en vue "groupes".
+  const { data: groupsData, isLoading: groupsLoading } = useQuery({
+    queryKey: ['parcel-groups', 'warehouse', id],
+    queryFn: () =>
+      apiClient
+        .get('/parcel-groups', { params: { agencyId: warehouseAgencyId || undefined } })
+        .then((r) => r.data),
+    enabled: parcelView === 'groups' && !!warehouseAgencyId,
+  });
 
   const handleStartInventory = async () => {
     try {
@@ -535,6 +548,35 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
     },
   ];
 
+  const groupColumns = [
+    {
+      key: 'reference',
+      label: 'Reference',
+      render: (row: any) => <span className="font-mono text-xs font-bold text-primary-700">{row.reference}</span>,
+    },
+    { key: 'label', label: 'Libelle', render: (row: any) => row.label || '-' },
+    { key: 'client', label: 'Client', render: (row: any) => row.client?.fullName || '-' },
+    {
+      key: 'parcels',
+      label: 'Colis',
+      render: (row: any) => <AppBadge variant="info">{row._count?.parcels ?? 0}</AppBadge>,
+    },
+    {
+      key: 'invoice',
+      label: 'Facture groupe',
+      render: (row: any) =>
+        row.invoice ? (
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold">{formatAmount(Number(row.invoice.totalAmount))}</span>
+            <StatusBadge status={row.invoice.status} type="invoice" />
+          </div>
+        ) : (
+          <span className="text-xs text-gray-300">-</span>
+        ),
+    },
+    { key: 'status', label: 'Statut', render: (row: any) => <AppBadge variant="default">{row.status}</AppBadge> },
+  ];
+
   return (
     <PageTransition>
       <div className="space-y-6">
@@ -726,6 +768,34 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
         })()}
 
         <AppCard>
+          <div className="mb-4 flex w-fit gap-1 rounded-lg bg-gray-100 p-1">
+            {([
+              { value: 'parcels', label: 'Colis', icon: <Package className="h-3.5 w-3.5" /> },
+              { value: 'groups', label: 'Groupes de colis', icon: <Boxes className="h-3.5 w-3.5" /> },
+            ] as const).map((v) => (
+              <button
+                key={v.value}
+                onClick={() => setParcelView(v.value)}
+                className={
+                  'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ' +
+                  (parcelView === v.value ? 'bg-white text-primary-700 shadow-sm' : 'text-gray-600 hover:text-gray-900')
+                }
+              >
+                {v.icon}
+                {v.label}
+              </button>
+            ))}
+          </div>
+
+          {parcelView === 'groups' ? (
+            <AppDataTable
+              columns={groupColumns}
+              data={groupsData?.data || []}
+              isLoading={groupsLoading}
+              onRowClick={(row) => router.push(`/parcel-groups/${row.id}`)}
+            />
+          ) : (
+          <>
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-base font-semibold text-gray-900">Colis dans ce magasin ({parcelsData?.meta?.total ?? 0})</h3>
             <div className="flex flex-wrap items-center gap-2">
@@ -810,6 +880,8 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
             limit={20}
             onPageChange={setParcelPage}
           />
+          </>
+          )}
         </AppCard>
       </div>
 
