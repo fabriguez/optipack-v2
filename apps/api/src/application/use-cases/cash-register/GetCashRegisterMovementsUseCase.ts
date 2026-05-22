@@ -65,7 +65,9 @@ export class GetCashRegisterMovementsUseCase {
           },
         }),
         prisma.expense.findMany({
-          where: { cashRegisterId: register.id },
+          // Exclut les depenses de salaire (category SALARY) : les versements
+          // de paie sont suivis dans le module RH, pas dans l'historique caisse.
+          where: { cashRegisterId: register.id, category: { not: 'SALARY' } },
           include: { approvedBy: { select: { firstName: true, lastName: true } } },
         }),
         prisma.disbursementVoucher.findMany({
