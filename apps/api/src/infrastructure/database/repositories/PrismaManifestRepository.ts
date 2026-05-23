@@ -17,11 +17,13 @@ const MANIFEST_INCLUDE = {
 
 // Statuts autorises pour generer un bordereau (audit fix #3 : statuts simplifies).
 const DISPATCH_ALLOWED = new Set(['LOADING', 'IN_TRANSIT', 'RECEIVED', 'UNLOADED']);
-// Bordereau de reception (= livraison physique a destination) : reserve au
-// statut UNLOADED uniquement. Le conteneur doit etre entierement vide pour
-// que la liste des colis recus soit definitive (un dechargement partiel
-// peut encore changer).
-const RECEPTION_ALLOWED = new Set(['UNLOADED']);
+// Bordereau de reception (= livraison physique a destination). Autorise des
+// que le conteneur est RECEIVED (arrive a destination, dechargement en
+// cours) ou UNLOADED (tous les colis traites). Sinon impossible de generer
+// le bordereau quand certains colis ont ete marques "non recus" sans aller
+// jusqu'au dechargement complet -- le statut RECEIVED reste alors actif et
+// bloquait la generation.
+const RECEPTION_ALLOWED = new Set(['RECEIVED', 'UNLOADED']);
 
 @injectable()
 export class PrismaManifestRepository implements IManifestRepository {
@@ -118,7 +120,7 @@ export class PrismaManifestRepository implements IManifestRepository {
 
     if (!RECEPTION_ALLOWED.has(container.status)) {
       throw new BusinessError(
-        `Bordereau de reception indisponible : le conteneur doit etre arrive ou decharge (statut actuel : ${container.status}).`,
+        `Bordereau de reception indisponible : le conteneur doit etre RECEIVED ou UNLOADED (statut actuel : ${container.status}).`,
       );
     }
 

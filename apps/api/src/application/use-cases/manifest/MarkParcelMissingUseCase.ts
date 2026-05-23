@@ -48,6 +48,22 @@ export class MarkParcelMissingUseCase {
         },
       });
 
+      // Repercussion sur le conteneur : si le colis etait charge dedans, on
+      // decremente currentLoad. Si plus aucun colis n'y reste, on cloture
+      // (UNLOADED) -- sinon le bordereau de reception restait bloque tant
+      // que le conteneur conservait son statut RECEIVED.
+      if (parcel.containerId === containerId) {
+        const parcelWeight = parcel.weight ? Number(parcel.weight) : 0;
+        const remaining = await tx.parcel.count({ where: { containerId } });
+        await tx.container.update({
+          where: { id: containerId },
+          data: {
+            currentLoad: { decrement: parcelWeight },
+            ...(remaining === 0 && container.status === 'RECEIVED' && { status: 'UNLOADED' }),
+          },
+        });
+      }
+
       const discrepancy = existing
         ? existing
         : await tx.manifestDiscrepancy.create({
