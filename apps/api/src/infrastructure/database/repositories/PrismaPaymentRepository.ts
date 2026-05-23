@@ -35,10 +35,28 @@ export class PrismaPaymentRepository implements IPaymentRepository {
   }
 
   async findByInvoice(invoiceId: string): Promise<Payment[]> {
-    return prisma.payment.findMany({
-      where: { invoiceId, isVoided: false },
-      orderBy: { createdAt: 'asc' },
+    // Facture agregat de groupe : aggregate les paiements de toutes les
+    // factures membres + ceux directement attaches a l'agregat. Sinon
+    // comportement standard (paiements directs uniquement).
+    const inv = await prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      select: { parcelGroupId: true },
     });
+    const invoiceIds: string[] = [invoiceId];
+    if (inv?.parcelGroupId) {
+      const parcels = await prisma.parcel.findMany({
+        where: { parcelGroupId: inv.parcelGroupId },
+        select: { invoiceId: true },
+      });
+      for (const p of parcels) {
+        if (p.invoiceId && !invoiceIds.includes(p.invoiceId)) invoiceIds.push(p.invoiceId);
+      }
+    }
+    return prisma.payment.findMany({
+      where: { invoiceId: { in: invoiceIds }, isVoided: false },
+      orderBy: { createdAt: 'asc' },
+      include: PAYMENT_INCLUDE,
+    } as any);
   }
 
   async findAll(

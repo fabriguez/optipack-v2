@@ -80,6 +80,11 @@ export function EmployeeFormDialog({ open, onClose, defaultAgency, employee }: P
       if (!isEdit) {
         const created = (res as any)?.data;
         if (created?.id) setEditableId(created.id);
+        // Affiche le matricule genere (ou saisi) dans le form pour copie rapide.
+        if (created?.idNumber) {
+          setValue('idNumber', created.idNumber, { shouldValidate: false });
+          toast.message(`Matricule : ${created.idNumber}`);
+        }
         if (created?.initialPassword) {
           setInitialPassword(created.initialPassword);
         }
@@ -281,7 +286,11 @@ export function EmployeeFormDialog({ open, onClose, defaultAgency, employee }: P
               <AppPhoneInput label="Telephone" value={field.value} onChange={field.onChange} />
             )}
           />
-          <AppInput label="N. identite" {...register('idNumber')} />
+          <AppInput
+            label="Matricule"
+            placeholder={isEdit ? '' : 'Auto-genere si laisse vide (ex: TRA-EMPL-2511231342)'}
+            {...register('idNumber')}
+          />
           <AppInput label="Email (pour compte portail)" type="email" {...register('email')} />
           <AppInput label="Salaire de base" type="number" {...register('baseSalary')} />
           <AppInput label="Niveau d'etudes" placeholder="Licence, Master, BAC+3..." {...register('educationLevel')} />

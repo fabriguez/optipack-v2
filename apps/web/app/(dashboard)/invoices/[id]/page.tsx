@@ -3,7 +3,7 @@
 import { use, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, FileText, CreditCard, Plus, User, Package, Building2, Eye, XCircle, Download } from 'lucide-react';
+import { ArrowLeft, FileText, CreditCard, Plus, User, Package, Building2, Eye, XCircle, Download, Percent } from 'lucide-react';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard, AppCardHeader } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
@@ -17,6 +17,7 @@ import { usePaymentsByInvoice } from '@/lib/hooks/usePayments';
 import { apiClient } from '@/lib/api/client';
 import { formatAmount, formatDate, formatDateTime } from '@transitsoftservices/shared';
 import { PaymentFormDialog } from '../../payments/PaymentFormDialog';
+import { InvoiceDiscountDialog } from './InvoiceDiscountDialog';
 
 const METHOD_LABELS: Record<string, string> = {
   CASH: 'Especes', MOBILE_MONEY: 'Mobile Money', BANK_TRANSFER: 'Virement', CARD: 'Carte', CHECK: 'Cheque',
@@ -26,6 +27,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   const { id } = use(params);
   const router = useRouter();
   const [showPayment, setShowPayment] = useState(false);
+  const [showDiscount, setShowDiscount] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
 
   const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
@@ -144,6 +146,10 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             <AppButton variant="outline" onClick={handleDownloadXlsx} loading={xlsxLoading}>
               <Download className="h-4 w-4" />
               XLSX
+            </AppButton>
+            <AppButton variant="outline" onClick={() => setShowDiscount(true)} disabled={invoice.status === 'PAID'}>
+              <Percent className="h-4 w-4" />
+              Remise
             </AppButton>
             <AppButton onClick={() => setShowPayment(true)} disabled={invoice.status === 'PAID'}>
               <Plus className="h-4 w-4" />
@@ -337,6 +343,11 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       </div>
 
       <PaymentFormDialog open={showPayment} onClose={() => setShowPayment(false)} invoiceId={id} />
+      <InvoiceDiscountDialog
+        open={showDiscount}
+        onClose={() => setShowDiscount(false)}
+        invoice={invoice ? { id: invoice.id, totalAmount: invoice.totalAmount, discount: invoice.discount, paidAmount: invoice.paidAmount } : null}
+      />
     </PageTransition>
   );
 }

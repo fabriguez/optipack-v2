@@ -56,6 +56,9 @@ export function PayEmployeeDialog({ open, onClose, employee, defaultCashRegister
   const qc = useQueryClient();
   const [period, setPeriod] = useState(currentPeriod());
   const [amount, setAmount] = useState<string>('');
+  const [bonuses, setBonuses] = useState<string>('');
+  const [benefitsInKind, setBenefitsInKind] = useState<string>('');
+  const [bonusesLabel, setBonusesLabel] = useState<string>('');
   const [installmentAmount, setInstallmentAmount] = useState<string>('');
   const [cashRegisterId, setCashRegisterId] = useState<string>('');
   const [description, setDescription] = useState<string>('');
@@ -114,6 +117,9 @@ export function PayEmployeeDialog({ open, onClose, employee, defaultCashRegister
     if (!open) return;
     setPeriod(currentPeriod());
     setAmount(employee?.baseSalary != null ? String(employee.baseSalary) : '');
+    setBonuses('');
+    setBenefitsInKind('');
+    setBonusesLabel('');
     setInstallmentAmount('');
     setCashRegisterId(defaultCashRegisterId ?? '');
     setDescription('');
@@ -126,7 +132,11 @@ export function PayEmployeeDialog({ open, onClose, employee, defaultCashRegister
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, deductionsData]);
 
-  const grossNumber = Number(amount) || 0;
+  const baseNumber = Number(amount) || 0;
+  const bonusesNumber = Number(bonuses) || 0;
+  const benefitsNumber = Number(benefitsInKind) || 0;
+  // Brut = base + primes + avantages. Aligne sur la regle backend.
+  const grossNumber = baseNumber + bonusesNumber + benefitsNumber;
   const deductionsTotal = pendingDeductions
     .filter((d) => applyDeductionIds.includes(d.id))
     .reduce((sum, d) => sum + Number(d.amount), 0);
@@ -150,6 +160,9 @@ export function PayEmployeeDialog({ open, onClose, employee, defaultCashRegister
       apiClient.post(`/employees/${employee!.id}/pay`, {
         period,
         amount: Number(amount),
+        bonuses: bonusesNumber || undefined,
+        benefitsInKind: benefitsNumber || undefined,
+        bonusesLabel: bonusesLabel || undefined,
         installmentAmount: installmentAmount ? Number(installmentAmount) : undefined,
         cashRegisterId: cashRegisterId || undefined,
         description: description || undefined,
@@ -225,7 +238,7 @@ export function PayEmployeeDialog({ open, onClose, employee, defaultCashRegister
         <div className="grid grid-cols-2 gap-3">
           <MonthYearPicker label="Periode" value={period} onChange={setPeriod} />
           <AppInput
-            label={isInstallmentMode ? 'Brut (fige)' : 'Montant brut'}
+            label={isInstallmentMode ? 'Salaire base (fige)' : 'Salaire base'}
             type="number"
             step="0.01"
             value={amount}
@@ -233,6 +246,37 @@ export function PayEmployeeDialog({ open, onClose, employee, defaultCashRegister
             disabled={isInstallmentMode}
           />
         </div>
+
+        {!isInstallmentMode && (
+          <div className="grid grid-cols-2 gap-3">
+            <AppInput
+              label="Primes / bonus (optionnel)"
+              type="number"
+              step="0.01"
+              value={bonuses}
+              onChange={(e) => setBonuses(e.target.value)}
+              placeholder="0"
+            />
+            <AppInput
+              label="Avantages en nature (optionnel)"
+              type="number"
+              step="0.01"
+              value={benefitsInKind}
+              onChange={(e) => setBenefitsInKind(e.target.value)}
+              placeholder="0"
+            />
+            {bonusesNumber > 0 && (
+              <div className="col-span-2">
+                <AppInput
+                  label="Libelle prime (pour bulletin)"
+                  value={bonusesLabel}
+                  onChange={(e) => setBonusesLabel(e.target.value)}
+                  placeholder="Ex: prime productivite, anciennete..."
+                />
+              </div>
+            )}
+          </div>
+        )}
 
         {isInstallmentMode && currentPayslip && (
           <div className="rounded-xl border border-primary-100 bg-primary-50/50 p-3 text-sm">
@@ -278,6 +322,22 @@ export function PayEmployeeDialog({ open, onClose, employee, defaultCashRegister
         {!isInstallmentMode && (
           <div className="rounded-xl bg-primary-50 p-3 text-sm">
             <div className="flex items-center justify-between">
+              <span className="text-gray-600">Salaire base</span>
+              <span className="font-mono">{formatAmount(baseNumber)}</span>
+            </div>
+            {bonusesNumber > 0 && (
+              <div className="flex items-center justify-between text-green-700">
+                <span>+ Primes {bonusesLabel ? `(${bonusesLabel})` : ''}</span>
+                <span className="font-mono">+{formatAmount(bonusesNumber)}</span>
+              </div>
+            )}
+            {benefitsNumber > 0 && (
+              <div className="flex items-center justify-between text-green-700">
+                <span>+ Avantages</span>
+                <span className="font-mono">+{formatAmount(benefitsNumber)}</span>
+              </div>
+            )}
+            <div className="flex items-center justify-between border-t border-primary-100 pt-1">
               <span className="text-gray-600">Brut</span>
               <span className="font-mono">{formatAmount(grossNumber)}</span>
             </div>

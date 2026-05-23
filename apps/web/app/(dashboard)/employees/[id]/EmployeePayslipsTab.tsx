@@ -13,6 +13,8 @@ interface Payslip {
   id: string;
   period: string;
   baseSalary: string | number;
+  bonuses?: string | number | null;
+  benefitsInKind?: string | number | null;
   grossSalary: string | number;
   netSalary: string | number;
   paidAmount: string | number;
@@ -58,6 +60,8 @@ export function EmployeePayslipsTab({ employeeId, employeeName }: { employeeId: 
             <tr>
               <th className="pb-2">Periode</th>
               <th className="pb-2">Statut</th>
+              <th className="pb-2 text-right">Base</th>
+              <th className="pb-2 text-right">Primes</th>
               <th className="pb-2 text-right">Brut</th>
               <th className="pb-2 text-right">Net</th>
               <th className="pb-2 text-right">Verse</th>
@@ -72,6 +76,7 @@ export function EmployeePayslipsTab({ employeeId, employeeName }: { employeeId: 
               const paid = Number(p.paidAmount ?? 0);
               const remaining = Math.max(0, net - paid);
               const partial = paid > 0 && remaining > 0;
+              const bonusesAmt = Number(p.bonuses ?? 0) + Number(p.benefitsInKind ?? 0);
               return (
                 <tr key={p.id}>
                   <td className="py-2 font-medium">{p.period}</td>
@@ -84,6 +89,8 @@ export function EmployeePayslipsTab({ employeeId, employeeName }: { employeeId: 
                       <AppBadge variant="default">Emis</AppBadge>
                     )}
                   </td>
+                  <td className="py-2 text-right font-mono text-gray-600">{formatAmount(Number(p.baseSalary))}</td>
+                  <td className="py-2 text-right font-mono text-green-700">{bonusesAmt > 0 ? `+${formatAmount(bonusesAmt)}` : '-'}</td>
                   <td className="py-2 text-right font-mono">{formatAmount(Number(p.grossSalary))}</td>
                   <td className="py-2 text-right font-mono">{formatAmount(net)}</td>
                   <td className="py-2 text-right font-mono text-green-700">{formatAmount(paid)}</td>

@@ -10,6 +10,15 @@ interface PayEmployeeInput {
   /** Montant brut DE REFERENCE pour cette periode (sert a calculer le net du
    *  payslip lors du PREMIER versement). Defaut : baseSalary. */
   amount?: number;
+  /** Primes / bonus de la periode (productivite, anciennete, etc.). Additionne
+   *  au baseSalary pour calculer le grossSalary du payslip. Appliquee au
+   *  PREMIER versement uniquement (figee dans le payslip ensuite). */
+  bonuses?: number;
+  /** Avantages en nature (logement, transport...). Idem bonuses : figee au
+   *  PREMIER versement. */
+  benefitsInKind?: number;
+  /** Libelle libre des primes (pour le bulletin de paie). */
+  bonusesLabel?: string;
   /** Montant a verser MAINTENANT (tranche). Defaut : solde restant a payer
    *  (paiement integral). Permet les avances / acomptes / soldes. */
   installmentAmount?: number;
@@ -53,7 +62,11 @@ export class PayEmployeeFromCashRegisterUseCase {
     if (!employee.isActive) throw new BusinessError('Employe inactif, paiement impossible.');
 
     const period = input.period ?? this.currentPeriod();
-    const grossAmount = input.amount ?? Number(employee.baseSalary);
+    const baseRef = input.amount ?? Number(employee.baseSalary);
+    const bonuses = Math.max(0, Number(input.bonuses ?? 0));
+    const benefits = Math.max(0, Number(input.benefitsInKind ?? 0));
+    // Brut = base + primes + avantages en nature (appliques au 1er versement).
+    const grossAmount = baseRef + bonuses + benefits;
     if (grossAmount <= 0) throw new BusinessError('Le montant doit etre superieur a zero.');
 
     const existingPayslip = await prisma.payslip.findFirst({ where: { employeeId, period } });
@@ -125,7 +138,9 @@ export class PayEmployeeFromCashRegisterUseCase {
             data: {
               employeeId,
               period,
-              baseSalary: employee.baseSalary,
+              baseSalary: baseRef,
+              bonuses,
+              benefitsInKind: benefits,
               grossSalary: grossAmount,
               netSalary: netSalary,
               isPaid: false,

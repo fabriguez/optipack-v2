@@ -8,6 +8,7 @@ export * from './transit-route.schema';
 export * from './parcel.schema';
 export * from './container.schema';
 export * from './payment.schema';
+export * from './invoice.schema';
 export * from './disbursement.schema';
 export * from './fund-transfer.schema';
 export * from './head-office.schema';

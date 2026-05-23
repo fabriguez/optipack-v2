@@ -1,23 +1,64 @@
 import { Router } from 'express';
 import { authenticate } from '../../middleware/authMiddleware';
 import { validate } from '../../middleware/validate';
-import { paginationSchema } from '@transitsoftservices/shared';
+import { paginationSchema, applyInvoiceDiscountSchema, type ApplyInvoiceDiscountInput } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
 import { PDFService } from '../../../application/services/PDFService';
 import type { InvoiceData } from '../../../application/services/PDFService';
 import { ExcelService } from '../../../infrastructure/excel/ExcelService';
 
 /**
- * Calcule la part de frais de magasinage par colis d'une facture. Reproduit
- * la logique de ComputeStorageFeeUseCase sans passer par le container DI
- * (cette route est handler-based, pas use-case). Retourne un objet par parcelId.
+ * Resout les ids de colis a facturer pour une facture donnee :
+ *  - facture standard : colis dont invoiceId = facture
+ *  - facture agregat de groupe : tous les colis du groupe lie a la facture
+ * Retourne aussi la liste d'invoiceIds membres (utile pour aggreger payments).
  */
-async function computeStorageFeesForInvoice(invoiceId: string): Promise<{
+async function resolveInvoiceScope(invoiceId: string): Promise<{
+  parcelIds: string[];
+  memberInvoiceIds: string[];
+  groupId: string | null;
+}> {
+  const invoice = await prisma.invoice.findUnique({
+    where: { id: invoiceId },
+    select: { id: true, parcelGroupId: true },
+  });
+  if (!invoice) return { parcelIds: [], memberInvoiceIds: [invoiceId], groupId: null };
+
+  if (invoice.parcelGroupId) {
+    // Facture agregat : on prend tous les colis du groupe + les factures membres.
+    const parcels = await prisma.parcel.findMany({
+      where: { parcelGroupId: invoice.parcelGroupId },
+      select: { id: true, invoiceId: true },
+    });
+    const memberInvoiceIds = [
+      ...new Set(parcels.map((p) => p.invoiceId).filter((id): id is string => !!id && id !== invoiceId)),
+    ];
+    return {
+      parcelIds: parcels.map((p) => p.id),
+      memberInvoiceIds: [invoiceId, ...memberInvoiceIds],
+      groupId: invoice.parcelGroupId,
+    };
+  }
+
+  const parcels = await prisma.parcel.findMany({
+    where: { invoiceId },
+    select: { id: true },
+  });
+  return { parcelIds: parcels.map((p) => p.id), memberInvoiceIds: [invoiceId], groupId: null };
+}
+
+/**
+ * Calcule la part de frais de magasinage par colis. Reproduit la logique de
+ * ComputeStorageFeeUseCase sans passer par le container DI (cette route est
+ * handler-based, pas use-case). Retourne un objet par parcelId.
+ */
+async function computeStorageFeesForParcels(parcelIds: string[]): Promise<{
   perParcel: Map<string, { fee: number; days: number }>;
   total: number;
 }> {
+  if (parcelIds.length === 0) return { perParcel: new Map(), total: 0 };
   const parcels = await prisma.parcel.findMany({
-    where: { invoiceId },
+    where: { id: { in: parcelIds } },
     select: {
       id: true,
       weight: true,
@@ -158,22 +199,55 @@ router.get('/:id', async (req, res, next) => {
       include: {
         client: { select: { id: true, fullName: true, phone: true, email: true } },
         agency: { select: { id: true, name: true, code: true, address: true, phone: true } },
-        parcels: { select: { id: true, trackingNumber: true, designation: true, weight: true, volume: true, destination: true, price: true } },
-        payments: { orderBy: { createdAt: 'asc' }, include: { agency: { select: { name: true } }, receivedBy: { select: { firstName: true, lastName: true } } } },
+        parcelGroup: { select: { id: true, reference: true, label: true } },
       },
     });
     if (!invoice) return res.status(404).json({ success: false, message: 'Facture introuvable' });
-    const storage = await computeStorageFeesForInvoice(invoice.id);
-    // On enrichit la reponse avec le breakdown des frais magasinage par colis
-    // et le total : l'UI peut afficher la ligne dediee + le detail par colis.
+
+    // Resout colis effectifs (facture standard ou facture agregat de groupe)
+    // + factures membres pour aggreger les paiements.
+    const scope = await resolveInvoiceScope(invoice.id);
+    const [parcelDetails, paymentList, storage, discountAudit] = await Promise.all([
+      prisma.parcel.findMany({
+        where: { id: { in: scope.parcelIds } },
+        select: {
+          id: true, trackingNumber: true, designation: true, weight: true, volume: true,
+          destination: true, price: true, invoiceId: true,
+        },
+      }),
+      prisma.payment.findMany({
+        where: { invoiceId: { in: scope.memberInvoiceIds }, isVoided: false },
+        orderBy: { createdAt: 'asc' },
+        include: {
+          agency: { select: { name: true } },
+          receivedBy: { select: { firstName: true, lastName: true } },
+          invoice: { select: { id: true, reference: true } },
+        },
+      }),
+      computeStorageFeesForParcels(scope.parcelIds),
+      prisma.auditLog.findMany({
+        where: {
+          entityType: 'Invoice',
+          entityId: { in: scope.memberInvoiceIds },
+          action: { in: ['DISCOUNT_APPLIED', 'DISCOUNT_REMOVED'] },
+        },
+        orderBy: { createdAt: 'desc' },
+        include: { user: { select: { firstName: true, lastName: true } } },
+      }),
+    ]);
+
     const enriched = {
       ...invoice,
-      parcels: (invoice as any).parcels?.map((p: any) => ({
+      parcels: parcelDetails.map((p) => ({
         ...p,
         storageFee: storage.perParcel.get(p.id)?.fee ?? 0,
         storageDays: storage.perParcel.get(p.id)?.days ?? 0,
       })),
+      payments: paymentList,
       storageFeesTotal: storage.total,
+      isAggregate: scope.groupId != null,
+      groupId: scope.groupId,
+      discountHistory: discountAudit,
     };
     res.json({ success: true, data: enriched });
   } catch (err) { next(err); }
@@ -187,14 +261,6 @@ router.get('/:id/pdf', async (req, res, next) => {
       include: {
         client: { select: { id: true, fullName: true, phone: true, email: true } },
         agency: { select: { id: true, name: true, code: true, address: true, phone: true } },
-        parcels: { select: { id: true, trackingNumber: true, designation: true, weight: true, volume: true, destination: true, price: true } },
-        payments: {
-          orderBy: { createdAt: 'asc' },
-          include: {
-            agency: { select: { name: true } },
-            receivedBy: { select: { firstName: true, lastName: true } },
-          },
-        },
       },
     });
 
@@ -203,10 +269,23 @@ router.get('/:id/pdf', async (req, res, next) => {
     }
 
     // Calcul des frais de magasinage par colis a l'instant T. On les rend
-    // visibles sur la facture pour transparence (non additionnes au netAmount
-    // tant que la matrice configurable n'est pas implementee -- voir todo
-    // differe).
-    const storage = await computeStorageFeesForInvoice(invoice.id);
+    // visibles sur la facture pour transparence.
+    const scope = await resolveInvoiceScope(invoice.id);
+    const [parcelDetails, paymentList, storage] = await Promise.all([
+      prisma.parcel.findMany({
+        where: { id: { in: scope.parcelIds } },
+        select: {
+          id: true, trackingNumber: true, designation: true, weight: true, volume: true,
+          destination: true, price: true,
+        },
+      }),
+      prisma.payment.findMany({
+        where: { invoiceId: { in: scope.memberInvoiceIds }, isVoided: false },
+        orderBy: { createdAt: 'asc' },
+        include: { agency: { select: { name: true } } },
+      }),
+      computeStorageFeesForParcels(scope.parcelIds),
+    ]);
 
     const invoiceData: InvoiceData = {
       reference: invoice.reference,
@@ -220,7 +299,7 @@ router.get('/:id/pdf', async (req, res, next) => {
         ? { name: invoice.agency.name, code: invoice.agency.code, address: invoice.agency.address, phone: invoice.agency.phone }
         : null,
       // Audit fix #5 : 1 facture peut couvrir N colis (toujours un array maintenant)
-      parcel: ((invoice as unknown as { parcels?: any[] }).parcels ?? []).map((p: any) => {
+      parcel: parcelDetails.map((p: any) => {
         const s = storage.perParcel.get(p.id);
         return {
           trackingNumber: p.trackingNumber,
@@ -233,15 +312,15 @@ router.get('/:id/pdf', async (req, res, next) => {
           storageDays: s?.days ?? 0,
         };
       }),
-      payments: invoice.payments.map((p: any) => ({
+      payments: paymentList.map((p: any) => ({
         createdAt: p.createdAt,
-        method: p.method,
+        method: p.paymentMethod ?? p.method ?? '-',
         amount: Number(p.amount),
         agency: p.agency,
       })),
       totalAmount: Number((invoice as any).totalAmount ?? 0),
       discount: Number((invoice as any).discount ?? 0),
-      tax: Number((invoice as any).tax ?? 0),
+      tax: Number((invoice as any).tva ?? 0),
       netAmount: Number((invoice as any).netAmount ?? 0),
       paidAmount: Number((invoice as any).paidAmount ?? 0),
       balance: Number((invoice as any).balance ?? 0),
@@ -273,15 +352,23 @@ router.get('/:id/xlsx', async (req, res, next) => {
       include: {
         client: { select: { fullName: true, phone: true, email: true } },
         agency: { select: { name: true, code: true } },
-        parcels: { select: { id: true, trackingNumber: true, designation: true, weight: true, volume: true, destination: true, price: true } },
-        payments: { orderBy: { createdAt: 'asc' }, select: { createdAt: true, paymentMethod: true, amount: true } },
       },
     });
     if (!invoice) return res.status(404).json({ success: false, message: 'Facture introuvable' });
 
-    const storage = await computeStorageFeesForInvoice(invoice.id);
+    const scope = await resolveInvoiceScope(invoice.id);
+    const [parcelDetails, storage] = await Promise.all([
+      prisma.parcel.findMany({
+        where: { id: { in: scope.parcelIds } },
+        select: {
+          id: true, trackingNumber: true, designation: true, weight: true, volume: true,
+          destination: true, price: true,
+        },
+      }),
+      computeStorageFeesForParcels(scope.parcelIds),
+    ]);
     const excel = new ExcelService();
-    const parcelRows = ((invoice as any).parcels ?? []).map((p: any, i: number) => {
+    const parcelRows = parcelDetails.map((p: any, i: number) => {
       const s = storage.perParcel.get(p.id);
       return {
         num: i + 1,
@@ -318,6 +405,79 @@ router.get('/:id/xlsx', async (req, res, next) => {
       'Content-Length': buf.length.toString(),
     });
     res.send(buf);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * Applique (ou remplace) une remise sur la facture avec justification obligatoire.
+ * Recalcule netAmount + balance et trace l'operation via AuditLog (action
+ * DISCOUNT_APPLIED) avec l'ancien/nouveau montant + raison + userId.
+ * Body : { amount: number >= 0, reason: string (min 3 chars) }
+ */
+router.post('/:id/discount', validate(applyInvoiceDiscountSchema), async (req, res, next) => {
+  try {
+    const { amount, reason } = req.body as ApplyInvoiceDiscountInput;
+
+    const invoice = await prisma.invoice.findUnique({ where: { id: req.params.id } });
+    if (!invoice) return res.status(404).json({ success: false, message: 'Facture introuvable' });
+
+    // Garde-fou : la remise ne peut pas excéder le brut.
+    const total = Number(invoice.totalAmount);
+    if (amount > total) {
+      return res.status(400).json({
+        success: false,
+        message: `Remise (${amount}) superieure au brut (${total}).`,
+      });
+    }
+
+    const previousDiscount = Number(invoice.discount);
+    const tva = Number(invoice.tva);
+    const newNet = Math.max(0, total - amount + tva);
+    const paid = Number(invoice.paidAmount);
+    const newBalance = Math.max(0, newNet - paid);
+    const newStatus = newBalance <= 0 ? 'PAID' : paid > 0 ? 'PARTIAL' : 'UNPAID';
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const inv = await tx.invoice.update({
+        where: { id: invoice.id },
+        data: { discount: amount, netAmount: newNet, balance: newBalance, status: newStatus as any },
+      });
+      await tx.auditLog.create({
+        data: {
+          userId: req.user?.userId ?? null,
+          agencyId: invoice.agencyId,
+          action: amount > 0 ? 'DISCOUNT_APPLIED' : 'DISCOUNT_REMOVED',
+          entityType: 'Invoice',
+          entityId: invoice.id,
+          changes: {
+            previousDiscount,
+            newDiscount: amount,
+            reason,
+            totalAmount: total,
+            newNetAmount: newNet,
+            newBalance,
+          },
+        },
+      });
+      return inv;
+    });
+
+    // Si facture membre d'un groupe : on resync l'agregat (somme members).
+    if (!invoice.parcelGroupId) {
+      const parcel = await prisma.parcel.findFirst({
+        where: { invoiceId: invoice.id, parcelGroupId: { not: null } },
+        select: { parcelGroupId: true },
+      });
+      if (parcel?.parcelGroupId) {
+        const { GroupInvoiceService } = await import('../../../application/services/GroupInvoiceService');
+        const svc = new GroupInvoiceService();
+        await svc.sync(parcel.parcelGroupId);
+      }
+    }
+
+    res.json({ success: true, data: updated });
   } catch (err) {
     next(err);
   }

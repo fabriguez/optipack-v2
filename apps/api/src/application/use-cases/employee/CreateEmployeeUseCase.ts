@@ -39,6 +39,25 @@ function generateInitialPassword(): string {
   return pwd;
 }
 
+/**
+ * Genere le matricule employe au format [PREFIX]-EMPL-XXXX, ou PREFIX est
+ * la premiere syllabe du nom du tenant (3 lettres). Suffixe : YYMMDDHHmm
+ * pour garantir un quasi-unique sans collision lecteur.
+ *
+ * Exemple : tenant "TransitSoftServices" -> "TRA-EMPL-2511231342".
+ */
+function generateEmployeeMatricule(tenantName: string | null | undefined): string {
+  const cleaned = (tenantName ?? 'ORG').replace(/[^A-Za-z0-9]/g, '');
+  const prefix = (cleaned.slice(0, 3) || 'ORG').toUpperCase();
+  const now = new Date();
+  const yy = String(now.getFullYear()).slice(-2);
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mn = String(now.getMinutes()).padStart(2, '0');
+  return `${prefix}-EMPL-${yy}${mm}${dd}${hh}${mn}`;
+}
+
 @injectable()
 export class CreateEmployeeUseCase {
   constructor(
@@ -73,10 +92,24 @@ export class CreateEmployeeUseCase {
       }
     }
 
-    // 1) Cree d'abord l'employe
+    // 1) Cree d'abord l'employe. Matricule : auto-genere a partir du tenant
+    //    si non fourni. Format [PREFIX_TENANT]-EMPL-YYMMDDHHmm.
+    let matricule = input.idNumber?.trim() || null;
+    if (!matricule) {
+      let tenantName: string | null = null;
+      if (organizationId) {
+        const org = await prisma.organization.findUnique({
+          where: { id: organizationId },
+          select: { name: true },
+        });
+        tenantName = org?.name ?? null;
+      }
+      matricule = generateEmployeeMatricule(tenantName);
+    }
+
     const employee = await this.employeeRepo.create({
       fullName: input.fullName,
-      idNumber: input.idNumber ?? null,
+      idNumber: matricule,
       phone: input.phone ?? null,
       position: input.position,
       level: input.level ?? null,
