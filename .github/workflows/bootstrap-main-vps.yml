@@ -82,9 +82,17 @@ jobs:
               git clone https://github.com/${{ github.repository }}.git ~/optipack-v2
             fi
             cd ~/optipack-v2
-            git fetch --all
+
+            # Sync resilient : remplace `git pull` (cf deploy-api.yml).
+            git remote prune origin || true
+            rm -f .git/refs/remotes/origin/main.lock 2>/dev/null || true
+            if ! git fetch origin main --force --prune; then
+              git update-ref -d refs/remotes/origin/main 2>/dev/null || true
+              git gc --prune=now 2>/dev/null || true
+              git fetch origin main --force --prune
+            fi
             git checkout main
-            git pull origin main
+            git reset --hard origin/main
 
       - name: Write .env if missing
         uses: appleboy/ssh-action@v1

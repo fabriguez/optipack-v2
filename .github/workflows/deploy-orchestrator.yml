@@ -44,7 +44,16 @@ jobs:
           script: |
             set -e
             cd ~/optipack-v2
-            git pull origin main
+
+            # Sync resilient : remplace `git pull` (cf deploy-api.yml).
+            git remote prune origin || true
+            rm -f .git/refs/remotes/origin/main.lock 2>/dev/null || true
+            if ! git fetch origin main --force --prune; then
+              git update-ref -d refs/remotes/origin/main 2>/dev/null || true
+              git gc --prune=now 2>/dev/null || true
+              git fetch origin main --force --prune
+            fi
+            git reset --hard origin/main
 
             # S'assurer que la BDD ops + redis tournent (entrypoint orchestrator les attend)
             docker compose -f docker-compose.control-plane.yml up -d ops-postgres ops-redis

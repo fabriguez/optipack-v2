@@ -437,6 +437,12 @@ export class PDFService {
     // (A4 = 842 x 595 pts) on a ~742pt utiles ce qui suffit largement.
     const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 50 });
     const pageWidth = doc.page.width - 100;
+    // Seuil bas dynamique (laisse 70pt pour le footer). En paysage A4 ~525.
+    // Auparavant les seuils etaient codes en dur (720/680/700) pour le
+    // portrait, ce qui ne declenchait jamais addPage en paysage et laissait
+    // pdfkit casser le bordereau en pages quasi-vides quand le contenu
+    // depassait 595pt.
+    const BOTTOM = doc.page.height - 70;
     const title = manifestData.title || "BORDEREAU D'ENVOI";
 
     // --- Header ---
@@ -525,7 +531,20 @@ export class PDFService {
         const recipientLines = 1 + (p.recipientPhone ? 1 : 0) + (p.recipientEmail ? 1 : 0);
         const lines = Math.max(clientLines, recipientLines, 1);
         const rowH = Math.max(22, 8 + lines * 9);
-        if (y + rowH > 720) { doc.addPage(); y = 50; }
+        if (y + rowH > BOTTOM) {
+          doc.addPage();
+          y = 50;
+          // Re-draw entete de table sur la nouvelle page.
+          doc.rect(50, y, tableWidth, 22).fill(COLORS.primary);
+          let hx = 55;
+          doc.fontSize(7).fillColor(COLORS.white);
+          for (const col of cols) {
+            doc.text(col.label, hx, y + 7, { width: col.width - 2 });
+            hx += col.width;
+          }
+          y += 22;
+          doc.fillColor(COLORS.dark).fontSize(7);
+        }
         const bg = i % 2 === 0 ? COLORS.white : COLORS.lightGray;
         doc.rect(50, y, tableWidth, rowH).fill(bg);
         doc.fillColor(COLORS.dark);
@@ -589,8 +608,10 @@ export class PDFService {
     }
 
     // --- Summary ---
+    // Bloc resume (~95pt) + signatures (~125pt) doivent rentrer ensemble.
+    // Si l'espace restant est insuffisant on passe a une nouvelle page.
     y += 15;
-    if (y > 680) { doc.addPage(); y = 50; }
+    if (y + 95 + 125 > BOTTOM) { doc.addPage(); y = 50; }
     const totalParcels = parcels.length;
     const totalWeight = parcels.reduce((s, p) => s + (Number(p.weight) || 0), 0);
     const totalVolume = parcels.reduce((s, p) => s + (Number(p.volume) || 0), 0);
@@ -613,7 +634,7 @@ export class PDFService {
 
     // --- Signatures ---
     y += 125;
-    if (y > 720) { doc.addPage(); y = 50; }
+    if (y + 40 > BOTTOM) { doc.addPage(); y = 50; }
 
     doc.fontSize(10).fillColor(COLORS.dark);
     doc.text('Expediteur:', 60, y);
