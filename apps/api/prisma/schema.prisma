@@ -577,6 +577,7 @@ model User {
   justificationsReviewed          AttendanceJustification[]       @relation("JustificationReviewer")
   leavesEnded                     EmployeeLeave[]                 @relation("LeaveEndedBy")
   containerExpensesClosed         Container[]                     @relation("ContainerExpensesClosedBy")
+  containerDocumentsUploaded      ContainerDocument[]             @relation("ContainerDocUploader")
 
   @@index([organizationId])
   @@index([email])
@@ -1352,6 +1353,7 @@ model Container {
   forwardingParcelLinks       ContainerForwardingParcelLink[] @relation("ForwardingParcelLinks")
   parentForwardingParcelLinks ContainerForwardingParcelLink[] @relation("ParentParcelLinks")
   expensesClosedBy            User?                           @relation("ContainerExpensesClosedBy", fields: [expensesClosedByUserId], references: [id])
+  documents                   ContainerDocument[]             @relation("ContainerDocuments")
   parcels                     Parcel[]                        @relation("CurrentContainer")
   lastContainerFor            Parcel[]                        @relation("LastContainer")
   histories                   ContainerHistory[]
@@ -1396,6 +1398,31 @@ model ContainerForwardingParent {
   @@index([forwardingId])
   @@index([parentId])
   @@map("container_forwarding_parents")
+}
+
+// Documents (PDF, XLSX, etc.) ou images (jpg, png) attaches a un conteneur.
+// Max 10 par conteneur (enforce dans AddContainerDocumentUseCase). Sert pour
+// justifier les depenses, frais de douane, photos d'arrivee, etc.
+model ContainerDocument {
+  id          String   @id @default(uuid())
+  containerId String
+  url         String
+  // Cle MinIO pour pouvoir supprimer / re-uploader. Optionnel pour les liens externes.
+  storageKey  String?
+  fileName    String?
+  contentType String?
+  size        Int?
+  caption     String?
+  // Marque les fichiers images pour affichage gallery (vs document).
+  isImage     Boolean  @default(false)
+  uploadedBy  String?
+  createdAt   DateTime @default(now())
+
+  container Container @relation("ContainerDocuments", fields: [containerId], references: [id], onDelete: Cascade)
+  uploader  User?     @relation("ContainerDocUploader", fields: [uploadedBy], references: [id])
+
+  @@index([containerId])
+  @@map("container_documents")
 }
 
 // Mapping per-parcel : pour chaque colis charge dans un conteneur

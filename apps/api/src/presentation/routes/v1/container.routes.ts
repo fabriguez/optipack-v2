@@ -29,4 +29,10 @@ router.post('/:id/depart', authorize('SUPER_ADMIN', 'ADMIN', 'AGENT'), Container
 router.post('/:id/arrive', authorize('SUPER_ADMIN', 'ADMIN', 'AGENT'), ContainerController.arrive);
 router.post('/:id/unload', authorize('SUPER_ADMIN', 'ADMIN', 'AGENT', 'MAGASINIER'), ContainerController.unloadParcel);
 
+// Documents / images du conteneur (max 10)
+router.get('/:id/documents', ContainerController.listDocuments);
+router.post('/:id/documents', authorize('SUPER_ADMIN', 'ADMIN', 'AGENT', 'COMPTABLE'), ContainerController.addDocument);
+router.patch('/:id/documents/:documentId', authorize('SUPER_ADMIN', 'ADMIN', 'AGENT', 'COMPTABLE'), ContainerController.updateDocument);
+router.delete('/:id/documents/:documentId', authorize('SUPER_ADMIN', 'ADMIN', 'AGENT', 'COMPTABLE'), ContainerController.deleteDocument);
+
 export default router;

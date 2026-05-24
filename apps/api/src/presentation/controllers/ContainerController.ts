@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import { container } from '../../container';
+import { prisma } from '../../config/database';
 import { CreateContainerUseCase } from '../../application/use-cases/container/CreateContainerUseCase';
 import { UpdateContainerUseCase } from '../../application/use-cases/container/UpdateContainerUseCase';
 import { ListContainersUseCase } from '../../application/use-cases/container/ListContainersUseCase';
@@ -183,6 +184,94 @@ export class ContainerController {
         { newWeight, comment },
       );
       res.json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  // -----------------------------------------------------------------
+  // Documents / images du conteneur (max 10 par conteneur)
+  // -----------------------------------------------------------------
+
+  static async listDocuments(req: Request, res: Response, next: NextFunction) {
+    try {
+      const docs = await prisma.containerDocument.findMany({
+        where: { containerId: req.params.id },
+        include: { uploader: { select: { id: true, firstName: true, lastName: true } } },
+        orderBy: { createdAt: 'desc' },
+      });
+      res.json({ success: true, data: docs });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async addDocument(req: Request, res: Response, next: NextFunction) {
+    try {
+      const containerId = req.params.id;
+      const { url, storageKey, fileName, contentType, size, caption, isImage } = req.body as {
+        url: string;
+        storageKey?: string;
+        fileName?: string;
+        contentType?: string;
+        size?: number;
+        caption?: string;
+        isImage?: boolean;
+      };
+      if (!url) return res.status(400).json({ success: false, message: 'url requis' });
+
+      const count = await prisma.containerDocument.count({ where: { containerId } });
+      if (count >= 10) {
+        return res.status(400).json({
+          success: false,
+          message: 'Limite atteinte : 10 documents max par conteneur. Supprimez-en un d\'abord.',
+        });
+      }
+
+      const doc = await prisma.containerDocument.create({
+        data: {
+          containerId,
+          url,
+          storageKey: storageKey ?? null,
+          fileName: fileName ?? null,
+          contentType: contentType ?? null,
+          size: size ?? null,
+          caption: caption?.trim() || null,
+          isImage: !!isImage,
+          uploadedBy: req.user!.userId,
+        },
+      });
+      res.status(201).json({ success: true, data: doc });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async updateDocument(req: Request, res: Response, next: NextFunction) {
+    try {
+      const doc = await prisma.containerDocument.findUnique({ where: { id: req.params.documentId } });
+      if (!doc || doc.containerId !== req.params.id) {
+        return res.status(404).json({ success: false, message: 'Document introuvable' });
+      }
+      const caption = typeof req.body?.caption === 'string' ? req.body.caption.trim() : null;
+      const updated = await prisma.containerDocument.update({
+        where: { id: doc.id },
+        data: { caption: caption || null },
+      });
+      res.json({ success: true, data: updated });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async deleteDocument(req: Request, res: Response, next: NextFunction) {
+    try {
+      const doc = await prisma.containerDocument.findUnique({ where: { id: req.params.documentId } });
+      if (!doc || doc.containerId !== req.params.id) {
+        return res.status(404).json({ success: false, message: 'Document introuvable' });
+      }
+      await prisma.containerDocument.delete({ where: { id: doc.id } });
+      res.json({ success: true });
     } catch (err) {
       next(err);
     }
