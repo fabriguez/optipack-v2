@@ -207,15 +207,38 @@ export class DailyReportService {
     let advancesTotal = 0;
     let recetteTotal = 0;
 
-    // Recette = paiement sur colis ayant atteint l'etat RECEPTIONNE
-    // (RECEIVED) ou au-dela (DELIVERED). Tous les statuts AVANT RECEIVED
-    // (IN_STOCK, LOADING, IN_TRANSIT, ARRIVED) -> paiement en avance.
-    const isAtDestination = (p: {
-      status: string;
-      warehouseId: string | null;
-      destinationAgencyId: string | null;
-      warehouse: { agencyId: string } | null;
-    }) => p.status === 'RECEIVED' || p.status === 'DELIVERED';
+    // Classification basee sur la TIMING : un paiement est une recette si
+    // son createdAt est posterieur a la date a laquelle le colis est passe
+    // en statut RECEIVED (receptionne). Sinon = paiement en avance.
+    //
+    // On precharge la date de reception de chaque colis lie aux paiements
+    // (premiere occurrence d'un ParcelHistory avec statusAfter='RECEIVED').
+    const allParcelIds = new Set<string>();
+    for (const pay of payments) {
+      if (pay.parcel) allParcelIds.add(pay.parcel.id);
+      for (const p of pay.invoice?.parcels ?? []) allParcelIds.add(p.id);
+    }
+    const receivedAtByParcel = new Map<string, Date>();
+    if (allParcelIds.size > 0) {
+      const receivedHistories = await prisma.parcelHistory.findMany({
+        where: {
+          parcelId: { in: Array.from(allParcelIds) },
+          statusAfter: 'RECEIVED',
+        },
+        select: { parcelId: true, createdAt: true },
+        orderBy: { createdAt: 'asc' },
+      });
+      for (const h of receivedHistories) {
+        if (!receivedAtByParcel.has(h.parcelId)) {
+          receivedAtByParcel.set(h.parcelId, h.createdAt);
+        }
+      }
+    }
+
+    const isPaymentAfterReception = (parcelId: string, paymentDate: Date) => {
+      const receivedAt = receivedAtByParcel.get(parcelId);
+      return !!receivedAt && paymentDate >= receivedAt;
+    };
 
     const routeOf = (p: { transitRoute: { id: string; name: string; type: string } | null }) => ({
       id: p.transitRoute?.id ?? null,
@@ -273,7 +296,9 @@ export class DailyReportService {
           : amount * (Number(p.price ?? 0) / totalPrice);
         if (share <= 0) continue;
         const route = routeOf(p);
-        if (isAtDestination(p)) {
+        // Recette = paiement effectue APRES reception du colis
+        // (payment.createdAt >= receivedAt). Sinon = avance.
+        if (isPaymentAfterReception(p.id, pay.createdAt)) {
           recetteTotal += share;
           bumpPayBucket(recetteByRouteAndMethod, route, pay.paymentMethod, share);
         } else {
