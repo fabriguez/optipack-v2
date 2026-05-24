@@ -1435,7 +1435,7 @@ model ContainerForwardingParcelLink {
   id                          String   @id @default(uuid())
   forwardingId                String
   parentId                    String
-  parcelId                    String   @unique
+  parcelId                    String
   containerForwardingParentId String
   // Snapshot du prix au moment du chargement (immutable). Sert au calcul
   // de proportion meme si le prix du colis change ulterieurement.
@@ -1447,8 +1447,13 @@ model ContainerForwardingParcelLink {
   parcel                    Parcel                    @relation("ParcelForwardingLink", fields: [parcelId], references: [id], onDelete: Cascade)
   containerForwardingParent ContainerForwardingParent @relation("ParcelLinkParent", fields: [containerForwardingParentId], references: [id], onDelete: Cascade)
 
+  // Un colis peut transiter par plusieurs forwardings au cours du temps.
+  // Une ligne par (forwarding, colis) : conserve l'historique meme apres
+  // dechargement -> propagation possible meme retroactivement.
+  @@unique([forwardingId, parcelId])
   @@index([forwardingId])
   @@index([parentId])
+  @@index([parcelId])
   @@index([containerForwardingParentId])
   @@map("container_forwarding_parcel_links")
 }
@@ -1567,9 +1572,10 @@ model Parcel {
   debts                   Debt[]
   // Paiements scopes a ce colis (cas facture multi-colis, paiement partiel).
   payments                Payment[]                       @relation("ParcelPayments")
-  // Lien forwarding (1-1) : conteneur source quand le colis est dans un
-  // forwarding. Null sinon. Permet propagation depense au prorata.
-  forwardingLink          ContainerForwardingParcelLink?  @relation("ParcelForwardingLink")
+  // Historique forwarding : un colis peut transiter par N forwardings au
+  // cours du temps. Une entree par (forwarding, colis). Permet propagation
+  // depense retroactive meme apres dechargement.
+  forwardingLinks         ContainerForwardingParcelLink[] @relation("ParcelForwardingLink")
 
   @@index([organizationId])
   @@index([clientId])

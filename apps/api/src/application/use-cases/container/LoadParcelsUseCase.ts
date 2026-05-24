@@ -105,9 +105,11 @@ export class LoadParcelsUseCase {
           create: { forwardingId: containerId, parentId: sourceContainerId, parcelCount: 1 },
           update: { parcelCount: { increment: 1 } },
         });
-        // Snapshot du prix au moment du chargement (immutable).
+        // Snapshot du prix au moment du chargement (immutable). Cle
+        // composite (forwarding, parcel) : conserve l'historique si le colis
+        // transite par plusieurs forwardings.
         await prisma.containerForwardingParcelLink.upsert({
-          where: { parcelId },
+          where: { forwardingId_parcelId: { forwardingId: containerId, parcelId } },
           create: {
             forwardingId: containerId,
             parentId: sourceContainerId,
@@ -116,7 +118,6 @@ export class LoadParcelsUseCase {
             parcelPriceSnapshot: parcel.price,
           },
           update: {
-            forwardingId: containerId,
             parentId: sourceContainerId,
             containerForwardingParentId: link.id,
             parcelPriceSnapshot: parcel.price,
