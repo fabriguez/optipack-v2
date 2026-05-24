@@ -5,6 +5,8 @@ import { MANIFEST_REPOSITORY, type IManifestRepository } from '../../interfaces/
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
 import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 import { HistoryService } from '../../services/HistoryService';
+import { prisma } from '../../../config/database';
+import { propagateForwardingExpense } from '../expense/CreateContainerExpenseUseCase';
 
 @injectable()
 export class DepartContainerUseCase {
@@ -77,6 +79,41 @@ export class DepartContainerUseCase {
       } catch (err) {
         // Le bordereau peut deja exister (replay) ou autre erreur metier --
         // on log uniquement, le depart reste valide.
+      }
+    }
+
+    // Propagation des depenses aux parents si conteneur d'acheminement.
+    // Au depart, le contenu est fige -> on propage toutes les depenses
+    // accumulees (non encore propagees + non-auto) aux conteneurs parents
+    // au prorata des prix snapshotes. Best-effort.
+    if (container.isForwarding) {
+      try {
+        const pendingExpenses = await prisma.expense.findMany({
+          where: {
+            containerId,
+            isAutoFromForwarding: false,
+            parentExpenseId: null,
+            // Pas deja propagees : aucune childExpense.
+            childExpenses: { none: {} },
+          },
+          select: { id: true, amount: true },
+        });
+        for (const exp of pendingExpenses) {
+          await prisma.$transaction(async (tx) => {
+            await propagateForwardingExpense(tx, exp.id, containerId, Number(exp.amount), userId);
+          });
+        }
+        if (pendingExpenses.length > 0) {
+          await this.history.recordContainer({
+            containerId,
+            action: 'FORWARDING_EXPENSES_PROPAGATED',
+            userId,
+            comment: `${pendingExpenses.length} depense(s) propagee(s) aux conteneurs parents`,
+            changes: { propagatedCount: pendingExpenses.length },
+          });
+        }
+      } catch (err) {
+        // Best-effort : echec propagation ne bloque pas le depart.
       }
     }
 

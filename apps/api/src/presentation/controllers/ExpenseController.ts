@@ -113,7 +113,8 @@ export class ExpenseController {
       const expense = await prisma.expense.findUnique({
         where: { id: expenseId },
         include: {
-          container: { select: { id: true, isForwarding: true, expensesClosedAt: true } },
+          container: { select: { id: true, isForwarding: true, status: true, expensesClosedAt: true } },
+          _count: { select: { childExpenses: true } },
         },
       });
       if (!expense) throw new NotFoundError('Depense', expenseId);
@@ -143,13 +144,18 @@ export class ExpenseController {
           },
         });
 
-        // Cascade auto-expenses si forwarding : on les recree avec les
-        // nouvelles proportions/montant.
-        if (expense.container?.isForwarding) {
+        // Cascade auto-expenses si forwarding ET deja propagee (childExpenses
+        // existantes OU conteneur post-depart). Sinon on ne touche a rien :
+        // la propagation se fera au moment du depart.
+        const POST_DEPARTURE = new Set(['IN_TRANSIT', 'RECEIVED', 'UNLOADED']);
+        const shouldCascade =
+          expense.container?.isForwarding &&
+          (expense._count.childExpenses > 0 || POST_DEPARTURE.has(expense.container.status));
+        if (shouldCascade) {
           await tx.expense.deleteMany({
             where: { parentExpenseId: expenseId, isAutoFromForwarding: true, isPaid: false },
           });
-          await propagateForwardingExpense(tx, expenseId, expense.container.id, newAmount, req.user!.userId);
+          await propagateForwardingExpense(tx, expenseId, expense.container!.id, newAmount, req.user!.userId);
         }
 
         return updated;

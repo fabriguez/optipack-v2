@@ -46,6 +46,7 @@ export class CreateContainerExpenseUseCase {
         designation: true,
         departureAgencyId: true,
         isForwarding: true,
+        status: true,
         expensesClosedAt: true,
       },
     });
@@ -79,8 +80,13 @@ export class CreateContainerExpenseUseCase {
         },
       });
 
-      // Propagation aux parents si forwarding.
-      if (container.isForwarding) {
+      // Propagation aux parents UNIQUEMENT si forwarding ET deja parti
+      // (IN_TRANSIT ou au-dela). Avant le depart, le contenu peut encore
+      // changer ; on attend le depart pour figer la repartition. Si la
+      // depense est ajoutee post-depart (incl. apres reception/dechargement),
+      // on propage immediatement.
+      const POST_DEPARTURE = new Set(['IN_TRANSIT', 'RECEIVED', 'UNLOADED']);
+      if (container.isForwarding && POST_DEPARTURE.has(container.status)) {
         await propagateForwardingExpense(tx, expense.id, container.id, input.amount, userId);
       }
 
