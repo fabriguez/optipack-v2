@@ -144,7 +144,7 @@ export class PayEmployeeFromHeadOfficeUseCase {
       });
       const disbursement = await tx.headOfficeDisbursementVoucher.create({
         data: {
-          reference: generateReference('DEC-HQ-SAL', disbursementCount + 1),
+          reference: generateReference('DEC-HQ-SAL', Date.now()),
           organizationId: input.organizationId,
           headOfficeCashRegisterId: hqRegister.id,
           reason: `${installmentLabel} ${period} - ${employee.fullName}`,

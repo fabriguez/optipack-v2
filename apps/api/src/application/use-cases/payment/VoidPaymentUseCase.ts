@@ -47,7 +47,7 @@ export class VoidPaymentUseCase {
 
     // Create REVERSE journal entry
     const journalCount = await this.journalRepo.countByDate(payment.agencyId, new Date());
-    const journalRef = generateReference('JRN', journalCount + 1);
+    const journalRef = generateReference('JRN', Date.now());
 
     await this.journalRepo.create({
       reference: journalRef,

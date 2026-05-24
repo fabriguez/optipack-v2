@@ -60,7 +60,7 @@ export class PayExpenseFromCashRegisterUseCase {
         : expense.title;
       const disbursement = await tx.disbursementVoucher.create({
         data: {
-          reference: generateReference('DEC-EXP', disbursementCount + 1),
+          reference: generateReference('DEC-EXP', Date.now()),
           agencyId: expense.agencyId,
           cashRegisterId: cashRegister!.id,
           reason: reasonLabel,

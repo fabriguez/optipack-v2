@@ -56,7 +56,7 @@ export class CreateDisbursementUseCase {
 
     // 5. Journal entry: Debit Charges, Credit Caisse
     const journalCount = await this.journalRepo.countByDate(input.agencyId, new Date());
-    const journalRef = generateReference('JRN', journalCount + 1);
+    const journalRef = generateReference('JRN', Date.now());
 
     await this.journalRepo.create({
       reference: journalRef,

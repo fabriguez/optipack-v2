@@ -186,7 +186,7 @@ export class PayEmployeeFromCashRegisterUseCase {
       });
       const disbursement = await tx.disbursementVoucher.create({
         data: {
-          reference: generateReference('DEC-SAL', disbursementCount + 1),
+          reference: generateReference('DEC-SAL', Date.now()),
           agencyId: employee.agencyId,
           cashRegisterId: cashRegister!.id,
           reason: `${installmentLabel} ${period} - ${employee.fullName}`,

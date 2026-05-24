@@ -89,7 +89,7 @@ export class CreateBatchParcelsUseCase {
 
     // 1 facture pour tout le batch
     const invoiceCount = await this.invoiceRepo.countByDate(warehouse.agencyId, new Date());
-    const invoiceRef = generateReference('FAC', invoiceCount + 1);
+    const invoiceRef = generateReference('FAC', Date.now());
 
     const invoice = await this.invoiceRepo.create({
       reference: invoiceRef,

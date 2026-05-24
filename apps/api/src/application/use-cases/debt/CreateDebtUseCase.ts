@@ -73,7 +73,7 @@ export class CreateDebtUseCase {
     // 4. Reference unique. Seq sur le compteur global organisation (pas
     //    parfait niveau race-condition, mais reference est aussi unique en DB).
     const count = await prisma.debt.count({ where: { organizationId: agency.organizationId } });
-    const reference = generateReference('DET', count + 1);
+    const reference = generateReference('DET', Date.now());
 
     // 5. Creation transactionnelle (Debt + DebtHistory initial).
     const debt = await prisma.$transaction(async (tx) => {

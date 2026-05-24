@@ -62,7 +62,7 @@ export class VoidFundTransferUseCase {
     if (transfer.sourceAgencyId) {
       const journalCount = await this.journalRepo.countByDate(transfer.sourceAgencyId, new Date());
       await this.journalRepo.create({
-        reference: generateReference('JRN', journalCount + 1),
+        reference: generateReference('JRN', Date.now()),
         description: `Annulation transfert ${transfer.reference}`,
         sourceType: 'TRANSFER',
         sourceId: transfer.id,

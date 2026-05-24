@@ -99,7 +99,7 @@ export class CreateFundTransferUseCase {
 
     const journalCount = await this.journalRepo.countByDate(input.sourceAgencyId!, new Date());
     await this.journalRepo.create({
-      reference: generateReference('JRN', journalCount + 1),
+      reference: generateReference('JRN', Date.now()),
       description: `Transfert ${reference} vers ${input.destinationType}`,
       sourceType: 'TRANSFER',
       sourceId: transfer.id,

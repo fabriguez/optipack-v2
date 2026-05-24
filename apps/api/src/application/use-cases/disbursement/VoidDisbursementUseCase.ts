@@ -45,7 +45,7 @@ export class VoidDisbursementUseCase {
     // Reverse journal entry
     const journalCount = await this.journalRepo.countByDate(disbursement.agencyId, new Date());
     await this.journalRepo.create({
-      reference: generateReference('JRN', journalCount + 1),
+      reference: generateReference('JRN', Date.now()),
       description: `Annulation decaissement ${disbursement.reference}`,
       sourceType: 'DISBURSEMENT',
       sourceId: reverse.id,

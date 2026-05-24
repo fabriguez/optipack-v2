@@ -38,7 +38,7 @@ export class RecordDebtPaymentUseCase {
 
     // Reference paiement unique (DPY-<seq>).
     const seq = await prisma.debtPayment.count({ where: { agencyId: input.agencyId } });
-    const reference = generateReference('DPY', seq + 1);
+    const reference = generateReference('DPY', Date.now());
 
     // Caisse du jour de l'agence (peut etre null si la caisse n'existe pas
     // encore pour ce jour ; on ne bloque pas le paiement pour Phase 1).
