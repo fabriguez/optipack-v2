@@ -17,6 +17,7 @@ import {
   ArchiveParcelsUseCase,
   UnarchiveParcelsUseCase,
 } from '../../application/use-cases/parcel/ArchiveParcelsUseCase';
+import { DeleteParcelUseCase } from '../../application/use-cases/parcel/DeleteParcelUseCase';
 
 export class ParcelController {
   static async create(req: Request, res: Response, next: NextFunction) {
@@ -271,6 +272,16 @@ export class ParcelController {
       const useCase = container.resolve(ComputeStorageFeeUseCase);
       const data = await useCase.execute(req.params.id);
       res.json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async delete(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(DeleteParcelUseCase);
+      await useCase.execute(req.params.id, req.user!.userId);
+      res.json({ success: true, message: 'Colis supprime' });
     } catch (err) {
       next(err);
     }

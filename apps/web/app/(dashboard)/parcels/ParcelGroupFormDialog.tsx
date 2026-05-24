@@ -121,6 +121,7 @@ export function ParcelGroupFormDialog({ open, onClose, defaultAgency }: Props) {
   const [parcels, setParcels] = useState<ParcelInGroup[]>([emptyParcel()]);
   // Scan QR : on memorise quel index de colis est en cours de scan.
   const [scanTarget, setScanTarget] = useState<number | null>(null);
+  const [contextCollapsed, setContextCollapsed] = useState(false);
 
   // Charge la route de transit selectionnee pour deriver :
   //  - le `groupMassMode` : AIR -> weight, SEA -> volume, LAND -> both ;
@@ -343,12 +344,29 @@ export function ParcelGroupFormDialog({ open, onClose, defaultAgency }: Props) {
       <div className="space-y-5">
         {/* Section 1 : contexte partage */}
         <section className="rounded-2xl border border-primary-100 bg-primary-50/30 p-4">
-          <p className="mb-3 text-sm font-semibold text-primary-900">
-            Contexte du groupe
-            <span className="ml-2 text-xs font-normal text-primary-700">
-              (applique a chaque colis du groupe)
-            </span>
-          </p>
+          <button
+            type="button"
+            onClick={() => setContextCollapsed((v) => !v)}
+            className="mb-3 flex w-full items-center justify-between gap-2 text-left"
+          >
+            <p className="text-sm font-semibold text-primary-900">
+              Contexte du groupe
+              <span className="ml-2 text-xs font-normal text-primary-700">
+                {contextCollapsed
+                  ? sharedReady
+                    ? '(defini — cliquer pour modifier)'
+                    : '(incomplet — cliquer pour ouvrir)'
+                  : '(applique a chaque colis du groupe)'}
+              </span>
+            </p>
+            {contextCollapsed ? (
+              <ChevronDown className="h-4 w-4 text-primary-700" />
+            ) : (
+              <ChevronUp className="h-4 w-4 text-primary-700" />
+            )}
+          </button>
+          {!contextCollapsed && (
+          <>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <AppSearchSelect
               label="Client expediteur"
@@ -397,6 +415,8 @@ export function ParcelGroupFormDialog({ open, onClose, defaultAgency }: Props) {
               />
             </div>
           ) : null}
+          </>
+          )}
         </section>
 
         {/* Section 2 : colis */}

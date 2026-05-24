@@ -3,7 +3,7 @@
 import { use, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Package, Plus, Eye, Edit, Trash2, ArrowRightLeft, ClipboardCheck, PlayCircle, QrCode, HandCoins, MapPin, Camera, ScanLine, Boxes } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Package, Plus, Eye, Edit, Trash2, ArrowRightLeft, ClipboardCheck, PlayCircle, QrCode, HandCoins, MapPin, Camera, ScanLine, Boxes } from 'lucide-react';
 import { BatchScanCollector } from '@/components/shared/BatchScanCollector';
 import { ParcelPickerList } from '@/components/shared/ParcelPickerList';
 import { normalizeScannedTracking } from '@/lib/utils/scanNormalize';
@@ -43,6 +43,7 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
   const [showCreateParcel, setShowCreateParcel] = useState(false);
   const [editParcel, setEditParcel] = useState<any>(null);
   const [deleteParcel, setDeleteParcel] = useState<any>(null);
+  const [lostParcel, setLostParcel] = useState<any>(null);
   const [transferParcel, setTransferParcel] = useState<any>(null);
   const [removeParcel, setRemoveParcel] = useState<any>(null);
   const [targetWarehouseId, setTargetWarehouseId] = useState('');
@@ -400,13 +401,25 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
   const handleDeleteParcel = async () => {
     if (!deleteParcel) return;
     try {
-      await apiClient.patch(`/parcels/${deleteParcel.id}/status`, { status: 'LOST' });
+      await apiClient.delete(`/parcels/${deleteParcel.id}`);
       toast.success(`Colis ${deleteParcel.trackingNumber} supprime`);
       invalidateAll();
-    } catch {
-      toast.error('Erreur lors de la suppression');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Erreur lors de la suppression');
     }
     setDeleteParcel(null);
+  };
+
+  const handleMarkLost = async () => {
+    if (!lostParcel) return;
+    try {
+      await apiClient.patch(`/parcels/${lostParcel.id}/status`, { status: 'LOST' });
+      toast.success(`Colis ${lostParcel.trackingNumber} marque comme perdu`);
+      invalidateAll();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Erreur lors du marquage');
+    }
+    setLostParcel(null);
   };
 
   const canModifyParcel = (row: any) => row.status === 'IN_STOCK';
@@ -540,6 +553,7 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
               { label: 'Deplacer vers une zone', icon: <MapPin className="h-4 w-4" />, onClick: () => setMoveSpaceParcel(row) },
               { label: 'Transferer', icon: <ArrowRightLeft className="h-4 w-4" />, onClick: () => setTransferParcel(row) },
               { label: 'Retirer du magasin', icon: <Package className="h-4 w-4" />, onClick: () => setRemoveParcel(row) },
+              { label: 'Marquer perdu', icon: <AlertTriangle className="h-4 w-4" />, onClick: () => setLostParcel(row) },
               { label: 'Supprimer', icon: <Trash2 className="h-4 w-4" />, onClick: () => setDeleteParcel(row), variant: 'destructive' as const },
             ] : []),
           ]}
@@ -1201,14 +1215,25 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
         </div>
       </AppDialog>
 
-      {/* Delete confirm */}
+      {/* Delete confirm (soft delete = retire de la liste) */}
       <ConfirmDialog
         open={!!deleteParcel}
         onClose={() => setDeleteParcel(null)}
         onConfirm={handleDeleteParcel}
         title="Supprimer le colis"
-        message={`Le colis ${deleteParcel?.trackingNumber} (${deleteParcel?.designation}) sera marque comme perdu. Cette action est irreversible.`}
+        message={`Le colis ${deleteParcel?.trackingNumber} (${deleteParcel?.designation}) sera supprime de la liste. Cette action est irreversible.`}
         confirmLabel="Supprimer"
+        variant="destructive"
+      />
+
+      {/* Marquer perdu */}
+      <ConfirmDialog
+        open={!!lostParcel}
+        onClose={() => setLostParcel(null)}
+        onConfirm={handleMarkLost}
+        title="Marquer le colis comme perdu"
+        message={`Le colis ${lostParcel?.trackingNumber} (${lostParcel?.designation}) sera marque comme perdu (statut LOST). Cette action est irreversible.`}
+        confirmLabel="Marquer perdu"
         variant="destructive"
       />
     </PageTransition>

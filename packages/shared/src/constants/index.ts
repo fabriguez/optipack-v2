@@ -1,12 +1,14 @@
 export * from './enums';
 
-// Transitions de statut valides pour les colis
+// Transitions de statut valides pour les colis.
+// LOST est cible valide depuis tout statut non-terminal (perte detectee a
+// n'importe quel moment du transit). DELIVERED/LOST = terminaux.
 export const VALID_PARCEL_TRANSITIONS: Record<string, string[]> = {
-  IN_STOCK: ['LOADING'],
-  LOADING: ['IN_STOCK', 'IN_TRANSIT'],
-  IN_TRANSIT: ['ARRIVED'],
-  ARRIVED: ['RECEIVED'],
-  RECEIVED: ['IN_STOCK', 'DELIVERED'],
+  IN_STOCK: ['LOADING', 'LOST'],
+  LOADING: ['IN_STOCK', 'IN_TRANSIT', 'LOST'],
+  IN_TRANSIT: ['ARRIVED', 'LOST'],
+  ARRIVED: ['RECEIVED', 'LOST'],
+  RECEIVED: ['IN_STOCK', 'DELIVERED', 'LOST'],
   DELIVERED: [],
   LOST: [],
 };
