@@ -19,7 +19,7 @@ import { DailyReportPDFService } from '../../application/services/DailyReportPDF
 import { SendDailyReportEmailUseCase } from '../../application/use-cases/agency/SendDailyReportEmailUseCase';
 import { StorageService } from '../../infrastructure/storage/StorageService';
 import { prisma } from '../../config/database';
-import { NotFoundError, BusinessError } from '../../domain/errors/BusinessError';
+import { NotFoundError } from '../../domain/errors/BusinessError';
 import { getOrgId } from '../middleware/tenantGuard';
 
 export class AgencyController {
@@ -233,19 +233,10 @@ export class AgencyController {
   static async generateDailyReport(req: Request, res: Response, next: NextFunction) {
     try {
       const date = req.body?.date ? new Date(req.body.date) : new Date();
-      // Verrouillage : si un rapport CLOSED existe deja pour cette date,
-      // refuser la regen pour preserver l'integrite du snapshot (stock, etc).
-      const dayStart = new Date(date);
-      dayStart.setUTCHours(0, 0, 0, 0);
-      const existing = await prisma.agencyDailyReport.findUnique({
-        where: { agencyId_date: { agencyId: req.params.id, date: dayStart } },
-        select: { status: true, id: true },
-      });
-      if (existing?.status === 'CLOSED') {
-        throw new BusinessError(
-          'Ce rapport est cloture. La regeneration est interdite pour preserver le snapshot fige.',
-        );
-      }
+      // Regeneration toujours permise (y compris CLOSED) : le payload est
+      // ecrase avec les dernieres donnees. Le statut CLOSED/observation sont
+      // preserves par DailyReportService.generate (update partiel : payload
+      // seulement, pas le status).
       const svc = container.resolve(DailyReportService);
       const result = await svc.generate(req.params.id, date);
       res.status(201).json({ success: true, data: result });

@@ -28,6 +28,13 @@ interface ContainerRouteAgg extends RouteAgg {
   totalVolume: number;
 }
 
+interface ManifestRef {
+  id: string;
+  number: string;
+  type: 'DISPATCH' | 'RECEPTION';
+  createdAt: string;
+}
+
 interface ContainerRow {
   id: string;
   designation: string;
@@ -42,6 +49,10 @@ interface ContainerRow {
   totalWeight: number;
   totalVolume: number;
   byRoute: Record<RouteKey, ContainerRouteAgg>;
+  /** Bordereaux d'envoi/reception lies au conteneur. */
+  manifests: ManifestRef[];
+  /** True si le conteneur a des discrepancies -> generer aussi bordereau comparaison. */
+  hasComparison: boolean;
 }
 
 interface ParcelLite {
@@ -196,16 +207,17 @@ export class DailyReportService {
     let advancesTotal = 0;
     let recetteTotal = 0;
 
-    // Strict : "deja en stock dans un magasin de son agence de destination".
-    // DELIVERED exclu = colis deja retire n'est plus en stock -> paiement
-    // bascule en avance (decision metier, cf rapport journalier spec).
+    // Recette = colis arrive dans son agence de destination, ce qui couvre
+    // les statuts IN_STOCK (en magasin) et RECEIVED (receptionne, pret a la
+    // remise au destinataire). DELIVERED exclu (deja retire). Le warehouse
+    // courant doit appartenir a l'agence destination.
     const isAtDestination = (p: {
       status: string;
       warehouseId: string | null;
       destinationAgencyId: string | null;
       warehouse: { agencyId: string } | null;
     }) =>
-      p.status === 'IN_STOCK' &&
+      (p.status === 'IN_STOCK' || p.status === 'RECEIVED') &&
       !!p.destinationAgencyId &&
       !!p.warehouse?.agencyId &&
       p.warehouse.agencyId === p.destinationAgencyId;
@@ -389,13 +401,12 @@ export class DailyReportService {
         },
         include: {
           transitRoute: { select: { id: true, name: true, type: true } },
-          parcels: {
-            select: {
-              weight: true,
-              volume: true,
-              transitRoute: { select: { id: true, name: true, type: true } },
-            },
+          manifests: {
+            where: { status: 'ACTIVE' },
+            select: { id: true, number: true, type: true, createdAt: true },
+            orderBy: { createdAt: 'desc' },
           },
+          discrepancies: { select: { id: true } },
         },
       }),
       prisma.container.findMany({
@@ -406,22 +417,56 @@ export class DailyReportService {
         },
         include: {
           transitRoute: { select: { id: true, name: true, type: true } },
-          parcels: {
-            select: {
-              weight: true,
-              volume: true,
-              transitRoute: { select: { id: true, name: true, type: true } },
-            },
+          manifests: {
+            where: { status: 'ACTIVE', type: 'DISPATCH' },
+            select: { id: true, number: true, type: true, createdAt: true },
+            orderBy: { createdAt: 'desc' },
           },
         },
       }),
     ]);
 
-    const summarizeContainer = (c: typeof receivedContainers[number]): ContainerRow => {
+    // Pour chaque conteneur on agrege les colis qui ont transite via lui :
+    // currentContainer (encore charge) OU lastContainer (deja decharge).
+    // Sans le fallback lastContainerId, les conteneurs RECUS affichent 0 colis
+    // une fois le dechargement effectue (containerId remis a null).
+    const allContainerIds = [...receivedContainers, ...sentContainers].map((c) => c.id);
+    const parcelsForContainers = allContainerIds.length
+      ? await prisma.parcel.findMany({
+          where: {
+            isDeleted: false,
+            OR: [
+              { containerId: { in: allContainerIds } },
+              { lastContainerId: { in: allContainerIds } },
+            ],
+          },
+          select: {
+            id: true,
+            containerId: true,
+            lastContainerId: true,
+            weight: true,
+            volume: true,
+            transitRoute: { select: { id: true, name: true, type: true } },
+          },
+        })
+      : [];
+
+    const parcelsByContainer = new Map<string, typeof parcelsForContainers>();
+    for (const p of parcelsForContainers) {
+      const cid = p.containerId ?? p.lastContainerId;
+      if (!cid) continue;
+      if (!parcelsByContainer.has(cid)) parcelsByContainer.set(cid, []);
+      parcelsByContainer.get(cid)!.push(p);
+    }
+
+    const summarizeContainer = (
+      c: typeof receivedContainers[number] | typeof sentContainers[number],
+    ): ContainerRow => {
       const byRoute: Record<RouteKey, ContainerRouteAgg> = {};
       let totalWeight = 0;
       let totalVolume = 0;
-      for (const p of c.parcels) {
+      const parcels = parcelsByContainer.get(c.id) ?? [];
+      for (const p of parcels) {
         const r = p.transitRoute ?? c.transitRoute;
         const key = routeKeyOf(r);
         byRoute[key] ??= {
@@ -438,6 +483,15 @@ export class DailyReportService {
         totalWeight += Number(p.weight ?? 0);
         totalVolume += Number(p.volume ?? 0);
       }
+      const manifests: ManifestRef[] = (c.manifests ?? []).map((m: any) => ({
+        id: m.id,
+        number: m.number,
+        type: m.type as 'DISPATCH' | 'RECEPTION',
+        createdAt: m.createdAt.toISOString(),
+      }));
+      const hasComparison = Array.isArray((c as any).discrepancies)
+        ? (c as any).discrepancies.length > 0
+        : false;
       return {
         id: c.id,
         designation: c.designation,
@@ -448,10 +502,12 @@ export class DailyReportService {
         loadingDate: c.loadingDate ? c.loadingDate.toISOString() : null,
         departureDate: c.departureDate ? c.departureDate.toISOString() : null,
         arrivalDate: c.actualArrivalDate ? c.actualArrivalDate.toISOString() : null,
-        parcels: c.parcels.length,
+        parcels: parcels.length,
         totalWeight,
         totalVolume,
         byRoute,
+        manifests,
+        hasComparison,
       };
     };
 
@@ -499,13 +555,15 @@ export class DailyReportService {
 
     // ------------------------------------------------------------------
     // 6) Etat de stock par route + valeur totale (snapshot a l'instant T).
+    //    "En stock" = IN_STOCK ou RECEIVED (receptionne, encore physiquement
+    //    present dans l'agence en attente de remise au destinataire).
     //    Une fois le rapport CLOSED, la regen est refusee (cf controller)
     //    donc ce snapshot reste fige au moment de la cloture.
     // ------------------------------------------------------------------
     const currentStock = await prisma.parcel.findMany({
       where: {
         isDeleted: false,
-        status: 'IN_STOCK',
+        status: { in: ['IN_STOCK', 'RECEIVED'] },
         warehouse: { agencyId },
       },
       select: {

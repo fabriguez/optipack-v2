@@ -192,9 +192,9 @@ export class DailyReportPDFService {
     const p = input.payload ?? {};
 
     // ------------------------------------------------------------------
-    // I. Recettes (paiements sur colis en stock destination)
+    // I. Recettes (paiements sur colis arrives a destination)
     // ------------------------------------------------------------------
-    sectionTitle('I. RECETTES (paiements sur colis en stock destination)');
+    sectionTitle('I. RECETTES (paiements sur colis arrives a destination)');
     const recetteRoutes = Object.values((p.recetteByRouteAndMethod ?? {}) as Record<string, any>);
     if (recetteRoutes.length === 0) writeLine('Aucune recette enregistree sur cette periode.', { color: gray });
     else {
@@ -218,9 +218,9 @@ export class DailyReportPDFService {
     // ------------------------------------------------------------------
     // II. Paiements en avance
     // ------------------------------------------------------------------
-    sectionTitle('II. PAIEMENTS EN AVANCE (colis pas encore en stock destination)');
+    sectionTitle('II. PAIEMENTS EN AVANCE (colis pas encore arrives a destination)');
     const advanceRoutes = Object.values((p.advancesByRouteAndMethod ?? {}) as Record<string, any>);
-    if (advanceRoutes.length === 0) writeLine('Aucune avance encaissee sur cette periode.', { color: gray });
+    if (advanceRoutes.length === 0) writeLine('Aucun paiement en avance encaisse sur cette periode.', { color: gray });
     else {
       drawTable(
         [
@@ -236,7 +236,7 @@ export class DailyReportPDFService {
           formatCurrency(r.total),
         ]),
       );
-      writeKV('TOTAL AVANCES (B)', formatCurrency(p.advancesTotal ?? 0));
+      writeKV('TOTAL PAIEMENTS EN AVANCE (B)', formatCurrency(p.advancesTotal ?? 0));
     }
 
     // ------------------------------------------------------------------
@@ -452,7 +452,7 @@ export class DailyReportPDFService {
     // ------------------------------------------------------------------
     sectionTitle('XI. RESUME DE LA SITUATION NETTE');
     writeKV('Total recettes (A)', formatCurrency(p.recetteTotal ?? 0));
-    writeKV('Total avances (B)', formatCurrency(p.advancesTotal ?? 0));
+    writeKV('Total paiements en avance (B)', formatCurrency(p.advancesTotal ?? 0));
     writeKV('Total depenses (D)', formatCurrency(p.expensesTotal ?? 0));
     writeKV('BENEFICE ESTIME', formatCurrency(p.profit ?? 0));
 

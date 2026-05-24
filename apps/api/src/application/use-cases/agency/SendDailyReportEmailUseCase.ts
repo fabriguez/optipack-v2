@@ -2,6 +2,7 @@ import { inject, injectable } from 'tsyringe';
 import { prisma } from '../../../config/database';
 import { NotFoundError } from '../../../domain/errors/BusinessError';
 import { DailyReportPDFService } from '../../services/DailyReportPDFService';
+import { ManifestPDFBuilder } from '../../services/ManifestPDFBuilder';
 import { StorageService } from '../../../infrastructure/storage/StorageService';
 import { tenantEmailDispatcher } from '../../../infrastructure/email/TenantEmailDispatcher';
 import { createChildLogger } from '../../../config/logger';
@@ -29,6 +30,7 @@ export class SendDailyReportEmailUseCase {
   constructor(
     @inject(DailyReportPDFService) private pdfService: DailyReportPDFService,
     @inject(StorageService) private storage: StorageService,
+    @inject(ManifestPDFBuilder) private manifestBuilder: ManifestPDFBuilder,
   ) {}
 
   async execute(reportId: string): Promise<{ sent: number; recipients: Recipient[] }> {
@@ -89,6 +91,16 @@ export class SendDailyReportEmailUseCase {
     const subject = `Rapport journalier ${report.agency.name} - ${dateStr}`;
     const html = this.buildHtmlSummary(report, payload);
 
+    // Bordereaux des conteneurs lies au rapport :
+    //  - sent containers : bordereau DISPATCH (envoi)
+    //  - received containers : bordereau RECEPTION + comparaison si hasComparison
+    const manifestAttachments = await this.buildManifestAttachments(payload);
+
+    const allAttachments = [
+      { filename, content: pdfBuffer, contentType: 'application/pdf' },
+      ...manifestAttachments,
+    ];
+
     let sent = 0;
     const sentAudit: Array<Recipient & { sentAt: string; ok: boolean; error?: string }> = [];
     for (const r of recipients) {
@@ -98,7 +110,7 @@ export class SendDailyReportEmailUseCase {
           to: r.email,
           subject,
           html,
-          attachments: [{ filename, content: pdfBuffer, contentType: 'application/pdf' }],
+          attachments: allAttachments,
           tag: 'daily-report',
         },
         { event: 'DAILY_REPORT_SENT' },
@@ -177,6 +189,52 @@ export class SendDailyReportEmailUseCase {
     return Array.from(map.values());
   }
 
+  private async buildManifestAttachments(
+    payload: any,
+  ): Promise<Array<{ filename: string; content: Buffer; contentType: string }>> {
+    const out: Array<{ filename: string; content: Buffer; contentType: string }> = [];
+
+    type C = { id: string; designation: string; manifests?: Array<{ id: string; type: 'DISPATCH' | 'RECEPTION' }>; hasComparison?: boolean };
+    const sent: C[] = payload?.sentContainers ?? [];
+    const received: C[] = payload?.receivedContainers ?? [];
+
+    // Bordereaux d'envoi (containers sortants).
+    for (const c of sent) {
+      for (const m of c.manifests ?? []) {
+        if (m.type !== 'DISPATCH') continue;
+        try {
+          const pdf = await this.manifestBuilder.buildManifestPDF(m.id);
+          out.push({ filename: `envoi-${c.designation}-${pdf.filename}`, content: pdf.buffer, contentType: 'application/pdf' });
+        } catch (err) {
+          logger.warn({ err, manifestId: m.id, containerId: c.id }, 'Echec build bordereau envoi');
+        }
+      }
+    }
+
+    // Bordereaux de reception + comparaison (containers entrants).
+    for (const c of received) {
+      for (const m of c.manifests ?? []) {
+        if (m.type !== 'RECEPTION') continue;
+        try {
+          const pdf = await this.manifestBuilder.buildManifestPDF(m.id);
+          out.push({ filename: `reception-${c.designation}-${pdf.filename}`, content: pdf.buffer, contentType: 'application/pdf' });
+        } catch (err) {
+          logger.warn({ err, manifestId: m.id, containerId: c.id }, 'Echec build bordereau reception');
+        }
+      }
+      if (c.hasComparison) {
+        try {
+          const pdf = await this.manifestBuilder.buildComparisonPDF(c.id);
+          out.push({ filename: pdf.filename, content: pdf.buffer, contentType: 'application/pdf' });
+        } catch (err) {
+          logger.warn({ err, containerId: c.id }, 'Echec build bordereau comparaison');
+        }
+      }
+    }
+
+    return out;
+  }
+
   private async fetchLogo(logoUrl: string | undefined): Promise<Buffer | null> {
     if (!logoUrl) return null;
     try {
@@ -228,7 +286,7 @@ export class SendDailyReportEmailUseCase {
       <h2 style="font-size:14px; margin:0 0 12px; color:#374151; text-transform:uppercase; letter-spacing:.5px;">Synthese financiere</h2>
       <table style="width:100%; border-collapse:collapse; font-size:14px;">
         <tr><td style="padding:6px 0; color:#6b7280;">Recettes</td><td style="text-align:right; font-weight:600; color:#16a34a;">+${fmt(recette)}</td></tr>
-        <tr><td style="padding:6px 0; color:#6b7280;">Avances</td><td style="text-align:right; font-weight:600;">+${fmt(avances)}</td></tr>
+        <tr><td style="padding:6px 0; color:#6b7280;">Paiements en avance</td><td style="text-align:right; font-weight:600;">+${fmt(avances)}</td></tr>
         <tr><td style="padding:6px 0; color:#6b7280;">Depenses</td><td style="text-align:right; font-weight:600; color:#dc2626;">-${fmt(expenses)}</td></tr>
         <tr><td style="padding:6px 0; color:#6b7280;">Decaissements</td><td style="text-align:right; font-weight:600; color:#dc2626;">-${fmt(disbursements)}</td></tr>
         <tr><td style="padding:10px 0 6px; border-top:1px solid #e5e7eb; font-weight:600;">Benefice estime</td><td style="text-align:right; padding-top:10px; border-top:1px solid #e5e7eb; font-weight:700; color:${profitColor};">${fmt(profit)}</td></tr>

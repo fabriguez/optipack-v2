@@ -90,6 +90,7 @@ export function AgencyDailyReportsTab({ agencyId }: Props) {
             <ReportRow
               key={report.id}
               report={report}
+              agencyId={agencyId}
               expanded={expandedId === report.id}
               onToggle={() => setExpandedId((x) => (x === report.id ? null : report.id))}
               onChange={() => qc.invalidateQueries({ queryKey: ['agencies', agencyId, 'daily-reports'] })}
@@ -103,11 +104,13 @@ export function AgencyDailyReportsTab({ agencyId }: Props) {
 
 function ReportRow({
   report,
+  agencyId,
   expanded,
   onToggle,
   onChange,
 }: {
   report: DailyReport;
+  agencyId: string;
   expanded: boolean;
   onToggle: () => void;
   onChange: () => void;
@@ -140,17 +143,19 @@ function ReportRow({
         </div>
       </button>
 
-      {expanded && <ReportDetails reportId={report.id} initialReport={report} onChange={onChange} />}
+      {expanded && <ReportDetails reportId={report.id} agencyId={agencyId} initialReport={report} onChange={onChange} />}
     </AppCard>
   );
 }
 
 function ReportDetails({
   reportId,
+  agencyId,
   initialReport,
   onChange,
 }: {
   reportId: string;
+  agencyId: string;
   initialReport: DailyReport;
   onChange: () => void;
 }) {
@@ -218,6 +223,21 @@ function ReportDetails({
     }
   };
 
+  const [regenerating, setRegenerating] = useState(false);
+  const regenerate = async () => {
+    setRegenerating(true);
+    try {
+      await apiClient.post(`/agencies/${agencyId}/daily-reports`, { date: initialReport.date });
+      toast.success('Rapport regenere');
+      qc.invalidateQueries({ queryKey: ['daily-reports', reportId] });
+      onChange();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Echec de la regeneration');
+    } finally {
+      setRegenerating(false);
+    }
+  };
+
   const [sendingMail, setSendingMail] = useState(false);
   const resendMail = async () => {
     setSendingMail(true);
@@ -269,6 +289,10 @@ function ReportDetails({
             Dernier envoi mail : {new Date(report.emailedAt).toLocaleString('fr-FR')}
           </span>
         )}
+        <AppButton size="sm" variant="outline" onClick={regenerate} loading={regenerating}>
+          <RefreshCw className="h-3.5 w-3.5" />
+          Regenerer
+        </AppButton>
         <AppButton size="sm" variant="outline" onClick={resendMail} loading={sendingMail}>
           <Mail className="h-3.5 w-3.5" />
           {report.emailedAt ? 'Renvoyer par mail' : 'Envoyer par mail'}
@@ -282,7 +306,7 @@ function ReportDetails({
       {/* Synthese chiffres */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Recettes" value={'+' + formatAmount(payload.recetteTotal ?? 0)} positive />
-        <Stat label="Avances" value={'+' + formatAmount(payload.advancesTotal ?? 0)} />
+        <Stat label="Paiements en avance" value={'+' + formatAmount(payload.advancesTotal ?? 0)} />
         <Stat label="Depenses" value={'-' + formatAmount(payload.expensesTotal ?? 0)} negative />
         <Stat label="Benefice" value={formatAmount(payload.profit ?? 0)} positive={Number(payload.profit ?? 0) >= 0} negative={Number(payload.profit ?? 0) < 0} />
       </div>
@@ -307,9 +331,9 @@ function ReportDetails({
         </Section>
       )}
 
-      {/* Recettes vs Avances */}
-      <PaymentBreakdown title="Recettes (colis en stock destination)" data={payload.recetteByRouteAndMethod} total={payload.recetteTotal} positive />
-      <PaymentBreakdown title="Paiements en avance (avant arrivee en stock destination)" data={payload.advancesByRouteAndMethod} total={payload.advancesTotal} />
+      {/* Recettes vs Paiements en avance */}
+      <PaymentBreakdown title="Recettes (paiements sur colis arrives a destination)" data={payload.recetteByRouteAndMethod} total={payload.recetteTotal} positive />
+      <PaymentBreakdown title="Paiements en avance (colis pas encore arrives a destination)" data={payload.advancesByRouteAndMethod} total={payload.advancesTotal} />
 
       {/* Masse / volume colis enregistres */}
       <RouteMassVolume
@@ -326,8 +350,8 @@ function ReportDetails({
       />
 
       {/* Conteneurs recus / envoyes */}
-      <ContainerList title="Conteneurs recus du jour" containers={payload.receivedContainers} dateLabel="Arrive le" dateField="arrivalDate" />
-      <ContainerList title="Conteneurs envoyes du jour" containers={payload.sentContainers} dateLabel="Parti le" dateField="departureDate" />
+      <ContainerList title="Conteneurs recus du jour" containers={payload.receivedContainers} dateLabel="Arrive le" dateField="arrivalDate" manifestVariant="received" />
+      <ContainerList title="Conteneurs envoyes du jour" containers={payload.sentContainers} dateLabel="Parti le" dateField="departureDate" manifestVariant="sent" />
 
       {/* Mouvements stock */}
       <RouteMassVolume title="Entrees en stock par route" data={payload.stockIn?.byRoute} totalWeight={payload.stockIn?.totalWeight} totalVolume={payload.stockIn?.totalVolume} />
@@ -528,33 +552,78 @@ function RouteMassVolume({ title, data, totalWeight, totalVolume }: { title: str
   );
 }
 
-function ContainerList({ title, containers, dateLabel, dateField }: { title: string; containers: any[] | undefined; dateLabel: string; dateField: string }) {
+function ContainerList({ title, containers, dateLabel, dateField, manifestVariant }: { title: string; containers: any[] | undefined; dateLabel: string; dateField: string; manifestVariant: 'sent' | 'received' }) {
   if (!containers || containers.length === 0) return null;
+
+  const openManifestPDF = async (path: string, filename: string) => {
+    try {
+      const res = await apiClient.get(path, { responseType: 'blob' });
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch {
+      toast.error('Echec du telechargement du bordereau');
+    }
+  };
+
   return (
     <Section title={title}>
       <div className="space-y-3">
-        {containers.map((c: any) => (
-          <div key={c.id} className="rounded-lg bg-gray-50 p-2">
-            <p className="text-xs font-semibold text-gray-800">
-              {c.designation} <span className="text-gray-500">- {c.type} - {c.routeName}</span>
-            </p>
-            <p className="text-[11px] text-gray-500">{dateLabel} {c[dateField] ? new Date(c[dateField]).toLocaleString('fr-FR') : '-'} - {c.parcels} colis - {Number(c.totalWeight ?? 0).toFixed(2)} kg - {Number(c.totalVolume ?? 0).toFixed(3)} m3</p>
-            {Object.keys(c.byRoute ?? {}).length > 0 && (
-              <table className="mt-1 w-full text-[11px]">
-                <tbody className="divide-y divide-gray-100">
-                  {Object.values(c.byRoute as Record<string, any>).map((r: any) => (
-                    <tr key={r.routeId ?? r.routeName}>
-                      <td className="py-1 pl-2">{r.routeName} {r.type ? `(${r.type})` : ''}</td>
-                      <td className="py-1 text-right">{r.count}</td>
-                      <td className="py-1 text-right">{Number(r.totalWeight).toFixed(2)} kg</td>
-                      <td className="py-1 text-right">{Number(r.totalVolume).toFixed(3)} m3</td>
-                    </tr>
+        {containers.map((c: any) => {
+          const manifests = (c.manifests ?? []) as Array<{ id: string; number: string; type: 'DISPATCH' | 'RECEPTION' }>;
+          const hasComparison = manifestVariant === 'received' && c.hasComparison;
+          return (
+            <div key={c.id} className="rounded-lg bg-gray-50 p-2">
+              <p className="text-xs font-semibold text-gray-800">
+                {c.designation} <span className="text-gray-500">- {c.type} - {c.routeName}</span>
+              </p>
+              <p className="text-[11px] text-gray-500">{dateLabel} {c[dateField] ? new Date(c[dateField]).toLocaleString('fr-FR') : '-'} - {c.parcels} colis - {Number(c.totalWeight ?? 0).toFixed(2)} kg - {Number(c.totalVolume ?? 0).toFixed(3)} m3</p>
+              {Object.keys(c.byRoute ?? {}).length > 0 && (
+                <table className="mt-1 w-full text-[11px]">
+                  <tbody className="divide-y divide-gray-100">
+                    {Object.values(c.byRoute as Record<string, any>).map((r: any) => (
+                      <tr key={r.routeId ?? r.routeName}>
+                        <td className="py-1 pl-2">{r.routeName} {r.type ? `(${r.type})` : ''}</td>
+                        <td className="py-1 text-right">{r.count}</td>
+                        <td className="py-1 text-right">{Number(r.totalWeight).toFixed(2)} kg</td>
+                        <td className="py-1 text-right">{Number(r.totalVolume).toFixed(3)} m3</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              {(manifests.length > 0 || hasComparison) && (
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  {manifests.map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => openManifestPDF(`/manifests/${m.id}/pdf`, `${m.number}.pdf`)}
+                      className="inline-flex items-center gap-1 rounded-md border border-primary-200 bg-white px-2 py-0.5 text-[11px] font-medium text-primary-700 hover:bg-primary-50"
+                    >
+                      <FileText className="h-3 w-3" />
+                      {m.type === 'DISPATCH' ? "Bordereau d'envoi" : 'Bordereau de reception'}
+                    </button>
                   ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        ))}
+                  {hasComparison && (
+                    <button
+                      type="button"
+                      onClick={() => openManifestPDF(`/manifests/comparison/${c.id}/pdf`, `comparaison-${c.designation}.pdf`)}
+                      className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-white px-2 py-0.5 text-[11px] font-medium text-amber-700 hover:bg-amber-50"
+                    >
+                      <FileText className="h-3 w-3" />
+                      Bordereau de comparaison
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </Section>
   );
