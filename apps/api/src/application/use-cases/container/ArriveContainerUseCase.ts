@@ -69,7 +69,8 @@ export class ArriveContainerUseCase {
     });
 
     // Auto-generation du bordereau de reception a l'arrivee.
-    // Best-effort : un echec ne bloque pas l'arrivee.
+    // Best-effort : un echec est loggue dans l'historique conteneur pour
+    // visibilite, mais ne bloque pas l'arrivee.
     if (parcelIds.length > 0) {
       try {
         const manifest = await this.manifestRepo.createReceptionManifest(containerId, userId);
@@ -81,7 +82,15 @@ export class ArriveContainerUseCase {
           changes: { manifestId: manifest.id, number: manifest.number, lineCount: manifest.lines.length },
         });
       } catch (err) {
-        // Le bordereau peut deja exister (replay) ou autre erreur metier.
+        try {
+          await this.history.recordContainer({
+            containerId,
+            action: 'RECEPTION_MANIFEST_FAILED',
+            userId,
+            comment: 'Echec generation auto bordereau reception',
+            changes: { error: err instanceof Error ? err.message : String(err) } as any,
+          });
+        } catch { /* skip */ }
       }
     }
 

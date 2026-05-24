@@ -98,7 +98,12 @@ export class LoadParcelsUseCase {
       // ContainerForwardingParent (acheminement -> source) ET on enregistre
       // le mapping per-parcel (ContainerForwardingParcelLink) pour permettre
       // la propagation proportionnelle des depenses.
-      const sourceContainerId = parcel.containerId;
+      //
+      // Source = containerId courant (rare, colis encore dans un conteneur)
+      //          ou lastContainerId (cas typique : colis dechargie d'un
+      //          conteneur parent puis IN_STOCK, on remonte au dernier
+      //          conteneur traverse).
+      const sourceContainerId = parcel.containerId ?? parcel.lastContainerId ?? null;
       if (container.isForwarding && sourceContainerId && sourceContainerId !== containerId) {
         const link = await prisma.containerForwardingParent.upsert({
           where: { forwardingId_parentId: { forwardingId: containerId, parentId: sourceContainerId } },

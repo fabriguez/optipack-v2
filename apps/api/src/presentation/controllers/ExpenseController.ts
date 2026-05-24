@@ -8,6 +8,93 @@ import {
 import { PayExpenseFromCashRegisterUseCase } from '../../application/use-cases/expense/PayExpenseFromCashRegisterUseCase';
 import { CloseContainerExpensesUseCase } from '../../application/use-cases/expense/CloseContainerExpensesUseCase';
 import { BusinessError } from '../../domain/errors/BusinessError';
+
+/**
+ * Reconstruit les liens ContainerForwardingParcelLink pour un forwarding
+ * a partir de l'historique ParcelHistory. Utile pour les conteneurs charges
+ * avant la mise en place du mapping per-parcel ou quand les colis arrivent
+ * dans le forwarding sans containerId source (IN_STOCK pre-load).
+ *
+ * Algo :
+ *  1. Trouve tous les LOADED_INTO_CONTAINER vers ce forwarding (parcelIds).
+ *  2. Pour chaque colis, cherche le LOADED_INTO_CONTAINER PRECEDENT (vers
+ *     un autre conteneur). Ce containerId precedent = parent source.
+ *  3. Upsert le lien (forwarding, parcel) avec snapshot du prix courant.
+ *
+ * Retourne le nombre de liens crees/maj.
+ */
+async function reconstructForwardingLinksFromHistory(forwardingId: string): Promise<number> {
+  const loadEvents = await prisma.parcelHistory.findMany({
+    where: { action: 'LOADED_INTO_CONTAINER', containerId: forwardingId },
+    select: { parcelId: true, createdAt: true },
+    orderBy: { createdAt: 'asc' },
+  });
+  if (loadEvents.length === 0) return 0;
+
+  let count = 0;
+  for (const ev of loadEvents) {
+    // Cherche le LOADED_INTO_CONTAINER precedent pour ce colis (vers un
+    // autre conteneur). Si absent, le colis n'a pas de parent -> skip.
+    const previous = await prisma.parcelHistory.findFirst({
+      where: {
+        parcelId: ev.parcelId,
+        action: 'LOADED_INTO_CONTAINER',
+        containerId: { not: forwardingId },
+        createdAt: { lt: ev.createdAt },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { containerId: true },
+    });
+    if (!previous?.containerId) continue;
+
+    const parentId = previous.containerId;
+    const parcel = await prisma.parcel.findUnique({
+      where: { id: ev.parcelId },
+      select: { price: true },
+    });
+    if (!parcel) continue;
+
+    // Upsert ContainerForwardingParent (compteur).
+    const parentLink = await prisma.containerForwardingParent.upsert({
+      where: { forwardingId_parentId: { forwardingId, parentId } },
+      create: { forwardingId, parentId, parcelCount: 0 },
+      update: {},
+    });
+
+    // Upsert le lien per-parcel.
+    await prisma.containerForwardingParcelLink.upsert({
+      where: { forwardingId_parcelId: { forwardingId, parcelId: ev.parcelId } },
+      create: {
+        forwardingId,
+        parentId,
+        parcelId: ev.parcelId,
+        containerForwardingParentId: parentLink.id,
+        parcelPriceSnapshot: parcel.price,
+      },
+      update: {
+        parentId,
+        containerForwardingParentId: parentLink.id,
+        parcelPriceSnapshot: parcel.price,
+      },
+    });
+    count += 1;
+  }
+
+  // Recalcule parcelCount sur les ContainerForwardingParent depuis les liens.
+  const groupedCounts = await prisma.containerForwardingParcelLink.groupBy({
+    by: ['parentId'],
+    where: { forwardingId },
+    _count: { _all: true },
+  });
+  for (const g of groupedCounts) {
+    await prisma.containerForwardingParent.update({
+      where: { forwardingId_parentId: { forwardingId, parentId: g.parentId } },
+      data: { parcelCount: g._count._all },
+    });
+  }
+
+  return count;
+}
 import { EXPENSE_REPOSITORY } from '../../application/interfaces/IExpenseRepository';
 import { NotFoundError } from '../../domain/errors/BusinessError';
 import { prisma } from '../../config/database';
@@ -294,15 +381,26 @@ export class ExpenseController {
         select: { id: true, amount: true },
       });
 
-      const linkCount = await prisma.containerForwardingParcelLink.count({
+      let linkCount = await prisma.containerForwardingParcelLink.count({
         where: { forwardingId: containerId },
       });
+
+      // Fallback : si liens absents (cas legacy : chargement fait avant le
+      // patch ContainerForwardingParcelLink, ou colis IN_STOCK avec containerId
+      // null au moment du load), on reconstruit depuis ParcelHistory.
+      // On cherche les events LOADED_INTO_CONTAINER vers ce forwarding, puis
+      // pour chaque colis on cherche le LOADED_INTO_CONTAINER precedent
+      // (= conteneur parent source).
       if (linkCount === 0) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Aucun colis lie a un conteneur parent dans ce forwarding. Verifiez que les colis ont ete charges depuis un conteneur source (ContainerForwardingParcelLink vide).",
-        });
+        const reconstructed = await reconstructForwardingLinksFromHistory(containerId);
+        linkCount = reconstructed;
+        if (linkCount === 0) {
+          return res.status(400).json({
+            success: false,
+            message:
+              "Aucun colis lie a un conteneur parent dans ce forwarding (ni table de liens, ni historique exploitable).",
+          });
+        }
       }
 
       const errors: Array<{ expenseId: string; error: string }> = [];

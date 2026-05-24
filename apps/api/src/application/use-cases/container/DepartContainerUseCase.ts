@@ -65,7 +65,7 @@ export class DepartContainerUseCase {
     });
 
     // Auto-generation du bordereau d'envoi (DISPATCH) au depart.
-    // Best-effort : un echec ne bloque pas le depart.
+    // Best-effort : un echec est loggue dans l'historique conteneur.
     if (parcelIds.length > 0) {
       try {
         const manifest = await this.manifestRepo.createDispatchManifest(containerId, userId);
@@ -77,8 +77,15 @@ export class DepartContainerUseCase {
           changes: { manifestId: manifest.id, number: manifest.number, lineCount: manifest.lines.length },
         });
       } catch (err) {
-        // Le bordereau peut deja exister (replay) ou autre erreur metier --
-        // on log uniquement, le depart reste valide.
+        try {
+          await this.history.recordContainer({
+            containerId,
+            action: 'DISPATCH_MANIFEST_FAILED',
+            userId,
+            comment: "Echec generation auto bordereau d'envoi",
+            changes: { error: err instanceof Error ? err.message : String(err) } as any,
+          });
+        } catch { /* skip */ }
       }
     }
 
