@@ -11,7 +11,10 @@ router.use(authenticate);
 router.get('/', validate(paginationSchema, 'query'), ExpenseController.list);
 router.get('/container/:containerId', ExpenseController.listForContainer);
 router.post('/container/:containerId', ExpenseController.createForContainer);
+router.post('/container/:containerId/close', ExpenseController.closeContainerExpenses);
 router.post('/:id/pay', ExpenseController.pay);
+router.patch('/:id', ExpenseController.update);
+router.delete('/:id', ExpenseController.delete);
 router.get('/:id', ExpenseController.getById);
 router.post('/', ExpenseController.create);
 

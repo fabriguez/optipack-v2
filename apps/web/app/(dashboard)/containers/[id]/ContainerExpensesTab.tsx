@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, CreditCard, CheckCircle2, Clock } from 'lucide-react';
+import Link from 'next/link';
+import { Plus, CreditCard, CheckCircle2, Clock, Lock, Sparkles, GitBranch, ExternalLink, Trash2, Edit } from 'lucide-react';
 import { apiClient } from '@/lib/api/client';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
@@ -27,23 +28,76 @@ interface Expense {
   approvedBy: { firstName: string; lastName: string } | null;
   cashRegister: { id: string; date: string } | null;
   createdAt: string;
+  isAutoFromForwarding?: boolean;
+  parentExpenseId?: string | null;
+  parentExpense?: {
+    id: string;
+    title: string;
+    amount: number | string;
+    containerId: string | null;
+    container: { id: string; designation: string; isForwarding: boolean } | null;
+  } | null;
+  childExpenses?: Array<{
+    id: string;
+    amount: number | string;
+    containerId: string | null;
+    container: { id: string; designation: string } | null;
+  }>;
 }
 
 export function ContainerExpensesTab({ containerId }: { containerId: string }) {
   const qc = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [payTarget, setPayTarget] = useState<Expense | null>(null);
+  const [confirmClose, setConfirmClose] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['containers', containerId, 'expenses'],
     queryFn: () => apiClient.get(`/expenses/container/${containerId}`).then((r) => r.data),
   });
 
+  const { data: containerData } = useQuery({
+    queryKey: ['containers', containerId, 'meta-for-expenses'],
+    queryFn: () => apiClient.get(`/containers/${containerId}`).then((r) => r.data),
+  });
+  const container = containerData?.data;
+  const isClosed = !!container?.expensesClosedAt;
+  const isForwarding = !!container?.isForwarding;
+  const parcelCount = container?._count?.parcels ?? container?.parcels?.length ?? 0;
+
   const expenses: Expense[] = data?.data ?? [];
   const totalUnpaid = expenses.filter((e) => !e.isPaid).reduce((s, e) => s + Number(e.amount), 0);
   const totalPaid = expenses.filter((e) => e.isPaid).reduce((s, e) => s + Number(e.amount), 0);
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ['containers', containerId, 'expenses'] });
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['containers', containerId, 'expenses'] });
+    qc.invalidateQueries({ queryKey: ['containers', containerId, 'meta-for-expenses'] });
+  };
+
+  const closeMutation = useMutation({
+    mutationFn: () => apiClient.post(`/expenses/container/${containerId}/close`),
+    onSuccess: () => {
+      toast.success('Depenses cloturees');
+      setConfirmClose(false);
+      invalidate();
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Echec cloture'),
+  });
+
+  // Scroll automatique vers une depense via hash (#expense-<id>) au mount.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const hash = window.location.hash;
+    if (!hash.startsWith('#expense-')) return;
+    setTimeout(() => {
+      const el = document.getElementById(hash.slice(1));
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('ring-2', 'ring-primary-400');
+        setTimeout(() => el.classList.remove('ring-2', 'ring-primary-400'), 2500);
+      }
+    }, 500);
+  }, [expenses.length]);
 
   return (
     <div className="space-y-4">
@@ -53,13 +107,37 @@ export function ContainerExpensesTab({ containerId }: { containerId: string }) {
         <Stat label="Total depenses" value={formatAmount(totalUnpaid + totalPaid)} />
       </div>
 
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-gray-700">Depenses du conteneur</h3>
-        <AppButton size="sm" onClick={() => setCreateOpen(true)}>
-          <Plus className="h-3.5 w-3.5" />
-          Ajouter une depense
-        </AppButton>
+      {isClosed && (
+        <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <Lock className="h-3.5 w-3.5" />
+          Depenses cloturees le {container?.expensesClosedAt ? formatDate(container.expensesClosedAt) : '-'}. Aucun ajout manuel autorise.
+        </div>
+      )}
+
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold text-gray-700">
+          Depenses du conteneur {isForwarding && <span className="text-xs text-purple-600">(acheminement)</span>}
+        </h3>
+        <div className="flex items-center gap-2">
+          {!isClosed && (
+            <AppButton size="sm" variant="outline" onClick={() => setConfirmClose(true)} disabled={parcelCount > 0}>
+              <Lock className="h-3.5 w-3.5" />
+              Cloturer les depenses
+            </AppButton>
+          )}
+          {!isClosed && (
+            <AppButton size="sm" onClick={() => setCreateOpen(true)}>
+              <Plus className="h-3.5 w-3.5" />
+              Ajouter une depense
+            </AppButton>
+          )}
+        </div>
       </div>
+      {!isClosed && parcelCount > 0 && (
+        <p className="text-[11px] text-gray-500">
+          Cloture impossible : {parcelCount} colis encore present(s) dans le conteneur.
+        </p>
+      )}
 
       {isLoading ? (
         <p className="text-sm text-gray-400">Chargement...</p>
@@ -68,36 +146,22 @@ export function ContainerExpensesTab({ containerId }: { containerId: string }) {
       ) : (
         <ul className="space-y-2">
           {expenses.map((e) => (
-            <li key={e.id} className="rounded-xl border border-gray-100 bg-white p-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="truncate text-sm font-semibold text-gray-900">{e.title}</p>
-                    {e.isPaid ? (
-                      <AppBadge variant="success"><CheckCircle2 className="mr-1 h-3 w-3" />Paye</AppBadge>
-                    ) : (
-                      <AppBadge variant="warning"><Clock className="mr-1 h-3 w-3" />A payer</AppBadge>
-                    )}
-                    {e.category && <AppBadge variant="default">{e.category}</AppBadge>}
-                  </div>
-                  <p className="mt-0.5 text-xs text-gray-500 truncate">{e.reason}</p>
-                  {e.description && <p className="mt-1 text-xs text-gray-600">{e.description}</p>}
-                  <p className="mt-1 text-[11px] text-gray-400">
-                    Cree le {formatDate(e.createdAt)}{e.approvedBy && ` par ${e.approvedBy.firstName} ${e.approvedBy.lastName}`}
-                    {e.paidAt && e.paidBy && ` - paye le ${formatDate(e.paidAt)} par ${e.paidBy.firstName} ${e.paidBy.lastName}`}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-base font-bold text-gray-900">{formatAmount(Number(e.amount))}</p>
-                  {!e.isPaid && (
-                    <AppButton size="sm" variant="outline" className="mt-2" onClick={() => setPayTarget(e)}>
-                      <CreditCard className="h-3.5 w-3.5" />
-                      Payer
-                    </AppButton>
-                  )}
-                </div>
-              </div>
-            </li>
+            <ExpenseCard
+              key={e.id}
+              expense={e}
+              onPay={() => setPayTarget(e)}
+              onDelete={async () => {
+                if (!confirm(`Supprimer la depense "${e.title}"? Les depenses auto liees seront aussi supprimees.`)) return;
+                try {
+                  await apiClient.delete(`/expenses/${e.id}`);
+                  toast.success('Depense supprimee');
+                  invalidate();
+                } catch (err: any) {
+                  toast.error(err?.response?.data?.message || 'Echec suppression');
+                }
+              }}
+              disabled={isClosed}
+            />
           ))}
         </ul>
       )}
@@ -113,7 +177,121 @@ export function ContainerExpensesTab({ containerId }: { containerId: string }) {
         onClose={() => setPayTarget(null)}
         onPaid={() => { invalidate(); setPayTarget(null); }}
       />
+
+      <AppDialog
+        open={confirmClose}
+        onClose={() => setConfirmClose(false)}
+        title="Cloturer les depenses du conteneur"
+        size="md"
+        footer={
+          <>
+            <AppButton variant="ghost" onClick={() => setConfirmClose(false)}>Annuler</AppButton>
+            <AppButton onClick={() => closeMutation.mutate()} loading={closeMutation.isPending} variant="destructive">
+              <Lock className="h-4 w-4" />
+              Cloturer (irreversible)
+            </AppButton>
+          </>
+        }
+      >
+        <p className="text-sm text-gray-600">
+          La cloture est <strong>irreversible</strong>. Plus aucune depense manuelle ne pourra etre ajoutee, modifiee ou supprimee.
+          Seules les propagations automatiques depuis un conteneur d&apos;acheminement restent autorisees.
+        </p>
+      </AppDialog>
     </div>
+  );
+}
+
+function ExpenseCard({ expense: e, onPay, onDelete, disabled }: { expense: Expense; onPay: () => void; onDelete: () => void; disabled: boolean }) {
+  const isAuto = !!e.isAutoFromForwarding;
+  const hasChildren = (e.childExpenses?.length ?? 0) > 0;
+  const childTotal = (e.childExpenses ?? []).reduce((s, c) => s + Number(c.amount), 0);
+
+  return (
+    <li id={`expense-${e.id}`} className="rounded-xl border border-gray-100 bg-white p-3 transition-shadow">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="truncate text-sm font-semibold text-gray-900">{e.title}</p>
+            {e.isPaid ? (
+              <AppBadge variant="success"><CheckCircle2 className="mr-1 h-3 w-3" />Paye</AppBadge>
+            ) : (
+              <AppBadge variant="warning"><Clock className="mr-1 h-3 w-3" />A payer</AppBadge>
+            )}
+            {e.category && <AppBadge variant="default">{e.category}</AppBadge>}
+            {isAuto && (
+              <AppBadge variant="info">
+                <Sparkles className="mr-1 h-3 w-3" />AUTO
+              </AppBadge>
+            )}
+          </div>
+          <p className="mt-0.5 text-xs text-gray-500 truncate">{e.reason}</p>
+          {e.description && <p className="mt-1 whitespace-pre-line text-xs text-gray-600">{e.description}</p>}
+
+          {/* Lien vers la depense forwarding parente si AUTO */}
+          {isAuto && e.parentExpense?.container && (
+            <Link
+              href={`/containers/${e.parentExpense.container.id}?tab=expenses#expense-${e.parentExpense.id}`}
+              className="mt-2 inline-flex items-center gap-1 rounded-md border border-purple-200 bg-purple-50 px-2 py-0.5 text-[11px] font-medium text-purple-700 hover:bg-purple-100"
+            >
+              <GitBranch className="h-3 w-3" />
+              Source : conteneur d&apos;acheminement {e.parentExpense.container.designation}
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+          )}
+
+          {/* Arbre breakdown si depense forwarding propagee */}
+          {hasChildren && (
+            <div className="mt-2 rounded-lg border border-purple-100 bg-purple-50/40 p-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-purple-700">
+                Propage aux conteneurs parents ({formatAmount(childTotal)} total)
+              </p>
+              <ul className="mt-1 space-y-1">
+                {(e.childExpenses ?? []).map((c) => (
+                  <li key={c.id} className="flex items-center justify-between text-[11px]">
+                    <Link
+                      href={`/containers/${c.containerId}?tab=expenses#expense-${c.id}`}
+                      className="inline-flex items-center gap-1 text-purple-700 hover:underline"
+                    >
+                      <GitBranch className="h-3 w-3" />
+                      {c.container?.designation ?? c.containerId}
+                      <ExternalLink className="h-3 w-3" />
+                    </Link>
+                    <span className="font-medium text-gray-700">{formatAmount(Number(c.amount))}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <p className="mt-1 text-[11px] text-gray-400">
+            Cree le {formatDate(e.createdAt)}{e.approvedBy && ` par ${e.approvedBy.firstName} ${e.approvedBy.lastName}`}
+            {e.paidAt && e.paidBy && ` - paye le ${formatDate(e.paidAt)} par ${e.paidBy.firstName} ${e.paidBy.lastName}`}
+          </p>
+        </div>
+        <div className="text-right">
+          <p className="text-base font-bold text-gray-900">{formatAmount(Number(e.amount))}</p>
+          <div className="mt-2 flex flex-col items-end gap-1">
+            {!e.isPaid && (
+              <AppButton size="sm" variant="outline" onClick={onPay}>
+                <CreditCard className="h-3.5 w-3.5" />
+                Payer
+              </AppButton>
+            )}
+            {!e.isPaid && !isAuto && !disabled && (
+              <button
+                type="button"
+                onClick={onDelete}
+                className="inline-flex items-center gap-1 text-[11px] text-red-500 hover:underline"
+              >
+                <Trash2 className="h-3 w-3" />
+                Supprimer
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </li>
   );
 }
 

@@ -576,6 +576,7 @@ model User {
   justificationsSubmitted         AttendanceJustification[]       @relation("JustificationSubmitter")
   justificationsReviewed          AttendanceJustification[]       @relation("JustificationReviewer")
   leavesEnded                     EmployeeLeave[]                 @relation("LeaveEndedBy")
+  containerExpensesClosed         Container[]                     @relation("ContainerExpensesClosedBy")
 
   @@index([organizationId])
   @@index([email])
@@ -1301,58 +1302,68 @@ enum TransitType {
 // ============================================================
 
 model Container {
-  id                   String          @id @default(uuid())
+  id                     String          @id @default(uuid())
   // organizationId pour isolation multi-tenant
-  organizationId       String
-  designation          String
-  type                 TransitType
-  isForwarding         Boolean         @default(false)
+  organizationId         String
+  designation            String
+  type                   TransitType
+  isForwarding           Boolean         @default(false)
   // Hierarchie : un conteneur d'acheminement (isForwarding=true) peut etre place
   // dans un conteneur parent AIR/SEA. Le parent ne peut pas etre lui-meme forwarding.
-  parentContainerId    String?
+  parentContainerId      String?
   // Transporteur (facultatif) : nom/reference de la compagnie/personne en charge.
-  carrier              String?
-  capacity             Decimal         @db.Decimal(15, 2)
+  carrier                String?
+  capacity               Decimal         @db.Decimal(15, 2)
   // currentLoad : valeur snapshot, peut driver. Repository la recalcule a la lecture.
-  currentLoad          Decimal         @default(0) @db.Decimal(15, 2)
-  transitRouteId       String?
-  departureAgencyId    String
-  arrivalAgencyId      String
-  status               ContainerStatus @default(EMPTY)
-  loadingDate          DateTime?
-  departureDate        DateTime?
-  estimatedArrivalDate DateTime?
-  actualArrivalDate    DateTime?
-  isDeleted            Boolean         @default(false)
-  deletedAt            DateTime?
-  createdAt            DateTime        @default(now())
-  updatedAt            DateTime        @updatedAt
+  currentLoad            Decimal         @default(0) @db.Decimal(15, 2)
+  transitRouteId         String?
+  departureAgencyId      String
+  arrivalAgencyId        String
+  status                 ContainerStatus @default(EMPTY)
+  loadingDate            DateTime?
+  departureDate          DateTime?
+  estimatedArrivalDate   DateTime?
+  actualArrivalDate      DateTime?
+  isDeleted              Boolean         @default(false)
+  deletedAt              DateTime?
+  // Cloture des depenses : empeche tout add/edit/delete sur le conteneur,
+  // sauf propagation automatique depuis un forwarding (qui bypass le verrou).
+  // Set par CloseContainerExpensesUseCase apres verification que tous les
+  // colis ont ete decharges.
+  expensesClosedAt       DateTime?
+  expensesClosedByUserId String?
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
 
-  transitRoute            TransitRoute?                   @relation(fields: [transitRouteId], references: [id])
-  departureAgency         Agency                          @relation("DepartureAgency", fields: [departureAgencyId], references: [id])
-  arrivalAgency           Agency                          @relation("ArrivalAgency", fields: [arrivalAgencyId], references: [id])
+  transitRoute                TransitRoute?                   @relation(fields: [transitRouteId], references: [id])
+  departureAgency             Agency                          @relation("DepartureAgency", fields: [departureAgencyId], references: [id])
+  arrivalAgency               Agency                          @relation("ArrivalAgency", fields: [arrivalAgencyId], references: [id])
   // Hierarchie legacy 1:1 (conserve pour compat ascendante / migration).
   // Le modele actif est M:N via ContainerForwardingParent : un conteneur
   // d'acheminement peut etre lie a N parents (un par conteneur source des
   // colis qu'il regroupe).
-  parentContainer         Container?                      @relation("ContainerHierarchy", fields: [parentContainerId], references: [id])
-  childContainers         Container[]                     @relation("ContainerHierarchy")
+  parentContainer             Container?                      @relation("ContainerHierarchy", fields: [parentContainerId], references: [id])
+  childContainers             Container[]                     @relation("ContainerHierarchy")
   // M:N : liens vers les conteneurs parents quand isForwarding=true.
-  forwardingParents       ContainerForwardingParent[]     @relation("ForwardingChildren")
+  forwardingParents           ContainerForwardingParent[]     @relation("ForwardingChildren")
   // M:N : liens depuis ce conteneur (parent) vers ses conteneurs d'acheminement.
-  forwardingChildren      ContainerForwardingParent[]     @relation("ForwardingParents")
-  parcels                 Parcel[]                        @relation("CurrentContainer")
-  lastContainerFor        Parcel[]                        @relation("LastContainer")
-  histories               ContainerHistory[]
-  parcelHistories         ParcelHistory[]
-  manifests               ShippingManifest[]
-  expenses                Expense[]
+  forwardingChildren          ContainerForwardingParent[]     @relation("ForwardingParents")
+  // Mapping per-parcel : liens parcels de ce conteneur vers leurs forwarding.
+  forwardingParcelLinks       ContainerForwardingParcelLink[] @relation("ForwardingParcelLinks")
+  parentForwardingParcelLinks ContainerForwardingParcelLink[] @relation("ParentParcelLinks")
+  expensesClosedBy            User?                           @relation("ContainerExpensesClosedBy", fields: [expensesClosedByUserId], references: [id])
+  parcels                     Parcel[]                        @relation("CurrentContainer")
+  lastContainerFor            Parcel[]                        @relation("LastContainer")
+  histories                   ContainerHistory[]
+  parcelHistories             ParcelHistory[]
+  manifests                   ShippingManifest[]
+  expenses                    Expense[]
   // Decaissements imputes a ce conteneur (frais transit, douane, surcout).
-  disbursements           DisbursementVoucher[]
-  headOfficeDisbursements HeadOfficeDisbursementVoucher[] @relation("HeadOfficeDisbursementContainer")
-  routingSource           InterAgencyRouting[]            @relation("SourceContainer")
-  routingTarget           InterAgencyRouting[]            @relation("TargetContainer")
-  discrepancies           ManifestDiscrepancy[]
+  disbursements               DisbursementVoucher[]
+  headOfficeDisbursements     HeadOfficeDisbursementVoucher[] @relation("HeadOfficeDisbursementContainer")
+  routingSource               InterAgencyRouting[]            @relation("SourceContainer")
+  routingTarget               InterAgencyRouting[]            @relation("TargetContainer")
+  discrepancies               ManifestDiscrepancy[]
 
   @@unique([organizationId, designation])
   @@index([organizationId])
@@ -1377,13 +1388,42 @@ model ContainerForwardingParent {
   parcelCount  Int      @default(0)
   createdAt    DateTime @default(now())
 
-  forwarding Container @relation("ForwardingChildren", fields: [forwardingId], references: [id], onDelete: Cascade)
-  parent     Container @relation("ForwardingParents", fields: [parentId], references: [id], onDelete: Cascade)
+  forwarding Container                       @relation("ForwardingChildren", fields: [forwardingId], references: [id], onDelete: Cascade)
+  parent     Container                       @relation("ForwardingParents", fields: [parentId], references: [id], onDelete: Cascade)
+  parcels    ContainerForwardingParcelLink[] @relation("ParcelLinkParent")
 
   @@unique([forwardingId, parentId])
   @@index([forwardingId])
   @@index([parentId])
   @@map("container_forwarding_parents")
+}
+
+// Mapping per-parcel : pour chaque colis charge dans un conteneur
+// d'acheminement, on garde la trace du conteneur parent dont il provient.
+// Necessaire pour repartir proportionnellement les depenses du forwarding
+// vers les parents (au prorata des prix des colis de chaque parent).
+// Un colis ne peut etre que dans un seul forwarding a la fois -> parcelId
+// est unique.
+model ContainerForwardingParcelLink {
+  id                          String   @id @default(uuid())
+  forwardingId                String
+  parentId                    String
+  parcelId                    String   @unique
+  containerForwardingParentId String
+  // Snapshot du prix au moment du chargement (immutable). Sert au calcul
+  // de proportion meme si le prix du colis change ulterieurement.
+  parcelPriceSnapshot         Decimal  @db.Decimal(15, 2)
+  createdAt                   DateTime @default(now())
+
+  forwarding                Container                 @relation("ForwardingParcelLinks", fields: [forwardingId], references: [id], onDelete: Cascade)
+  parent                    Container                 @relation("ParentParcelLinks", fields: [parentId], references: [id], onDelete: Cascade)
+  parcel                    Parcel                    @relation("ParcelForwardingLink", fields: [parcelId], references: [id], onDelete: Cascade)
+  containerForwardingParent ContainerForwardingParent @relation("ParcelLinkParent", fields: [containerForwardingParentId], references: [id], onDelete: Cascade)
+
+  @@index([forwardingId])
+  @@index([parentId])
+  @@index([containerForwardingParentId])
+  @@map("container_forwarding_parcel_links")
 }
 
 // Cycle de vie simplifie a 5 statuts (audit fix #3) :
@@ -1500,6 +1540,9 @@ model Parcel {
   debts                   Debt[]
   // Paiements scopes a ce colis (cas facture multi-colis, paiement partiel).
   payments                Payment[]                       @relation("ParcelPayments")
+  // Lien forwarding (1-1) : conteneur source quand le colis est dans un
+  // forwarding. Null sinon. Permet propagation depense au prorata.
+  forwardingLink          ContainerForwardingParcelLink?  @relation("ParcelForwardingLink")
 
   @@index([organizationId])
   @@index([clientId])
@@ -2015,6 +2058,12 @@ model Expense {
   // (rapport journalier : profit = recettes - expenses - disbursements_sans_expense).
   // Null pour les depenses non encore payees ou les enregistrements legacy.
   disbursementId           String?   @unique
+  // Propagation depense forwarding -> parents : si cette depense est une
+  // copie automatique creee depuis une depense forwarding, parentExpenseId
+  // pointe sur l'originale (la depense du forwarding). isAutoFromForwarding=
+  // true marque les copies pour affichage badge "AUTO" + lien.
+  parentExpenseId          String?
+  isAutoFromForwarding     Boolean   @default(false)
   // Etat de paiement. Pour compat ascendante : true par defaut (toutes les
   // depenses historiques ont ete creees au moment de leur paiement). Les
   // depenses imputees a un conteneur (CreateContainerExpense) sont creees
@@ -2035,11 +2084,15 @@ model Expense {
   paidPayslip            Payslip?                @relation("PayslipPaidExpense")
   payslipInstallment     PayslipPayment?         @relation("PayslipInstallmentExpense")
   disbursement           DisbursementVoucher?    @relation("ExpenseDisbursement", fields: [disbursementId], references: [id])
+  // Self-relation pour propagation forwarding -> parents.
+  parentExpense          Expense?                @relation("ForwardingExpensePropagation", fields: [parentExpenseId], references: [id])
+  childExpenses          Expense[]               @relation("ForwardingExpensePropagation")
 
   @@index([agencyId])
   @@index([agencyChargeId, period])
   @@index([cashRegisterId])
   @@index([headOfficeCashRegisterId])
+  @@index([parentExpenseId])
   @@map("expenses")
 }
 

@@ -95,14 +95,32 @@ export class LoadParcelsUseCase {
 
       // Si on charge dans un conteneur d'acheminement et que le colis etait
       // deja dans un autre conteneur source, on cree/incremente le lien M:N
-      // ContainerForwardingParent (acheminement -> source). Permet de tracer
-      // la provenance documentaire de chaque colis regroupe.
+      // ContainerForwardingParent (acheminement -> source) ET on enregistre
+      // le mapping per-parcel (ContainerForwardingParcelLink) pour permettre
+      // la propagation proportionnelle des depenses.
       const sourceContainerId = parcel.containerId;
       if (container.isForwarding && sourceContainerId && sourceContainerId !== containerId) {
-        await prisma.containerForwardingParent.upsert({
+        const link = await prisma.containerForwardingParent.upsert({
           where: { forwardingId_parentId: { forwardingId: containerId, parentId: sourceContainerId } },
           create: { forwardingId: containerId, parentId: sourceContainerId, parcelCount: 1 },
           update: { parcelCount: { increment: 1 } },
+        });
+        // Snapshot du prix au moment du chargement (immutable).
+        await prisma.containerForwardingParcelLink.upsert({
+          where: { parcelId },
+          create: {
+            forwardingId: containerId,
+            parentId: sourceContainerId,
+            parcelId,
+            containerForwardingParentId: link.id,
+            parcelPriceSnapshot: parcel.price,
+          },
+          update: {
+            forwardingId: containerId,
+            parentId: sourceContainerId,
+            containerForwardingParentId: link.id,
+            parcelPriceSnapshot: parcel.price,
+          },
         });
       }
 
