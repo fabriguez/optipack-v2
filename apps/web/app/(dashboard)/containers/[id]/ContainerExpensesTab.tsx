@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { Plus, CreditCard, CheckCircle2, Clock, Lock, Sparkles, GitBranch, ExternalLink, Trash2, Edit } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
+import { Plus, CreditCard, CheckCircle2, Clock, Lock, Sparkles, GitBranch, ExternalLink, Trash2, Edit, ChevronDown, ChevronRight } from 'lucide-react';
 import { apiClient } from '@/lib/api/client';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
@@ -44,6 +45,14 @@ interface Expense {
     containerId: string | null;
     container: { id: string; designation: string } | null;
   }>;
+  forwardingBreakdown?: Array<{
+    parentId: string;
+    parentDesignation: string;
+    parcels: Array<{ id: string; trackingNumber: string; designation: string; priceSnapshot: number }>;
+    sum: number;
+    totalSum: number;
+    proportion: number;
+  }> | null;
 }
 
 export function ContainerExpensesTab({ containerId }: { containerId: string }) {
@@ -120,6 +129,25 @@ export function ContainerExpensesTab({ containerId }: { containerId: string }) {
           Depenses du conteneur {isForwarding && <span className="text-xs text-purple-600">(acheminement)</span>}
         </h3>
         <div className="flex items-center gap-2">
+          {isForwarding && (
+            <AppButton
+              size="sm"
+              variant="outline"
+              onClick={async () => {
+                try {
+                  const r = await apiClient.post(`/expenses/container/${containerId}/propagate-forwarding`);
+                  const d = r.data?.data;
+                  toast.success(`Propagation : ${d?.propagatedCount ?? 0}/${d?.pendingCount ?? 0} (${d?.linkCount ?? 0} colis lies)`);
+                  invalidate();
+                } catch (err: any) {
+                  toast.error(err?.response?.data?.message || 'Echec propagation');
+                }
+              }}
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Forcer propagation aux parents
+            </AppButton>
+          )}
           {!isClosed && (
             <AppButton size="sm" variant="outline" onClick={() => setConfirmClose(true)} disabled={parcelCount > 0}>
               <Lock className="h-3.5 w-3.5" />
@@ -150,6 +178,7 @@ export function ContainerExpensesTab({ containerId }: { containerId: string }) {
             <ExpenseCard
               key={e.id}
               expense={e}
+              currentContainerId={containerId}
               onPay={() => setPayTarget(e)}
               onDelete={async () => {
                 if (!confirm(`Supprimer la depense "${e.title}"? Les depenses auto liees seront aussi supprimees.`)) return;
@@ -203,10 +232,24 @@ export function ContainerExpensesTab({ containerId }: { containerId: string }) {
   );
 }
 
-function ExpenseCard({ expense: e, onPay, onDelete, disabled }: { expense: Expense; onPay: () => void; onDelete: () => void; disabled: boolean }) {
+function ExpenseCard({ expense: e, currentContainerId, onPay, onDelete, disabled }: { expense: Expense; currentContainerId: string; onPay: () => void; onDelete: () => void; disabled: boolean }) {
   const isAuto = !!e.isAutoFromForwarding;
   const hasChildren = (e.childExpenses?.length ?? 0) > 0;
   const childTotal = (e.childExpenses ?? []).reduce((s, c) => s + Number(c.amount), 0);
+  const breakdown = e.forwardingBreakdown ?? null;
+  const hasBreakdown = !!breakdown && breakdown.length > 0;
+  const searchParams = useSearchParams();
+  const highlightParentId = searchParams?.get('highlightParent') ?? null;
+  // Si on arrive depuis un auto-expense d'un parent, le hash cible cette
+  // depense ET highlightParent designe le bloc parent a outliner dans l'arbre.
+  const isTargetedByHash =
+    typeof window !== 'undefined' && window.location.hash === `#expense-${e.id}`;
+  const shouldAutoExpand = isTargetedByHash && !!highlightParentId && hasBreakdown;
+  const [expanded, setExpanded] = useState(shouldAutoExpand);
+  useEffect(() => {
+    if (shouldAutoExpand) setExpanded(true);
+  }, [shouldAutoExpand]);
+  const amount = Number(e.amount);
 
   return (
     <li id={`expense-${e.id}`} className="rounded-xl border border-gray-100 bg-white p-3 transition-shadow">
@@ -229,10 +272,12 @@ function ExpenseCard({ expense: e, onPay, onDelete, disabled }: { expense: Expen
           <p className="mt-0.5 text-xs text-gray-500 truncate">{e.reason}</p>
           {e.description && <p className="mt-1 whitespace-pre-line text-xs text-gray-600">{e.description}</p>}
 
-          {/* Lien vers la depense forwarding parente si AUTO */}
+          {/* Lien vers la depense forwarding parente si AUTO. Passe
+              highlightParent = ce conteneur (parent) pour outliner le bloc
+              correspondant dans l'arbre du forwarding apres scroll. */}
           {isAuto && e.parentExpense?.container && (
             <Link
-              href={`/containers/${e.parentExpense.container.id}?tab=expenses#expense-${e.parentExpense.id}`}
+              href={`/containers/${e.parentExpense.container.id}?tab=expenses&highlightParent=${currentContainerId}#expense-${e.parentExpense.id}`}
               className="mt-2 inline-flex items-center gap-1 rounded-md border border-purple-200 bg-purple-50 px-2 py-0.5 text-[11px] font-medium text-purple-700 hover:bg-purple-100"
             >
               <GitBranch className="h-3 w-3" />
@@ -241,27 +286,115 @@ function ExpenseCard({ expense: e, onPay, onDelete, disabled }: { expense: Expen
             </Link>
           )}
 
-          {/* Arbre breakdown si depense forwarding propagee */}
-          {hasChildren && (
+          {/* Arbre breakdown + calc detaille pour depense forwarding */}
+          {(hasBreakdown || hasChildren) && (
             <div className="mt-2 rounded-lg border border-purple-100 bg-purple-50/40 p-2">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-purple-700">
-                Propage aux conteneurs parents ({formatAmount(childTotal)} total)
-              </p>
-              <ul className="mt-1 space-y-1">
-                {(e.childExpenses ?? []).map((c) => (
-                  <li key={c.id} className="flex items-center justify-between text-[11px]">
-                    <Link
-                      href={`/containers/${c.containerId}?tab=expenses#expense-${c.id}`}
-                      className="inline-flex items-center gap-1 text-purple-700 hover:underline"
-                    >
-                      <GitBranch className="h-3 w-3" />
-                      {c.container?.designation ?? c.containerId}
-                      <ExternalLink className="h-3 w-3" />
-                    </Link>
-                    <span className="font-medium text-gray-700">{formatAmount(Number(c.amount))}</span>
-                  </li>
-                ))}
-              </ul>
+              <button
+                type="button"
+                onClick={() => setExpanded((v) => !v)}
+                className="flex w-full items-center justify-between gap-2 text-left"
+              >
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-purple-700">
+                  {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                  Repartition aux conteneurs parents
+                  {hasChildren && ` (${formatAmount(childTotal)} total)`}
+                </span>
+                {hasBreakdown && (
+                  <span className="text-[10px] text-purple-600">
+                    {breakdown!.length} parent{breakdown!.length > 1 ? 's' : ''} - {breakdown![0]?.parcels.reduce((c, _, i, arr) => arr.length === 0 ? c : breakdown!.reduce((s, b) => s + b.parcels.length, 0), 0) || breakdown!.reduce((s, b) => s + b.parcels.length, 0)} colis
+                  </span>
+                )}
+              </button>
+
+              {expanded && (
+                <div className="mt-2 space-y-2">
+                  {/* Detail per-parent avec colis + calcul proportion */}
+                  {hasBreakdown && breakdown!.map((b) => {
+                    const childExp = (e.childExpenses ?? []).find((c) => c.containerId === b.parentId);
+                    const computed = amount * b.proportion;
+                    const isHighlighted = highlightParentId === b.parentId;
+                    return (
+                      <div
+                        key={b.parentId}
+                        className={`rounded-md border bg-white p-2 transition-all ${
+                          isHighlighted ? 'border-amber-400 ring-2 ring-amber-300 shadow-md' : 'border-purple-200'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <Link
+                            href={`/containers/${b.parentId}?tab=expenses${childExp ? `#expense-${childExp.id}` : ''}`}
+                            className="inline-flex items-center gap-1 text-xs font-semibold text-purple-700 hover:underline"
+                          >
+                            <GitBranch className="h-3 w-3" />
+                            {b.parentDesignation}
+                            <ExternalLink className="h-3 w-3" />
+                          </Link>
+                          <span className="text-xs font-bold text-gray-900">
+                            {formatAmount(childExp ? Number(childExp.amount) : computed)}
+                          </span>
+                        </div>
+                        <div className="mt-1 rounded bg-purple-50 px-2 py-1 font-mono text-[10px] text-gray-700">
+                          {formatAmount(amount)} × ({formatAmount(b.sum)} / {formatAmount(b.totalSum)}) ={' '}
+                          {formatAmount(amount)} × {(b.proportion * 100).toFixed(2)}% ={' '}
+                          <strong>{formatAmount(computed)}</strong>
+                        </div>
+                        <details className="mt-1">
+                          <summary className="cursor-pointer text-[10px] text-purple-600 hover:underline">
+                            {b.parcels.length} colis de ce parent ({formatAmount(b.sum)})
+                          </summary>
+                          <table className="mt-1 w-full text-[10px]">
+                            <thead className="text-left text-gray-500">
+                              <tr>
+                                <th className="py-0.5">Tracking</th>
+                                <th className="py-0.5">Designation</th>
+                                <th className="py-0.5 text-right">Prix snapshot</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                              {b.parcels.map((p) => (
+                                <tr key={p.id}>
+                                  <td className="py-0.5 font-mono">{p.trackingNumber}</td>
+                                  <td className="py-0.5 truncate">{p.designation}</td>
+                                  <td className="py-0.5 text-right">{formatAmount(p.priceSnapshot)}</td>
+                                </tr>
+                              ))}
+                              <tr className="border-t-2 border-purple-200">
+                                <td colSpan={2} className="py-0.5 text-right font-semibold">Sous-total</td>
+                                <td className="py-0.5 text-right font-bold">{formatAmount(b.sum)}</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </details>
+                      </div>
+                    );
+                  })}
+
+                  {/* Fallback : pas de breakdown mais des childExpenses (legacy) */}
+                  {!hasBreakdown && hasChildren && (
+                    <ul className="space-y-1">
+                      {(e.childExpenses ?? []).map((c) => (
+                        <li key={c.id} className="flex items-center justify-between text-[11px]">
+                          <Link
+                            href={`/containers/${c.containerId}?tab=expenses#expense-${c.id}`}
+                            className="inline-flex items-center gap-1 text-purple-700 hover:underline"
+                          >
+                            <GitBranch className="h-3 w-3" />
+                            {c.container?.designation ?? c.containerId}
+                            <ExternalLink className="h-3 w-3" />
+                          </Link>
+                          <span className="font-medium text-gray-700">{formatAmount(Number(c.amount))}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  {hasBreakdown && !hasChildren && (
+                    <p className="text-[10px] italic text-amber-700">
+                      Propagation en attente : sera appliquee au depart du conteneur (IN_TRANSIT).
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

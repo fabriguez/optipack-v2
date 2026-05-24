@@ -534,6 +534,35 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
 
       <ContainerLinksGraph container={container as any} />
 
+      {/* Liste structuree des conteneurs parents pour acheminement.
+          Affiche designation + statut + nombre de colis communs. Lien
+          vers chaque parent. */}
+      {container.isForwarding && Array.isArray(container.forwardingParents) && container.forwardingParents.length > 0 && (
+        <AppCard>
+          <AppCardHeader
+            title={`Conteneurs parents (${container.forwardingParents.length})`}
+            description="Conteneurs sources des colis regroupes dans cet acheminement. Les depenses se propagent au prorata des prix snapshotes."
+          />
+          <ul className="divide-y divide-gray-100">
+            {container.forwardingParents.map((fp: any) => (
+              <li key={fp.parentId} className="flex items-center justify-between gap-3 py-2">
+                <Link
+                  href={`/containers/${fp.parent.id}`}
+                  className="flex items-center gap-2 text-sm font-medium text-primary-700 hover:underline"
+                >
+                  <Truck className="h-4 w-4" />
+                  {fp.parent.designation}
+                  <StatusBadge status={fp.parent.status} type="container" />
+                </Link>
+                <span className="text-xs text-gray-600">
+                  <strong>{fp.parcelCount}</strong> colis en commun
+                </span>
+              </li>
+            ))}
+          </ul>
+        </AppCard>
+      )}
+
       <AppCard>
         <AppCardHeader
           title="Bordereaux"

@@ -85,7 +85,7 @@ export class DepartContainerUseCase {
     // Propagation des depenses aux parents si conteneur d'acheminement.
     // Au depart, le contenu est fige -> on propage toutes les depenses
     // accumulees (non encore propagees + non-auto) aux conteneurs parents
-    // au prorata des prix snapshotes. Best-effort.
+    // au prorata des prix snapshotes. Best-effort (log explicite si echec).
     if (container.isForwarding) {
       try {
         const pendingExpenses = await prisma.expense.findMany({
@@ -93,27 +93,57 @@ export class DepartContainerUseCase {
             containerId,
             isAutoFromForwarding: false,
             parentExpenseId: null,
-            // Pas deja propagees : aucune childExpense.
             childExpenses: { none: {} },
           },
-          select: { id: true, amount: true },
+          select: { id: true, amount: true, title: true },
         });
+
+        const linkCount = await prisma.containerForwardingParcelLink.count({
+          where: { forwardingId: containerId },
+        });
+
+        const errors: Array<{ expenseId: string; error: string }> = [];
+        let propagated = 0;
         for (const exp of pendingExpenses) {
-          await prisma.$transaction(async (tx) => {
-            await propagateForwardingExpense(tx, exp.id, containerId, Number(exp.amount), userId);
-          });
+          try {
+            await prisma.$transaction(async (tx) => {
+              await propagateForwardingExpense(tx, exp.id, containerId, Number(exp.amount), userId);
+            });
+            propagated += 1;
+          } catch (err) {
+            errors.push({
+              expenseId: exp.id,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
         }
-        if (pendingExpenses.length > 0) {
+
+        await this.history.recordContainer({
+          containerId,
+          action: 'FORWARDING_EXPENSES_PROPAGATED',
+          userId,
+          comment:
+            pendingExpenses.length === 0
+              ? 'Aucune depense pendante a propager'
+              : `${propagated}/${pendingExpenses.length} depense(s) propagee(s) (${linkCount} colis lies)`,
+          changes: {
+            pendingCount: pendingExpenses.length,
+            propagatedCount: propagated,
+            linkCount,
+            errors: errors.length > 0 ? errors : undefined,
+          } as any,
+        });
+      } catch (err) {
+        // Log dans l'historique conteneur pour visibilite.
+        try {
           await this.history.recordContainer({
             containerId,
-            action: 'FORWARDING_EXPENSES_PROPAGATED',
+            action: 'FORWARDING_EXPENSES_PROPAGATION_FAILED',
             userId,
-            comment: `${pendingExpenses.length} depense(s) propagee(s) aux conteneurs parents`,
-            changes: { propagatedCount: pendingExpenses.length },
+            comment: 'Echec global propagation depenses',
+            changes: { error: err instanceof Error ? err.message : String(err) } as any,
           });
-        }
-      } catch (err) {
-        // Best-effort : echec propagation ne bloque pas le depart.
+        } catch { /* skip */ }
       }
     }
 

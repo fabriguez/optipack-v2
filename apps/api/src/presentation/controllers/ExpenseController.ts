@@ -51,8 +51,14 @@ export class ExpenseController {
 
   static async listForContainer(req: Request, res: Response, next: NextFunction) {
     try {
+      const containerId = req.params.containerId;
+      const containerInfo = await prisma.container.findUnique({
+        where: { id: containerId },
+        select: { id: true, isForwarding: true },
+      });
+
       const items = await prisma.expense.findMany({
-        where: { containerId: req.params.containerId },
+        where: { containerId },
         orderBy: { createdAt: 'desc' },
         include: {
           cashRegister: { select: { id: true, date: true } },
@@ -81,7 +87,66 @@ export class ExpenseController {
           },
         },
       });
-      res.json({ success: true, data: items });
+
+      // Forwarding container : enrichi chaque depense avec le breakdown
+      // detaille (parcel-level + sum + proportion + calc) pour audit humain.
+      let forwardingBreakdown: any[] | null = null;
+      if (containerInfo?.isForwarding) {
+        const links = await prisma.containerForwardingParcelLink.findMany({
+          where: { forwardingId: containerId },
+          include: {
+            parent: { select: { id: true, designation: true } },
+            parcel: { select: { id: true, trackingNumber: true, designation: true } },
+          },
+        });
+        // Group by parentId.
+        const byParent = new Map<string, {
+          parentId: string;
+          parentDesignation: string;
+          parcels: Array<{ id: string; trackingNumber: string; designation: string; priceSnapshot: number }>;
+          sum: number;
+        }>();
+        let totalSum = 0;
+        for (const l of links) {
+          const price = Number(l.parcelPriceSnapshot);
+          totalSum += price;
+          const cur = byParent.get(l.parentId);
+          const parcelEntry = {
+            id: l.parcel.id,
+            trackingNumber: l.parcel.trackingNumber,
+            designation: l.parcel.designation,
+            priceSnapshot: price,
+          };
+          if (cur) {
+            cur.parcels.push(parcelEntry);
+            cur.sum += price;
+          } else {
+            byParent.set(l.parentId, {
+              parentId: l.parentId,
+              parentDesignation: l.parent.designation,
+              parcels: [parcelEntry],
+              sum: price,
+            });
+          }
+        }
+        forwardingBreakdown = Array.from(byParent.values()).map((g) => ({
+          ...g,
+          proportion: totalSum > 0 ? g.sum / totalSum : 0,
+          totalSum,
+        }));
+      }
+
+      // Attache le breakdown a chaque depense forwarding (meme data partagee).
+      const enriched = items.map((e) => {
+        const isForwardingExpense =
+          containerInfo?.isForwarding && !e.isAutoFromForwarding && !e.parentExpenseId;
+        return {
+          ...e,
+          forwardingBreakdown: isForwardingExpense ? forwardingBreakdown : null,
+        };
+      });
+
+      res.json({ success: true, data: enriched });
     } catch (err) {
       next(err);
     }
@@ -196,6 +261,67 @@ export class ExpenseController {
         await tx.expense.delete({ where: { id: expenseId } });
       });
       res.json({ success: true, message: 'Depense supprimee' });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * Force la propagation des depenses d'un conteneur forwarding vers ses
+   * parents. Utile quand le depart a deja eu lieu mais la propagation a
+   * echoue (ex: schema migre apres le depart). Idempotent : ne re-propage
+   * pas les depenses ayant deja des enfants.
+   */
+  static async propagateForwardingExpenses(req: Request, res: Response, next: NextFunction) {
+    try {
+      const containerId = req.params.containerId;
+      const containerInfo = await prisma.container.findUnique({
+        where: { id: containerId },
+        select: { id: true, isForwarding: true, designation: true },
+      });
+      if (!containerInfo) throw new NotFoundError('Conteneur', containerId);
+      if (!containerInfo.isForwarding) {
+        throw new BusinessError('Ce conteneur n\'est pas un conteneur d\'acheminement.');
+      }
+
+      const pendingExpenses = await prisma.expense.findMany({
+        where: {
+          containerId,
+          isAutoFromForwarding: false,
+          parentExpenseId: null,
+          childExpenses: { none: {} },
+        },
+        select: { id: true, amount: true },
+      });
+
+      const linkCount = await prisma.containerForwardingParcelLink.count({
+        where: { forwardingId: containerId },
+      });
+      if (linkCount === 0) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Aucun colis lie a un conteneur parent dans ce forwarding. Verifiez que les colis ont ete charges depuis un conteneur source (ContainerForwardingParcelLink vide).",
+        });
+      }
+
+      const errors: Array<{ expenseId: string; error: string }> = [];
+      let propagated = 0;
+      for (const exp of pendingExpenses) {
+        try {
+          await prisma.$transaction(async (tx) => {
+            await propagateForwardingExpense(tx, exp.id, containerId, Number(exp.amount), req.user!.userId);
+          });
+          propagated += 1;
+        } catch (err) {
+          errors.push({ expenseId: exp.id, error: err instanceof Error ? err.message : String(err) });
+        }
+      }
+
+      res.json({
+        success: true,
+        data: { pendingCount: pendingExpenses.length, propagatedCount: propagated, linkCount, errors },
+      });
     } catch (err) {
       next(err);
     }
