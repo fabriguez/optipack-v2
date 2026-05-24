@@ -183,6 +183,10 @@ model AgencyDailyReport {
   generatedAt DateTime                @default(now())
   closedAt    DateTime?
   closedBy    String?
+  // Envoi mail automatique: timestamp du dernier envoi + audit destinataires
+  // ([{email, name, role, sentAt}]). Null = jamais envoye.
+  emailedAt   DateTime?
+  emailSentTo Json?
 
   agency       Agency                        @relation(fields: [agencyId], references: [id])
   closedByUser User?                         @relation("DailyReportClosedBy", fields: [closedBy], references: [id])
@@ -363,6 +367,7 @@ model Warehouse {
   inventories     WarehouseInventory[]
   spaces          WarehouseSpace[]
   storageFeeRules WarehouseStorageFeeRule[]
+  parcelHistories ParcelHistory[]           @relation("ParcelHistoryWarehouse")
 
   @@index([agencyId])
   @@map("warehouses")
@@ -1822,6 +1827,9 @@ model DisbursementVoucher {
   approvedBy   User?                @relation("ApprovedByUser", fields: [approvedByUserId], references: [id])
   reverseEntry DisbursementVoucher? @relation("ReverseVoucher", fields: [reverseEntryId], references: [id])
   reversedBy   DisbursementVoucher? @relation("ReverseVoucher")
+  // Lien inverse vers la depense (Expense) qui a declenche ce decaissement.
+  // Permet la dedup dans le rapport journalier (cf Expense.disbursementId).
+  expense      Expense?             @relation("ExpenseDisbursement")
 
   @@index([agencyId])
   @@index([cashRegisterId])
@@ -2002,6 +2010,11 @@ model Expense {
   // l'agence. Mutuellement exclusif avec cashRegisterId (au plus l'un des
   // deux est defini).
   headOfficeCashRegisterId String?
+  // Lien 1-1 vers le bon de decaissement genere au moment du paiement
+  // de cette depense. Permet de dedupliquer dans les agregations financieres
+  // (rapport journalier : profit = recettes - expenses - disbursements_sans_expense).
+  // Null pour les depenses non encore payees ou les enregistrements legacy.
+  disbursementId           String?   @unique
   // Etat de paiement. Pour compat ascendante : true par defaut (toutes les
   // depenses historiques ont ete creees au moment de leur paiement). Les
   // depenses imputees a un conteneur (CreateContainerExpense) sont creees
@@ -2021,6 +2034,7 @@ model Expense {
   headOfficeCashRegister HeadOfficeCashRegister? @relation("HeadOfficeExpense", fields: [headOfficeCashRegisterId], references: [id])
   paidPayslip            Payslip?                @relation("PayslipPaidExpense")
   payslipInstallment     PayslipPayment?         @relation("PayslipInstallmentExpense")
+  disbursement           DisbursementVoucher?    @relation("ExpenseDisbursement", fields: [disbursementId], references: [id])
 
   @@index([agencyId])
   @@index([agencyChargeId, period])
@@ -2481,6 +2495,7 @@ model ParcelHistory {
   parcel    Parcel     @relation(fields: [parcelId], references: [id])
   user      User?      @relation(fields: [userId], references: [id])
   container Container? @relation(fields: [containerId], references: [id])
+  warehouse Warehouse? @relation("ParcelHistoryWarehouse", fields: [warehouseId], references: [id])
 
   @@index([parcelId])
   @@index([createdAt])

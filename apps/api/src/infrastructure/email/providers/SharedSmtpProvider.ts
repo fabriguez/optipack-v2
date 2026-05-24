@@ -43,6 +43,11 @@ export class SharedSmtpProvider implements TenantEmailProvider {
         html: params.html,
         text: params.text,
         replyTo: params.replyTo,
+        attachments: params.attachments?.map((a) => ({
+          filename: a.filename,
+          content: a.content,
+          contentType: a.contentType,
+        })),
       });
       return { ok: true, providerMessageId: info.messageId };
     } catch (err) {

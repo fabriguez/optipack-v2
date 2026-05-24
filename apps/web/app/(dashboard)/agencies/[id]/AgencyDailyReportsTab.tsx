@@ -10,7 +10,7 @@ import { ImageInput } from '@/components/shared/ImageInput';
 import { uploadImage, uploadFile } from '@/lib/api/uploads';
 import { openAuthedFile } from '@/components/shared/AuthedImage';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
-import { ChevronDown, ChevronRight, FileText, Lock, Paperclip, Printer, RefreshCw, Save, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, FileText, Lock, Mail, Paperclip, Printer, RefreshCw, Save, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface DailyReport {
@@ -24,6 +24,8 @@ interface DailyReport {
   closedAt: string | null;
   attachments?: Attachment[];
   _count?: { attachments: number };
+  emailedAt?: string | null;
+  emailSentTo?: Array<{ email: string; name: string; role: string; sentAt: string; ok: boolean; error?: string }> | null;
 }
 
 interface Attachment {
@@ -216,6 +218,24 @@ function ReportDetails({
     }
   };
 
+  const [sendingMail, setSendingMail] = useState(false);
+  const resendMail = async () => {
+    setSendingMail(true);
+    try {
+      const res = await apiClient.post(`/agencies/daily-reports/${reportId}/email`);
+      const data = res.data?.data;
+      const sent = data?.sent ?? 0;
+      const total = data?.recipients?.length ?? 0;
+      if (sent > 0) toast.success(`Mail envoye a ${sent} destinataire(s) sur ${total}`);
+      else toast.error(total === 0 ? 'Aucun destinataire trouve' : 'Echec envoi mail (voir logs)');
+      qc.invalidateQueries({ queryKey: ['daily-reports', reportId] });
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Echec envoi mail');
+    } finally {
+      setSendingMail(false);
+    }
+  };
+
   const printPDF = async () => {
     try {
       const res = await apiClient.get(`/agencies/daily-reports/${reportId}/pdf`, {
@@ -242,8 +262,17 @@ function ReportDetails({
 
   return (
     <div className="mt-4 space-y-4 border-t border-gray-100 pt-4">
-      {/* Bouton imprimer PDF */}
-      <div className="flex justify-end">
+      {/* Boutons actions */}
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {report.emailedAt && (
+          <span className="text-xs text-gray-500">
+            Dernier envoi mail : {new Date(report.emailedAt).toLocaleString('fr-FR')}
+          </span>
+        )}
+        <AppButton size="sm" variant="outline" onClick={resendMail} loading={sendingMail}>
+          <Mail className="h-3.5 w-3.5" />
+          {report.emailedAt ? 'Renvoyer par mail' : 'Envoyer par mail'}
+        </AppButton>
         <AppButton size="sm" variant="outline" onClick={printPDF}>
           <Printer className="h-3.5 w-3.5" />
           Imprimer en PDF

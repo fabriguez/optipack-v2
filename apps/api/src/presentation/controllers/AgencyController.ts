@@ -16,9 +16,10 @@ import { SetAgencyOpeningHoursUseCase } from '../../application/use-cases/agency
 import { AgencyBreakdownUseCase } from '../../application/use-cases/agency/AgencyBreakdownUseCase';
 import { DailyReportService } from '../../application/services/DailyReportService';
 import { DailyReportPDFService } from '../../application/services/DailyReportPDFService';
+import { SendDailyReportEmailUseCase } from '../../application/use-cases/agency/SendDailyReportEmailUseCase';
 import { StorageService } from '../../infrastructure/storage/StorageService';
 import { prisma } from '../../config/database';
-import { NotFoundError } from '../../domain/errors/BusinessError';
+import { NotFoundError, BusinessError } from '../../domain/errors/BusinessError';
 import { getOrgId } from '../middleware/tenantGuard';
 
 export class AgencyController {
@@ -231,10 +232,33 @@ export class AgencyController {
 
   static async generateDailyReport(req: Request, res: Response, next: NextFunction) {
     try {
-      const svc = container.resolve(DailyReportService);
       const date = req.body?.date ? new Date(req.body.date) : new Date();
+      // Verrouillage : si un rapport CLOSED existe deja pour cette date,
+      // refuser la regen pour preserver l'integrite du snapshot (stock, etc).
+      const dayStart = new Date(date);
+      dayStart.setUTCHours(0, 0, 0, 0);
+      const existing = await prisma.agencyDailyReport.findUnique({
+        where: { agencyId_date: { agencyId: req.params.id, date: dayStart } },
+        select: { status: true, id: true },
+      });
+      if (existing?.status === 'CLOSED') {
+        throw new BusinessError(
+          'Ce rapport est cloture. La regeneration est interdite pour preserver le snapshot fige.',
+        );
+      }
+      const svc = container.resolve(DailyReportService);
       const result = await svc.generate(req.params.id, date);
       res.status(201).json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async resendDailyReportEmail(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(SendDailyReportEmailUseCase);
+      const result = await useCase.execute(req.params.reportId);
+      res.json({ success: true, data: result });
     } catch (err) {
       next(err);
     }

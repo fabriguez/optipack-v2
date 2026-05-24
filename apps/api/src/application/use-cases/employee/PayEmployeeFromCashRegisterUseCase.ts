@@ -199,6 +199,12 @@ export class PayEmployeeFromCashRegisterUseCase {
         },
       });
 
+      // Lien 1-1 expense<->disbursement pour la dedup profit rapport journalier.
+      await tx.expense.update({
+        where: { id: expense.id },
+        data: { disbursementId: disbursement.id },
+      });
+
       // Enregistre la tranche.
       await tx.payslipPayment.create({
         data: {

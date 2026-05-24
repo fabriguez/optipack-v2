@@ -105,6 +105,14 @@ router.delete(
   AgencyController.deleteDailyReportAttachment,
 );
 
+// Renvoi manuel du rapport journalier par email (idempotent : met a jour
+// emailedAt + emailSentTo a chaque appel).
+router.post(
+  '/daily-reports/:reportId/email',
+  authorize('SUPER_ADMIN', 'ADMIN', 'COMPTABLE'),
+  AgencyController.resendDailyReportEmail,
+);
+
 // Image upload / delete (auth requise)
 router.post(
   '/:id/image',

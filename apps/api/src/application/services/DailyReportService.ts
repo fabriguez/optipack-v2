@@ -44,23 +44,48 @@ interface ContainerRow {
   byRoute: Record<RouteKey, ContainerRouteAgg>;
 }
 
+interface ParcelLite {
+  id: string;
+  weight: Prisma.Decimal | null;
+  volume: Prisma.Decimal | null;
+  price: Prisma.Decimal;
+  transitRoute: { id: string; name: string; type: string } | null;
+}
+
 function routeKeyOf(route: { id?: string | null } | null | undefined): string {
   return route?.id ?? '__none__';
 }
 
-function bumpRoute(
-  bucket: Record<RouteKey, RouteAgg>,
-  route: { id?: string | null; name?: string | null; type?: string | null } | null | undefined,
-): RouteKey {
-  const key = routeKeyOf(route);
-  if (!bucket[key]) {
-    bucket[key] = {
-      routeId: route?.id ?? null,
-      routeName: route?.name ?? 'Sans route',
-      type: route?.type ?? null,
-    };
+function emptyMassVol(route: { id?: string | null; name?: string | null; type?: string | null } | null | undefined): ParcelMassVolAgg {
+  return {
+    routeId: route?.id ?? null,
+    routeName: route?.name ?? 'Sans route',
+    type: route?.type ?? null,
+    count: 0,
+    totalWeight: 0,
+    totalVolume: 0,
+    totalPrice: 0,
+  };
+}
+
+function aggregateParcels(items: ParcelLite[]) {
+  const byRoute: Record<RouteKey, ParcelMassVolAgg> = {};
+  let totalWeight = 0;
+  let totalVolume = 0;
+  let totalPrice = 0;
+  for (const p of items) {
+    const r = p.transitRoute;
+    const key = routeKeyOf(r);
+    byRoute[key] ??= emptyMassVol(r);
+    byRoute[key].count += 1;
+    byRoute[key].totalWeight += Number(p.weight ?? 0);
+    byRoute[key].totalVolume += Number(p.volume ?? 0);
+    byRoute[key].totalPrice += Number(p.price ?? 0);
+    totalWeight += Number(p.weight ?? 0);
+    totalVolume += Number(p.volume ?? 0);
+    totalPrice += Number(p.price ?? 0);
   }
-  return key;
+  return { byRoute, count: items.length, totalWeight, totalVolume, totalPrice };
 }
 
 /**
@@ -93,7 +118,6 @@ export class DailyReportService {
     const windowEnd = cashRegister?.closedAt ?? new Date();
     const windowFilter = { gte: windowStart, lt: windowEnd };
 
-    // Resolution agence + organisation (branding header/footer du PDF)
     const agency = await prisma.agency.findUnique({
       where: { id: agencyId },
       include: {
@@ -114,9 +138,16 @@ export class DailyReportService {
     });
 
     // ------------------------------------------------------------------
-    // 1) Entrees du jour par mode transit et mode de paiement
-    //    + 8/9) Avances vs Recettes (paye sur colis pas-encore-en-stock-dest
-    //    vs colis-deja-en-stock-dest)
+    // 1) Entrees du jour par mode transit + methode
+    //    + 8/9) Recettes vs Avances avec PRORATA par prix colis
+    //
+    // Regle metier validee :
+    //  - Attribution = payment.agencyId (agence qui encaisse, status quo).
+    //  - Recette part = amount * (somme prix colis "a destination" /
+    //    somme prix de tous les colis du paiement). Reste = avance.
+    //  - "A destination" = colis dont status IN [IN_STOCK, DELIVERED] ET
+    //    warehouse courant appartient a son destinationAgencyId.
+    //  - DELIVERED inclus : un colis retire par le client etait bien arrive.
     // ------------------------------------------------------------------
     const payments = await prisma.payment.findMany({
       where: {
@@ -131,6 +162,7 @@ export class DailyReportService {
             parcels: {
               select: {
                 id: true,
+                price: true,
                 status: true,
                 warehouseId: true,
                 destinationAgencyId: true,
@@ -143,6 +175,7 @@ export class DailyReportService {
         parcel: {
           select: {
             id: true,
+            price: true,
             status: true,
             warehouseId: true,
             destinationAgencyId: true,
@@ -163,89 +196,121 @@ export class DailyReportService {
     let advancesTotal = 0;
     let recetteTotal = 0;
 
+    const isAtDestination = (p: {
+      status: string;
+      warehouseId: string | null;
+      destinationAgencyId: string | null;
+      warehouse: { agencyId: string } | null;
+    }) =>
+      (p.status === 'IN_STOCK' || p.status === 'DELIVERED') &&
+      !!p.destinationAgencyId &&
+      !!p.warehouse?.agencyId &&
+      p.warehouse.agencyId === p.destinationAgencyId;
+
+    const routeOf = (p: { transitRoute: { id: string; name: string; type: string } | null }) => ({
+      id: p.transitRoute?.id ?? null,
+      name: p.transitRoute?.name ?? 'Sans route',
+      type: p.transitRoute?.type ?? null,
+    });
+
+    const bumpPayBucket = (
+      bucket: Record<string, PaymentRouteMethodAgg>,
+      route: { id: string | null; name: string; type: string | null },
+      method: string,
+      amount: number,
+    ) => {
+      const key = route.id ?? route.name;
+      bucket[key] ??= { routeId: route.id, routeName: route.name, type: route.type, methods: {}, total: 0 };
+      bucket[key].methods[method] = (bucket[key].methods[method] ?? 0) + amount;
+      bucket[key].total += amount;
+    };
+
     for (const pay of payments) {
-      // Resolution route + statut "en stock destination" :
-      //  - si pay.parcel : scope colis
-      //  - sinon : parcours des colis de la facture (route mixte possible)
       const parcelsCtx = pay.parcel ? [pay.parcel] : pay.invoice?.parcels ?? [];
-      const routeSet = new Set(parcelsCtx.map((p) => p.transitRoute?.id ?? null));
-      let route: { id: string | null; name: string; type: string | null };
-      if (routeSet.size === 1) {
-        const r = parcelsCtx[0]?.transitRoute;
-        route = { id: r?.id ?? null, name: r?.name ?? 'Sans route', type: r?.type ?? null };
-      } else if (routeSet.size > 1) {
-        route = { id: null, name: 'Mixte', type: null };
-      } else {
-        route = { id: null, name: 'Sans route', type: null };
-      }
-
-      // "En stock destination" = au moins un colis du paiement est IN_STOCK
-      // dans un warehouse de son destinationAgency. Si OUI -> recette ; sinon
-      // -> avance (paiement avant arrivee en stock destination).
-      const isAtDestination = parcelsCtx.some(
-        (p) =>
-          p.status === 'IN_STOCK' &&
-          p.warehouseId &&
-          p.warehouse?.agencyId &&
-          p.destinationAgencyId &&
-          p.warehouse.agencyId === p.destinationAgencyId,
-      );
-
       const amount = Number(pay.amount);
       paymentsTotal += amount;
 
-      // 1) Entrees par type de transit + methode
-      const transitType = route.type ?? 'OTHER';
+      // 1) Section 1 : entrees par type transit + methode (sur le paiement
+      //    entier, route majoritaire ou "Mixte").
+      const routeSet = new Set(parcelsCtx.map((p) => p.transitRoute?.id ?? null));
+      const transitType =
+        routeSet.size === 1
+          ? parcelsCtx[0]?.transitRoute?.type ?? 'OTHER'
+          : routeSet.size > 1
+          ? 'MIXED'
+          : 'OTHER';
       entriesByTransitMethod[transitType] ??= { type: transitType, methods: {}, total: 0 };
       entriesByTransitMethod[transitType].methods[pay.paymentMethod] =
         (entriesByTransitMethod[transitType].methods[pay.paymentMethod] ?? 0) + amount;
       entriesByTransitMethod[transitType].total += amount;
 
-      const bucket = isAtDestination ? recetteByRouteAndMethod : advanceByRouteAndMethod;
-      if (isAtDestination) recetteTotal += amount;
-      else advancesTotal += amount;
+      // 8/9) Prorata recette / avance.
+      if (parcelsCtx.length === 0) {
+        // Paiement sans colis ctx (ne devrait pas arriver) : tout en avance.
+        const route = { id: null, name: 'Sans route', type: null };
+        advancesTotal += amount;
+        bumpPayBucket(advanceByRouteAndMethod, route, pay.paymentMethod, amount);
+        continue;
+      }
 
-      const key = route.id ?? route.name;
-      bucket[key] ??= { routeId: route.id, routeName: route.name, type: route.type, methods: {}, total: 0 };
-      bucket[key].methods[pay.paymentMethod] = (bucket[key].methods[pay.paymentMethod] ?? 0) + amount;
-      bucket[key].total += amount;
+      const totalPrice = parcelsCtx.reduce((s, p) => s + Number(p.price ?? 0), 0);
+      // Fallback : si tous les prix sont 0, split egalitaire entre colis.
+      const equalSplit = totalPrice <= 0;
+
+      for (const p of parcelsCtx) {
+        const share = equalSplit
+          ? amount / parcelsCtx.length
+          : amount * (Number(p.price ?? 0) / totalPrice);
+        if (share <= 0) continue;
+        const route = routeOf(p);
+        if (isAtDestination(p)) {
+          recetteTotal += share;
+          bumpPayBucket(recetteByRouteAndMethod, route, pay.paymentMethod, share);
+        } else {
+          advancesTotal += share;
+          bumpPayBucket(advanceByRouteAndMethod, route, pay.paymentMethod, share);
+        }
+      }
     }
 
     // ------------------------------------------------------------------
-    // 2) Flux de colis du jour par route : ENTREES (colis enregistres /
-    //    receptionnes dans l'agence) et SORTIES (colis charges dans un
-    //    conteneur partant de l'agence). Masse + volume par route.
+    // 2) Flux IN : colis ENTRES dans l'agence aujourd'hui.
+    //    Sources unifiees via ParcelHistory :
+    //     - action CREATED dont warehouse appartient a l'agence (creation
+    //       comptoir directement en magasin de l'agence).
+    //     - action UNLOADED dont container.arrivalAgencyId = agence
+    //       (reception conteneur entrant : colis dechargies a l'agence).
+    //     - action RECEIVED via routing inter-agences (transfert recu : colis
+    //       livre depuis autre agence -- capture aussi par UNLOADED si passe
+    //       par un conteneur, donc dedup parcelId).
     // ------------------------------------------------------------------
-    // Entrees : colis crees ce jour, rattaches a l'agence (magasin ou
-    // destination).
-    const flowInParcels = await prisma.parcel.findMany({
+    const flowInHistories = await prisma.parcelHistory.findMany({
       where: {
-        isDeleted: false,
         createdAt: windowFilter,
         OR: [
-          { warehouse: { agencyId } },
-          { destinationAgencyId: agencyId },
+          // Creation comptoir : entree directe en magasin de l'agence
+          {
+            action: 'CREATED',
+            warehouse: { agencyId },
+          },
+          // Reception conteneur : decharge dans agence d'arrivee
+          {
+            action: 'UNLOADED',
+            container: { arrivalAgencyId: agencyId },
+          },
+          // Reception via routing inter-agences (alias possible)
+          {
+            action: { in: ['RECEIVED', 'HANDED_OVER'] },
+            warehouse: { agencyId },
+            // exclut HANDED_OVER au client (= sortie). HANDED_OVER en entree =
+            // remise inter-agences ; en sortie = remise client. On filtre via
+            // metadata.kind si dispo, sinon on accepte les 2 et on dedup par
+            // parcelId avec flow.out (priorite flow.out plus tard).
+          },
         ],
       },
       select: {
-        id: true,
-        weight: true,
-        volume: true,
-        price: true,
-        transitRoute: { select: { id: true, name: true, type: true } },
-      },
-    });
-
-    // Sorties : colis charges dans un conteneur partant de cette agence ce
-    // jour. On lit l'historique colis (action LOADED_INTO_CONTAINER) borne a
-    // la fenetre, filtre sur les conteneurs dont l'agence de depart = agence.
-    const loadEvents = await prisma.parcelHistory.findMany({
-      where: {
-        action: 'LOADED_INTO_CONTAINER',
-        createdAt: windowFilter,
-        container: { departureAgencyId: agencyId },
-      },
-      select: {
+        action: true,
         parcel: {
           select: {
             id: true,
@@ -258,51 +323,59 @@ export class DailyReportService {
       },
     });
 
-    const aggregateFlow = (
-      items: Array<{
-        weight: unknown;
-        volume: unknown;
-        price?: unknown;
-        transitRoute: { id: string; name: string; type: string } | null;
-      }>,
-    ) => {
-      const byRoute: Record<RouteKey, ParcelMassVolAgg> = {};
-      let totalWeight = 0;
-      let totalVolume = 0;
-      for (const p of items) {
-        const key = bumpRoute(byRoute as any, p.transitRoute);
-        const slot = byRoute[key] as ParcelMassVolAgg;
-        if (!('count' in slot)) {
-          Object.assign(slot, { count: 0, totalWeight: 0, totalVolume: 0, totalPrice: 0 });
-        }
-        slot.count += 1;
-        slot.totalWeight += Number(p.weight ?? 0);
-        slot.totalVolume += Number(p.volume ?? 0);
-        slot.totalPrice += Number(p.price ?? 0);
-        totalWeight += Number(p.weight ?? 0);
-        totalVolume += Number(p.volume ?? 0);
-      }
-      return { byRoute, totalWeight, totalVolume, count: items.length };
-    };
+    // Flux OUT : colis SORTIS de l'agence aujourd'hui.
+    //  - HANDED_OVER avec warehouse de l'agence (remise client : pickup).
+    //  - LOADED_INTO_CONTAINER avec container.departureAgencyId = agence.
+    //  - Transfert emis = LOADED_INTO_CONTAINER (couvert ci-dessus).
+    const flowOutHistories = await prisma.parcelHistory.findMany({
+      where: {
+        createdAt: windowFilter,
+        OR: [
+          {
+            action: 'HANDED_OVER',
+            warehouse: { agencyId },
+          },
+          {
+            action: 'LOADED_INTO_CONTAINER',
+            container: { departureAgencyId: agencyId },
+          },
+        ],
+      },
+      select: {
+        action: true,
+        parcel: {
+          select: {
+            id: true,
+            weight: true,
+            volume: true,
+            price: true,
+            transitRoute: { select: { id: true, name: true, type: true } },
+          },
+        },
+      },
+    });
 
-    const flowIn = aggregateFlow(flowInParcels);
-    const flowOut = aggregateFlow(
-      // Dedup : un colis peut avoir plusieurs evenements de chargement.
-      Array.from(
-        new Map(loadEvents.map((e) => [e.parcel.id, e.parcel])).values(),
-      ),
-    );
-    // Compat ascendante : l'ancien champ registeredByRoute = entrees du flux.
-    const registeredByRoute = flowIn.byRoute;
-    const registeredTotalWeight = flowIn.totalWeight;
-    const registeredTotalVolume = flowIn.totalVolume;
-    const newParcels = flowInParcels;
+    // Dedup par parcelId. Un colis qui sort > prioritaire sur entree (cas
+    // HANDED_OVER ambigu : si meme jour il est aussi sorti, on garde sortie).
+    const outParcelIds = new Set(flowOutHistories.map((h) => h.parcel.id));
+    const flowInParcelsMap = new Map<string, ParcelLite>();
+    for (const h of flowInHistories) {
+      if (outParcelIds.has(h.parcel.id) && h.action === 'HANDED_OVER') continue;
+      if (!flowInParcelsMap.has(h.parcel.id)) flowInParcelsMap.set(h.parcel.id, h.parcel);
+    }
+    const flowOutParcelsMap = new Map<string, ParcelLite>();
+    for (const h of flowOutHistories) {
+      if (!flowOutParcelsMap.has(h.parcel.id)) flowOutParcelsMap.set(h.parcel.id, h.parcel);
+    }
+
+    const flowIn = aggregateParcels(Array.from(flowInParcelsMap.values()));
+    const flowOut = aggregateParcels(Array.from(flowOutParcelsMap.values()));
 
     // ------------------------------------------------------------------
-    // 3) Conteneurs RECUS dans la journee a cette agence (actualArrivalDate
-    //    dans la fenetre, arrivalAgencyId = agence)
-    // 4) Conteneurs ENVOYES dans la journee depuis cette agence
-    //    (departureDate dans la fenetre, departureAgencyId = agence)
+    // 3) Conteneurs RECUS (arrivalAgencyId = agence, actualArrivalDate dans
+    //    la fenetre).
+    // 4) Conteneurs ENVOYES (departureAgencyId = agence, departureDate dans
+    //    la fenetre).
     // ------------------------------------------------------------------
     const [receivedContainers, sentContainers] = await Promise.all([
       prisma.container.findMany({
@@ -383,70 +456,48 @@ export class DailyReportService {
     const sentContainersList = sentContainers.map(summarizeContainer);
 
     // ------------------------------------------------------------------
-    // 5) Stock IN/OUT par route (arrivalDate / pickupDate dans la fenetre)
+    // 5) Mouvements de stock : transitions STRICTES vers/depuis IN_STOCK
+    //    dans un magasin de l'agence (via ParcelHistory.statusBefore /
+    //    statusAfter). Un colis cree directement IN_STOCK (statusBefore=null)
+    //    compte aussi en stock IN.
     // ------------------------------------------------------------------
-    const [stockIn, stockOut] = await Promise.all([
-      prisma.parcel.findMany({
-        where: {
-          isDeleted: false,
-          arrivalDate: windowFilter,
-          OR: [{ warehouse: { agencyId } }, { destinationAgencyId: agencyId }],
+    const stockHistories = await prisma.parcelHistory.findMany({
+      where: {
+        createdAt: windowFilter,
+        warehouse: { agencyId },
+        OR: [
+          { statusAfter: 'IN_STOCK', NOT: { statusBefore: 'IN_STOCK' } },
+          { statusBefore: 'IN_STOCK', NOT: { statusAfter: 'IN_STOCK' } },
+        ],
+      },
+      select: {
+        statusBefore: true,
+        statusAfter: true,
+        parcel: {
+          select: {
+            id: true,
+            weight: true,
+            volume: true,
+            price: true,
+            transitRoute: { select: { id: true, name: true, type: true } },
+          },
         },
-        select: {
-          weight: true,
-          volume: true,
-          price: true,
-          transitRoute: { select: { id: true, name: true, type: true } },
-        },
-      }),
-      prisma.parcel.findMany({
-        where: {
-          isDeleted: false,
-          pickupDate: windowFilter,
-          OR: [{ warehouse: { agencyId } }, { destinationAgencyId: agencyId }],
-        },
-        select: {
-          weight: true,
-          volume: true,
-          price: true,
-          transitRoute: { select: { id: true, name: true, type: true } },
-        },
-      }),
-    ]);
+      },
+    });
 
-    const aggregateMassVol = (items: typeof stockIn) => {
-      const buckets: Record<RouteKey, ParcelMassVolAgg> = {};
-      let totalWeight = 0;
-      let totalVolume = 0;
-      let totalPrice = 0;
-      for (const p of items) {
-        const r = p.transitRoute;
-        const key = routeKeyOf(r);
-        buckets[key] ??= {
-          routeId: r?.id ?? null,
-          routeName: r?.name ?? 'Sans route',
-          type: r?.type ?? null,
-          count: 0,
-          totalWeight: 0,
-          totalVolume: 0,
-          totalPrice: 0,
-        };
-        buckets[key].count += 1;
-        buckets[key].totalWeight += Number(p.weight ?? 0);
-        buckets[key].totalVolume += Number(p.volume ?? 0);
-        buckets[key].totalPrice += Number(p.price ?? 0);
-        totalWeight += Number(p.weight ?? 0);
-        totalVolume += Number(p.volume ?? 0);
-        totalPrice += Number(p.price ?? 0);
-      }
-      return { buckets, totalWeight, totalVolume, totalPrice };
-    };
-
-    const stockInAgg = aggregateMassVol(stockIn);
-    const stockOutAgg = aggregateMassVol(stockOut);
+    const stockInParcels: ParcelLite[] = [];
+    const stockOutParcels: ParcelLite[] = [];
+    for (const h of stockHistories) {
+      if (h.statusAfter === 'IN_STOCK' && h.statusBefore !== 'IN_STOCK') stockInParcels.push(h.parcel);
+      if (h.statusBefore === 'IN_STOCK' && h.statusAfter !== 'IN_STOCK') stockOutParcels.push(h.parcel);
+    }
+    const stockInAgg = aggregateParcels(stockInParcels);
+    const stockOutAgg = aggregateParcels(stockOutParcels);
 
     // ------------------------------------------------------------------
-    // 6) Etat de stock par route + valeur totale (snapshot a windowEnd)
+    // 6) Etat de stock par route + valeur totale (snapshot a l'instant T).
+    //    Une fois le rapport CLOSED, la regen est refusee (cf controller)
+    //    donc ce snapshot reste fige au moment de la cloture.
     // ------------------------------------------------------------------
     const currentStock = await prisma.parcel.findMany({
       where: {
@@ -463,7 +514,15 @@ export class DailyReportService {
       },
     });
 
-    const stockStateAgg = aggregateMassVol(currentStock);
+    const stockStateAgg = aggregateParcels(
+      currentStock.map((p) => ({
+        id: '',
+        weight: p.weight,
+        volume: p.volume,
+        price: p.price,
+        transitRoute: p.transitRoute,
+      })),
+    );
     const stockTotalValue = currentStock.reduce(
       (s, p) => s + Number(p.declaredValue ?? p.price ?? 0),
       0,
@@ -500,15 +559,21 @@ export class DailyReportService {
     }));
 
     // ------------------------------------------------------------------
-    // 10) Depenses + bons de decaissement (pour profits)
+    // 10) Depenses + decaissements (pour profit).
+    //     Dedup : un disbursement lie a une expense (via expense.disbursementId)
+    //     est exclu de la somme disbursements pour eviter le double-comptage
+    //     (la depense est deja dans expensesTotal).
     // ------------------------------------------------------------------
     const [disbursements, expenses] = await Promise.all([
       prisma.disbursementVoucher.findMany({
         where: { agencyId, createdAt: windowFilter },
+        include: {
+          expense: { select: { id: true } },
+        },
       }),
       prisma.expense.findMany({
         where: { agencyId, createdAt: windowFilter },
-        select: { id: true, title: true, reason: true, category: true, amount: true, createdAt: true },
+        select: { id: true, title: true, reason: true, category: true, amount: true, createdAt: true, disbursementId: true },
       }),
     ]);
     const expensesList = expenses.map((e) => ({
@@ -524,6 +589,7 @@ export class DailyReportService {
     const disbursementsByCategory: Record<string, { count: number; total: number; voided: number }> = {};
     let disbursementsTotal = 0;
     let disbursementsVoided = 0;
+    let disbursementsTotalDedup = 0; // exclut ceux lies a une Expense (dedup profit)
     for (const d of disbursements) {
       const cat = d.reason || 'OTHER';
       disbursementsByCategory[cat] ??= { count: 0, total: 0, voided: 0 };
@@ -535,11 +601,16 @@ export class DailyReportService {
       } else {
         disbursementsTotal += amount;
         disbursementsByCategory[cat].total += amount;
+        if (!d.expense) disbursementsTotalDedup += amount;
       }
     }
 
     // ------------------------------------------------------------------
-    // 11) Solde caisse apres entrees/sorties + profit
+    // 11) Solde caisse + profit.
+    //     Profit = recettes - expenses - disbursements_sans_expense_lie.
+    //     Les expenses payees generent un disbursement lie (PayExpense...)
+    //     donc on ne compte que les disbursements "purs" (non issus d'une
+    //     expense) pour eviter le double-comptage.
     // ------------------------------------------------------------------
     const cashSnapshot = cashRegister
       ? {
@@ -559,13 +630,9 @@ export class DailyReportService {
         }
       : null;
 
-    // Profit "brut journee" = recettes encaissees - depenses (incl. salaires
-    // et autres expenses). Les avances ne comptent pas comme realises tant
-    // que les colis ne sont pas en stock dest (definition fournie par metier).
-    const profit = recetteTotal - expensesTotal;
+    const profit = recetteTotal - expensesTotal - disbursementsTotalDedup;
 
     const payload = {
-      // --- Meta ---
       generatedAt: new Date().toISOString(),
       window: { start: windowStart.toISOString(), end: windowEnd.toISOString() },
       organization: agency?.organization ?? null,
@@ -582,10 +649,8 @@ export class DailyReportService {
           }
         : null,
 
-      // --- Section 1 : Entrees par transit + methode ---
       entriesByTransitMethod,
 
-      // --- Section 2 : Flux de colis du jour par route (entrees + sorties) ---
       flow: {
         in: {
           byRoute: flowIn.byRoute,
@@ -601,56 +666,63 @@ export class DailyReportService {
         },
       },
       // Compat ascendante : ancien champ = entrees du flux.
-      registeredByRoute,
+      registeredByRoute: flowIn.byRoute,
       registeredTotal: {
-        count: newParcels.length,
-        totalWeight: registeredTotalWeight,
-        totalVolume: registeredTotalVolume,
+        count: flowIn.count,
+        totalWeight: flowIn.totalWeight,
+        totalVolume: flowIn.totalVolume,
       },
 
-      // --- Section 3 : Conteneurs recus ---
       receivedContainers: receivedContainersList,
-
-      // --- Section 4 : Conteneurs envoyes ---
       sentContainers: sentContainersList,
 
-      // --- Section 5 : Mouvements de stock (in/out) par route ---
-      stockIn: { byRoute: stockInAgg.buckets, totalWeight: stockInAgg.totalWeight, totalVolume: stockInAgg.totalVolume },
-      stockOut: { byRoute: stockOutAgg.buckets, totalWeight: stockOutAgg.totalWeight, totalVolume: stockOutAgg.totalVolume },
+      stockIn: {
+        byRoute: stockInAgg.byRoute,
+        count: stockInAgg.count,
+        totalWeight: stockInAgg.totalWeight,
+        totalVolume: stockInAgg.totalVolume,
+      },
+      stockOut: {
+        byRoute: stockOutAgg.byRoute,
+        count: stockOutAgg.count,
+        totalWeight: stockOutAgg.totalWeight,
+        totalVolume: stockOutAgg.totalVolume,
+      },
 
-      // --- Section 6 : Etat de stock courant + valeur ---
-      stockState: { byRoute: stockStateAgg.buckets, totalWeight: stockStateAgg.totalWeight, totalVolume: stockStateAgg.totalVolume, totalValue: stockTotalValue },
+      stockState: {
+        byRoute: stockStateAgg.byRoute,
+        count: stockStateAgg.count,
+        totalWeight: stockStateAgg.totalWeight,
+        totalVolume: stockStateAgg.totalVolume,
+        totalValue: stockTotalValue,
+      },
 
-      // --- Section 7 : Inventaires du jour ---
       inventories: inventoryList,
 
-      // --- Section 8 : Avances (paiements avant arrivee en stock dest) ---
       advancesByRouteAndMethod: advanceByRouteAndMethod,
       advancesTotal,
 
-      // --- Section 9 : Recettes (paiements sur colis en stock dest) ---
       recetteByRouteAndMethod,
       recetteTotal,
 
-      // --- Section 10 : Profit estime ---
       expenses: expensesList,
       expensesTotal,
       disbursementsByCategory,
       disbursementsTotal,
+      disbursementsTotalDedup,
       disbursementsVoided,
       profit,
 
-      // --- Section 11 : Solde caisse ---
       cashRegister: cashSnapshot,
 
-      // --- Total paiements (compat ascendante) ---
       paymentsTotal,
-      totalParcels: newParcels.length,
+      totalParcels: flowIn.count,
       totalRemainingAmount: 0,
     };
 
-    // Upsert : un rapport unique par agence/jour. On peut le regenerer tant
-    // que le statut n'est pas CLOSED (cloture manuelle/auto).
+    // Upsert : un rapport unique par agence/jour. Regen interdite si CLOSED
+    // (verrouillage cote controller -- ici on accepte pour la 1ere generation
+    // automatique au moment de la cloture caisse).
     const existing = await prisma.agencyDailyReport.findUnique({
       where: { agencyId_date: { agencyId, date: dayStart } },
     });

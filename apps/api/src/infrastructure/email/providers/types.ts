@@ -17,6 +17,12 @@ export interface EmailSendParams {
   replyTo?: string;
   /** Tag/category for the provider analytics. */
   tag?: string;
+  /** Optional file attachments (e.g. PDF reports). */
+  attachments?: Array<{
+    filename: string;
+    content: Buffer;
+    contentType?: string;
+  }>;
 }
 
 export interface EmailSendResult {

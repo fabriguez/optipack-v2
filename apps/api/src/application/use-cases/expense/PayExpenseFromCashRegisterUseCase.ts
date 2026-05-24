@@ -81,6 +81,9 @@ export class PayExpenseFromCashRegisterUseCase {
           paidAt: new Date(),
           paidByUserId: userId,
           cashRegisterId: cashRegister!.id,
+          // Lien 1-1 vers le bon : permet la dedup dans le profit du
+          // rapport journalier (cf DailyReportService.disbursementsTotalDedup).
+          disbursementId: disbursement.id,
         },
       });
 
