@@ -264,13 +264,13 @@ export class SendDailyReportEmailUseCase {
     const avances = Number(payload?.advancesTotal ?? 0);
     const expenses = Number(payload?.expensesTotal ?? 0);
     const disbursements = Number(payload?.disbursementsTotal ?? 0);
-    const profit = Number(payload?.profit ?? 0);
+    const soldeCaisse = Number(payload?.cashRegister?.closingBalance ?? payload?.cashRegister?.currentBalance ?? 0);
     const cr = payload?.cashRegister;
     const flowIn = payload?.flow?.in ?? {};
     const flowOut = payload?.flow?.out ?? {};
     const recv = (payload?.receivedContainers ?? []).length;
     const sent = (payload?.sentContainers ?? []).length;
-    const profitColor = profit >= 0 ? '#16a34a' : '#dc2626';
+    const soldeColor = soldeCaisse >= 0 ? '#16a34a' : '#dc2626';
 
     return `
 <!doctype html>
@@ -289,7 +289,7 @@ export class SendDailyReportEmailUseCase {
         <tr><td style="padding:6px 0; color:#6b7280;">Paiements en avance</td><td style="text-align:right; font-weight:600;">+${fmt(avances)}</td></tr>
         <tr><td style="padding:6px 0; color:#6b7280;">Depenses</td><td style="text-align:right; font-weight:600; color:#dc2626;">-${fmt(expenses)}</td></tr>
         <tr><td style="padding:6px 0; color:#6b7280;">Decaissements</td><td style="text-align:right; font-weight:600; color:#dc2626;">-${fmt(disbursements)}</td></tr>
-        <tr><td style="padding:10px 0 6px; border-top:1px solid #e5e7eb; font-weight:600;">Benefice estime</td><td style="text-align:right; padding-top:10px; border-top:1px solid #e5e7eb; font-weight:700; color:${profitColor};">${fmt(profit)}</td></tr>
+        <tr><td style="padding:10px 0 6px; border-top:1px solid #e5e7eb; font-weight:600;">Solde caisse agence</td><td style="text-align:right; padding-top:10px; border-top:1px solid #e5e7eb; font-weight:700; color:${soldeColor};">${fmt(soldeCaisse)}</td></tr>
       </table>
 
       <h2 style="font-size:14px; margin:24px 0 12px; color:#374151; text-transform:uppercase; letter-spacing:.5px;">Mouvements</h2>

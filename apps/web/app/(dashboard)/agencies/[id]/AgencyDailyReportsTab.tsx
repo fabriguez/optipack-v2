@@ -308,7 +308,12 @@ function ReportDetails({
         <Stat label="Recettes" value={'+' + formatAmount(payload.recetteTotal ?? 0)} positive />
         <Stat label="Paiements en avance" value={'+' + formatAmount(payload.advancesTotal ?? 0)} />
         <Stat label="Depenses" value={'-' + formatAmount(payload.expensesTotal ?? 0)} negative />
-        <Stat label="Benefice" value={formatAmount(payload.profit ?? 0)} positive={Number(payload.profit ?? 0) >= 0} negative={Number(payload.profit ?? 0) < 0} />
+        <Stat
+          label="Solde caisse"
+          value={formatAmount(payload.cashRegister?.closingBalance ?? payload.cashRegister?.currentBalance ?? 0)}
+          positive={Number(payload.cashRegister?.closingBalance ?? payload.cashRegister?.currentBalance ?? 0) >= 0}
+          negative={Number(payload.cashRegister?.closingBalance ?? payload.cashRegister?.currentBalance ?? 0) < 0}
+        />
       </div>
 
       {/* Entrees par mode transit + methode */}

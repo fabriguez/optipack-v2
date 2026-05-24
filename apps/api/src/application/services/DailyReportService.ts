@@ -207,20 +207,15 @@ export class DailyReportService {
     let advancesTotal = 0;
     let recetteTotal = 0;
 
-    // Recette = colis arrive dans son agence de destination, ce qui couvre
-    // les statuts IN_STOCK (en magasin) et RECEIVED (receptionne, pret a la
-    // remise au destinataire). DELIVERED exclu (deja retire). Le warehouse
-    // courant doit appartenir a l'agence destination.
+    // Recette = paiement sur colis ayant atteint l'etat RECEPTIONNE
+    // (RECEIVED) ou au-dela (DELIVERED). Tous les statuts AVANT RECEIVED
+    // (IN_STOCK, LOADING, IN_TRANSIT, ARRIVED) -> paiement en avance.
     const isAtDestination = (p: {
       status: string;
       warehouseId: string | null;
       destinationAgencyId: string | null;
       warehouse: { agencyId: string } | null;
-    }) =>
-      (p.status === 'IN_STOCK' || p.status === 'RECEIVED') &&
-      !!p.destinationAgencyId &&
-      !!p.warehouse?.agencyId &&
-      p.warehouse.agencyId === p.destinationAgencyId;
+    }) => p.status === 'RECEIVED' || p.status === 'DELIVERED';
 
     const routeOf = (p: { transitRoute: { id: string; name: string; type: string } | null }) => ({
       id: p.transitRoute?.id ?? null,

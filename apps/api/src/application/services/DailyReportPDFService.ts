@@ -454,7 +454,8 @@ export class DailyReportPDFService {
     writeKV('Total recettes (A)', formatCurrency(p.recetteTotal ?? 0));
     writeKV('Total paiements en avance (B)', formatCurrency(p.advancesTotal ?? 0));
     writeKV('Total depenses (D)', formatCurrency(p.expensesTotal ?? 0));
-    writeKV('BENEFICE ESTIME', formatCurrency(p.profit ?? 0));
+    const soldeCaisse = p.cashRegister?.closingBalance ?? p.cashRegister?.currentBalance ?? 0;
+    writeKV('SOLDE CAISSE AGENCE', formatCurrency(soldeCaisse));
 
     const cr = p.cashRegister;
     if (cr) {
