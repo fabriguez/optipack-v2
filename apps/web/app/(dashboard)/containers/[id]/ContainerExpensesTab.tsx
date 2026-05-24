@@ -11,6 +11,7 @@ import { AppBadge } from '@/components/ui/AppBadge';
 import { AppDialog } from '@/components/ui/AppDialog';
 import { AppInput } from '@/components/ui/AppInput';
 import { AppTextarea } from '@/components/ui/AppTextarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
 
@@ -370,6 +371,32 @@ function PayExpenseDialog({ expense, onClose, onPaid }: { expense: Expense | nul
   });
   const agencies: Array<{ id: string; name: string; code?: string }> = agenciesData?.data ?? [];
 
+  // Pre-charge le solde caisse du jour pour chaque agence afin d'afficher
+  // dans chaque option du select (evite le paiement a l'aveugle).
+  const { data: balancesData } = useQuery({
+    queryKey: ['agencies-cash-balances', agencies.map((a) => a.id).join(',')],
+    queryFn: async () => {
+      const entries = await Promise.all(
+        agencies.map(async (a) => {
+          try {
+            const r = await apiClient.get(`/cash-registers/${a.id}`);
+            const bal = Number(r?.data?.data?.currentBalance ?? 0);
+            return [a.id, { balance: bal, isClosed: !!r?.data?.data?.isClosed }] as const;
+          } catch {
+            return [a.id, { balance: 0, isClosed: false }] as const;
+          }
+        }),
+      );
+      return Object.fromEntries(entries) as Record<string, { balance: number; isClosed: boolean }>;
+    },
+    enabled: !!expense && agencies.length > 0,
+  });
+  const balances = balancesData ?? {};
+
+  const expenseAmount = expense ? Number(expense.amount) : 0;
+  const selected = balances[agencyId];
+  const insufficient = !!selected && selected.balance < expenseAmount;
+
   const mutation = useMutation({
     mutationFn: () =>
       apiClient.post(`/expenses/${expense!.id}/pay`, {
@@ -389,12 +416,12 @@ function PayExpenseDialog({ expense, onClose, onPaid }: { expense: Expense | nul
     <AppDialog
       open={!!expense}
       onClose={onClose}
-      title={expense ? `Payer ${expense.title} (${formatAmount(Number(expense.amount))})` : 'Payer'}
+      title={expense ? `Payer ${expense.title} (${formatAmount(expenseAmount)})` : 'Payer'}
       size="md"
       footer={
         <>
           <AppButton variant="ghost" onClick={onClose}>Annuler</AppButton>
-          <AppButton onClick={() => mutation.mutate()} loading={mutation.isPending}>
+          <AppButton onClick={() => mutation.mutate()} loading={mutation.isPending} disabled={insufficient}>
             <CreditCard className="h-4 w-4" />
             Payer depuis caisse du jour
           </AppButton>
@@ -403,22 +430,46 @@ function PayExpenseDialog({ expense, onClose, onPaid }: { expense: Expense | nul
     >
       <div className="space-y-3">
         <p className="text-xs text-gray-500">
-          Selectionnez l&apos;agence payeuse. Par defaut = agence de rattachement de la depense. La caisse du jour de cette agence sera debitee.
+          Selectionnez l&apos;agence payeuse. La caisse du jour de cette agence sera debitee.
         </p>
         <div>
           <label className="mb-1 block text-xs font-medium text-gray-600">Agence payeuse</label>
-          <select
-            value={agencyId}
-            onChange={(e) => setAgencyId(e.target.value)}
-            className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none"
-          >
-            <option value="">Agence par defaut (rattachement depense)</option>
-            {agencies.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}{a.code ? ` (${a.code})` : ''}
-              </option>
-            ))}
-          </select>
+          <Select value={agencyId || '__default__'} onValueChange={(v: string | null) => setAgencyId(v === '__default__' || !v ? '' : v)}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Choisir une agence" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__default__">
+                <span className="text-gray-500">Agence par defaut (rattachement depense)</span>
+              </SelectItem>
+              {agencies.map((a) => {
+                const bal = balances[a.id]?.balance;
+                const closed = balances[a.id]?.isClosed;
+                const enough = bal != null && bal >= expenseAmount;
+                return (
+                  <SelectItem key={a.id} value={a.id}>
+                    <div className="flex w-full items-center justify-between gap-3">
+                      <span className="truncate">
+                        {a.name}{a.code ? ` (${a.code})` : ''}
+                      </span>
+                      <span className={`ml-2 shrink-0 text-xs font-semibold ${
+                        bal == null ? 'text-gray-400' : enough ? 'text-green-600' : 'text-red-600'
+                      }`}>
+                        {bal == null ? '...' : formatAmount(bal)}
+                        {closed && <span className="ml-1 text-amber-600">(closed)</span>}
+                      </span>
+                    </div>
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
+          {selected && (
+            <p className={`mt-1 text-[11px] ${insufficient ? 'text-red-600' : 'text-gray-500'}`}>
+              Solde caisse : <strong>{formatAmount(selected.balance)}</strong> - Montant a payer : <strong>{formatAmount(expenseAmount)}</strong>
+              {insufficient && ' - Solde insuffisant'}
+            </p>
+          )}
         </div>
         <AppTextarea label="Note" value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="Optionnel" />
       </div>
