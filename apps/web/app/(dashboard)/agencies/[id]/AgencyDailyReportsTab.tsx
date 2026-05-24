@@ -368,6 +368,14 @@ function ReportDetails({
         totalVolume={payload.stockState?.totalVolume}
       />
 
+      {/* Transferts de fonds */}
+      <FundTransfersSection
+        outgoing={payload.fundTransfersOut}
+        incoming={payload.fundTransfersIn}
+        outTotal={payload.fundTransfersOutTotal}
+        inTotal={payload.fundTransfersInTotal}
+      />
+
       {/* Inventaires */}
       {Array.isArray(payload.inventories) && payload.inventories.length > 0 && (
         <Section title="Inventaire(s) du jour">
@@ -631,6 +639,52 @@ function ContainerList({ title, containers, dateLabel, dateField, manifestVarian
         })}
       </div>
     </Section>
+  );
+}
+
+function FundTransfersSection({ outgoing, incoming, outTotal, inTotal }: { outgoing?: any[]; incoming?: any[]; outTotal?: number; inTotal?: number }) {
+  const out = outgoing ?? [];
+  const inn = incoming ?? [];
+  if (out.length === 0 && inn.length === 0) return null;
+  const renderTable = (rows: any[], direction: 'OUT' | 'IN') => (
+    <table className="w-full text-xs">
+      <thead className="text-left text-gray-500">
+        <tr>
+          <th className="py-1">Reference</th>
+          <th className="py-1">{direction === 'OUT' ? 'Destination' : 'Source'}</th>
+          <th className="py-1">Methode</th>
+          <th className="py-1">Statut</th>
+          <th className="py-1 text-right">Montant</th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-gray-50">
+        {rows.map((t) => (
+          <tr key={t.id}>
+            <td className="py-1.5 font-mono text-[11px]">{t.reference}</td>
+            <td className="py-1.5">{t.counterpart}</td>
+            <td className="py-1.5 text-gray-600">{t.transferMethod}</td>
+            <td className="py-1.5"><AppBadge variant={t.status === 'CONFIRMED' ? 'success' : t.status === 'PENDING' ? 'warning' : 'default'}>{t.status}</AppBadge></td>
+            <td className={`py-1.5 text-right font-medium ${direction === 'OUT' ? 'text-red-600' : 'text-green-600'}`}>
+              {direction === 'OUT' ? '-' : '+'}{formatAmount(t.amount)}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+  return (
+    <>
+      {out.length > 0 && (
+        <Section title={`Transferts de fonds sortants (${formatAmount(outTotal ?? 0)})`}>
+          {renderTable(out, 'OUT')}
+        </Section>
+      )}
+      {inn.length > 0 && (
+        <Section title={`Transferts de fonds entrants (${formatAmount(inTotal ?? 0)})`}>
+          {renderTable(inn, 'IN')}
+        </Section>
+      )}
+    </>
   );
 }
 

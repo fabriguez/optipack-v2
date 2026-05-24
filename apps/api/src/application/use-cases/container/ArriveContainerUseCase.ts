@@ -1,6 +1,7 @@
 import { inject, injectable } from 'tsyringe';
 import { CONTAINER_REPOSITORY, type IContainerRepository } from '../../interfaces/IContainerRepository';
 import { PARCEL_REPOSITORY, type IParcelRepository } from '../../interfaces/IParcelRepository';
+import { MANIFEST_REPOSITORY, type IManifestRepository } from '../../interfaces/IManifestRepository';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
 import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 import { HistoryService } from '../../services/HistoryService';
@@ -10,6 +11,7 @@ export class ArriveContainerUseCase {
   constructor(
     @inject(CONTAINER_REPOSITORY) private containerRepo: IContainerRepository,
     @inject(PARCEL_REPOSITORY) private parcelRepo: IParcelRepository,
+    @inject(MANIFEST_REPOSITORY) private manifestRepo: IManifestRepository,
     private history: HistoryService,
   ) {}
 
@@ -65,6 +67,23 @@ export class ArriveContainerUseCase {
       comment: `Arrivee - ${parcelIds.length} colis a decharger`,
       changes: { arrivalDate: arrivalDate.toISOString(), parcelCount: parcelIds.length },
     });
+
+    // Auto-generation du bordereau de reception a l'arrivee.
+    // Best-effort : un echec ne bloque pas l'arrivee.
+    if (parcelIds.length > 0) {
+      try {
+        const manifest = await this.manifestRepo.createReceptionManifest(containerId, userId);
+        await this.history.recordContainer({
+          containerId,
+          action: 'RECEPTION_MANIFEST_CREATED',
+          userId,
+          comment: `Bordereau de reception ${manifest.number} genere automatiquement`,
+          changes: { manifestId: manifest.id, number: manifest.number, lineCount: manifest.lines.length },
+        });
+      } catch (err) {
+        // Le bordereau peut deja exister (replay) ou autre erreur metier.
+      }
+    }
 
     eventBus.emit({
       type: DomainEvents.CONTAINER_ARRIVED,

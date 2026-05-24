@@ -309,54 +309,28 @@ export class DailyReportService {
     }
 
     // ------------------------------------------------------------------
-    // 2) Flux IN : colis ENTRES dans l'agence aujourd'hui.
-    //    Sources unifiees via ParcelHistory :
-    //     - action CREATED dont warehouse appartient a l'agence (creation
-    //       comptoir directement en magasin de l'agence).
-    //     - action UNLOADED dont container.arrivalAgencyId = agence
-    //       (reception conteneur entrant : colis dechargies a l'agence).
-    //     - action RECEIVED via routing inter-agences (transfert recu : colis
-    //       livre depuis autre agence -- capture aussi par UNLOADED si passe
-    //       par un conteneur, donc dedup parcelId).
+    // 2) Flux IN : colis actuellement IN_STOCK ou RECEIVED dans l'agence.
+    //    Definition metier : "le flux des entrees, ce sont les colis IN_STOCK
+    //    et RECEIVED dans l'agence". Snapshot a l'instant T (windowEnd).
     // ------------------------------------------------------------------
-    const flowInHistories = await prisma.parcelHistory.findMany({
+    const flowInRawParcels = await prisma.parcel.findMany({
       where: {
-        createdAt: windowFilter,
-        OR: [
-          // Creation comptoir : entree directe en magasin de l'agence
-          {
-            action: 'CREATED',
-            warehouse: { agencyId },
-          },
-          // Reception conteneur : decharge dans agence d'arrivee
-          {
-            action: 'UNLOADED',
-            container: { arrivalAgencyId: agencyId },
-          },
-          // Reception via routing inter-agences (alias possible)
-          {
-            action: { in: ['RECEIVED', 'HANDED_OVER'] },
-            warehouse: { agencyId },
-            // exclut HANDED_OVER au client (= sortie). HANDED_OVER en entree =
-            // remise inter-agences ; en sortie = remise client. On filtre via
-            // metadata.kind si dispo, sinon on accepte les 2 et on dedup par
-            // parcelId avec flow.out (priorite flow.out plus tard).
-          },
-        ],
+        isDeleted: false,
+        status: { in: ['IN_STOCK', 'RECEIVED'] },
+        warehouse: { agencyId },
       },
       select: {
-        action: true,
-        parcel: {
-          select: {
-            id: true,
-            weight: true,
-            volume: true,
-            price: true,
-            transitRoute: { select: { id: true, name: true, type: true } },
-          },
-        },
+        id: true,
+        weight: true,
+        volume: true,
+        price: true,
+        transitRoute: { select: { id: true, name: true, type: true } },
       },
     });
+    const flowInHistories = flowInRawParcels.map((p) => ({
+      action: 'SNAPSHOT' as const,
+      parcel: p,
+    }));
 
     // Flux OUT : colis SORTIS de l'agence aujourd'hui.
     //  - HANDED_OVER avec warehouse de l'agence (remise client : pickup).
@@ -390,12 +364,9 @@ export class DailyReportService {
       },
     });
 
-    // Dedup par parcelId. Un colis qui sort > prioritaire sur entree (cas
-    // HANDED_OVER ambigu : si meme jour il est aussi sorti, on garde sortie).
-    const outParcelIds = new Set(flowOutHistories.map((h) => h.parcel.id));
+    // Dedup par parcelId.
     const flowInParcelsMap = new Map<string, ParcelLite>();
     for (const h of flowInHistories) {
-      if (outParcelIds.has(h.parcel.id) && h.action === 'HANDED_OVER') continue;
       if (!flowInParcelsMap.has(h.parcel.id)) flowInParcelsMap.set(h.parcel.id, h.parcel);
     }
     const flowOutParcelsMap = new Map<string, ParcelLite>();
@@ -640,6 +611,63 @@ export class DailyReportService {
     }));
 
     // ------------------------------------------------------------------
+    // 9bis) Transferts de fonds : sortants (sourceAgencyId = agence) et
+    //       entrants (destinationAgencyId = agence). Inclut PENDING +
+    //       CONFIRMED, exclut VOIDED. Cree dans la fenetre caisse.
+    // ------------------------------------------------------------------
+    const [outgoingTransfers, incomingTransfers] = await Promise.all([
+      prisma.fundTransfer.findMany({
+        where: {
+          sourceAgencyId: agencyId,
+          isVoided: false,
+          createdAt: windowFilter,
+        },
+        include: {
+          destinationAgency: { select: { id: true, name: true } },
+          initiatedBy: { select: { firstName: true, lastName: true } },
+          confirmedBy: { select: { firstName: true, lastName: true } },
+        },
+      }),
+      prisma.fundTransfer.findMany({
+        where: {
+          destinationAgencyId: agencyId,
+          isVoided: false,
+          createdAt: windowFilter,
+        },
+        include: {
+          sourceAgency: { select: { id: true, name: true } },
+          initiatedBy: { select: { firstName: true, lastName: true } },
+          confirmedBy: { select: { firstName: true, lastName: true } },
+        },
+      }),
+    ]);
+
+    const mapTransfer = (t: any, direction: 'OUT' | 'IN') => ({
+      id: t.id,
+      reference: t.reference,
+      direction,
+      amount: Number(t.amount),
+      transferMethod: t.transferMethod,
+      sourcePaymentMethod: t.sourcePaymentMethod ?? null,
+      destinationPaymentMethod: t.destinationPaymentMethod ?? null,
+      destinationType: t.destinationType,
+      destinationLabel: t.destinationLabel ?? null,
+      counterpart:
+        direction === 'OUT'
+          ? t.destinationAgency?.name ?? t.destinationLabel ?? t.destinationType
+          : t.sourceAgency?.name ?? 'Siege',
+      status: t.status,
+      createdAt: t.createdAt.toISOString(),
+      initiatedBy: t.initiatedBy ? `${t.initiatedBy.firstName} ${t.initiatedBy.lastName}` : null,
+      confirmedBy: t.confirmedBy ? `${t.confirmedBy.firstName} ${t.confirmedBy.lastName}` : null,
+    });
+
+    const outgoingTransfersList = outgoingTransfers.map((t) => mapTransfer(t, 'OUT'));
+    const incomingTransfersList = incomingTransfers.map((t) => mapTransfer(t, 'IN'));
+    const outgoingTransfersTotal = outgoingTransfersList.reduce((s, t) => s + t.amount, 0);
+    const incomingTransfersTotal = incomingTransfersList.reduce((s, t) => s + t.amount, 0);
+
+    // ------------------------------------------------------------------
     // 10) Depenses + decaissements (pour profit).
     //     Dedup : un disbursement lie a une expense (via expense.disbursementId)
     //     est exclu de la somme disbursements pour eviter le double-comptage
@@ -795,6 +823,12 @@ export class DailyReportService {
       profit,
 
       cashRegister: cashSnapshot,
+
+      // Transferts de fonds (sortants + entrants) sur la fenetre.
+      fundTransfersOut: outgoingTransfersList,
+      fundTransfersIn: incomingTransfersList,
+      fundTransfersOutTotal: outgoingTransfersTotal,
+      fundTransfersInTotal: incomingTransfersTotal,
 
       paymentsTotal,
       totalParcels: flowIn.count,

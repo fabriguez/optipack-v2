@@ -1,6 +1,7 @@
 import { inject, injectable } from 'tsyringe';
 import { CONTAINER_REPOSITORY, type IContainerRepository } from '../../interfaces/IContainerRepository';
 import { PARCEL_REPOSITORY, type IParcelRepository } from '../../interfaces/IParcelRepository';
+import { MANIFEST_REPOSITORY, type IManifestRepository } from '../../interfaces/IManifestRepository';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
 import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 import { HistoryService } from '../../services/HistoryService';
@@ -10,6 +11,7 @@ export class DepartContainerUseCase {
   constructor(
     @inject(CONTAINER_REPOSITORY) private containerRepo: IContainerRepository,
     @inject(PARCEL_REPOSITORY) private parcelRepo: IParcelRepository,
+    @inject(MANIFEST_REPOSITORY) private manifestRepo: IManifestRepository,
     private history: HistoryService,
   ) {}
 
@@ -59,6 +61,24 @@ export class DepartContainerUseCase {
       comment: `Depart - ${parcelIds.length} colis a bord`,
       changes: { departureDate: departureDate.toISOString(), parcelCount: parcelIds.length },
     });
+
+    // Auto-generation du bordereau d'envoi (DISPATCH) au depart.
+    // Best-effort : un echec ne bloque pas le depart.
+    if (parcelIds.length > 0) {
+      try {
+        const manifest = await this.manifestRepo.createDispatchManifest(containerId, userId);
+        await this.history.recordContainer({
+          containerId,
+          action: 'DISPATCH_MANIFEST_CREATED',
+          userId,
+          comment: `Bordereau d'envoi ${manifest.number} genere automatiquement`,
+          changes: { manifestId: manifest.id, number: manifest.number, lineCount: manifest.lines.length },
+        });
+      } catch (err) {
+        // Le bordereau peut deja exister (replay) ou autre erreur metier --
+        // on log uniquement, le depart reste valide.
+      }
+    }
 
     eventBus.emit({
       type: DomainEvents.CONTAINER_DEPARTED,

@@ -430,6 +430,41 @@ export class DailyReportPDFService {
     }
 
     // ------------------------------------------------------------------
+    // IX-bis. Transferts de fonds
+    // ------------------------------------------------------------------
+    const transfersOut = (p.fundTransfersOut ?? []) as any[];
+    const transfersIn = (p.fundTransfersIn ?? []) as any[];
+    if (transfersOut.length > 0 || transfersIn.length > 0) {
+      sectionTitle('IX-bis. TRANSFERTS DE FONDS');
+      if (transfersOut.length > 0) {
+        writeLine(`Sortants (${formatCurrency(p.fundTransfersOutTotal ?? 0)})`, { bold: true });
+        drawTable(
+          [
+            { label: 'Reference', width: 130 },
+            { label: 'Destination', width: 160 },
+            { label: 'Methode', width: 100 },
+            { label: 'Statut', width: 70 },
+            { label: 'Montant', width: pageWidth - 460, align: 'right' },
+          ],
+          transfersOut.map((t) => [t.reference, t.counterpart, t.transferMethod, t.status, '-' + formatCurrency(t.amount)]),
+        );
+      }
+      if (transfersIn.length > 0) {
+        writeLine(`Entrants (${formatCurrency(p.fundTransfersInTotal ?? 0)})`, { bold: true });
+        drawTable(
+          [
+            { label: 'Reference', width: 130 },
+            { label: 'Source', width: 160 },
+            { label: 'Methode', width: 100 },
+            { label: 'Statut', width: 70 },
+            { label: 'Montant', width: pageWidth - 460, align: 'right' },
+          ],
+          transfersIn.map((t) => [t.reference, t.counterpart, t.transferMethod, t.status, '+' + formatCurrency(t.amount)]),
+        );
+      }
+    }
+
+    // ------------------------------------------------------------------
     // X. Depenses
     // ------------------------------------------------------------------
     sectionTitle('X. DEPENSES DU JOUR');
