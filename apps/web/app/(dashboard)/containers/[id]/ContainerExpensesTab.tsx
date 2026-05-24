@@ -181,15 +181,27 @@ function CreateExpenseDialog({ open, onClose, containerId, onCreated }: { open: 
 
 function PayExpenseDialog({ expense, onClose, onPaid }: { expense: Expense | null; onClose: () => void; onPaid: () => void }) {
   const [note, setNote] = useState('');
+  const [agencyId, setAgencyId] = useState<string>('');
+
+  // Liste des agences accessibles a l'utilisateur (pour selectionner l'agence
+  // payeuse). Par defaut on laisse vide -> backend utilise expense.agencyId.
+  const { data: agenciesData } = useQuery({
+    queryKey: ['agencies', 'list-for-pay'],
+    queryFn: () => apiClient.get('/agencies', { params: { limit: 100 } }).then((r) => r.data),
+    enabled: !!expense,
+  });
+  const agencies: Array<{ id: string; name: string; code?: string }> = agenciesData?.data ?? [];
 
   const mutation = useMutation({
     mutationFn: () =>
       apiClient.post(`/expenses/${expense!.id}/pay`, {
         note: note || undefined,
+        agencyId: agencyId || undefined,
       }),
     onSuccess: () => {
       toast.success('Depense payee');
       setNote('');
+      setAgencyId('');
       onPaid();
     },
     onError: (e: any) => toast.error(e?.response?.data?.message || 'Echec paiement'),
@@ -213,8 +225,23 @@ function PayExpenseDialog({ expense, onClose, onPaid }: { expense: Expense | nul
     >
       <div className="space-y-3">
         <p className="text-xs text-gray-500">
-          La depense sera reglee depuis la caisse du jour de l&apos;agence de rattachement. Si la caisse est cloturee, on bascule sur celle du jour suivant.
+          Selectionnez l&apos;agence payeuse. Par defaut = agence de rattachement de la depense. La caisse du jour de cette agence sera debitee.
         </p>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-gray-600">Agence payeuse</label>
+          <select
+            value={agencyId}
+            onChange={(e) => setAgencyId(e.target.value)}
+            className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none"
+          >
+            <option value="">Agence par defaut (rattachement depense)</option>
+            {agencies.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}{a.code ? ` (${a.code})` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
         <AppTextarea label="Note" value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="Optionnel" />
       </div>
     </AppDialog>

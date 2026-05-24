@@ -6,8 +6,13 @@ import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessErr
 
 interface Input {
   expenseId: string;
-  /** Caisse depuis laquelle on paye. Defaut : caisse du jour de l'agence de la depense. */
+  /** Caisse depuis laquelle on paye. Defaut : caisse du jour de l'agence
+   *  resolue (agencyId si fourni, sinon expense.agencyId). */
   cashRegisterId?: string;
+  /** Agence payeuse (override l'agence de la depense). Utile pour les
+   *  depenses de conteneur payees depuis une autre agence (ex : agence
+   *  d'arrivee paye une depense saisie a l'agence de depart). */
+  agencyId?: string;
   note?: string;
 }
 
@@ -34,9 +39,30 @@ export class PayExpenseFromCashRegisterUseCase {
     if (!expense) throw new NotFoundError('Depense', input.expenseId);
     if (expense.isPaid) throw new BusinessError('Cette depense est deja payee.');
 
+    // Resolution agence payeuse :
+    //  1. cashRegisterId explicite (priorite max)
+    //  2. agencyId fourni (override pour depenses conteneur)
+    //  3. expense.agencyId par defaut
+    const payerAgencyId = input.agencyId ?? expense.agencyId;
+    if (input.agencyId && input.agencyId !== expense.agencyId) {
+      // Verifie que l'agence existe + meme organisation que la depense.
+      const payerAgency = await prisma.agency.findUnique({
+        where: { id: input.agencyId },
+        select: { id: true, organizationId: true },
+      });
+      if (!payerAgency) throw new NotFoundError('Agence payeuse', input.agencyId);
+      const expenseAgency = await prisma.agency.findUnique({
+        where: { id: expense.agencyId },
+        select: { organizationId: true },
+      });
+      if (payerAgency.organizationId !== expenseAgency?.organizationId) {
+        throw new BusinessError("L'agence payeuse doit appartenir a la meme organisation que la depense.");
+      }
+    }
+
     let cashRegister = input.cashRegisterId
       ? await prisma.agencyCashRegister.findUnique({ where: { id: input.cashRegisterId } })
-      : await this.cashRegisterRepo.findOrCreateForToday(expense.agencyId);
+      : await this.cashRegisterRepo.findOrCreateForToday(payerAgencyId);
     if (!cashRegister) throw new NotFoundError('Caisse', input.cashRegisterId ?? '(default)');
 
     if (cashRegister.isClosed) {
@@ -61,7 +87,9 @@ export class PayExpenseFromCashRegisterUseCase {
       const disbursement = await tx.disbursementVoucher.create({
         data: {
           reference: generateReference('DEC-EXP', Date.now()),
-          agencyId: expense.agencyId,
+          // Le bon de decaissement est emis par l'agence payeuse (= proprietaire
+          // de la caisse debitee), pas necessairement l'agence de la depense.
+          agencyId: cashRegister!.agencyId,
           cashRegisterId: cashRegister!.id,
           reason: reasonLabel,
           description: input.note ?? expense.description ?? null,

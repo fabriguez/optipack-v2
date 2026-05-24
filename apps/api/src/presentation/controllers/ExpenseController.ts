@@ -78,7 +78,12 @@ export class ExpenseController {
     try {
       const useCase = container.resolve(PayExpenseFromCashRegisterUseCase);
       const result = await useCase.execute(
-        { expenseId: req.params.id, cashRegisterId: req.body?.cashRegisterId, note: req.body?.note },
+        {
+          expenseId: req.params.id,
+          cashRegisterId: req.body?.cashRegisterId,
+          agencyId: req.body?.agencyId,
+          note: req.body?.note,
+        },
         req.user!.userId,
       );
       res.json({ success: true, data: result });
