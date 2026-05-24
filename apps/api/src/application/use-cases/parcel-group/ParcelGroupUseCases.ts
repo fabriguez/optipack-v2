@@ -110,8 +110,10 @@ export class CreateParcelGroupUseCase {
     });
 
     return prisma.$transaction(async (tx) => {
-      const count = await tx.parcelGroup.count({ where: { agencyId: resolvedAgencyId } });
-      const reference = generateReference('GRP', count + 1);
+      // Sequence basee sur timestamp ms pour eviter les collisions de
+      // reference quand plusieurs requetes creent des groupes/factures en
+      // parallele (count() n'est pas atomique entre transactions).
+      const reference = generateReference('GRP', Date.now());
 
       const group = await tx.parcelGroup.create({
         data: {
@@ -125,7 +127,9 @@ export class CreateParcelGroupUseCase {
         },
       });
 
-      let invoiceSeq = await tx.invoice.count({ where: { agencyId: resolvedAgencyId! } });
+      // Base timestamp + offset par iteration garantit unicite intra-batch.
+      const invoiceSeqBase = Date.now();
+      let invoiceIdx = 0;
       const createdParcels = [];
       let groupTotal = 0;
 
@@ -156,10 +160,10 @@ export class CreateParcelGroupUseCase {
 
         // Facture individuelle du colis (chaque colis du groupe est payable
         // separement -- voir GroupInvoiceService).
-        invoiceSeq += 1;
+        invoiceIdx += 1;
         const parcelInvoice = await tx.invoice.create({
           data: {
-            reference: generateReference('FAC', invoiceSeq),
+            reference: generateReference('FAC', invoiceSeqBase + invoiceIdx),
             clientId: input.clientId,
             agencyId: resolvedAgencyId!,
             totalAmount: price,
@@ -203,10 +207,10 @@ export class CreateParcelGroupUseCase {
       }
 
       // Facture agregat du groupe : montants = somme des factures membres.
-      invoiceSeq += 1;
+      invoiceIdx += 1;
       await tx.invoice.create({
         data: {
-          reference: generateReference('FCT-GRP', invoiceSeq),
+          reference: generateReference('FCT-GRP', invoiceSeqBase + invoiceIdx),
           clientId: input.clientId,
           agencyId: resolvedAgencyId!,
           totalAmount: groupTotal,
@@ -269,10 +273,9 @@ export class AddParcelToGroupUseCase {
     }
 
     const created = await prisma.$transaction(async (tx) => {
-      const seq = await tx.invoice.count({ where: { agencyId: group.agencyId } });
       const parcelInvoice = await tx.invoice.create({
         data: {
-          reference: generateReference('FAC', seq + 1),
+          reference: generateReference('FAC', Date.now()),
           clientId: group.clientId,
           agencyId: group.agencyId,
           totalAmount: price,
@@ -329,8 +332,7 @@ export class GenerateGroupInvoiceUseCase {
     if (group.invoice) return group.invoice;
 
     const total = group.parcels.reduce((sum, p) => sum + Number(p.price), 0);
-    const count = await prisma.invoice.count({ where: { agencyId: group.agencyId } });
-    const reference = generateReference('FCT-GRP', count + 1);
+    const reference = generateReference('FCT-GRP', Date.now());
 
     const invoice = await prisma.$transaction(async (tx) => {
       const invoiceTx = await tx.invoice.create({
