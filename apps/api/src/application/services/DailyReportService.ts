@@ -196,13 +196,16 @@ export class DailyReportService {
     let advancesTotal = 0;
     let recetteTotal = 0;
 
+    // Strict : "deja en stock dans un magasin de son agence de destination".
+    // DELIVERED exclu = colis deja retire n'est plus en stock -> paiement
+    // bascule en avance (decision metier, cf rapport journalier spec).
     const isAtDestination = (p: {
       status: string;
       warehouseId: string | null;
       destinationAgencyId: string | null;
       warehouse: { agencyId: string } | null;
     }) =>
-      (p.status === 'IN_STOCK' || p.status === 'DELIVERED') &&
+      p.status === 'IN_STOCK' &&
       !!p.destinationAgencyId &&
       !!p.warehouse?.agencyId &&
       p.warehouse.agencyId === p.destinationAgencyId;
