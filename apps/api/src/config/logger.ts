@@ -10,7 +10,12 @@ export const logger = pino({
           options: {
             colorize: true,
             translateTime: 'SYS:yyyy-mm-dd HH:MM:ss',
-            ignore: 'pid,hostname',
+            // Format compact : "YYYY-MM-DD HH:MM:SS [LEVEL] [module] [reqId-8] msg"
+            // (extras passes au msg). singleLine = pas de YAML multi-lignes.
+            singleLine: true,
+            ignore: 'pid,hostname,module,requestId,userId,method,url,statusCode,duration,remoteAddress',
+            messageFormat:
+              '{if module}[{module}] {end}{if requestId}[{requestId}] {end}{msg}{if method} | {method} {url} {statusCode} ({duration}){end}',
           },
         }
       : undefined,
