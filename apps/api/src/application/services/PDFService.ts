@@ -26,10 +26,22 @@ interface InvoiceParcel {
   volume?: number | null;
   destination: string;
   price: number;
+  // Detail transit affiche en facture.
+  transitRouteName?: string | null;
+  transitType?: string | null;
+  origin?: string | null;
   // Frais de magasinage propres au colis (jours payants x tarif jour). Affiches
   // dans le PDF sous la forme "+ NNN FCFA frais magasinage (N jrs)" quand > 0.
   storageFee?: number;
   storageDays?: number;
+  storageFreeDays?: number;
+  storageDailyRate?: number;
+  storageWarehouseName?: string | null;
+  storageReason?: string | null;
+  // URLs des images du colis (max 3) -- buffers prechargees rendues en facture.
+  imageUrls?: string[];
+  /** Buffers des images (preremplis par l'appelant). */
+  imageBuffers?: Buffer[];
 }
 
 interface InvoicePayment {
@@ -316,24 +328,83 @@ export class PDFService {
       y += 20;
     });
 
-    // --- Frais de magasinage detailles (si > 0) ---
-    // Affiche un bloc avant le summary pour expliciter comment se composent
-    // les frais de magasinage cumules : tracking + jours payants + montant.
-    const parcelsWithStorage = parcels.filter((p) => (p.storageFee ?? 0) > 0);
-    if (parcelsWithStorage.length > 0) {
-      y += 12;
-      if (y > 680) { doc.addPage(); y = 50; }
-      doc.fontSize(10).fillColor(COLORS.primary).text('Frais de magasinage', 50, y);
-      y += 16;
-      doc.fontSize(8).fillColor(COLORS.dark);
-      for (const p of parcelsWithStorage) {
-        if (y > 720) { doc.addPage(); y = 50; }
-        const left = `${p.trackingNumber} - ${p.designation || '-'}`;
-        const right = `${p.storageDays ?? 0} jr(s) payants  ·  ${formatCurrency(p.storageFee ?? 0)}`;
-        doc.text(left, 55, y, { width: 320, lineBreak: false, ellipsis: true });
-        doc.text(right, 380, y, { width: pageWidth - 330, align: 'right' });
-        y += 12;
+    // --- Detail par colis : transit + magasinage + images ---
+    y += 14;
+    if (y > 660) { doc.addPage(); y = 50; }
+    doc.fontSize(11).fillColor(COLORS.primary).text('Details des colis', 50, y);
+    y += 18;
+
+    for (const p of parcels) {
+      // Reserve assez de hauteur pour le bloc colis (~ 90px sans images).
+      const needed = 90 + ((p.imageBuffers?.length ?? 0) > 0 ? 70 : 0);
+      if (y + needed > 750) { doc.addPage(); y = 50; }
+
+      // Header colis
+      doc.rect(50, y, pageWidth, 18).fill(COLORS.lightGray);
+      doc.fillColor(COLORS.dark).fontSize(9).font('Helvetica-Bold')
+        .text(`${p.trackingNumber} - ${p.designation || '-'}`, 55, y + 5, { width: pageWidth - 10 });
+      y += 22;
+
+      doc.font('Helvetica').fontSize(8).fillColor(COLORS.dark);
+      // Ligne 1 : transit
+      const transitParts: string[] = [];
+      if (p.transitRouteName) transitParts.push(`Route: ${p.transitRouteName}`);
+      if (p.transitType) transitParts.push(`Mode: ${p.transitType}`);
+      const route = transitParts.join('  ·  ') || 'Transit non defini';
+      doc.text(route, 55, y, { width: pageWidth - 10, lineBreak: false, ellipsis: true });
+      y += 11;
+      // Ligne 2 : origine -> destination
+      const od = `${p.origin || '-'}  →  ${p.destination || '-'}`;
+      doc.text(od, 55, y, { width: pageWidth - 10, lineBreak: false, ellipsis: true });
+      y += 11;
+      // Ligne 3 : masse/volume + prix transport
+      const mv: string[] = [];
+      if (p.weight != null && Number(p.weight) > 0) mv.push(`${Number(p.weight).toFixed(2)} kg`);
+      if (p.volume != null && Number(p.volume) > 0) mv.push(`${Number(p.volume).toFixed(3)} m3`);
+      doc.text(
+        `${mv.join(' / ') || '-'}    Prix transport : ${formatCurrency(Number(p.price) || 0)}`,
+        55, y, { width: pageWidth - 10, lineBreak: false },
+      );
+      y += 13;
+
+      // Magasinage : toujours afficher (raison + calcul). Si fee=0, indiquer.
+      const wn = p.storageWarehouseName ?? '-';
+      doc.fillColor(COLORS.primary).fontSize(8).font('Helvetica-Bold')
+        .text('Magasinage', 55, y);
+      y += 10;
+      doc.fillColor(COLORS.dark).font('Helvetica').fontSize(7.5);
+      doc.text(`Lieu : ${wn}`, 55, y, { width: pageWidth - 10 });
+      y += 9;
+      if (p.storageReason) {
+        doc.text(p.storageReason, 55, y, { width: pageWidth - 10 });
+        y += 9;
       }
+      doc.font('Helvetica-Bold').text(
+        `Montant magasinage : ${formatCurrency(p.storageFee ?? 0)}`,
+        55, y, { width: pageWidth - 10 },
+      );
+      y += 12;
+
+      // Images du colis
+      if (p.imageBuffers && p.imageBuffers.length > 0) {
+        const imgY = y;
+        const imgW = 80;
+        const imgH = 60;
+        const gap = 8;
+        let xImg = 55;
+        for (let i = 0; i < Math.min(3, p.imageBuffers.length); i++) {
+          try {
+            doc.image(p.imageBuffers[i], xImg, imgY, { fit: [imgW, imgH] });
+          } catch { /* skip image errors */ }
+          xImg += imgW + gap;
+        }
+        y = imgY + imgH + 6;
+      }
+
+      // Separateur fin
+      doc.moveTo(50, y).lineTo(50 + pageWidth, y)
+        .strokeColor(COLORS.lightGray).lineWidth(0.5).stroke();
+      y += 6;
     }
 
     // --- Financial summary ---

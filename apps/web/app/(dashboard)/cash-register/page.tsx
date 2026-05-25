@@ -36,13 +36,19 @@ export default function CashRegisterPage() {
     enabled: !!agencyId,
   });
 
+  const [movementsPage, setMovementsPage] = useState(1);
+  const movementsLimit = 20;
   const { data: movementsData, isLoading: movementsLoading } = useQuery({
-    queryKey: ['cash-register', agencyId, 'movements'],
-    queryFn: () => apiClient.get(`/cash-registers/${agencyId}/movements`).then((r) => r.data),
+    queryKey: ['cash-register', agencyId, 'movements', movementsPage, movementsLimit],
+    queryFn: () =>
+      apiClient
+        .get(`/cash-registers/${agencyId}/movements`, { params: { page: movementsPage, limit: movementsLimit } })
+        .then((r) => r.data),
     enabled: !!agencyId,
   });
   const movements: any[] = movementsData?.data?.movements ?? [];
   const movSummary = movementsData?.data?.summary;
+  const movMeta = movementsData?.data?.meta as { page: number; limit: number; total: number; totalPages: number } | undefined;
 
   const closeMutation = useMutation({
     mutationFn: () => cashRegisterApi.close(agencyId),
@@ -161,7 +167,7 @@ export default function CashRegisterPage() {
             <AppCard>
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <h3 className="text-base font-semibold text-gray-900">
-                  Historique des mouvements ({movements.length})
+                  Historique des mouvements ({movMeta?.total ?? movements.length})
                 </h3>
                 {movSummary && (
                   <div className="flex gap-3 text-sm">
@@ -175,6 +181,7 @@ export default function CashRegisterPage() {
               ) : movements.length === 0 ? (
                 <p className="text-sm text-gray-400">Aucun mouvement sur cette caisse.</p>
               ) : (
+                <>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
@@ -216,6 +223,32 @@ export default function CashRegisterPage() {
                     </tbody>
                   </table>
                 </div>
+                {movMeta && movMeta.totalPages > 1 && (
+                  <div className="mt-3 flex items-center justify-between gap-2 text-xs text-gray-600">
+                    <span>
+                      Page {movMeta.page} / {movMeta.totalPages} - {movMeta.total} mouvement(s)
+                    </span>
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setMovementsPage((p) => Math.max(1, p - 1))}
+                        disabled={movMeta.page <= 1}
+                        className="rounded-md border border-gray-200 px-2 py-1 hover:bg-gray-50 disabled:opacity-40"
+                      >
+                        Precedent
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMovementsPage((p) => Math.min(movMeta.totalPages, p + 1))}
+                        disabled={movMeta.page >= movMeta.totalPages}
+                        className="rounded-md border border-gray-200 px-2 py-1 hover:bg-gray-50 disabled:opacity-40"
+                      >
+                        Suivant
+                      </button>
+                    </div>
+                  </div>
+                )}
+                </>
               )}
             </AppCard>
           </>

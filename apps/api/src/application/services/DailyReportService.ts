@@ -114,12 +114,21 @@ function aggregateParcels(items: ParcelLite[]) {
 @injectable()
 export class DailyReportService {
   async generate(agencyId: string, date: Date): Promise<{ id: string; payload: any }> {
-    const dayStart = new Date(date);
-    dayStart.setUTCHours(0, 0, 0, 0);
-    const dayEnd = new Date(dayStart);
-    dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+    // Resolution du jour calendaire dans le fuseau de l'agence (et non UTC
+    // serveur). Sinon, un appel "generer aujourd'hui" en fin de journee en
+    // Afrique de l'Ouest pouvait cibler le mauvais jour UTC -> pas de caisse
+    // trouvee, rapport vide.
+    const agencyTz = await prisma.agency.findUnique({
+      where: { id: agencyId },
+      select: { timezone: true },
+    });
+    const tz = agencyTz?.timezone || 'Africa/Douala';
+    const dayStart = startOfDayInTimezone(date, tz);
+    const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
 
-    // Fenetre = session caisse si existante, sinon jour calendaire
+    // Fenetre = session caisse si existante, sinon jour calendaire.
+    // On match aussi en bornant la date au jour entier pour tolerer les
+    // ecarts de stockage @db.Date (Prisma peut stocker en UTC).
     const cashRegister = await prisma.agencyCashRegister.findFirst({
       where: { agencyId, date: { gte: dayStart, lt: dayEnd } },
       include: { closedBy: { select: { firstName: true, lastName: true } } },
@@ -857,3 +866,20 @@ export class DailyReportService {
 }
 
 export const DAILY_REPORT_SERVICE = Symbol.for('DailyReportService');
+
+/**
+ * Calcule le JOUR CALENDAIRE de la date passee dans le fuseau de l'agence,
+ * et retourne un Date a UTC midnight de ce jour. Stocke comme @db.Date par
+ * Prisma -> conserve la portion date intacte. Evite les decalages quand le
+ * serveur est en UTC et le fuseau agence en UTC+1 (cas Cameroun).
+ */
+function startOfDayInTimezone(date: Date, timeZone: string): Date {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? 0);
+  return new Date(Date.UTC(get('year'), get('month') - 1, get('day'), 0, 0, 0, 0));
+}

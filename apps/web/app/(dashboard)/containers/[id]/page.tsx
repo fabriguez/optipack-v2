@@ -33,7 +33,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { containersApi, manifestsApi } from '@/lib/api/containers';
 import { searchers } from '@/lib/api/searchers';
-import { formatDate, formatDateTime } from '@transitsoftservices/shared';
+import { formatAmount, formatDate, formatDateTime } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
 import { ComparisonDialog } from './ComparisonDialog';
 import { ParcelFormDialog } from '@/app/(dashboard)/parcels/ParcelFormDialog';
@@ -500,8 +500,42 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
     },
   ];
 
+  // Benefice : pour les conteneurs non-acheminement, valeur des colis -
+  // total des depenses (payees + non payees, hors annulees).
+  const { data: containerExpensesData } = useQuery({
+    queryKey: ['containers', id, 'expenses', 'for-benefice'],
+    queryFn: () => apiClient.get(`/expenses/container/${id}`).then((r) => r.data),
+    enabled: !!id && !container?.isForwarding,
+  });
+  const expensesForBenefice: any[] = containerExpensesData?.data ?? [];
+  const parcelsValueTotal = parcels.reduce((s: number, p: any) => s + Number(p.price ?? 0), 0);
+  const expensesTotal = expensesForBenefice.reduce((s, e) => s + Number(e.amount ?? 0), 0);
+  const benefice = parcelsValueTotal - expensesTotal;
+
   const infoTab = (
     <div className="space-y-6">
+      {!container.isForwarding && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <AppCard>
+            <p className="text-sm text-gray-500">Valeur totale colis</p>
+            <p className="mt-1 text-lg font-bold text-green-600">+{formatAmount(parcelsValueTotal)}</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">{parcels.length} colis</p>
+          </AppCard>
+          <AppCard>
+            <p className="text-sm text-gray-500">Total depenses</p>
+            <p className="mt-1 text-lg font-bold text-red-600">-{formatAmount(expensesTotal)}</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">{expensesForBenefice.length} depense(s)</p>
+          </AppCard>
+          <AppCard>
+            <p className="text-sm text-gray-500">Benefice estime</p>
+            <p className={`mt-1 text-lg font-bold ${benefice >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+              {formatAmount(benefice)}
+            </p>
+            <p className="text-[11px] text-gray-400 mt-0.5">valeur colis - depenses</p>
+          </AppCard>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
         <AppCard>
           <p className="text-sm text-gray-500">Type</p>

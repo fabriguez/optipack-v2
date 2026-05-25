@@ -38,6 +38,14 @@ export class PayExpenseFromCashRegisterUseCase {
     });
     if (!expense) throw new NotFoundError('Depense', input.expenseId);
     if (expense.isPaid) throw new BusinessError('Cette depense est deja payee.');
+    // Une depense auto (propagee depuis un forwarding) ne peut PAS etre
+    // payee directement : elle est soldee automatiquement quand on paye la
+    // depense forwarding parente (cascade). Sinon risque de double paiement.
+    if (expense.isAutoFromForwarding) {
+      throw new BusinessError(
+        'Cette depense provient d\'une propagation forwarding. Payez la depense parente sur le conteneur d\'acheminement -- le statut sera propage automatiquement ici.',
+      );
+    }
 
     // Resolution agence payeuse :
     //  1. cashRegisterId explicite (priorite max)
@@ -123,7 +131,28 @@ export class PayExpenseFromCashRegisterUseCase {
         },
       });
 
-      return { expense: updated, disbursement, cashRegisterId: cashRegister!.id };
+      // Cascade isPaid=true sur les depenses auto-propagees aux parents.
+      // Pas de debit caisse supplementaire : la depense parente couvre tout.
+      // Pas de disbursementId (1 disbursement par caisse, unique sur expense).
+      const cascade = await tx.expense.updateMany({
+        where: {
+          parentExpenseId: expense.id,
+          isAutoFromForwarding: true,
+          isPaid: false,
+        },
+        data: {
+          isPaid: true,
+          paidAt: new Date(),
+          paidByUserId: userId,
+        },
+      });
+
+      return {
+        expense: updated,
+        disbursement,
+        cashRegisterId: cashRegister!.id,
+        cascadedChildren: cascade.count,
+      };
     });
   }
 }

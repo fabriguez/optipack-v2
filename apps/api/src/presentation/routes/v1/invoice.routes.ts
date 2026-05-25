@@ -6,6 +6,8 @@ import { prisma } from '../../../config/database';
 import { PDFService } from '../../../application/services/PDFService';
 import type { InvoiceData } from '../../../application/services/PDFService';
 import { ExcelService } from '../../../infrastructure/excel/ExcelService';
+import { container } from '../../../container';
+import { StorageService } from '../../../infrastructure/storage/StorageService';
 
 /**
  * Resout les ids de colis a facturer pour une facture donnee :
@@ -52,8 +54,33 @@ async function resolveInvoiceScope(invoiceId: string): Promise<{
  * ComputeStorageFeeUseCase sans passer par le container DI (cette route est
  * handler-based, pas use-case). Retourne un objet par parcelId.
  */
+interface StorageFeeDetail {
+  fee: number;
+  days: number;
+  freeDays: number;
+  dailyRate: number;
+  warehouseName: string | null;
+  reason: string;
+}
+
+async function fetchImageBuffer(url: string): Promise<Buffer | null> {
+  if (!url) return null;
+  // URL = "/uploads/object/<key>" ou URL absolue. Extrait la cle MinIO.
+  const key = url.includes('/uploads/object/') ? url.split('/uploads/object/').pop()! : url;
+  try {
+    const storage = container.resolve(StorageService);
+    const obj = await storage.getObject(key);
+    if (!obj) return null;
+    const chunks: Buffer[] = [];
+    for await (const ch of obj.stream as any) chunks.push(ch as Buffer);
+    return Buffer.concat(chunks);
+  } catch {
+    return null;
+  }
+}
+
 async function computeStorageFeesForParcels(parcelIds: string[]): Promise<{
-  perParcel: Map<string, { fee: number; days: number }>;
+  perParcel: Map<string, StorageFeeDetail>;
   total: number;
 }> {
   if (parcelIds.length === 0) return { perParcel: new Map(), total: 0 };
@@ -70,6 +97,7 @@ async function computeStorageFeesForParcels(parcelIds: string[]): Promise<{
       transitRoute: { select: { type: true } },
       warehouse: {
         select: {
+          name: true,
           storageFreeDays: true,
           storageDailyRate: true,
           storageFeeRules: true,
@@ -79,7 +107,7 @@ async function computeStorageFeesForParcels(parcelIds: string[]): Promise<{
   });
   const now = Date.now();
   const ONE_DAY = 24 * 60 * 60 * 1000;
-  const perParcel = new Map<string, { fee: number; days: number }>();
+  const perParcel = new Map<string, StorageFeeDetail>();
   let total = 0;
 
   const inRange = (val: number | null, min: number | null, max: number | null) => {
@@ -91,7 +119,16 @@ async function computeStorageFeesForParcels(parcelIds: string[]): Promise<{
 
   for (const p of parcels) {
     if (!p.lastContainerId || !p.warehouse) {
-      perParcel.set(p.id, { fee: 0, days: 0 });
+      perParcel.set(p.id, {
+        fee: 0,
+        days: 0,
+        freeDays: 0,
+        dailyRate: 0,
+        warehouseName: p.warehouse?.name ?? null,
+        reason: !p.lastContainerId
+          ? "Colis non issu d'un conteneur (pas de magasinage facturable)"
+          : 'Colis sans magasin associe',
+      });
       continue;
     }
     const enteredAt = p.warehouseEnteredAt ?? p.createdAt;
@@ -133,7 +170,21 @@ async function computeStorageFeesForParcels(parcelIds: string[]): Promise<{
     const rate = rule ? Number(rule.dailyRate) : Number(p.warehouse.storageDailyRate);
     const chargeable = Math.max(0, days - freeDays);
     const fee = chargeable * rate;
-    perParcel.set(p.id, { fee, days: chargeable });
+    const ruleLabel = rule
+      ? `Regle ${rule.transitType}${rule.transitRouteId ? ' (route specifique)' : ''}`
+      : 'Tarif par defaut du magasin';
+    const reason =
+      fee === 0 && chargeable === 0
+        ? `${days} jour(s) en magasin, dont ${freeDays} gratuit(s) -> 0 jour facturable`
+        : `${days} jour(s) en magasin, ${freeDays} gratuit(s), ${chargeable} jour(s) factures a ${rate} FCFA/jour [${ruleLabel}]`;
+    perParcel.set(p.id, {
+      fee,
+      days: chargeable,
+      freeDays,
+      dailyRate: rate,
+      warehouseName: p.warehouse.name,
+      reason,
+    });
     total += fee;
   }
   return { perParcel, total };
@@ -276,7 +327,13 @@ router.get('/:id/pdf', async (req, res, next) => {
         where: { id: { in: scope.parcelIds } },
         select: {
           id: true, trackingNumber: true, designation: true, weight: true, volume: true,
-          destination: true, price: true,
+          destination: true, price: true, imageUrl: true, origin: true,
+          transitRoute: { select: { name: true, type: true } },
+          images: {
+            select: { url: true, isPrimary: true, sortOrder: true },
+            orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }],
+            take: 3,
+          },
         },
       }),
       prisma.payment.findMany({
@@ -299,8 +356,16 @@ router.get('/:id/pdf', async (req, res, next) => {
         ? { name: invoice.agency.name, code: invoice.agency.code, address: invoice.agency.address, phone: invoice.agency.phone }
         : null,
       // Audit fix #5 : 1 facture peut couvrir N colis (toujours un array maintenant)
-      parcel: parcelDetails.map((p: any) => {
+      parcel: await Promise.all(parcelDetails.map(async (p: any) => {
         const s = storage.perParcel.get(p.id);
+        const imageUrls = [
+          ...(p.imageUrl ? [p.imageUrl] : []),
+          ...(p.images ?? []).map((i: any) => i.url),
+        ].filter((u, i, arr) => u && arr.indexOf(u) === i).slice(0, 3);
+        // Pre-fetch image bytes (MinIO) pour les embarquer dans le PDF.
+        const imageBuffers = await Promise.all(
+          imageUrls.map((url) => fetchImageBuffer(url).catch(() => null)),
+        );
         return {
           trackingNumber: p.trackingNumber,
           designation: p.designation,
@@ -308,10 +373,19 @@ router.get('/:id/pdf', async (req, res, next) => {
           volume: p.volume != null ? Number(p.volume) : null,
           destination: p.destination,
           price: Number(p.price),
+          transitRouteName: p.transitRoute?.name ?? null,
+          transitType: p.transitRoute?.type ?? null,
+          origin: p.origin ?? null,
           storageFee: s?.fee ?? 0,
           storageDays: s?.days ?? 0,
+          storageFreeDays: s?.freeDays ?? 0,
+          storageDailyRate: s?.dailyRate ?? 0,
+          storageWarehouseName: s?.warehouseName ?? null,
+          storageReason: s?.reason ?? null,
+          imageUrls,
+          imageBuffers: imageBuffers.filter((b): b is Buffer => Buffer.isBuffer(b)),
         };
-      }),
+      })),
       payments: paymentList.map((p: any) => ({
         createdAt: p.createdAt,
         method: p.paymentMethod ?? p.method ?? '-',

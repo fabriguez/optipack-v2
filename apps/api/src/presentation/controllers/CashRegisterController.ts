@@ -20,8 +20,10 @@ export class CashRegisterController {
     try {
       const { agencyId } = req.params;
       const cashRegisterId = req.query.cashRegisterId as string | undefined;
+      const page = req.query.page ? Number(req.query.page) : undefined;
+      const limit = req.query.limit ? Number(req.query.limit) : undefined;
       const useCase = container.resolve(GetCashRegisterMovementsUseCase);
-      const data = await useCase.execute({ agencyId, cashRegisterId });
+      const data = await useCase.execute({ agencyId, cashRegisterId, page, limit });
       res.json({ success: true, data });
     } catch (err) {
       next(err);

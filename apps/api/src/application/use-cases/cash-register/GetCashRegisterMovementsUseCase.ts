@@ -35,7 +35,7 @@ export interface CashMovement {
  */
 @injectable()
 export class GetCashRegisterMovementsUseCase {
-  async execute(input: { agencyId?: string; cashRegisterId?: string }) {
+  async execute(input: { agencyId?: string; cashRegisterId?: string; page?: number; limit?: number }) {
     const register = input.cashRegisterId
       ? await prisma.agencyCashRegister.findUnique({ where: { id: input.cashRegisterId } })
       : input.agencyId
@@ -67,7 +67,14 @@ export class GetCashRegisterMovementsUseCase {
         prisma.expense.findMany({
           // Exclut les depenses de salaire (category SALARY) : les versements
           // de paie sont suivis dans le module RH, pas dans l'historique caisse.
-          where: { cashRegisterId: register.id, category: { not: 'SALARY' } },
+          // Exclut aussi les depenses ayant un disbursement lie (disbursementId
+          // != null) : le mouvement caisse est porte par la ligne Disbursement,
+          // l'Expense est juste un enregistrement metier (evite doublon).
+          where: {
+            cashRegisterId: register.id,
+            category: { not: 'SALARY' },
+            disbursementId: null,
+          },
           include: { approvedBy: { select: { firstName: true, lastName: true } } },
         }),
         prisma.disbursementVoucher.findMany({
@@ -177,8 +184,18 @@ export class GetCashRegisterMovementsUseCase {
 
     movements.sort((a, b) => b.date.getTime() - a.date.getTime());
 
+    // Totaux calcules sur TOUS les mouvements (pas seulement la page courante).
     const totalIn = movements.filter((m) => m.direction === 'IN' && !m.voided).reduce((s, m) => s + m.amount, 0);
     const totalOut = movements.filter((m) => m.direction === 'OUT' && !m.voided).reduce((s, m) => s + m.amount, 0);
+
+    // Pagination cote applicatif (les sources sont heterogenes : impossible
+    // de paginer en DB directement). Defaut : page=1, limit=20.
+    const page = Math.max(1, Number(input.page ?? 1));
+    const limit = Math.max(1, Math.min(200, Number(input.limit ?? 20)));
+    const total = movements.length;
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    const start = (page - 1) * limit;
+    const pageItems = movements.slice(start, start + limit);
 
     return {
       cashRegister: {
@@ -190,8 +207,9 @@ export class GetCashRegisterMovementsUseCase {
         currentBalance: Number(register.currentBalance),
         isClosed: register.isClosed,
       },
-      movements,
-      summary: { totalIn, totalOut, count: movements.length },
+      movements: pageItems,
+      summary: { totalIn, totalOut, count: total },
+      meta: { page, limit, total, totalPages },
     };
   }
 }

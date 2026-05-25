@@ -24,49 +24,51 @@ export class AutoCloseCashRegistersUseCase {
     private reportService: DailyReportService,
   ) {}
 
-  async execute(): Promise<{ closed: number; checked: number }> {
-    const today = startOfDayUtc(new Date());
-
-    const openRegisters = await prisma.agencyCashRegister.findMany({
-      where: {
-        isClosed: false,
-        date: { gte: today },
-      },
-      include: {
-        agency: {
-          select: {
-            id: true,
-            name: true,
-            timezone: true,
-            openingHours: true,
-          },
-        },
-      },
+  async execute(): Promise<{ closed: number; checked: number; reported: number }> {
+    // On itere sur TOUTES les agences (avec horaires d'ouverture). Pour chaque
+    // agence dont l'heure de fermeture locale est depassee, on ferme la caisse
+    // (si ouverte) ET on genere le rapport (meme s'il n'y a pas eu d'activite).
+    const agencies = await prisma.agency.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true, timezone: true, openingHours: true },
     });
 
     let closed = 0;
+    let reported = 0;
 
-    for (const register of openRegisters) {
-      const tz = register.agency.timezone || 'Africa/Douala';
+    for (const agency of agencies) {
+      const tz = agency.timezone || 'Africa/Douala';
       const local = nowInTimezone(tz);
       const localDow = local.getDay();
       const localTime = formatHHMM(local);
 
-      const hoursForDay = (register.agency.openingHours as Array<{
+      const hoursForDay = (agency.openingHours as Array<{
         dayOfWeek: number;
         closeTime: string;
         isOpen: boolean;
       }>).filter((h) => h.dayOfWeek === localDow && h.isOpen);
 
-      // Si pas de plage configuree pour ce jour : on ne ferme pas auto.
       if (hoursForDay.length === 0) continue;
 
       const latestClose = hoursForDay.reduce(
         (acc, h) => (h.closeTime > acc ? h.closeTime : acc),
         '00:00',
       );
+      if (localTime < latestClose) continue;
 
-      if (localTime >= latestClose) {
+      // Date "aujourd'hui" dans le fuseau de l'agence (pour matcher caisse).
+      const localDayStart = startOfDayInTimezone(new Date(), tz);
+
+      // Tente de fermer la caisse ouverte d'aujourd'hui (si existante).
+      const register = await prisma.agencyCashRegister.findFirst({
+        where: {
+          agencyId: agency.id,
+          isClosed: false,
+          date: { gte: localDayStart, lt: new Date(localDayStart.getTime() + 24 * 60 * 60 * 1000) },
+        },
+      });
+
+      if (register) {
         await this.cashRegisterRepo.update(register.id, {
           isClosed: true,
           closedAt: new Date(),
@@ -75,19 +77,11 @@ export class AutoCloseCashRegistersUseCase {
             (register.notes ? register.notes + '\n' : '') +
             `Cloture automatique de fin de journee (${tz}, ${localTime}).`,
         });
-
-        // Genere le rapport journalier
-        try {
-          await this.reportService.generate(register.agencyId, register.date);
-        } catch {
-          // Best-effort : un echec rapport ne doit pas bloquer la fermeture caisse
-        }
-
         eventBus.emit({
           type: DomainEvents.CASH_REGISTER_CLOSED,
           payload: {
             registerId: register.id,
-            agencyId: register.agencyId,
+            agencyId: agency.id,
             closingBalance: Number(register.currentBalance),
             auto: true,
           },
@@ -96,16 +90,30 @@ export class AutoCloseCashRegistersUseCase {
         });
         closed += 1;
       }
+
+      // Generation rapport journalier : meme sans caisse, on cree un rapport
+      // (eventuellement vide) pour tracer la journee. Idempotent : upsert.
+      try {
+        await this.reportService.generate(agency.id, localDayStart);
+        reported += 1;
+      } catch {
+        // Best-effort
+      }
     }
 
-    return { closed, checked: openRegisters.length };
+    return { closed, checked: agencies.length, reported };
   }
 }
 
-function startOfDayUtc(d: Date): Date {
-  const x = new Date(d);
-  x.setUTCHours(0, 0, 0, 0);
-  return x;
+function startOfDayInTimezone(date: Date, timeZone: string): Date {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? 0);
+  return new Date(Date.UTC(get('year'), get('month') - 1, get('day'), 0, 0, 0, 0));
 }
 
 function nowInTimezone(timeZone: string): Date {
