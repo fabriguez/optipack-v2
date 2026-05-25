@@ -114,16 +114,35 @@ function aggregateParcels(items: ParcelLite[]) {
 @injectable()
 export class DailyReportService {
   async generate(agencyId: string, date: Date): Promise<{ id: string; payload: any }> {
-    // Resolution du jour calendaire dans le fuseau de l'agence (et non UTC
-    // serveur). Sinon, un appel "generer aujourd'hui" en fin de journee en
-    // Afrique de l'Ouest pouvait cibler le mauvais jour UTC -> pas de caisse
-    // trouvee, rapport vide.
+    // Resolution du jour calendaire dans le fuseau de l'agence + snap au
+    // prochain jour ouvrable si necessaire. Generer un rapport pour un jour
+    // non-ouvre (ex: dimanche) -> redirige vers le prochain jour ouvre (lundi).
     const agencyTz = await prisma.agency.findUnique({
       where: { id: agencyId },
       select: { timezone: true },
     });
     const tz = agencyTz?.timezone || 'Africa/Douala';
-    const dayStart = startOfDayInTimezone(date, tz);
+    let dayStart = startOfDayInTimezone(date, tz);
+
+    // Snap au prochain jour ouvrable de l'agence.
+    const openingHours = await prisma.agencyOpeningHours.findMany({
+      where: { agencyId, isOpen: true },
+      select: { dayOfWeek: true },
+    });
+    if (openingHours.length > 0) {
+      const openDays = new Set(openingHours.map((h) => h.dayOfWeek));
+      // Calcule le dayOfWeek de dayStart dans le fuseau agence.
+      const dowFmt = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short' });
+      const dowMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+      let dow = dowMap[dowFmt.format(dayStart).slice(0, 3)] ?? dayStart.getUTCDay();
+      let safety = 0;
+      while (!openDays.has(dow) && safety < 7) {
+        dayStart = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+        dow = dowMap[dowFmt.format(dayStart).slice(0, 3)] ?? dayStart.getUTCDay();
+        safety += 1;
+      }
+    }
+
     const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
 
     // Fenetre = session caisse si existante, sinon jour calendaire.

@@ -20,9 +20,10 @@ export class PrismaCashRegisterRepository implements ICashRegisterRepository {
   }
 
   async findOrCreateForToday(agencyId: string): Promise<AgencyCashRegister> {
-    // Si la caisse du jour est cloturee, on bascule sur le prochain jour ouvrable.
-    // Cela permet d'enregistrer une entree/sortie apres fermeture sans casser
-    // l'integrite financiere du jour ferme (chiffres deja gravels).
+    // Si la caisse du jour est cloturee OU si aujourd'hui n'est pas un jour
+    // ouvrable de l'agence, on bascule sur le prochain jour ouvrable. Cela
+    // garantit que toute action post-fermeture (incl. week-end) atterrit
+    // dans le rapport du prochain jour d'ouverture.
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -30,12 +31,32 @@ export class PrismaCashRegisterRepository implements ICashRegisterRepository {
     if (todayRegister && !todayRegister.isClosed) return todayRegister;
 
     if (todayRegister?.isClosed) {
-      // Bascule sur la caisse du prochain jour ouvrable (en pratique, demain)
       const nextDate = await this.computeNextBusinessDay(agencyId, today);
       return this.openOrGetForDate(agencyId, nextDate);
     }
 
+    // Aucune caisse pour aujourd'hui. Si aujourd'hui n'est pas un jour
+    // d'ouverture configure -> snap au prochain jour ouvrable. Sinon ouvre
+    // pour aujourd'hui.
+    const openDay = await this.isAgencyOpenOn(agencyId, today);
+    if (!openDay) {
+      const nextDate = await this.computeNextBusinessDay(agencyId, today);
+      return this.openOrGetForDate(agencyId, nextDate);
+    }
     return this.openOrGetForDate(agencyId, today);
+  }
+
+  /** Verifie si la date donnee correspond a un jour d'ouverture configure
+   *  pour l'agence (AgencyOpeningHours avec isOpen=true). Si aucune config :
+   *  on considere tous les jours comme ouverts (compat ascendante). */
+  private async isAgencyOpenOn(agencyId: string, date: Date): Promise<boolean> {
+    const hours = await prisma.agencyOpeningHours.findMany({
+      where: { agencyId, isOpen: true },
+      select: { dayOfWeek: true },
+    });
+    if (hours.length === 0) return true;
+    const dow = date.getDay();
+    return hours.some((h) => h.dayOfWeek === dow);
   }
 
   /**
