@@ -18,6 +18,7 @@ import v1Routes from './presentation/routes/v1';
 import { startCronJobs } from './infrastructure/cron/CronService';
 import { registerHandlers as registerNotificationHandlers } from './infrastructure/events/handlers/NotificationHandler';
 import { registerDailyReportEmailHandler } from './infrastructure/events/handlers/DailyReportEmailHandler';
+import { registerDailyReportRegenHandler } from './infrastructure/events/handlers/DailyReportRegenHandler';
 import { registerNotificationProviders } from './infrastructure/notifications/providers';
 import jwt from 'jsonwebtoken';
 import type { JwtPayload } from '@transitsoftservices/shared';
@@ -118,6 +119,7 @@ async function start(): Promise<void> {
     registerNotificationHandlers();
     registerNotificationProviders();
     registerDailyReportEmailHandler();
+    registerDailyReportRegenHandler();
 
     // Start cron jobs
     startCronJobs();

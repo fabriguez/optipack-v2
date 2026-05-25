@@ -46,14 +46,13 @@ export class GetCashRegisterMovementsUseCase {
         : null;
     if (!register) throw new NotFoundError('Caisse', input.cashRegisterId ?? input.agencyId ?? '');
 
-    // Fenetre journee de la caisse (date @db.Date -> 00:00). On borne aussi
-    // sur closedAt si la caisse est fermee.
-    const dayStart = new Date(register.date);
-    dayStart.setUTCHours(0, 0, 0, 0);
-    const dayEnd = new Date(dayStart);
-    dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
-    const windowEnd = register.closedAt && register.closedAt < dayEnd ? register.closedAt : dayEnd;
-    const window = { gte: dayStart, lt: windowEnd };
+    // Fenetre = SESSION caisse (createdAt -> closedAt). Pas le jour calendaire :
+    // une caisse ouverte le 24 a 22h pour le jour ouvrable du 25 doit voir les
+    // paiements de 22h-minuit (createdAt=24/22h, mais session de la caisse 25).
+    // Sinon les events post-cloture agence tombent hors window -> non affiches.
+    const windowStart = register.createdAt;
+    const windowEnd = register.closedAt ?? new Date();
+    const window = { gte: windowStart, lt: windowEnd };
 
     const [payments, expenses, disbursements, debtPayments, transfersOut, transfersIn] =
       await Promise.all([

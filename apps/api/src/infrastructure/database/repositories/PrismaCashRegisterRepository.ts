@@ -2,6 +2,7 @@ import { injectable } from 'tsyringe';
 import type { AgencyCashRegister, Prisma } from '@prisma/client';
 import type { ICashRegisterRepository } from '../../../application/interfaces/ICashRegisterRepository';
 import { prisma } from '../../../config/database';
+import { eventBus, DomainEvents } from '../../events/EventBus';
 
 @injectable()
 export class PrismaCashRegisterRepository implements ICashRegisterRepository {
@@ -100,22 +101,47 @@ export class PrismaCashRegisterRepository implements ICashRegisterRepository {
   }
 
   async addEntry(id: string, amount: number): Promise<AgencyCashRegister> {
-    return prisma.agencyCashRegister.update({
+    const updated = await prisma.agencyCashRegister.update({
       where: { id },
       data: {
         totalEntries: { increment: amount },
         currentBalance: { increment: amount },
       },
     });
+    emitCashRegisterUpdated(updated);
+    return updated;
   }
 
   async addExit(id: string, amount: number): Promise<AgencyCashRegister> {
-    return prisma.agencyCashRegister.update({
+    const updated = await prisma.agencyCashRegister.update({
       where: { id },
       data: {
         totalExits: { increment: amount },
         currentBalance: { decrement: amount },
       },
     });
+    emitCashRegisterUpdated(updated);
+    return updated;
+  }
+}
+
+/** Emet un event domain pour declencher la regen du rapport journalier
+ *  associe (cf DailyReportRegenHandler). Permet aux actions effectuees
+ *  apres fermeture de l'agence (qui debitent/creditent la caisse du jour
+ *  ouvrable suivant) de s'afficher des le mouvement dans le rapport du
+ *  jour correspondant. */
+function emitCashRegisterUpdated(register: AgencyCashRegister): void {
+  try {
+    eventBus.emit({
+      type: DomainEvents.CASH_REGISTER_UPDATED,
+      payload: {
+        registerId: register.id,
+        agencyId: register.agencyId,
+        date: register.date.toISOString(),
+      },
+      timestamp: new Date(),
+    });
+  } catch {
+    // non bloquant
   }
 }
