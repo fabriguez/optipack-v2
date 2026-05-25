@@ -244,7 +244,22 @@ export class DailyReportService {
       }
     }
 
+    // Construit un map parcelId -> status courant pour filtre strict.
+    const parcelStatusMap = new Map<string, string>();
+    for (const pay of payments) {
+      if (pay.parcel) parcelStatusMap.set(pay.parcel.id, pay.parcel.status);
+      for (const p of pay.invoice?.parcels ?? []) parcelStatusMap.set(p.id, p.status);
+    }
+
+    // Recette = colis ACTUELLEMENT receptionne (RECEIVED ou DELIVERED) ET
+    // paiement effectue APRES la reception. Tous les autres cas -> avance.
+    // Cas particuliers :
+    //  - colis pas encore receptionne (status IN_STOCK/LOADING/IN_TRANSIT/
+    //    ARRIVED/LOST) -> avance, quelle que soit la date paiement.
+    //  - colis receptionne MAIS paiement anterieur a la reception -> avance.
     const isPaymentAfterReception = (parcelId: string, paymentDate: Date) => {
+      const currentStatus = parcelStatusMap.get(parcelId);
+      if (currentStatus !== 'RECEIVED' && currentStatus !== 'DELIVERED') return false;
       const receivedAt = receivedAtByParcel.get(parcelId);
       return !!receivedAt && paymentDate >= receivedAt;
     };

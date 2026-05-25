@@ -19,15 +19,20 @@ import { toast } from 'sonner';
 export default function CashRegisterPage() {
   const [selectedAgency, setSelectedAgency] = useState<string>('');
   const [showClose, setShowClose] = useState(false);
+  const [pickedDate, setPickedDate] = useState<string>(''); // YYYY-MM-DD
+  const [viewAll, setViewAll] = useState<boolean>(false);
   const qc = useQueryClient();
 
   const { data: agencies } = useAgencies({ limit: 100 });
   const agencyId = selectedAgency || agencies?.data?.[0]?.id || '';
 
   const { data: register, isLoading } = useQuery({
-    queryKey: ['cash-register', agencyId],
-    queryFn: () => cashRegisterApi.get(agencyId),
-    enabled: !!agencyId,
+    queryKey: ['cash-register', agencyId, pickedDate],
+    queryFn: () =>
+      apiClient
+        .get(`/cash-registers/${agencyId}`, { params: pickedDate ? { date: pickedDate } : {} })
+        .then((r) => r.data),
+    enabled: !!agencyId && !viewAll,
   });
 
   const { data: breakdown } = useQuery({
@@ -37,12 +42,18 @@ export default function CashRegisterPage() {
   });
 
   const [movementsPage, setMovementsPage] = useState(1);
-  const movementsLimit = 20;
+  const movementsLimit = 100;
   const { data: movementsData, isLoading: movementsLoading } = useQuery({
-    queryKey: ['cash-register', agencyId, 'movements', movementsPage, movementsLimit],
+    queryKey: ['cash-register', agencyId, 'movements', movementsPage, movementsLimit, pickedDate, viewAll],
     queryFn: () =>
       apiClient
-        .get(`/cash-registers/${agencyId}/movements`, { params: { page: movementsPage, limit: movementsLimit } })
+        .get(`/cash-registers/${agencyId}/movements`, {
+          params: {
+            page: movementsPage,
+            limit: movementsLimit,
+            ...(viewAll ? { all: 'true' } : pickedDate ? { date: pickedDate } : {}),
+          },
+        })
         .then((r) => r.data),
     enabled: !!agencyId,
   });
@@ -92,6 +103,37 @@ export default function CashRegisterPage() {
               {a.name}
             </button>
           ))}
+        </div>
+
+        {/* Date picker + toggle "tous mouvements" */}
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-gray-100 bg-white px-3 py-2">
+          <label className="text-xs font-medium text-gray-600">Date :</label>
+          <input
+            type="date"
+            value={pickedDate}
+            onChange={(e) => { setPickedDate(e.target.value); setViewAll(false); setMovementsPage(1); }}
+            disabled={viewAll}
+            className="rounded-lg border border-gray-200 px-2 py-1 text-sm focus:border-primary-500 focus:outline-none disabled:opacity-50"
+          />
+          {pickedDate && !viewAll && (
+            <button
+              type="button"
+              onClick={() => { setPickedDate(''); setMovementsPage(1); }}
+              className="rounded-md px-2 py-1 text-xs text-gray-500 hover:bg-gray-100"
+            >
+              Aujourd&apos;hui
+            </button>
+          )}
+          <span className="ml-2 text-xs text-gray-300">|</span>
+          <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600">
+            <input
+              type="checkbox"
+              checked={viewAll}
+              onChange={(e) => { setViewAll(e.target.checked); setMovementsPage(1); }}
+              className="h-3.5 w-3.5"
+            />
+            Voir TOUS les mouvements (toutes dates confondues)
+          </label>
         </div>
 
         {isLoading ? (
