@@ -196,6 +196,16 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
     return () => { cancelled = true; };
   }, [showLoadDialog, container?.departureAgencyId, container?.departureAgency?.id, loadSourceWarehouseId]);
 
+  // Benefice : pour les conteneurs non-acheminement, valeur des colis -
+  // total des depenses (payees + non payees, hors annulees).
+  // Hook declare ICI (avant les early returns) pour respecter l'ordre des
+  // hooks React. enabled gere l'execution effective.
+  const { data: containerExpensesData } = useQuery({
+    queryKey: ['containers', id, 'expenses', 'for-benefice'],
+    queryFn: () => apiClient.get(`/expenses/container/${id}`).then((r) => r.data),
+    enabled: !!id && !container?.isForwarding,
+  });
+
   if (isLoading) return <DashboardSkeleton />;
   if (!container) return <p className="p-6 text-gray-500">Conteneur introuvable</p>;
 
@@ -500,13 +510,6 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
     },
   ];
 
-  // Benefice : pour les conteneurs non-acheminement, valeur des colis -
-  // total des depenses (payees + non payees, hors annulees).
-  const { data: containerExpensesData } = useQuery({
-    queryKey: ['containers', id, 'expenses', 'for-benefice'],
-    queryFn: () => apiClient.get(`/expenses/container/${id}`).then((r) => r.data),
-    enabled: !!id && !container?.isForwarding,
-  });
   const expensesForBenefice: any[] = containerExpensesData?.data ?? [];
   const parcelsValueTotal = parcels.reduce((s: number, p: any) => s + Number(p.price ?? 0), 0);
   const expensesTotal = expensesForBenefice.reduce((s, e) => s + Number(e.amount ?? 0), 0);
