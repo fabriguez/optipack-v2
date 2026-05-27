@@ -19,6 +19,7 @@ export interface IContainerRepository {
       status?: string;
       isForwarding?: boolean;
       agencyIds?: string[];
+      carrierId?: string;
     },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<ContainerWithRelations>>;

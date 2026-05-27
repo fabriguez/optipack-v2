@@ -1118,6 +1118,7 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
                           <th className="text-left p-3 font-medium text-gray-600">Tracking</th>
                           <th className="text-left p-3 font-medium text-gray-600">Paiement</th>
                           <th className="text-left p-3 font-medium text-gray-600">Designation</th>
+                          <th className="text-left p-3 font-medium text-gray-600">Destination</th>
                           <th className="text-left p-3 font-medium text-gray-600">Pesee</th>
                           <th className="text-left p-3 font-medium text-gray-600">Type</th>
                           <th className="text-left p-3 font-medium text-gray-600">Client</th>
@@ -1147,6 +1148,14 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
                               })()}
                             </td>
                             <td className="p-3">{p.designation}</td>
+                            <td className="p-3">
+                              <div className="flex flex-col text-xs">
+                                <span className="text-gray-900 font-medium">{p.destinationAgency?.city || p.destination || '-'}</span>
+                                {p.destinationAgency?.name && (
+                                  <span className="text-gray-400 text-[10px]">{p.destinationAgency.name}</span>
+                                )}
+                              </div>
+                            </td>
                             <td className="p-3">{p.weight ? `${Number(p.weight).toFixed(1)} kg` : p.volume ? `${Number(p.volume).toFixed(2)} m3` : '-'}</td>
                             <td className="p-3">
                               {p.transitRoute?.type ? (
@@ -1423,6 +1432,11 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
           onClose={() => {
             setShowCreateParcel(false);
             qc.invalidateQueries({ queryKey: ['parcels-available'] });
+            // La liste des colis chargeables du conteneur est cachee sous
+            // ['containers', id, 'loadable', ...] : invalider l'ancetre force
+            // le refetch immediat, le nouveau colis apparait sans fermer le dialog.
+            qc.invalidateQueries({ queryKey: ['containers', id, 'loadable'] });
+            qc.invalidateQueries({ queryKey: ['parcels'] });
           }}
           defaultTransitType={container.isForwarding ? null : (container.type as 'AIR' | 'SEA' | 'LAND')}
         />

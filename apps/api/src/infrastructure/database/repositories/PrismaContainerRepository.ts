@@ -72,6 +72,7 @@ export class PrismaContainerRepository implements IContainerRepository {
       status?: string;
       isForwarding?: boolean;
       agencyIds?: string[];
+      carrierId?: string;
     },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<ContainerWithRelations>> {
@@ -91,6 +92,7 @@ export class PrismaContainerRepository implements IContainerRepository {
       ...(filters.arrivalAgencyId && { arrivalAgencyId: filters.arrivalAgencyId }),
       ...(statusFilter !== undefined && { status: statusFilter }),
       ...(filters.isForwarding !== undefined && { isForwarding: filters.isForwarding }),
+      ...(filters.carrierId && { carrierId: filters.carrierId }),
       ...(filters.agencyIds?.length && {
         OR: [
           { departureAgencyId: { in: filters.agencyIds } },

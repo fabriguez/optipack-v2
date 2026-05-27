@@ -304,7 +304,7 @@ export function ContainerFormDialog({ open, onClose, container: editTarget }: Co
       <CarrierFormDialog
         open={showCarrierDialog}
         onClose={() => setShowCarrierDialog(false)}
-        onCreated={(c) => setValue('carrierId' as any, c.id)}
+        onSaved={(c) => setValue('carrierId' as any, c.id)}
       />
     </AppDialog>
   );

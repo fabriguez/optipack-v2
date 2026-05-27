@@ -50,7 +50,7 @@ export class ContainerController {
   static async list(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(ListContainersUseCase);
-      const { departureAgencyId, arrivalAgencyId, status, isForwarding } = req.query;
+      const { departureAgencyId, arrivalAgencyId, status, isForwarding, carrierId } = req.query;
       const isForwardingFlag =
         isForwarding === 'true' ? true : isForwarding === 'false' ? false : undefined;
       // SUPER_ADMIN voit tous les conteneurs (pas de scope agence). Les autres
@@ -66,6 +66,7 @@ export class ContainerController {
           status: status as string,
           isForwarding: isForwardingFlag,
           agencyIds,
+          carrierId: carrierId as string | undefined,
         },
         req.query as any,
       );

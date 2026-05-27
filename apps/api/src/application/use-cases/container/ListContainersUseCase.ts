@@ -15,6 +15,7 @@ export class ListContainersUseCase {
       status?: string;
       isForwarding?: boolean;
       agencyIds?: string[];
+      carrierId?: string;
     },
     pagination: PaginationInput,
   ) {

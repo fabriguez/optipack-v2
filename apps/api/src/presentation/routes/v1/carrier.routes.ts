@@ -94,6 +94,23 @@ router.patch(
       const updated = await prisma.carrier.update({
         where: { id: req.params.id },
         data: { ...req.body, ...(req.body.email !== undefined && { email: req.body.email || null }) },
+        include: { client: { select: { id: true, fullName: true, phone: true } } },
+      });
+      res.json({ success: true, data: updated });
+    } catch (err) { next(err); }
+  },
+);
+
+router.delete(
+  '/:id',
+  authorize('SUPER_ADMIN', 'ADMIN'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      // Soft delete : on desactive plutot que supprimer pour preserver les
+      // references historiques (containers, debts, paiements).
+      const updated = await prisma.carrier.update({
+        where: { id: req.params.id },
+        data: { isActive: false },
       });
       res.json({ success: true, data: updated });
     } catch (err) { next(err); }

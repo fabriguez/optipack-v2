@@ -13,6 +13,7 @@ import {
   Package,
   Container,
   Route,
+  Truck,
   FileText,
   CreditCard,
   Vault,
@@ -58,6 +59,7 @@ const mainNav: NavItem[] = [
   { label: 'Clients', href: '/clients', icon: Users, module: 'clients' },
   { label: 'Colis', href: '/parcels', icon: Package, module: 'parcels' },
   { label: 'Conteneurs', href: '/containers', icon: Container, module: 'containers' },
+  { label: 'Transporteurs', href: '/carriers', icon: Truck, module: 'containers' },
   { label: 'Routes transit', href: '/transit-routes', icon: Route, module: 'transit-routes' },
 ];
 
