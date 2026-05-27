@@ -124,18 +124,13 @@ export class PrismaManifestRepository implements IManifestRepository {
       );
     }
 
-    // Bordereau de reception = colis effectivement DECHARGES de ce conteneur,
-    // peu importe l'agence ou ils ont ete recus (destination finale OU agence
-    // de transit intermediaire -> statut IN_STOCK).
-    //
-    // Marqueur de "decharge" : lastContainerId == containerId (pose au
-    // dechargement) ET le colis n'est plus charge dans CE conteneur
-    // (containerId != containerId, ou null). Les colis LOST sont exclus :
-    // ils figurent dans le bordereau de comparaison (manquants).
+    // Bordereau de reception = snapshot des colis a l'arrivee du conteneur.
+    // Genere automatiquement a l'arrivee (les colis sont encore dans le
+    // conteneur, containerId == id), ou plus tard (apres dechargement,
+    // lastContainerId == id). LOST exclus (figurent dans le comparatif).
     const parcels = await this.loadParcelsWithFinancials(
       {
-        lastContainerId: containerId,
-        OR: [{ containerId: null }, { containerId: { not: containerId } }],
+        OR: [{ containerId }, { lastContainerId: containerId }],
         status: { not: 'LOST' as never },
       },
       container.departureAgency.city,
@@ -143,7 +138,7 @@ export class PrismaManifestRepository implements IManifestRepository {
     );
 
     if (parcels.length === 0) {
-      throw new BusinessError("Aucun colis recu pour ce conteneur.");
+      throw new BusinessError("Aucun colis a receptionner pour ce conteneur.");
     }
 
     const number = await this.buildManifestName(container, 'RECEPTION');

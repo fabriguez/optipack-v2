@@ -70,9 +70,15 @@ export class ArriveContainerUseCase {
 
     // Auto-generation du bordereau de reception a l'arrivee.
     // Best-effort : un echec est loggue dans l'historique conteneur pour
-    // visibilite, mais ne bloque pas l'arrivee.
+    // visibilite, mais ne bloque pas l'arrivee. Idempotent : si un bordereau
+    // de reception existe deja pour ce conteneur, on saute.
     if (parcelIds.length > 0) {
       try {
+        const existing = await this.manifestRepo.findByContainer(containerId);
+        const alreadyHasReception = existing.some((m) => m.type === 'RECEPTION');
+        if (alreadyHasReception) {
+          // Pas de regeneration auto : on garde le bordereau existant.
+        } else {
         const manifest = await this.manifestRepo.createReceptionManifest(containerId, userId);
         await this.history.recordContainer({
           containerId,
@@ -81,6 +87,7 @@ export class ArriveContainerUseCase {
           comment: `Bordereau de reception ${manifest.number} genere automatiquement`,
           changes: { manifestId: manifest.id, number: manifest.number, lineCount: manifest.lines.length },
         });
+        }
       } catch (err) {
         try {
           await this.history.recordContainer({
