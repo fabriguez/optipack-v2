@@ -12,7 +12,7 @@ import { apiClient } from '@/lib/api/client';
 import { uploadFile } from '@/lib/api/uploads';
 import { toast } from 'sonner';
 
-type ParentType = 'expense' | 'disbursement' | 'debt';
+type ParentType = 'expense' | 'disbursement' | 'debt' | 'fund-transfer';
 
 interface Attachment {
   id: string;

@@ -15,6 +15,7 @@ import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
+import { AttachmentsCard } from '@/components/shared/AttachmentsCard';
 import { toast } from 'sonner';
 
 const STATUS_VARIANT: Record<string, 'warning' | 'success' | 'error'> = {
@@ -191,6 +192,12 @@ export default function FundTransferDetailPage({ params }: { params: Promise<{ i
             </div>
           </AppCard>
         </div>
+
+        <AttachmentsCard
+          parentType="fund-transfer"
+          parentId={transfer.id}
+          readonly={!!transfer.isVoided}
+        />
       </div>
 
       <ConfirmDialog

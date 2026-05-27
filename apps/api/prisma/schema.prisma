@@ -580,6 +580,7 @@ model User {
   expenseAttachmentsUploaded      ExpenseAttachment[]              @relation("ExpenseAttachmentUploader")
   disbursementAttachmentsUploaded DisbursementAttachment[]         @relation("DisbursementAttachmentUploader")
   debtAttachmentsUploaded         DebtAttachment[]                 @relation("DebtAttachmentUploader")
+  fundTransferAttachmentsUploaded FundTransferAttachment[]         @relation("FundTransferAttachmentUploader")
   permissionOverrides             UserPermissionOverride[]
   justificationsSubmitted         AttendanceJustification[]       @relation("JustificationSubmitter")
   justificationsReviewed          AttendanceJustification[]       @relation("JustificationReviewer")
@@ -2041,11 +2042,30 @@ model FundTransfer {
   confirmedBy        User?         @relation("ConfirmedByUser", fields: [confirmedByUserId], references: [id])
   reverseEntry       FundTransfer? @relation("ReverseTransfer", fields: [reverseEntryId], references: [id])
   reversedBy         FundTransfer? @relation("ReverseTransfer")
+  // Pieces jointes (images / PDF de preuve transfert).
+  attachments        FundTransferAttachment[]
 
   @@index([sourceAgencyId])
   @@index([sourceOrganizationId])
   @@index([status])
   @@map("fund_transfers")
+}
+
+model FundTransferAttachment {
+  id               String   @id @default(uuid())
+  fundTransferId   String
+  url              String
+  key              String
+  kind             String // 'IMAGE' | 'PDF' | 'OTHER'
+  caption          String?
+  uploadedByUserId String?
+  createdAt        DateTime @default(now())
+
+  fundTransfer FundTransfer @relation(fields: [fundTransferId], references: [id], onDelete: Cascade)
+  uploadedBy   User?        @relation("FundTransferAttachmentUploader", fields: [uploadedByUserId], references: [id])
+
+  @@index([fundTransferId])
+  @@map("fund_transfer_attachments")
 }
 
 enum TransferDestinationType {

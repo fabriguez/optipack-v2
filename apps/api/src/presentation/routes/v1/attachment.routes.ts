@@ -12,7 +12,7 @@ router.use(authenticate);
  * segment de path. Mutualise ici pour eviter la duplication.
  */
 
-type AttachmentType = 'expense' | 'disbursement' | 'debt';
+type AttachmentType = 'expense' | 'disbursement' | 'debt' | 'fund-transfer';
 
 function resolveDelegate(type: AttachmentType) {
   switch (type) {
@@ -33,6 +33,12 @@ function resolveDelegate(type: AttachmentType) {
         delegate: prisma.debtAttachment,
         parentDelegate: prisma.debt,
         parentField: 'debtId' as const,
+      };
+    case 'fund-transfer':
+      return {
+        delegate: prisma.fundTransferAttachment,
+        parentDelegate: prisma.fundTransfer,
+        parentField: 'fundTransferId' as const,
       };
   }
 }
@@ -104,5 +110,10 @@ const debtHandlers = buildHandlers('debt');
 router.get('/debts/:id/attachments', debtHandlers.list);
 router.post('/debts/:id/attachments', debtHandlers.add);
 router.delete('/debts/:id/attachments/:attId', debtHandlers.remove);
+
+const fundTransferHandlers = buildHandlers('fund-transfer');
+router.get('/fund-transfers/:id/attachments', fundTransferHandlers.list);
+router.post('/fund-transfers/:id/attachments', fundTransferHandlers.add);
+router.delete('/fund-transfers/:id/attachments/:attId', fundTransferHandlers.remove);
 
 export default router;
