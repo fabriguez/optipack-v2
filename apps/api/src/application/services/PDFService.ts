@@ -38,10 +38,27 @@ interface InvoiceParcel {
   storageDailyRate?: number;
   storageWarehouseName?: string | null;
   storageReason?: string | null;
+  /** Lignes detaillees de magasinage : 1 par periode/magasin/phase. */
+  storageLines?: InvoiceStorageLine[];
   // URLs des images du colis (max 3) -- buffers prechargees rendues en facture.
   imageUrls?: string[];
   /** Buffers des images (preremplis par l'appelant). */
   imageBuffers?: Buffer[];
+}
+
+export interface InvoiceStorageLine {
+  warehouseName: string | null;
+  warehouseCity: string | null;
+  phase: 'DEPARTURE' | 'TRANSIT' | 'DESTINATION';
+  startedAt: Date | string;
+  endedAt: Date | string;
+  isActive: boolean;
+  dailyRate: number;
+  freeDays: number;
+  chargedDays: number;
+  feeAmount: number;
+  ruleLabel: string | null;
+  stopReason: string | null;
 }
 
 interface InvoicePayment {
@@ -49,6 +66,15 @@ interface InvoicePayment {
   method: string;
   amount: number;
   agency?: { name: string } | null;
+}
+
+export interface InvoiceDiscountEntry {
+  createdAt: Date | string;
+  action: 'DISCOUNT_APPLIED' | 'DISCOUNT_REMOVED' | string;
+  previousDiscount: number;
+  newDiscount: number;
+  reason: string | null;
+  userName?: string | null;
 }
 
 export interface InvoiceData {
@@ -67,6 +93,8 @@ export interface InvoiceData {
   // Total des frais de magasinage cumules sur tous les colis de la facture.
   // Si > 0, on affiche une ligne dediee dans le bloc total.
   storageFeesTotal?: number;
+  // Historique des remises (audit log). Affiche en bas de la facture.
+  discountHistory?: InvoiceDiscountEntry[];
 }
 
 interface ManifestParcel {
@@ -475,6 +503,126 @@ export class PDFService {
           xCol += payCols[c].width;
         }
         y += 18;
+      });
+    }
+
+    // --- Frais de magasinage : detail par charge (1 ligne = 1 magasin/phase) ---
+    type FlatLine = InvoiceStorageLine & { tracking: string };
+    const allLines: FlatLine[] = [];
+    for (const p of parcels) {
+      for (const l of (p.storageLines ?? [])) {
+        if (l.phase === 'TRANSIT') continue; // transit jamais facture
+        allLines.push({ ...l, tracking: p.trackingNumber });
+      }
+    }
+    if (allLines.length > 0) {
+      y += 15;
+      if (y > 660) { doc.addPage(); y = 50; }
+      doc.fontSize(11).fillColor(COLORS.primary).text(
+        `Frais de magasinage detailles (${formatCurrency(invoiceData.storageFeesTotal ?? 0)})`,
+        50, y,
+      );
+      y += 6;
+      doc.fontSize(8).fillColor(COLORS.gray).text(
+        '1 ligne = 1 sejour dans un magasin. La phase indique si le colis etait au depart, en transit ou a destination.',
+        50, y, { width: pageWidth },
+      );
+      y += 14;
+
+      const stCols = [
+        { label: 'Tracking', width: 75 },
+        { label: 'Magasin', width: 120 },
+        { label: 'Phase', width: 65 },
+        { label: 'Periode', width: 110 },
+        { label: 'Jours', width: 45 },
+        { label: 'Tarif/j', width: 70 },
+        { label: 'Frais', width: 80 },
+      ];
+      doc.rect(50, y, pageWidth, 20).fill(COLORS.primary);
+      let xCol2 = 55;
+      doc.fontSize(8).fillColor(COLORS.white);
+      for (const col of stCols) {
+        doc.text(col.label, xCol2, y + 5, { width: col.width });
+        xCol2 += col.width;
+      }
+      y += 20;
+
+      doc.fillColor(COLORS.dark).fontSize(7.5);
+      allLines.forEach((l, i) => {
+        if (y > 750) { doc.addPage(); y = 50; }
+        const bg = i % 2 === 0 ? COLORS.white : COLORS.lightGray;
+        doc.rect(50, y, pageWidth, 22).fill(bg);
+        doc.fillColor(COLORS.dark);
+        xCol2 = 55;
+        const wh = [l.warehouseName ?? '-', l.warehouseCity].filter(Boolean).join(' (') + (l.warehouseCity ? ')' : '');
+        const phaseLabel = l.phase === 'DEPARTURE' ? 'Depart' : l.phase === 'DESTINATION' ? 'Destination' : 'Transit';
+        const periode = `${formatDate(l.startedAt)} → ${l.isActive ? 'en cours' : formatDate(l.endedAt)}`;
+        const row = [
+          l.tracking,
+          wh,
+          phaseLabel,
+          periode,
+          `${l.chargedDays} (${l.freeDays} gratuit)`,
+          formatCurrency(l.dailyRate),
+          formatCurrency(l.feeAmount),
+        ];
+        for (let c = 0; c < stCols.length; c++) {
+          doc.text(row[c], xCol2, y + 5, { width: stCols[c].width, ellipsis: true });
+          xCol2 += stCols[c].width;
+        }
+        y += 22;
+      });
+    }
+
+    // --- Historique des remises ---
+    if (invoiceData.discountHistory && invoiceData.discountHistory.length > 0) {
+      y += 15;
+      if (y > 660) { doc.addPage(); y = 50; }
+      doc.fontSize(11).fillColor(COLORS.primary).text(
+        `Historique des remises (${invoiceData.discountHistory.length})`,
+        50, y,
+      );
+      y += 20;
+
+      const dCols = [
+        { label: 'Date', width: 90 },
+        { label: 'Action', width: 70 },
+        { label: 'Avant', width: 70 },
+        { label: 'Apres', width: 70 },
+        { label: 'Raison', width: 150 },
+        { label: 'Par', width: 60 },
+      ];
+      doc.rect(50, y, pageWidth, 20).fill(COLORS.primary);
+      let xCol3 = 55;
+      doc.fontSize(8).fillColor(COLORS.white);
+      for (const col of dCols) {
+        doc.text(col.label, xCol3, y + 5, { width: col.width });
+        xCol3 += col.width;
+      }
+      y += 20;
+
+      doc.fillColor(COLORS.dark).fontSize(8);
+      invoiceData.discountHistory.forEach((entry, i) => {
+        if (y > 750) { doc.addPage(); y = 50; }
+        const bg = i % 2 === 0 ? COLORS.white : COLORS.lightGray;
+        // Hauteur dynamique : si raison longue, on reserve plus pour wrap.
+        const rowH = 22;
+        doc.rect(50, y, pageWidth, rowH).fill(bg);
+        doc.fillColor(COLORS.dark);
+        xCol3 = 55;
+        const row = [
+          formatDate(entry.createdAt),
+          entry.action === 'DISCOUNT_APPLIED' ? 'Appliquee' : 'Retiree',
+          formatCurrency(Number(entry.previousDiscount ?? 0)),
+          formatCurrency(Number(entry.newDiscount ?? 0)),
+          entry.reason || '-',
+          entry.userName || '-',
+        ];
+        for (let c = 0; c < dCols.length; c++) {
+          doc.text(row[c], xCol3, y + 5, { width: dCols[c].width, ellipsis: true });
+          xCol3 += dCols[c].width;
+        }
+        y += rowH;
       });
     }
 

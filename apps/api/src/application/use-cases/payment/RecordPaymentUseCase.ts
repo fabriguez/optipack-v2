@@ -10,6 +10,7 @@ import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus'
 import { prisma } from '../../../config/database';
 import { LoyaltyConfigService } from '../../services/LoyaltyConfigService';
 import { GroupInvoiceService } from '../../services/GroupInvoiceService';
+import { StorageChargeService } from '../../services/StorageChargeService';
 
 function tierFor(
   points: number,
@@ -30,6 +31,7 @@ export class RecordPaymentUseCase {
     @inject(JOURNAL_ENTRY_REPOSITORY) private journalRepo: IJournalEntryRepository,
     private loyaltyConfig: LoyaltyConfigService,
     private groupInvoice: GroupInvoiceService,
+    private storageCharges: StorageChargeService,
   ) {}
 
   async execute(input: RecordPaymentInput, userId: string): Promise<any> {
@@ -139,6 +141,26 @@ export class RecordPaymentUseCase {
       balance: Math.max(0, newBalance),
       status: newStatus,
     });
+
+    // Paiement gele les frais de magasinage en phase DEPARTURE pour les
+    // colis de la facture. Phase DESTINATION continue (le paiement
+    // n'arrete pas les frais une fois le colis arrive a destination).
+    const invoiceParcels = await prisma.parcel.findMany({
+      where: { invoiceId: invoice.id, isDeleted: false },
+      select: { id: true },
+    });
+    for (const p of invoiceParcels) {
+      const activeDeparture = await prisma.parcelStorageCharge.findFirst({
+        where: { parcelId: p.id, stoppedAt: null, phase: 'DEPARTURE' },
+      });
+      if (activeDeparture) {
+        await this.storageCharges.stopActive({
+          parcelId: p.id,
+          warehouseId: activeDeparture.warehouseId,
+          reason: 'PAYMENT',
+        });
+      }
+    }
 
     // Si cette facture est celle d'un colis appartenant a un groupe, on
     // resynchronise la facture agregat du groupe (montants + statut).

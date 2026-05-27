@@ -8,6 +8,7 @@ import type { InvoiceData } from '../../../application/services/PDFService';
 import { ExcelService } from '../../../infrastructure/excel/ExcelService';
 import { container } from '../../../container';
 import { StorageService } from '../../../infrastructure/storage/StorageService';
+import { StorageChargeService } from '../../../application/services/StorageChargeService';
 import sharp from 'sharp';
 
 /**
@@ -51,9 +52,9 @@ async function resolveInvoiceScope(invoiceId: string): Promise<{
 }
 
 /**
- * Calcule la part de frais de magasinage par colis. Reproduit la logique de
- * ComputeStorageFeeUseCase sans passer par le container DI (cette route est
- * handler-based, pas use-case). Retourne un objet par parcelId.
+ * Detail d'une ligne de magasinage par colis (legacy compat). On expose
+ * desormais aussi le tableau `lines` issu de ParcelStorageCharge pour le
+ * detail multi-magasin / multi-phase.
  */
 interface StorageFeeDetail {
   fee: number;
@@ -62,6 +63,8 @@ interface StorageFeeDetail {
   dailyRate: number;
   warehouseName: string | null;
   reason: string;
+  /** Lignes detaillees : 1 par charge (magasin/phase/periode). */
+  lines?: StorageChargeBreakdown[];
 }
 
 async function loadRawImage(url: string): Promise<Buffer | null> {
@@ -132,11 +135,86 @@ async function fetchImageBuffer(url: string): Promise<Buffer | null> {
   }
 }
 
+export interface StorageChargeBreakdown {
+  id: string;
+  warehouseId: string;
+  warehouseName: string | null;
+  warehouseCity: string | null;
+  phase: 'DEPARTURE' | 'TRANSIT' | 'DESTINATION';
+  startedAt: Date;
+  stoppedAt: Date | null;
+  endedAt: Date;
+  dailyRate: number;
+  freeDays: number;
+  chargedDays: number;
+  feeAmount: number;
+  ruleLabel: string | null;
+  isActive: boolean;
+  stopReason: string | null;
+}
+
 async function computeStorageFeesForParcels(parcelIds: string[]): Promise<{
   perParcel: Map<string, StorageFeeDetail>;
   total: number;
 }> {
   if (parcelIds.length === 0) return { perParcel: new Map(), total: 0 };
+
+  // Nouvelle source de verite : ParcelStorageCharge (1 ligne par
+  // magasin / phase / periode). On les agrege en facture detaillee.
+  const chargeService = container.resolve(StorageChargeService);
+  const agg = await chargeService.aggregateForParcels(parcelIds);
+  if (agg.perParcel.size > 0) {
+    const perParcel = new Map<string, StorageFeeDetail>();
+    for (const [parcelId, bucket] of agg.perParcel.entries()) {
+      const lines: StorageChargeBreakdown[] = bucket.lines.map((l) => ({
+        id: l.id,
+        warehouseId: l.warehouseId,
+        warehouseName: l.warehouseName,
+        warehouseCity: l.warehouseCity,
+        phase: l.phase,
+        startedAt: l.startedAt,
+        stoppedAt: l.stoppedAt,
+        endedAt: l.endedAt,
+        dailyRate: l.dailyRate,
+        freeDays: l.freeDays,
+        chargedDays: l.chargedDays,
+        feeAmount: l.feeAmount,
+        ruleLabel: l.ruleLabel,
+        isActive: l.isActive,
+        stopReason: l.stopReason,
+      }));
+      const billable = lines.filter((l) => l.phase !== 'TRANSIT');
+      const totalDays = billable.reduce((s, l) => s + l.chargedDays, 0);
+      const last = billable[billable.length - 1];
+      perParcel.set(parcelId, {
+        fee: bucket.total,
+        days: totalDays,
+        freeDays: last?.freeDays ?? 0,
+        dailyRate: last?.dailyRate ?? 0,
+        warehouseName: last?.warehouseName ?? null,
+        reason: billable.length === 0
+          ? 'Aucune charge de magasinage facturable'
+          : `${billable.length} periode(s) facturable(s) sur ${lines.length} magasin(s) traverses`,
+        lines,
+      });
+    }
+    // Remplit les colis sans charge enregistree (defaut zero ligne).
+    for (const id of parcelIds) {
+      if (!perParcel.has(id)) {
+        perParcel.set(id, {
+          fee: 0, days: 0, freeDays: 0, dailyRate: 0,
+          warehouseName: null,
+          reason: 'Aucune charge de magasinage enregistree',
+          lines: [],
+        });
+      }
+    }
+    return { perParcel, total: agg.total };
+  }
+
+  // Fallback legacy : si aucune charge n'a encore ete enregistree (anciens
+  // colis avant la mise en place de ParcelStorageCharge), on retombe sur
+  // l'ancien calcul base sur warehouseEnteredAt + regle courante du magasin.
   const parcels = await prisma.parcel.findMany({
     where: { id: { in: parcelIds } },
     select: {
@@ -346,6 +424,7 @@ router.get('/:id', async (req, res, next) => {
         ...p,
         storageFee: storage.perParcel.get(p.id)?.fee ?? 0,
         storageDays: storage.perParcel.get(p.id)?.days ?? 0,
+        storageLines: storage.perParcel.get(p.id)?.lines ?? [],
       })),
       payments: paymentList,
       storageFeesTotal: storage.total,
@@ -373,9 +452,10 @@ router.get('/:id/pdf', async (req, res, next) => {
     }
 
     // Calcul des frais de magasinage par colis a l'instant T. On les rend
-    // visibles sur la facture pour transparence.
+    // visibles sur la facture pour transparence. discountAudit = historique
+    // des remises (audit log) affiche en bas du PDF.
     const scope = await resolveInvoiceScope(invoice.id);
-    const [parcelDetails, paymentList, storage] = await Promise.all([
+    const [parcelDetails, paymentList, storage, discountAudit] = await Promise.all([
       prisma.parcel.findMany({
         where: { id: { in: scope.parcelIds } },
         select: {
@@ -395,6 +475,15 @@ router.get('/:id/pdf', async (req, res, next) => {
         include: { agency: { select: { name: true } } },
       }),
       computeStorageFeesForParcels(scope.parcelIds),
+      prisma.auditLog.findMany({
+        where: {
+          entityType: 'Invoice',
+          entityId: { in: scope.memberInvoiceIds },
+          action: { in: ['DISCOUNT_APPLIED', 'DISCOUNT_REMOVED'] },
+        },
+        orderBy: { createdAt: 'desc' },
+        include: { user: { select: { firstName: true, lastName: true } } },
+      }),
     ]);
 
     const invoiceData: InvoiceData = {
@@ -435,6 +524,20 @@ router.get('/:id/pdf', async (req, res, next) => {
           storageDailyRate: s?.dailyRate ?? 0,
           storageWarehouseName: s?.warehouseName ?? null,
           storageReason: s?.reason ?? null,
+          storageLines: (s?.lines ?? []).map((l) => ({
+            warehouseName: l.warehouseName,
+            warehouseCity: l.warehouseCity,
+            phase: l.phase,
+            startedAt: l.startedAt,
+            endedAt: l.endedAt,
+            isActive: l.isActive,
+            dailyRate: l.dailyRate,
+            freeDays: l.freeDays,
+            chargedDays: l.chargedDays,
+            feeAmount: l.feeAmount,
+            ruleLabel: l.ruleLabel,
+            stopReason: l.stopReason,
+          })),
           imageUrls,
           imageBuffers: imageBuffers.filter((b): b is Buffer => Buffer.isBuffer(b)),
         };
@@ -452,6 +555,20 @@ router.get('/:id/pdf', async (req, res, next) => {
       paidAmount: Number((invoice as any).paidAmount ?? 0),
       balance: Number((invoice as any).balance ?? 0),
       storageFeesTotal: storage.total,
+      discountHistory: discountAudit.map((e: any) => {
+        const c = (e.changes ?? {}) as Record<string, unknown>;
+        const userName = e.user
+          ? `${(e.user.firstName ?? '').toString()} ${(e.user.lastName ?? '').toString()}`.trim() || null
+          : null;
+        return {
+          createdAt: e.createdAt,
+          action: e.action,
+          previousDiscount: Number((c.previousDiscount as number | undefined) ?? 0),
+          newDiscount: Number((c.newDiscount as number | undefined) ?? 0),
+          reason: (c.reason as string | null | undefined) ?? null,
+          userName,
+        };
+      }),
     };
 
     const pdfBuffer = await PDFService.generateInvoicePDF(invoiceData);

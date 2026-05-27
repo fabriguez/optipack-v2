@@ -9,6 +9,7 @@ import { INVOICE_REPOSITORY, type IInvoiceRepository } from '../../interfaces/II
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
 import { PricingService } from '../../services/PricingService';
 import { HistoryService } from '../../services/HistoryService';
+import { StorageChargeService } from '../../services/StorageChargeService';
 import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 import { prisma } from '../../../config/database';
 
@@ -21,6 +22,7 @@ export class CreateParcelUseCase {
     @inject(TRANSIT_ROUTE_REPOSITORY) private transitRepo: ITransitRouteRepository,
     @inject(INVOICE_REPOSITORY) private invoiceRepo: IInvoiceRepository,
     private history: HistoryService,
+    private storageCharges: StorageChargeService,
   ) {}
 
   async execute(input: CreateParcelInput, userId: string) {
@@ -178,6 +180,15 @@ export class CreateParcelUseCase {
       originalWarehouse: { connect: { id: input.warehouseId } },
       transitRoute: { connect: { id: input.transitRouteId } },
       invoice: { connect: { id: invoice.id } },
+    });
+
+    // Ouvre charge de magasinage initiale (phase DEPARTURE, avec grace
+    // period du magasin d'entree). Si la regle ne s'applique pas (rate 0
+    // ou pas de regle), la charge est skippee.
+    await this.storageCharges.openCharge({
+      parcelId: parcel.id,
+      warehouseId: input.warehouseId,
+      phase: 'DEPARTURE',
     });
 
     // Historique de creation

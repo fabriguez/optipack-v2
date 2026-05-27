@@ -2,6 +2,7 @@ import { inject, injectable } from 'tsyringe';
 import { PARCEL_REPOSITORY, type IParcelRepository } from '../../interfaces/IParcelRepository';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
 import { HistoryService } from '../../services/HistoryService';
+import { StorageChargeService } from '../../services/StorageChargeService';
 import { prisma } from '../../../config/database';
 
 interface HandoverInput {
@@ -29,6 +30,7 @@ export class HandoverParcelUseCase {
   constructor(
     @inject(PARCEL_REPOSITORY) private parcelRepo: IParcelRepository,
     private history: HistoryService,
+    private storageCharges: StorageChargeService,
   ) {}
 
   async execute(parcelId: string, input: HandoverInput, userId: string) {
@@ -57,6 +59,12 @@ export class HandoverParcelUseCase {
       // On note le receveur effectif via la relation recipient (peut differer
       // du recipient initial si quelqu'un d'autre est venu prendre le colis).
       recipient: { connect: { id: receiver.id } },
+    });
+
+    // Stop toute charge de magasinage active (le colis quitte le magasin).
+    await this.storageCharges.stopActive({
+      parcelId,
+      reason: 'HANDOVER',
     });
 
     await this.history.recordParcel({

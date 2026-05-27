@@ -2,6 +2,7 @@ import { inject, injectable } from 'tsyringe';
 import { PARCEL_REPOSITORY, type IParcelRepository } from '../../interfaces/IParcelRepository';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
 import { HistoryService } from '../../services/HistoryService';
+import { StorageChargeService, computeAccrual } from '../../services/StorageChargeService';
 import { prisma } from '../../../config/database';
 
 export interface UpdateParcelInput {
@@ -28,6 +29,7 @@ export class UpdateParcelUseCase {
   constructor(
     @inject(PARCEL_REPOSITORY) private parcelRepo: IParcelRepository,
     private history: HistoryService,
+    private storageCharges: StorageChargeService,
   ) {}
 
   async execute(parcelId: string, input: UpdateParcelInput, userId: string) {
@@ -152,6 +154,31 @@ export class UpdateParcelUseCase {
     }
 
     const updated = await this.parcelRepo.update(parcelId, data);
+
+    // Transition magasinage : si changement de magasin et le colis a une
+    // charge active, on stoppe + reouvre selon les regles :
+    //  - Phase DEPARTURE (avant transit) : nouvelle charge DEPARTURE sans
+    //    grace (le grace n'est consomme qu'a l'enregistrement initial).
+    //  - Phase DESTINATION : si butoir deja atteint (chargedDays > 0 dans la
+    //    charge en cours), on ouvre la nouvelle DESTINATION sans grace, sinon
+    //    on conserve le grace pour le nouveau magasin.
+    if (input.warehouseId !== undefined && input.warehouseId !== parcel.warehouseId && input.warehouseId) {
+      const active = await prisma.parcelStorageCharge.findFirst({
+        where: { parcelId, stoppedAt: null },
+      });
+      if (active) {
+        const accrual = computeAccrual(active, new Date());
+        const noGrace = active.phase === 'DEPARTURE' || accrual.chargedDays > 0;
+        const phase = active.phase as 'DEPARTURE' | 'DESTINATION';
+        await this.storageCharges.stopActive({ parcelId, reason: 'TRANSFER' });
+        await this.storageCharges.openCharge({
+          parcelId,
+          warehouseId: input.warehouseId,
+          phase,
+          noGrace,
+        });
+      }
+    }
 
     await this.history.recordParcel({
       parcelId,

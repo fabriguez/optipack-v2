@@ -278,50 +278,90 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           </div>
         </AppCard>
 
-        {/* Frais de magasinage detailles par colis : visible uniquement si au
-            moins un colis a des frais > 0. Permet au client de comprendre le
-            cumul (X jours payants x tarif). */}
-        {Array.isArray(invoice.parcels) && invoice.parcels.some((p: any) => Number(p.storageFee) > 0) && (
-          <AppCard>
-            <AppCardHeader
-              title="Frais de magasinage par colis"
-              description={`Total : ${formatAmount(Number(invoice.storageFeesTotal || 0))}`}
-            />
-            <div className="overflow-hidden rounded-xl border border-gray-100">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 text-xs text-gray-500">
-                  <tr>
-                    <th className="p-2 text-left">Tracking</th>
-                    <th className="p-2 text-left">Designation</th>
-                    <th className="p-2 text-right">Jours payants</th>
-                    <th className="p-2 text-right">Frais</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {invoice.parcels
-                    .filter((p: any) => Number(p.storageFee) > 0)
-                    .map((p: any) => (
-                      <tr key={p.id} className="hover:bg-gray-50">
+        {/* Frais de magasinage detailles : 1 ligne par sejour (magasin /
+            phase / periode). Permet au client de voir exactement ou et quand
+            les frais se sont accumules (Chine, transit Douala, Yaounde, ...). */}
+        {(() => {
+          const allLines: any[] = [];
+          if (Array.isArray(invoice.parcels)) {
+            for (const p of invoice.parcels) {
+              for (const l of (p.storageLines ?? [])) {
+                if (l.phase === 'TRANSIT') continue;
+                allLines.push({ ...l, parcelId: p.id, tracking: p.trackingNumber });
+              }
+            }
+          }
+          if (allLines.length === 0) return null;
+          const phaseColor: Record<string, string> = {
+            DEPARTURE: 'bg-blue-50 text-blue-700',
+            DESTINATION: 'bg-emerald-50 text-emerald-700',
+            TRANSIT: 'bg-gray-50 text-gray-500',
+          };
+          const phaseLabel: Record<string, string> = {
+            DEPARTURE: 'Depart',
+            DESTINATION: 'Destination',
+            TRANSIT: 'Transit',
+          };
+          return (
+            <AppCard>
+              <AppCardHeader
+                title={`Frais de magasinage detailles (${allLines.length} ligne${allLines.length > 1 ? 's' : ''})`}
+                description={`Total : ${formatAmount(Number(invoice.storageFeesTotal || 0))}. 1 ligne = 1 sejour dans un magasin.`}
+              />
+              <div className="overflow-hidden rounded-xl border border-gray-100">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-xs text-gray-500">
+                    <tr>
+                      <th className="p-2 text-left">Tracking</th>
+                      <th className="p-2 text-left">Magasin</th>
+                      <th className="p-2 text-left">Phase</th>
+                      <th className="p-2 text-left">Periode</th>
+                      <th className="p-2 text-right">Jours</th>
+                      <th className="p-2 text-right">Tarif/jour</th>
+                      <th className="p-2 text-right">Montant</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {allLines.map((l: any, idx: number) => (
+                      <tr key={`${l.parcelId}-${idx}`} className="hover:bg-gray-50 align-top">
                         <td className="p-2">
                           <Link
-                            href={`/parcels/${p.id}`}
+                            href={`/parcels/${l.parcelId}`}
                             className="font-mono text-xs text-primary-700 hover:underline"
                           >
-                            {p.trackingNumber}
+                            {l.tracking}
                           </Link>
                         </td>
-                        <td className="p-2 text-gray-700">{p.designation}</td>
-                        <td className="p-2 text-right text-gray-700">{p.storageDays}</td>
-                        <td className="p-2 text-right font-semibold text-gray-900">
-                          {formatAmount(Number(p.storageFee))}
+                        <td className="p-2 text-gray-700">
+                          <div className="font-medium">{l.warehouseName || '-'}</div>
+                          {l.warehouseCity && (
+                            <div className="text-[11px] text-gray-400">{l.warehouseCity}</div>
+                          )}
                         </td>
+                        <td className="p-2">
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${phaseColor[l.phase]}`}>
+                            {phaseLabel[l.phase]}
+                          </span>
+                        </td>
+                        <td className="p-2 text-gray-700 whitespace-nowrap text-xs">
+                          {formatDate(l.startedAt)}
+                          <span className="text-gray-400 mx-1">→</span>
+                          {l.isActive ? <span className="text-amber-700 font-medium">en cours</span> : formatDate(l.endedAt)}
+                        </td>
+                        <td className="p-2 text-right text-gray-700 whitespace-nowrap">
+                          <div>{l.chargedDays}</div>
+                          <div className="text-[10px] text-gray-400">{l.freeDays} gratuit(s)</div>
+                        </td>
+                        <td className="p-2 text-right text-gray-700">{formatAmount(Number(l.dailyRate))}</td>
+                        <td className="p-2 text-right font-semibold text-gray-900">{formatAmount(Number(l.feeAmount))}</td>
                       </tr>
                     ))}
-                </tbody>
-              </table>
-            </div>
-          </AppCard>
-        )}
+                  </tbody>
+                </table>
+              </div>
+            </AppCard>
+          );
+        })()}
 
         {/* Historique des remises : visible si au moins une remise a ete
             appliquee ou retiree. Permet de tracer le pourquoi et le quand. */}

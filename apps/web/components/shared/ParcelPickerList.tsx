@@ -28,7 +28,13 @@ interface ParcelRow {
   destination?: string | null;
   warehouse?: { id: string; name: string } | null;
   client?: { id: string; fullName: string } | null;
-  invoice?: { id: string; status: string } | null;
+  invoice?: {
+    id: string;
+    status: string;
+    totalAmount?: number | string | null;
+    paidAmount?: number | string | null;
+    balance?: number | string | null;
+  } | null;
   price?: number | string | null;
   isFragile?: boolean;
   isHazardous?: boolean;
@@ -160,6 +166,7 @@ export function ParcelPickerList({
                   <th className="text-left p-3 font-medium text-gray-600 hidden lg:table-cell">Client</th>
                   <th className="text-left p-3 font-medium text-gray-600 hidden md:table-cell">Pesee</th>
                   <th className="text-left p-3 font-medium text-gray-600 hidden lg:table-cell">Destination</th>
+                  <th className="text-left p-3 font-medium text-gray-600">Paiement</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -197,6 +204,39 @@ export function ParcelPickerList({
                       <td className="p-3 text-gray-500 hidden lg:table-cell">{r.client?.fullName ?? '-'}</td>
                       <td className="p-3 text-gray-500 hidden md:table-cell font-mono text-xs">{pv}</td>
                       <td className="p-3 text-gray-500 hidden lg:table-cell">{r.destination ?? '-'}</td>
+                      <td className="p-3">
+                        {(() => {
+                          const total = Number(r.invoice?.totalAmount ?? 0);
+                          const paid = Number(r.invoice?.paidAmount ?? 0);
+                          if (!r.invoice || total <= 0) {
+                            return <span className="text-xs text-gray-300">-</span>;
+                          }
+                          const pct = Math.min(100, Math.round((paid / total) * 100));
+                          const color = pct >= 100
+                            ? 'bg-emerald-500'
+                            : pct >= 50
+                              ? 'bg-amber-500'
+                              : pct > 0
+                                ? 'bg-orange-500'
+                                : 'bg-gray-300';
+                          return (
+                            <div className="flex flex-col gap-0.5 min-w-[110px]">
+                              <span className="text-[11px] font-mono text-gray-700">
+                                {formatAmount(paid)} / {formatAmount(total)}
+                              </span>
+                              <div className="flex items-center gap-1.5">
+                                <div className="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                                  <div className={cn('h-full transition-all', color)} style={{ width: `${pct}%` }} />
+                                </div>
+                                <span className={cn(
+                                  'text-[10px] font-bold tabular-nums',
+                                  pct >= 100 ? 'text-emerald-700' : pct > 0 ? 'text-amber-700' : 'text-gray-400',
+                                )}>{pct}%</span>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </td>
                     </tr>
                   );
                 })}

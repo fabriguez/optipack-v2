@@ -153,6 +153,8 @@ model Agency {
   debts                 Debt[]
   // Paiements de dette encaisses/effectues depuis cette agence.
   debtPayments          DebtPayment[]
+  // Frais de magasinage rattaches a cette agence (via leurs magasins).
+  storageCharges        ParcelStorageCharge[]
 
   @@index([organizationId])
   @@index([city])
@@ -368,6 +370,7 @@ model Warehouse {
   spaces          WarehouseSpace[]
   storageFeeRules WarehouseStorageFeeRule[]
   parcelHistories ParcelHistory[]           @relation("ParcelHistoryWarehouse")
+  storageCharges  ParcelStorageCharge[]
 
   @@index([agencyId])
   @@map("warehouses")
@@ -1576,6 +1579,8 @@ model Parcel {
   // cours du temps. Une entree par (forwarding, colis). Permet propagation
   // depense retroactive meme apres dechargement.
   forwardingLinks         ContainerForwardingParcelLink[] @relation("ParcelForwardingLink")
+  // Frais de magasinage explicites (par magasin / phase / periode).
+  storageCharges          ParcelStorageCharge[]
 
   @@index([organizationId])
   @@index([clientId])
@@ -2976,4 +2981,54 @@ model EmployeeAgencyAssignment {
   @@index([agencyId])
   @@index([fromDate, toDate])
   @@map("employee_agency_assignments")
+}
+
+// ============================================================
+// PARCEL STORAGE CHARGES
+// ============================================================
+// Tracage explicite des frais de magasinage par colis + magasin + phase.
+// Une "charge" = periode pendant laquelle un colis a ete stocke dans un
+// magasin (avec sa propre regle freeDays/dailyRate snapshotee). On ouvre une
+// charge a l'entree du magasin, on la ferme a la sortie / paiement /
+// chargement / livraison. Une facture = somme des charges associees.
+model ParcelStorageCharge {
+  id          String       @id @default(uuid())
+  parcelId    String
+  warehouseId String
+  agencyId    String
+  // Snapshot regle au moment du start (evite drift si regle modifiee apres)
+  dailyRate   Decimal      @db.Decimal(15, 2)
+  freeDays    Int          @default(0)
+  ruleLabel   String?
+  // Phase du voyage : determine la politique (gracePeriod ou non, applicable
+  // ou non). DEPARTURE = magasin avant transit, TRANSIT = arret intermediaire
+  // (jamais facture), DESTINATION = magasin destination finale.
+  phase       StoragePhase
+  // Periode
+  startedAt   DateTime
+  stoppedAt   DateTime?
+  // Raison du stop (audit) : PAYMENT, CONTAINER_DEPART, TRANSFER,
+  // HANDOVER, MANUAL.
+  stopReason  String?
+  // Sortie recomputable a la lecture, materialisee au stop pour eviter recalc.
+  chargedDays Int          @default(0)
+  feeAmount   Decimal      @default(0) @db.Decimal(15, 2)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  parcel    Parcel    @relation(fields: [parcelId], references: [id], onDelete: Cascade)
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id])
+  agency    Agency    @relation(fields: [agencyId], references: [id])
+
+  @@index([parcelId])
+  @@index([warehouseId])
+  @@index([agencyId])
+  @@index([parcelId, stoppedAt])
+  @@map("parcel_storage_charges")
+}
+
+enum StoragePhase {
+  DEPARTURE
+  TRANSIT
+  DESTINATION
 }

@@ -95,16 +95,17 @@ export class ListLoadableParcelsUseCase {
       prisma.parcel.count({ where }),
     ]);
 
+    // Tri : 1) montant paye descendant (les plus payes en premier),
+    // 2) date d'enregistrement croissante (plus ancien d'abord). Permet de
+    // prioriser les colis avec versement le plus eleve pour le chargement.
     const ranked = rows
       .map((p) => {
-        const invoiceStatus = p.invoice?.status ?? 'UNPAID';
-        const isPaid = invoiceStatus === 'PAID';
+        const paidAmount = Number(p.invoice?.paidAmount ?? 0);
         const sortDate = p.warehouseEnteredAt ?? p.createdAt;
-        return { p, isPaid, sortDate };
+        return { p, paidAmount, sortDate };
       })
       .sort((a, b) => {
-        if (a.isPaid !== b.isPaid) return a.isPaid ? -1 : 1; // payes d'abord
-        // au sein du meme bucket, plus ancien d'abord
+        if (a.paidAmount !== b.paidAmount) return b.paidAmount - a.paidAmount;
         return a.sortDate.getTime() - b.sortDate.getTime();
       })
       .slice(skip, skip + limit)

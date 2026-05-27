@@ -4,6 +4,7 @@ import { PARCEL_REPOSITORY, type IParcelRepository } from '../../interfaces/IPar
 import { WAREHOUSE_REPOSITORY, type IWarehouseRepository } from '../../interfaces/IWarehouseRepository';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
 import { HistoryService } from '../../services/HistoryService';
+import { StorageChargeService } from '../../services/StorageChargeService';
 import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 import { prisma } from '../../../config/database';
 
@@ -26,6 +27,7 @@ export class UnloadParcelUseCase {
     @inject(PARCEL_REPOSITORY) private parcelRepo: IParcelRepository,
     @inject(WAREHOUSE_REPOSITORY) private warehouseRepo: IWarehouseRepository,
     private history: HistoryService,
+    private storageCharges: StorageChargeService,
   ) {}
 
   async execute(
@@ -148,6 +150,19 @@ export class UnloadParcelUseCase {
           ...(options?.comment && { observation: options.comment }),
         });
         break;
+    }
+
+    // Ouvre une charge de magasinage sur le magasin de dechargement :
+    //  - 'not_found' : colis LOST, aucune charge.
+    //  - reachedFinalDestination : phase DESTINATION (grace period s'applique).
+    //  - sinon : transit intermediaire, phase TRANSIT (aucune charge facturee).
+    if (action !== 'not_found') {
+      const phase = reachedFinalDestination ? 'DESTINATION' : 'TRANSIT';
+      await this.storageCharges.openCharge({
+        parcelId,
+        warehouseId,
+        phase,
+      });
     }
 
     const parcelWeight = parcel.weight ? Number(parcel.weight) : 0;

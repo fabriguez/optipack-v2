@@ -5,6 +5,7 @@ import { MANIFEST_REPOSITORY, type IManifestRepository } from '../../interfaces/
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
 import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 import { HistoryService } from '../../services/HistoryService';
+import { StorageChargeService } from '../../services/StorageChargeService';
 import { prisma } from '../../../config/database';
 import { propagateForwardingExpense } from '../expense/CreateContainerExpenseUseCase';
 
@@ -15,6 +16,7 @@ export class DepartContainerUseCase {
     @inject(PARCEL_REPOSITORY) private parcelRepo: IParcelRepository,
     @inject(MANIFEST_REPOSITORY) private manifestRepo: IManifestRepository,
     private history: HistoryService,
+    private storageCharges: StorageChargeService,
   ) {}
 
   async execute(containerId: string, userId: string) {
@@ -38,6 +40,17 @@ export class DepartContainerUseCase {
 
     if (parcelIds.length > 0) {
       await this.parcelRepo.updateMany(parcelIds, { status: 'IN_TRANSIT' });
+
+      // Stoppe toutes les charges de magasinage en cours au depart : le colis
+      // quitte physiquement les magasins de l'agence de depart, plus rien a
+      // facturer pendant le transit.
+      for (const p of parcels) {
+        await this.storageCharges.stopActive({
+          parcelId: p.id,
+          reason: 'CONTAINER_DEPART',
+          stoppedAt: departureDate,
+        });
+      }
 
       await this.history.recordParcelMany(
         parcels.map((p) => ({
