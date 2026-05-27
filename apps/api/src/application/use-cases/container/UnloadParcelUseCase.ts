@@ -127,6 +127,9 @@ export class UnloadParcelUseCase {
           status: 'LOST',
           isPresent: false,
           container: { disconnect: true },
+          // Trace l'origine : meme perdu physiquement, le colis a ete charge
+          // dans ce conteneur (essentiel pour le snapshot d'arrivee / benefice).
+          lastContainer: { connect: { id: containerId } },
           space: { disconnect: true },
         });
         break;

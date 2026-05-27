@@ -154,6 +154,19 @@ export class PrismaParcelRepository implements IParcelRepository {
     return prisma.parcel.findMany({ where: { containerId, isDeleted: false } });
   }
 
+  async findArrivalSnapshot(containerId: string): Promise<Parcel[]> {
+    // Snapshot = colis charges dans ce conteneur a un moment, peu importe
+    // qu'ils soient encore presents ou deja decharges (lastContainerId pose
+    // par UnloadParcelUseCase). LOST inclus : ils ont bien voyage. Exclus :
+    // colis retires en chargement (status RETURNED via RemoveParcelFromContainerUseCase).
+    return prisma.parcel.findMany({
+      where: {
+        isDeleted: false,
+        OR: [{ containerId }, { lastContainerId: containerId }],
+      },
+    });
+  }
+
   async create(data: Prisma.ParcelCreateInput): Promise<Parcel> {
     return prisma.parcel.create({ data });
   }

@@ -205,6 +205,14 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
     queryFn: () => apiClient.get(`/expenses/container/${id}`).then((r) => r.data),
     enabled: !!id && !container?.isForwarding,
   });
+  // Snapshot des colis a l'arrivee = colis charges dans ce conteneur (encore
+  // presents + deja decharges). Sert au benefice : la valeur des colis ne
+  // doit pas baisser au fur et a mesure du dechargement.
+  const { data: arrivalSnapshotData } = useQuery({
+    queryKey: ['containers', id, 'arrival-snapshot'],
+    queryFn: () => apiClient.get(`/containers/${id}/arrival-snapshot`).then((r) => r.data),
+    enabled: !!id && !container?.isForwarding,
+  });
 
   if (isLoading) return <DashboardSkeleton />;
   if (!container) return <p className="p-6 text-gray-500">Conteneur introuvable</p>;
@@ -511,7 +519,11 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
   ];
 
   const expensesForBenefice: any[] = containerExpensesData?.data ?? [];
-  const parcelsValueTotal = parcels.reduce((s: number, p: any) => s + Number(p.price ?? 0), 0);
+  // Benefice base sur le snapshot d'arrivee, pas sur les colis actuellement
+  // dans le conteneur : sinon le total baisse au fur et a mesure du
+  // dechargement et peut devenir negatif.
+  const arrivalSnapshot: any[] = arrivalSnapshotData?.data ?? [];
+  const parcelsValueTotal = arrivalSnapshot.reduce((s: number, p: any) => s + Number(p.price ?? 0), 0);
   const expensesTotal = expensesForBenefice.reduce((s, e) => s + Number(e.amount ?? 0), 0);
   const benefice = parcelsValueTotal - expensesTotal;
 
@@ -522,7 +534,7 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
           <AppCard>
             <p className="text-sm text-gray-500">Valeur totale colis</p>
             <p className="mt-1 text-lg font-bold text-green-600">+{formatAmount(parcelsValueTotal)}</p>
-            <p className="text-[11px] text-gray-400 mt-0.5">{parcels.length} colis</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">{arrivalSnapshot.length} colis (a l&apos;arrivee)</p>
           </AppCard>
           <AppCard>
             <p className="text-sm text-gray-500">Total depenses</p>

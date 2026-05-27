@@ -31,6 +31,13 @@ export interface IParcelRepository {
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<ParcelWithRelations>>;
   findByContainer(containerId: string): Promise<Parcel[]>;
+  /**
+   * Snapshot des colis presents dans le conteneur a l'arrivee : tous les
+   * colis charges dans ce conteneur (containerId courant OU lastContainerId
+   * apres dechargement). Sert au calcul du benefice qui ne doit pas baisser
+   * au fur et a mesure du dechargement.
+   */
+  findArrivalSnapshot(containerId: string): Promise<Parcel[]>;
   create(data: Prisma.ParcelCreateInput): Promise<Parcel>;
   update(id: string, data: Prisma.ParcelUpdateInput): Promise<Parcel>;
   updateMany(ids: string[], data: Prisma.ParcelUpdateInput): Promise<number>;

@@ -65,11 +65,38 @@ interface StorageFeeDetail {
 
 async function fetchImageBuffer(url: string): Promise<Buffer | null> {
   if (!url) return null;
-  // URL = "/uploads/object/<key>" ou URL absolue. Extrait la cle MinIO.
-  const key = url.includes('/uploads/object/') ? url.split('/uploads/object/').pop()! : url;
+  // Cas 1 : URL servie par /uploads/object/<key>. La cle peut etre encodee
+  // (encodeURIComponent par segment) -- on decode pour MinIO.
+  if (url.includes('/uploads/object/')) {
+    const rawKey = url.split('/uploads/object/').pop() ?? '';
+    let key: string;
+    try { key = decodeURIComponent(rawKey); } catch { key = rawKey; }
+    try {
+      const storage = container.resolve(StorageService);
+      const obj = await storage.getObject(key);
+      if (!obj) return null;
+      const chunks: Buffer[] = [];
+      for await (const ch of obj.stream as any) chunks.push(ch as Buffer);
+      return Buffer.concat(chunks);
+    } catch {
+      return null;
+    }
+  }
+  // Cas 2 : URL absolue http(s) externe (legacy / preuve client). Fetch direct.
+  if (/^https?:\/\//i.test(url)) {
+    try {
+      const r = await fetch(url);
+      if (!r.ok) return null;
+      const ab = await r.arrayBuffer();
+      return Buffer.from(ab);
+    } catch {
+      return null;
+    }
+  }
+  // Cas 3 : cle MinIO brute (sans prefixe URL).
   try {
     const storage = container.resolve(StorageService);
-    const obj = await storage.getObject(key);
+    const obj = await storage.getObject(url);
     if (!obj) return null;
     const chunks: Buffer[] = [];
     for await (const ch of obj.stream as any) chunks.push(ch as Buffer);

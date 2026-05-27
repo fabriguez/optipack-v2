@@ -96,6 +96,21 @@ export class ContainerController {
     }
   }
 
+  /**
+   * Snapshot des colis presents dans le conteneur a l'arrivee : inclut les
+   * colis encore charges + ceux deja decharges (lastContainerId). Sert au
+   * calcul du benefice qui ne doit pas baisser pendant le dechargement.
+   */
+  static async getArrivalSnapshot(req: Request, res: Response, next: NextFunction) {
+    try {
+      const repo = container.resolve<any>(PARCEL_REPOSITORY);
+      const parcels = await repo.findArrivalSnapshot(req.params.id);
+      res.json({ success: true, data: parcels });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   static async loadParcels(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(LoadParcelsUseCase);
