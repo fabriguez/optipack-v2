@@ -22,6 +22,7 @@ router.post(
 
 router.get('/', validate(paginationSchema, 'query'), ClientController.list);
 router.get('/:id', ClientController.getById);
+router.get('/:id/outstanding', ClientController.getOutstanding);
 router.post('/', validate(createClientSchema), ClientController.create);
 router.patch('/:id', validate(updateClientSchema), ClientController.update);
 router.delete('/:id', ClientController.delete);

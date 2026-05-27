@@ -52,6 +52,52 @@ export class ClientController {
     }
   }
 
+  /**
+   * Cumul reste a payer du client : somme des soldes des factures non
+   * annulees (status != CANCELLED) + somme des remainingAmount des dettes
+   * actives (status != CANCELLED && != CLEARED). Inclus breakdown.
+   */
+  static async getOutstanding(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { prisma } = await import('../../config/database');
+      const clientId = req.params.id;
+      const [invoiceAgg, debtAgg, unpaidInvoiceCount, activeDebtCount] = await Promise.all([
+        prisma.invoice.aggregate({
+          where: { clientId, isActive: true, status: { not: 'CANCELLED' as never } },
+          _sum: { balance: true },
+        }),
+        prisma.debt.aggregate({
+          where: {
+            clientId,
+            status: { notIn: ['CANCELLED' as never, 'CLEARED' as never] },
+          },
+          _sum: { remainingAmount: true },
+        }),
+        prisma.invoice.count({
+          where: { clientId, isActive: true, status: { notIn: ['PAID' as never, 'CANCELLED' as never] } },
+        }),
+        prisma.debt.count({
+          where: {
+            clientId,
+            status: { notIn: ['CANCELLED' as never, 'CLEARED' as never] },
+          },
+        }),
+      ]);
+      const invoiceOutstanding = Number(invoiceAgg._sum.balance ?? 0);
+      const debtOutstanding = Number(debtAgg._sum.remainingAmount ?? 0);
+      res.json({
+        success: true,
+        data: {
+          invoiceOutstanding,
+          debtOutstanding,
+          totalOutstanding: invoiceOutstanding + debtOutstanding,
+          unpaidInvoiceCount,
+          activeDebtCount,
+        },
+      });
+    } catch (err) { next(err); }
+  }
+
   static async update(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(UpdateClientUseCase);

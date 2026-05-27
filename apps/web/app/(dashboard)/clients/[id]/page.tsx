@@ -55,6 +55,14 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     enabled: !!id,
   });
 
+  // Cumul reste a payer = factures non soldees + dettes actives.
+  const { data: outstandingData } = useQuery({
+    queryKey: ['clients', id, 'outstanding'],
+    queryFn: () => apiClient.get(`/clients/${id}/outstanding`).then((r) => r.data),
+    enabled: !!id,
+  });
+  const outstanding = outstandingData?.data ?? null;
+
   const client = data?.data;
 
   if (isLoading) return <DashboardSkeleton />;
@@ -262,6 +270,29 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
             <p className="text-sm text-gray-500 mt-0.5">{client.phone} {client.email ? `-- ${client.email}` : ''}</p>
           </div>
         </div>
+
+        {/* Reste a payer cumule (factures + dettes) */}
+        {outstanding && (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <AppCard className={outstanding.totalOutstanding > 0 ? 'border-red-200 bg-red-50/30' : 'border-emerald-200 bg-emerald-50/30'}>
+              <p className="text-xs text-gray-500">Reste a payer total</p>
+              <p className={`mt-1 text-2xl font-bold ${outstanding.totalOutstanding > 0 ? 'text-red-700' : 'text-emerald-700'}`}>
+                {formatAmount(outstanding.totalOutstanding)}
+              </p>
+              <p className="text-[11px] text-gray-500 mt-0.5">factures + dettes cumulees</p>
+            </AppCard>
+            <AppCard>
+              <p className="text-xs text-gray-500">Factures impayees</p>
+              <p className="mt-1 text-xl font-bold text-gray-900">{formatAmount(outstanding.invoiceOutstanding)}</p>
+              <p className="text-[11px] text-gray-400 mt-0.5">{outstanding.unpaidInvoiceCount} facture(s) non soldee(s)</p>
+            </AppCard>
+            <AppCard>
+              <p className="text-xs text-gray-500">Dettes actives</p>
+              <p className="mt-1 text-xl font-bold text-gray-900">{formatAmount(outstanding.debtOutstanding)}</p>
+              <p className="text-[11px] text-gray-400 mt-0.5">{outstanding.activeDebtCount} dette(s) en cours</p>
+            </AppCard>
+          </div>
+        )}
 
         {/* Stats */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
