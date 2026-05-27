@@ -23,10 +23,19 @@ export function useRecordPayment() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: RecordPaymentInput) => paymentsApi.record(data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['payments'] });
-      qc.invalidateQueries({ queryKey: ['cash-register'] });
-      qc.invalidateQueries({ queryKey: ['dashboard'] });
+    onSuccess: async () => {
+      // Invalide ET force refetch immediat. invalidateQueries seul ne refetch
+      // que les queries actives (montees). Un dialog ouvert depuis une autre
+      // page peut laisser le listing /payments inactif -> il restait
+      // stale meme apres invalidation. refetchQueries garantit la mise a
+      // jour des queries inactives au prochain affichage.
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['payments'], refetchType: 'all' }),
+        qc.invalidateQueries({ queryKey: ['cash-register'], refetchType: 'all' }),
+        qc.invalidateQueries({ queryKey: ['dashboard'] }),
+        qc.invalidateQueries({ queryKey: ['invoices'] }),
+        qc.invalidateQueries({ queryKey: ['parcels'] }),
+      ]);
       toast.success('Paiement enregistre');
     },
     onError: (e) => toast.error(extractApiError(e, "Erreur lors de l'enregistrement du paiement")),

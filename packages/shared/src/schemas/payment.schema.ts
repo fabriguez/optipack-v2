@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { PaymentMethod } from '../constants/enums';
 
 // Une piece jointe deja uploadee (l'upload reel se fait depuis le client
 // via /uploads/file ; on persiste juste les coordonnees retournees).
@@ -19,13 +18,9 @@ export const recordPaymentSchema = z.object({
   // un seul colis a la fois).
   parcelId: z.string().uuid().optional(),
   amount: z.number().positive('Le montant doit etre positif'),
-  paymentMethod: z.enum([
-    PaymentMethod.CASH,
-    PaymentMethod.MOBILE_MONEY,
-    PaymentMethod.BANK_TRANSFER,
-    PaymentMethod.CARD,
-    PaymentMethod.CHECK,
-  ]),
+  // String libre : reference PaymentMethodConfig.code (peut etre custom).
+  // Validation cote backend : doit exister dans PaymentMethodConfig actif.
+  paymentMethod: z.string().min(2, 'Methode de paiement requise').max(40),
   discount: z.number().min(0, 'La remise ne peut pas etre negative').optional(),
   discountReason: z.string().optional(),
   tva: z.number().min(0).optional(),

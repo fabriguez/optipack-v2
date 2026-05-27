@@ -528,27 +528,28 @@ export class PDFService {
       }
     }
     if (allLines.length > 0) {
-      y += 15;
-      if (y > 660) { doc.addPage(); y = 50; }
+      y += 20;
+      if (y > 640) { doc.addPage(); y = 50; }
       doc.fontSize(11).fillColor(COLORS.primary).text(
         `Frais de magasinage detailles (${formatCurrency(invoiceData.storageFeesTotal ?? 0)})`,
         50, y,
       );
-      y += 6;
-      doc.fontSize(8).fillColor(COLORS.gray).text(
+      y += 18;
+      doc.fontSize(7.5).fillColor(COLORS.gray).text(
         '1 ligne = 1 sejour dans un magasin. La phase indique si le colis etait au depart, en transit ou a destination.',
         50, y, { width: pageWidth },
       );
       y += 14;
 
+      // Largeurs ajustees pour tenir dans pageWidth (~495pt A4 portrait).
       const stCols = [
-        { label: 'Tracking', width: 75 },
-        { label: 'Magasin', width: 120 },
-        { label: 'Phase', width: 65 },
+        { label: 'Tracking', width: 70 },
+        { label: 'Magasin', width: 100 },
+        { label: 'Phase', width: 55 },
         { label: 'Periode', width: 110 },
         { label: 'Jours', width: 45 },
-        { label: 'Tarif/j', width: 70 },
-        { label: 'Frais', width: 80 },
+        { label: 'Tarif/j', width: 55 },
+        { label: 'Frais', width: 60 },
       ];
       doc.rect(50, y, pageWidth, 20).fill(COLORS.primary);
       let xCol2 = 55;

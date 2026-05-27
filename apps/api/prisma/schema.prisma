@@ -76,6 +76,8 @@ model Organization {
   debts                   Debt[]
   // Transporteurs tiers utilises par l'organisation.
   carriers                Carrier[]
+  // Methodes de paiement configurees pour cette organisation.
+  paymentMethods          PaymentMethodConfig[]
   // Caisse du siege (une seule par organisation, solde courant cumule).
   headOfficeCashRegister  HeadOfficeCashRegister?
   // Bons de decaissement emis depuis le siege.
@@ -1784,7 +1786,9 @@ model Payment {
   discount             Decimal       @default(0) @db.Decimal(15, 2)
   discountReason       String?
   tva                  Decimal       @default(0) @db.Decimal(15, 2)
-  paymentMethod        PaymentMethod
+  // String libre referencant PaymentMethodConfig.code. Le code des methodes
+  // systeme (CASH, MOBILE_MONEY, ...) reste compatible avec l'ancien enum.
+  paymentMethod        String
   transactionReference String?
   receivedByUserId     String
 
@@ -1831,6 +1835,40 @@ model PaymentAttachment {
   @@map("payment_attachments")
 }
 
+// Methodes de paiement configurables par organisation (plus de hard-coded enum).
+// Les methodes systeme (isSystem=true : CASH, MOBILE_MONEY, BANK_TRANSFER, CARD,
+// CHECK) sont seeded automatiquement et non supprimables. Toute methode utilisee
+// au moins une fois ne peut pas etre supprimee (referentiel comptable).
+model PaymentMethodConfig {
+  id             String   @id @default(uuid())
+  organizationId String
+  // Code court utilise comme clef stable (ex: CASH, MTN_MOMO, ORANGE_MONEY).
+  // Persiste sur Payment.paymentMethod. Unique par organisation.
+  code           String
+  label          String
+  // Couleur hex pour badges UI (optionnel).
+  color          String?
+  icon           String?
+  // Marqueur des methodes par defaut (seedees au create de l'organisation).
+  // Non supprimables, label/code editable.
+  isSystem       Boolean  @default(false)
+  isActive       Boolean  @default(true)
+  // Ordre d'affichage dans les selecteurs.
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@index([isActive])
+  @@map("payment_method_configs")
+}
+
+// Legacy : conserve pour compat (anciennes lignes Payment.paymentMethod et
+// Debt.payment migrent via le code de PaymentMethodConfig). Ne pas ajouter de
+// valeur ici, ajouter via PaymentMethodConfig.
 enum PaymentMethod {
   CASH
   MOBILE_MONEY
@@ -2276,7 +2314,8 @@ model DebtPayment {
   reference            String        @unique
   debtId               String
   amount               Decimal       @db.Decimal(15, 2)
-  paymentMethod        PaymentMethod
+  // String libre referencant PaymentMethodConfig.code (idem Payment).
+  paymentMethod        String
   // Justificatif (image ou PDF) : URL MinIO + key pour suppression/rotation.
   proofUrl             String?
   proofKey             String?

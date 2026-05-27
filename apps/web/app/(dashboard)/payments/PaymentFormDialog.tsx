@@ -11,6 +11,8 @@ import { AppSelect } from '@/components/ui/AppSelect';
 import { AppSearchSelect, type SearchOption } from '@/components/ui/AppSearchSelect';
 import { searchers } from '@/lib/api/searchers';
 import { useRecordPayment } from '@/lib/hooks/usePayments';
+import { usePaymentMethods, useCreatePaymentMethod, type PaymentMethodItem } from '@/lib/hooks/usePaymentMethods';
+import { Plus } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { uploadFile } from '@/lib/api/uploads';
@@ -46,6 +48,10 @@ function kindFromFile(file: File): 'IMAGE' | 'PDF' | 'OTHER' {
 export function PaymentFormDialog({ open, onClose, invoiceId, parcelTracking }: Props) {
   const mutation = useRecordPayment();
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
+  const [showAddMethod, setShowAddMethod] = useState(false);
+
+  const { data: methodsData } = usePaymentMethods();
+  const paymentMethods: PaymentMethodItem[] = (methodsData?.data ?? []).filter((m: PaymentMethodItem) => m.isActive);
 
   // Charge la facture pre-fixee (depuis page detail colis / facture) pour
   // afficher un libelle clair + permettre de scoper sur un colis precis.
@@ -192,6 +198,7 @@ export function PaymentFormDialog({ open, onClose, invoiceId, parcelTracking }: 
   };
 
   return (
+    <>
     <AppDialog
       open={open}
       onClose={onClose}
@@ -306,19 +313,28 @@ export function PaymentFormDialog({ open, onClose, invoiceId, parcelTracking }: 
             {...register('amount', { valueAsNumber: true })}
             error={errors.amount?.message}
           />
-          <AppSelect
-            label="Mode de paiement"
-            {...register('paymentMethod')}
-            error={errors.paymentMethod?.message}
-            options={[
-              { value: 'CASH', label: 'Especes' },
-              { value: 'MOBILE_MONEY', label: 'Mobile Money' },
-              { value: 'BANK_TRANSFER', label: 'Virement' },
-              { value: 'CARD', label: 'Carte' },
-              { value: 'CHECK', label: 'Cheque' },
-            ]}
-            placeholder="Selectionner"
-          />
+          <div>
+            <div className="flex items-end gap-2">
+              <div className="flex-1">
+                <AppSelect
+                  label="Mode de paiement"
+                  {...register('paymentMethod')}
+                  error={errors.paymentMethod?.message}
+                  options={paymentMethods.map((m) => ({ value: m.code, label: m.label }))}
+                  placeholder="Selectionner"
+                />
+              </div>
+              <AppButton
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAddMethod(true)}
+                title="Ajouter une methode"
+              >
+                <Plus className="h-4 w-4" />
+              </AppButton>
+            </div>
+          </div>
         </div>
 
         <AppInput
@@ -394,6 +410,82 @@ export function PaymentFormDialog({ open, onClose, invoiceId, parcelTracking }: 
           </p>
         </div>
       </form>
+    </AppDialog>
+    <CreatePaymentMethodDialog
+      open={showAddMethod}
+      onClose={() => setShowAddMethod(false)}
+      onCreated={(m) => setValue('paymentMethod', m.code as any)}
+    />
+    </>
+  );
+}
+
+function CreatePaymentMethodDialog({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: (m: PaymentMethodItem) => void }) {
+  const createMutation = useCreatePaymentMethod();
+  const [code, setCode] = useState('');
+  const [label, setLabel] = useState('');
+
+  useEffect(() => {
+    if (!open) { setCode(''); setLabel(''); }
+  }, [open]);
+
+  const handleSubmit = () => {
+    const c = code.trim().toUpperCase().replace(/\s+/g, '_').replace(/[^A-Z0-9_]/g, '');
+    if (!c || c.length < 2) { toast.error('Code invalide'); return; }
+    if (!label.trim()) { toast.error('Libelle requis'); return; }
+    createMutation.mutate(
+      { code: c, label: label.trim() },
+      {
+        onSuccess: (res) => {
+          const created = (res as any)?.data?.data;
+          if (created) onCreated(created);
+          onClose();
+        },
+      },
+    );
+  };
+
+  return (
+    <AppDialog
+      open={open}
+      onClose={onClose}
+      title="Nouvelle methode de paiement"
+      size="sm"
+      footer={
+        <>
+          <AppButton variant="ghost" onClick={onClose}>Annuler</AppButton>
+          <AppButton type="button" onClick={handleSubmit} loading={createMutation.isPending}>
+            Creer
+          </AppButton>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <AppInput
+          label="Libelle"
+          value={label}
+          onChange={(e) => {
+            setLabel(e.target.value);
+            // Auto-genere le code depuis le libelle si l'utilisateur n'a pas
+            // encore tape de code manuel.
+            if (!code) {
+              setCode(e.target.value.toUpperCase().replace(/\s+/g, '_').replace(/[^A-Z0-9_]/g, '').slice(0, 40));
+            }
+          }}
+          placeholder="Ex: MTN Mobile Money"
+          required
+        />
+        <AppInput
+          label="Code (interne)"
+          value={code}
+          onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, ''))}
+          placeholder="MTN_MOMO"
+          required
+        />
+        <p className="text-[11px] text-gray-500">
+          Le code sert d&apos;identifiant stable (persiste sur les paiements). A-Z 0-9 underscore.
+        </p>
+      </div>
     </AppDialog>
   );
 }

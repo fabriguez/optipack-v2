@@ -68,7 +68,7 @@ export const createDebtSchema = z
 
 export const recordDebtPaymentSchema = z.object({
   amount: z.number().positive('Le montant doit etre positif'),
-  paymentMethod: z.enum(['CASH', 'MOBILE_MONEY', 'BANK_TRANSFER', 'CARD', 'CHECK']),
+  paymentMethod: z.string().min(2, 'Methode de paiement requise').max(40),
   agencyId: z.string().uuid('Agence requise'),
   transactionReference: z.string().max(200).optional(),
   comment: z.string().max(1000).optional(),
