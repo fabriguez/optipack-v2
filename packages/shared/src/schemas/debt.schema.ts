@@ -108,6 +108,9 @@ export const createCarrierSchema = z.object({
   address: z.string().max(500).optional(),
   carrierType: z.string().max(100).optional(),
   notes: z.string().max(2000).optional(),
+  emergencyContactName: z.string().max(120).optional(),
+  emergencyContactPhone: z.string().max(40).optional(),
+  emergencyContactRelation: z.string().max(60).optional(),
 });
 
 export const updateCarrierSchema = createCarrierSchema.partial().extend({

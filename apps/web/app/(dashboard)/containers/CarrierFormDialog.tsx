@@ -20,6 +20,9 @@ export interface CarrierLike {
   address?: string | null;
   carrierType?: string | null;
   notes?: string | null;
+  emergencyContactName?: string | null;
+  emergencyContactPhone?: string | null;
+  emergencyContactRelation?: string | null;
 }
 
 interface Props {
@@ -53,6 +56,9 @@ export function CarrierFormDialog({ open, onClose, carrier, onSaved }: Props) {
   const [address, setAddress] = useState('');
   const [carrierType, setCarrierType] = useState('LAND');
   const [notes, setNotes] = useState('');
+  const [ecName, setEcName] = useState('');
+  const [ecPhone, setEcPhone] = useState('');
+  const [ecRelation, setEcRelation] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -65,9 +71,13 @@ export function CarrierFormDialog({ open, onClose, carrier, onSaved }: Props) {
       setAddress(carrier.address ?? '');
       setCarrierType(carrier.carrierType ?? 'LAND');
       setNotes(carrier.notes ?? '');
+      setEcName(carrier.emergencyContactName ?? '');
+      setEcPhone(carrier.emergencyContactPhone ?? '');
+      setEcRelation(carrier.emergencyContactRelation ?? '');
     } else {
       setName(''); setContactName(''); setPhone(''); setEmail('');
       setAddress(''); setCarrierType('LAND'); setNotes('');
+      setEcName(''); setEcPhone(''); setEcRelation('');
     }
   }, [open, carrier]);
 
@@ -86,6 +96,9 @@ export function CarrierFormDialog({ open, onClose, carrier, onSaved }: Props) {
         address: address.trim() || undefined,
         carrierType,
         notes: notes.trim() || undefined,
+        emergencyContactName: ecName.trim() || undefined,
+        emergencyContactPhone: ecPhone.trim() || undefined,
+        emergencyContactRelation: ecRelation.trim() || undefined,
       };
       const res = isEdit && carrier
         ? await apiClient.patch(`/carriers/${carrier.id}`, body)
@@ -176,6 +189,24 @@ export function CarrierFormDialog({ open, onClose, carrier, onSaved }: Props) {
           onChange={(e) => setNotes(e.target.value)}
           rows={2}
         />
+
+        <div className="rounded-xl border border-gray-100 p-3">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+            Contact d&apos;urgence (optionnel)
+          </p>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <AppInput label="Nom" value={ecName} onChange={(e) => setEcName(e.target.value)} placeholder="Nom complet" />
+              <AppInput label="Lien" value={ecRelation} onChange={(e) => setEcRelation(e.target.value)} placeholder="Conjoint, parent..." />
+            </div>
+            <AppPhoneInput
+              label="Telephone"
+              value={ecPhone}
+              onChange={(v) => setEcPhone(v ?? '')}
+              placeholder="Numero de telephone"
+            />
+          </div>
+        </div>
       </div>
     </AppDialog>
   );

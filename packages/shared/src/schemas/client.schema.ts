@@ -25,6 +25,10 @@ export const createClientSchema = z.object({
     .optional()
     .default(LoyaltyTier.STANDARD),
   isActive: z.boolean().optional().default(true),
+  // Contact d'urgence (optionnel). Trois champs libres.
+  emergencyContactName: z.string().trim().max(120).optional().or(z.literal('')),
+  emergencyContactPhone: z.string().trim().max(40).optional().or(z.literal('')),
+  emergencyContactRelation: z.string().trim().max(60).optional().or(z.literal('')),
 });
 
 export const updateClientSchema = createClientSchema.partial();

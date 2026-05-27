@@ -117,6 +117,17 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
           <InfoRow icon={UserCircle} label="Superieur direct" value={employee.manager?.fullName || '-'} />
         </div>
       </AppCard>
+
+      {(employee.emergencyContactName || employee.emergencyContactPhone) && (
+        <AppCard>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Contact d&apos;urgence</h3>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <InfoRow icon={UserCircle} label="Nom" value={employee.emergencyContactName || '-'} />
+            <InfoRow icon={Phone} label="Telephone" value={employee.emergencyContactPhone || '-'} />
+            <InfoRow icon={UserCircle} label="Lien" value={employee.emergencyContactRelation || '-'} />
+          </div>
+        </AppCard>
+      )}
     </div>
   );
 

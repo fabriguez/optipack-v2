@@ -91,6 +91,15 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   if (isLoading) return <DashboardSkeleton />;
   if (!invoice) return <p className="p-6 text-gray-500">Facture introuvable</p>;
 
+  // Detection colis perdus : si TOUS les colis lies sont LOST, on bloque le
+  // paiement (regle metier : un colis perdu ne se paie pas, attendre
+  // remboursement / annulation). Si certains LOST + d'autres OK, on
+  // signale mais on autorise le paiement (les autres restent dus).
+  const invoiceParcels: any[] = Array.isArray(invoice.parcels) ? invoice.parcels : [];
+  const lostParcels = invoiceParcels.filter((p: any) => p.status === 'LOST');
+  const allLost = invoiceParcels.length > 0 && lostParcels.length === invoiceParcels.length;
+  const hasLost = lostParcels.length > 0;
+
   const netAmount = Number(invoice.netAmount || 0);
   const paidAmount = Number(invoice.paidAmount || 0);
   const balance = Number(invoice.balance || 0);
@@ -154,12 +163,41 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               <Percent className="h-4 w-4" />
               Remise
             </AppButton>
-            <AppButton onClick={() => setShowPayment(true)} disabled={invoice.status === 'PAID'}>
+            <AppButton onClick={() => setShowPayment(true)} disabled={invoice.status === 'PAID' || allLost}>
               <Plus className="h-4 w-4" />
               Enregistrer paiement
             </AppButton>
           </div>
         </div>
+
+        {hasLost && (
+          <div className={`rounded-xl border p-3 text-sm ${allLost ? 'border-red-300 bg-red-50 text-red-900' : 'border-amber-300 bg-amber-50 text-amber-900'}`}>
+            <p className="font-semibold">
+              {allLost
+                ? `Tous les colis de cette facture sont marques perdus (${lostParcels.length}).`
+                : `${lostParcels.length} colis sur ${invoiceParcels.length} marque(s) perdu(s).`}
+            </p>
+            <p className="mt-0.5 text-xs">
+              {allLost
+                ? 'Aucun paiement ne peut etre enregistre sur cette facture. Prevoir un avoir / annulation.'
+                : 'Les paiements restent autorises pour les colis non perdus de la facture.'}
+            </p>
+            {lostParcels.length > 0 && (
+              <ul className="mt-2 flex flex-wrap gap-1.5">
+                {lostParcels.map((p: any) => (
+                  <li key={p.id}>
+                    <Link
+                      href={`/parcels/${p.id}`}
+                      className="inline-block rounded-md border border-red-200 bg-white px-2 py-0.5 font-mono text-[11px] text-red-700 hover:bg-red-100"
+                    >
+                      {p.trackingNumber}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
 
         {/* Summary bar */}
         <AppCard>
@@ -506,7 +544,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-base font-semibold text-gray-900">Paiements ({paymentsData?.data?.length || 0})</h3>
             <div className="flex items-center gap-2">
-              <AppButton size="sm" onClick={() => setShowPayment(true)} disabled={invoice.status === 'PAID'}>
+              <AppButton size="sm" onClick={() => setShowPayment(true)} disabled={invoice.status === 'PAID' || allLost}>
                 <Plus className="h-3.5 w-3.5" />
                 Enregistrer paiement
               </AppButton>

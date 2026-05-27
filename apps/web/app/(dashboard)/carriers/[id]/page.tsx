@@ -161,6 +161,27 @@ export default function CarrierDetailPage({ params }: { params: Promise<{ id: st
           </AppCard>
         )}
 
+        {/* Contact d'urgence */}
+        {(carrier.emergencyContactName || carrier.emergencyContactPhone) && (
+          <AppCard>
+            <AppCardHeader title="Contact d'urgence" />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="rounded-xl bg-gray-50 p-3">
+                <p className="text-[10px] uppercase tracking-wider text-gray-400">Nom</p>
+                <p className="text-sm font-medium text-gray-900 mt-0.5">{carrier.emergencyContactName || '-'}</p>
+              </div>
+              <div className="rounded-xl bg-gray-50 p-3">
+                <p className="text-[10px] uppercase tracking-wider text-gray-400">Telephone</p>
+                <p className="text-sm font-medium text-gray-900 mt-0.5">{carrier.emergencyContactPhone || '-'}</p>
+              </div>
+              <div className="rounded-xl bg-gray-50 p-3">
+                <p className="text-[10px] uppercase tracking-wider text-gray-400">Lien</p>
+                <p className="text-sm font-medium text-gray-900 mt-0.5">{carrier.emergencyContactRelation || '-'}</p>
+              </div>
+            </div>
+          </AppCard>
+        )}
+
         {/* Notes */}
         {carrier.notes && (
           <AppCard>

@@ -394,7 +394,7 @@ router.get('/:id', async (req, res, next) => {
         where: { id: { in: scope.parcelIds } },
         select: {
           id: true, trackingNumber: true, designation: true, weight: true, volume: true,
-          destination: true, price: true, invoiceId: true, imageUrl: true,
+          destination: true, price: true, invoiceId: true, imageUrl: true, status: true,
           recipient: { select: { id: true, fullName: true, phone: true, email: true } },
           images: {
             select: { id: true, url: true, caption: true, isPrimary: true, sortOrder: true },

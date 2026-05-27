@@ -687,6 +687,10 @@ model Employee {
   idDocumentBackKey String?
   // Type de contrat
   contractType      EmployeeContractType @default(CDI)
+  // Contact d'urgence (optionnel) : personne a joindre en cas de probleme.
+  emergencyContactName     String?
+  emergencyContactPhone    String?
+  emergencyContactRelation String?
   // Superieur hierarchique direct (FK self vers Employee)
   managerId         String?
   // Lien optionnel vers User pour permettre la connexion de l'employe sur la plateforme
@@ -1179,6 +1183,11 @@ model Client {
   idDocumentBackKey String?
   address           String?
   clientType        ClientType  @default(INDIVIDUAL)
+  // Contact d'urgence (optionnel) : personne a joindre en cas de probleme.
+  // Trois champs libres : nom, telephone, lien (parent / conjoint / ami).
+  emergencyContactName     String?
+  emergencyContactPhone    String?
+  emergencyContactRelation String?
   loyaltyTier       LoyaltyTier @default(STANDARD)
   loyaltyPoints     Int         @default(0)
   totalSpent        Decimal     @default(0) @db.Decimal(15, 2)
@@ -2340,6 +2349,10 @@ model Carrier {
   // ne pas contraindre prematurement.
   carrierType    String?
   notes          String?
+  // Contact d'urgence (optionnel) : personne a joindre en cas de probleme.
+  emergencyContactName     String?
+  emergencyContactPhone    String?
+  emergencyContactRelation String?
   // Client associe automatiquement : permet d'imputer des paiements /
   // dettes / decaissements au transporteur via la mecanique Client standard.
   clientId       String?  @unique

@@ -28,6 +28,10 @@ interface CreateEmployeeInput {
   createUser?: boolean;
   /** Si true (defaut), cree ou lie un profil Client (un personnel = potentiel client). */
   syncClient?: boolean;
+  /** Contact d'urgence optionnel. */
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  emergencyContactRelation?: string;
 }
 
 function generateInitialPassword(): string {
@@ -117,6 +121,9 @@ export class CreateEmployeeUseCase {
       educationLevel: input.educationLevel ?? null,
       specialty: input.specialty ?? null,
       contractType: (input.contractType as any) ?? 'CDI',
+      emergencyContactName: input.emergencyContactName?.trim() || null,
+      emergencyContactPhone: input.emergencyContactPhone?.trim() || null,
+      emergencyContactRelation: input.emergencyContactRelation?.trim() || null,
       isAgencyManager: !!input.isAgencyManager,
       ...(input.managerId && { manager: { connect: { id: input.managerId } } }),
       ...(input.positionId && { positionRef: { connect: { id: input.positionId } } }),

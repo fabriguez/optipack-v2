@@ -311,6 +311,27 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
           </AppCard>
         </div>
 
+        {/* Contact d'urgence (optionnel) */}
+        {(client.emergencyContactName || client.emergencyContactPhone) && (
+          <AppCard>
+            <AppCardHeader title="Contact d'urgence" />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="rounded-xl bg-gray-50 p-3">
+                <p className="text-[10px] uppercase tracking-wider text-gray-400">Nom</p>
+                <p className="text-sm font-medium text-gray-900 mt-0.5">{client.emergencyContactName || '-'}</p>
+              </div>
+              <div className="rounded-xl bg-gray-50 p-3">
+                <p className="text-[10px] uppercase tracking-wider text-gray-400">Telephone</p>
+                <p className="text-sm font-medium text-gray-900 mt-0.5">{client.emergencyContactPhone || '-'}</p>
+              </div>
+              <div className="rounded-xl bg-gray-50 p-3">
+                <p className="text-[10px] uppercase tracking-wider text-gray-400">Lien</p>
+                <p className="text-sm font-medium text-gray-900 mt-0.5">{client.emergencyContactRelation || '-'}</p>
+              </div>
+            </div>
+          </AppCard>
+        )}
+
         {/* Tarification partenaire (visible uniquement pour les partenaires) */}
         <PartnerPricingsSection clientId={id} isPartner={client.clientType === 'PARTNER'} />
 

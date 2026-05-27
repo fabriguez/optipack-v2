@@ -345,6 +345,27 @@ export function ClientFormDialog({ open, onClose, defaultAgency, client }: Clien
             )}
           />
         </div>
+
+        <div className="mt-4 rounded-xl border border-gray-100 p-3">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+            Contact d&apos;urgence (optionnel)
+          </p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <AppInput label="Nom" {...register('emergencyContactName' as any)} placeholder="Nom complet" />
+            <AppInput label="Lien" {...register('emergencyContactRelation' as any)} placeholder="Conjoint, parent..." />
+            <Controller
+              name={'emergencyContactPhone' as any}
+              control={control}
+              render={({ field }) => (
+                <AppPhoneInput
+                  label="Telephone"
+                  value={field.value}
+                  onChange={field.onChange}
+                />
+              )}
+            />
+          </div>
+        </div>
       </form>
 
       <div className="mt-6 border-t border-gray-100 pt-4">

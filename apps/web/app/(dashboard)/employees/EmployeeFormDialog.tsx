@@ -141,6 +141,9 @@ export function EmployeeFormDialog({ open, onClose, defaultAgency, employee }: P
         position: employee.position,
         positionId: employee.positionId ?? '',
         phone: employee.phone ?? '',
+        emergencyContactName: (employee as any).emergencyContactName ?? '',
+        emergencyContactPhone: (employee as any).emergencyContactPhone ?? '',
+        emergencyContactRelation: (employee as any).emergencyContactRelation ?? '',
         idNumber: employee.idNumber ?? '',
         baseSalary: employee.baseSalary != null ? Number(employee.baseSalary) : undefined,
         educationLevel: employee.educationLevel ?? '',
@@ -352,6 +355,27 @@ export function EmployeeFormDialog({ open, onClose, defaultAgency, employee }: P
             </span>
           </label>
         )}
+
+        <div className="rounded-xl border border-gray-100 p-3">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+            Contact d&apos;urgence (optionnel)
+          </p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <AppInput label="Nom" {...register('emergencyContactName')} placeholder="Nom complet" />
+            <AppInput label="Lien" {...register('emergencyContactRelation')} placeholder="Conjoint, parent..." />
+            <Controller
+              name="emergencyContactPhone"
+              control={control}
+              render={({ field }) => (
+                <AppPhoneInput
+                  label="Telephone"
+                  value={field.value}
+                  onChange={field.onChange}
+                />
+              )}
+            />
+          </div>
+        </div>
       </form>
 
       {initialPassword && (
