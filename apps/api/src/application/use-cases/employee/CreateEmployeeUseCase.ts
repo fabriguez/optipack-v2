@@ -169,7 +169,7 @@ export class CreateEmployeeUseCase {
         // Envoi email best-effort des identifiants (le mot de passe reste aussi
         // affiche a l'admin via initialPassword pour fallback).
         emailService
-          .sendEmployeePortalCredentials(input.email, input.fullName, input.email, initialPassword)
+          .sendEmployeePortalCredentials(input.email, input.fullName, input.email, initialPassword, organizationId ?? null)
           .catch(() => {});
       }
     }

@@ -46,6 +46,7 @@ router.delete('/:id', requirePermission('personnel.delete'), EmployeeController.
 
 // Paie
 router.post('/:id/pay', requirePermission('payroll.pay'), EmployeeController.pay);
+router.post('/:id/resend-credentials', requirePermission('personnel.update'), EmployeeController.resendCredentials);
 router.get('/:id/payslips', requirePermission('payslip.read'), EmployeeController.listPayslips);
 router.get('/payslips/:payslipId/pdf', requirePermission('payslip.read'), EmployeeController.payslipPdf);
 

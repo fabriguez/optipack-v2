@@ -13,10 +13,13 @@ import { AppBadge } from '@/components/ui/AppBadge';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppTabs } from '@/components/ui/AppTabs';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
 import { EmployeeFormDialog } from '../EmployeeFormDialog';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { Mail } from 'lucide-react';
+import { toast } from 'sonner';
 import { EmployeeShiftsTab } from './EmployeeShiftsTab';
 import { EmployeeAttendanceTab } from './EmployeeAttendanceTab';
 import { EmployeeLeavesTab } from './EmployeeLeavesTab';
@@ -30,6 +33,17 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
   const { id } = use(params);
   const router = useRouter();
   const [showEdit, setShowEdit] = useState(false);
+  const [confirmResend, setConfirmResend] = useState(false);
+
+  const resendMutation = useMutation({
+    mutationFn: () => apiClient.post(`/employees/${id}/resend-credentials`),
+    onSuccess: (r) => {
+      const email = r?.data?.data?.email ?? '';
+      toast.success(`Identifiants envoyes${email ? ` a ${email}` : ''}. Le mot de passe a ete reinitialise.`);
+      setConfirmResend(false);
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Echec envoi identifiants'),
+  });
 
   const { data, isLoading } = useQuery({
     queryKey: ['employees', id],
@@ -127,12 +141,20 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
               <p className="text-sm text-gray-500 mt-0.5">{employee.position}</p>
             </div>
           </div>
-          {employee.isActive && (
-            <AppButton variant="outline" onClick={() => setShowEdit(true)}>
-              <Edit className="h-4 w-4" />
-              Modifier
-            </AppButton>
-          )}
+          <div className="flex items-center gap-2">
+            {employee.isActive && (
+              <AppButton variant="outline" onClick={() => setConfirmResend(true)}>
+                <Mail className="h-4 w-4" />
+                Envoyer identifiants
+              </AppButton>
+            )}
+            {employee.isActive && (
+              <AppButton variant="outline" onClick={() => setShowEdit(true)}>
+                <Edit className="h-4 w-4" />
+                Modifier
+              </AppButton>
+            )}
+          </div>
         </div>
 
         {!employee.isActive && (
@@ -150,6 +172,16 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
         )}
 
         <EmployeeFormDialog open={showEdit} onClose={() => setShowEdit(false)} employee={employee} />
+
+        <ConfirmDialog
+          open={confirmResend}
+          onClose={() => setConfirmResend(false)}
+          onConfirm={() => resendMutation.mutate()}
+          title="Envoyer les identifiants portail"
+          message={`Un email avec un NOUVEAU mot de passe sera envoye a ${employee.user?.email || employee.client?.email || employee.email || '(email a renseigner)'}. Le precedent mot de passe sera invalide. Confirmer ?`}
+          confirmLabel="Envoyer"
+          loading={resendMutation.isPending}
+        />
 
         <AppTabs tabs={[
           { value: 'profile', label: 'Profil', icon: <UserCircle className="h-4 w-4" />, content: profileTab },

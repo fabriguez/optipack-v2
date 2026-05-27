@@ -7,6 +7,7 @@ import { UploadEmployeeImageUseCase } from '../../application/use-cases/employee
 import { DeleteEmployeeImageUseCase } from '../../application/use-cases/employee/DeleteEmployeeImageUseCase';
 import { GetEmployeeImageUseCase } from '../../application/use-cases/employee/GetEmployeeImageUseCase';
 import { PayEmployeeFromCashRegisterUseCase } from '../../application/use-cases/employee/PayEmployeeFromCashRegisterUseCase';
+import { ResendEmployeeCredentialsUseCase } from '../../application/use-cases/employee/ResendEmployeeCredentialsUseCase';
 import { ListEmployeesByPermissionUseCase } from '../../application/use-cases/employee/ListEmployeesByPermissionUseCase';
 import {
   CreateSalaryDeductionUseCase,
@@ -197,6 +198,19 @@ export class EmployeeController {
       const useCase = container.resolve(PayEmployeeFromCashRegisterUseCase);
       const result = await useCase.execute(req.params.id, req.body, req.user!.userId);
       res.status(201).json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async resendCredentials(req: Request, res: Response, next: NextFunction) {
+    try {
+      const useCase = container.resolve(ResendEmployeeCredentialsUseCase);
+      const result = await useCase.execute(
+        req.params.id,
+        req.user!.organizationId,
+      );
+      res.json({ success: true, data: result });
     } catch (err) {
       next(err);
     }
