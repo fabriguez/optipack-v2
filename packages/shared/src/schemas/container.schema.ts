@@ -11,6 +11,11 @@ export const createContainerSchema = z.object({
   isForwarding: z.boolean().optional().default(false),
   parentContainerId: z.string().uuid('ID conteneur parent invalide').optional(),
   carrier: z.string().trim().min(1).max(120).optional(),
+  // Nouveau : transporteur structure (FK) + cout. Le cout > 0 cree automatiquement
+  // une depense de transport imputee au conteneur (propagee aux parents si
+  // forwarding au depart).
+  carrierId: z.string().uuid('ID transporteur invalide').optional(),
+  carrierCost: z.number().nonnegative('Le cout transporteur doit etre positif ou nul').optional(),
   capacity: z.number().positive('La capacite doit etre positive'),
   departureAgencyId: z.string().uuid("ID agence de depart invalide"),
   arrivalAgencyId: z.string().uuid("ID agence d'arrivee invalide"),
@@ -29,6 +34,8 @@ export const updateContainerSchema = z.object({
   isForwarding: z.boolean().optional(),
   parentContainerId: z.string().uuid().nullable().optional(),
   carrier: z.string().trim().min(1).max(120).nullable().optional(),
+  carrierId: z.string().uuid().nullable().optional(),
+  carrierCost: z.number().nonnegative().optional(),
   capacity: z.number().positive().optional(),
   departureAgencyId: z.string().uuid().optional(),
   arrivalAgencyId: z.string().uuid().optional(),

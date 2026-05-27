@@ -394,7 +394,13 @@ router.get('/:id', async (req, res, next) => {
         where: { id: { in: scope.parcelIds } },
         select: {
           id: true, trackingNumber: true, designation: true, weight: true, volume: true,
-          destination: true, price: true, invoiceId: true,
+          destination: true, price: true, invoiceId: true, imageUrl: true,
+          recipient: { select: { id: true, fullName: true, phone: true, email: true } },
+          images: {
+            select: { id: true, url: true, caption: true, isPrimary: true, sortOrder: true },
+            orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }],
+            take: 4,
+          },
         },
       }),
       prisma.payment.findMany({
@@ -462,6 +468,7 @@ router.get('/:id/pdf', async (req, res, next) => {
           id: true, trackingNumber: true, designation: true, weight: true, volume: true,
           destination: true, price: true, imageUrl: true, origin: true,
           transitRoute: { select: { name: true, type: true } },
+          recipient: { select: { fullName: true, phone: true, email: true } },
           images: {
             select: { url: true, isPrimary: true, sortOrder: true },
             orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }],
@@ -518,6 +525,9 @@ router.get('/:id/pdf', async (req, res, next) => {
           transitRouteName: p.transitRoute?.name ?? null,
           transitType: p.transitRoute?.type ?? null,
           origin: p.origin ?? null,
+          recipientName: p.recipient?.fullName ?? null,
+          recipientPhone: p.recipient?.phone ?? null,
+          recipientEmail: p.recipient?.email ?? null,
           storageFee: s?.fee ?? 0,
           storageDays: s?.days ?? 0,
           storageFreeDays: s?.freeDays ?? 0,

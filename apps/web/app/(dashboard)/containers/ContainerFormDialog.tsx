@@ -12,6 +12,8 @@ import { AppSearchSelect } from '@/components/ui/AppSearchSelect';
 import { AppSwitch } from '@/components/ui/AppSwitch';
 import { useCreateContainer, useUpdateContainer } from '@/lib/hooks/useContainers';
 import { searchers } from '@/lib/api/searchers';
+import { Plus } from 'lucide-react';
+import { CarrierFormDialog } from './CarrierFormDialog';
 
 interface ContainerLike {
   id: string;
@@ -19,6 +21,9 @@ interface ContainerLike {
   type: 'AIR' | 'SEA' | 'LAND';
   isForwarding: boolean;
   carrier?: string | null;
+  carrierId?: string | null;
+  carrierCost?: number | string | null;
+  carrierEntity?: { id: string; name: string } | null;
   capacity: number | string;
   departureAgencyId?: string;
   arrivalAgencyId?: string;
@@ -40,6 +45,7 @@ export function ContainerFormDialog({ open, onClose, container: editTarget }: Co
   const updateMutation = useUpdateContainer();
   const isEdit = !!editTarget;
   const [isForwarding, setIsForwarding] = useState(false);
+  const [showCarrierDialog, setShowCarrierDialog] = useState(false);
 
   const {
     register,
@@ -62,6 +68,8 @@ export function ContainerFormDialog({ open, onClose, container: editTarget }: Co
         type: editTarget.type,
         isForwarding: editTarget.isForwarding,
         carrier: editTarget.carrier ?? undefined,
+        carrierId: editTarget.carrierEntity?.id ?? editTarget.carrierId ?? undefined,
+        carrierCost: editTarget.carrierCost != null ? Number(editTarget.carrierCost) : 0,
         capacity: Number(editTarget.capacity),
         departureAgencyId: editTarget.departureAgency?.id ?? editTarget.departureAgencyId ?? '',
         arrivalAgencyId: editTarget.arrivalAgency?.id ?? editTarget.arrivalAgencyId ?? '',
@@ -82,6 +90,8 @@ export function ContainerFormDialog({ open, onClose, container: editTarget }: Co
           designation: data.designation || undefined,
           type: data.type,
           carrier: data.carrier || null,
+          carrierId: (data as any).carrierId || null,
+          carrierCost: (data as any).carrierCost ?? 0,
           capacity: data.capacity,
           departureAgencyId: data.departureAgencyId,
           arrivalAgencyId: data.arrivalAgencyId,
@@ -168,12 +178,47 @@ export function ContainerFormDialog({ open, onClose, container: editTarget }: Co
           </p>
         )}
 
-        <AppInput
-          label="Transporteur (optionnel)"
-          {...register('carrier')}
-          error={errors.carrier?.message}
-          placeholder="Compagnie / nom du transporteur"
-        />
+        <div className="space-y-2">
+          <div className="flex items-end gap-2">
+            <div className="flex-1">
+              <Controller
+                control={control}
+                name={'carrierId' as any}
+                render={({ field }) => (
+                  <AppSearchSelect
+                    label="Transporteur"
+                    value={field.value || null}
+                    onChange={(v) => field.onChange(v ?? undefined)}
+                    search={searchers.carriers}
+                    placeholder="Selectionner un transporteur"
+                  />
+                )}
+              />
+            </div>
+            <AppButton
+              type="button"
+              variant="outline"
+              onClick={() => setShowCarrierDialog(true)}
+              title="Ajouter un transporteur"
+            >
+              <Plus className="h-4 w-4" />
+            </AppButton>
+          </div>
+          <AppInput
+            label="Cout transporteur (FCFA)"
+            type="number"
+            step="0.01"
+            min={0}
+            {...register('carrierCost' as any, { valueAsNumber: true })}
+            error={(errors as any).carrierCost?.message}
+            placeholder="0"
+          />
+          <p className="text-xs text-gray-500">
+            Si renseigne (&gt; 0), une depense de transport est creee automatiquement
+            pour ce conteneur. Pour un conteneur d&apos;acheminement, elle sera
+            propagee aux parents au moment du depart.
+          </p>
+        </div>
 
         <Controller
           control={control}
@@ -256,6 +301,11 @@ export function ContainerFormDialog({ open, onClose, container: editTarget }: Co
         />
 
       </form>
+      <CarrierFormDialog
+        open={showCarrierDialog}
+        onClose={() => setShowCarrierDialog(false)}
+        onCreated={(c) => setValue('carrierId' as any, c.id)}
+      />
     </AppDialog>
   );
 }

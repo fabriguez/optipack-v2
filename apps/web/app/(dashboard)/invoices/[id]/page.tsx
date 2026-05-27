@@ -18,6 +18,8 @@ import { apiClient } from '@/lib/api/client';
 import { formatAmount, formatDate, formatDateTime } from '@transitsoftservices/shared';
 import { PaymentFormDialog } from '../../payments/PaymentFormDialog';
 import { InvoiceDiscountDialog } from './InvoiceDiscountDialog';
+import { AuthedImage } from '@/components/shared/AuthedImage';
+import { ImageLightbox } from '@/components/shared/ImageLightbox';
 
 const METHOD_LABELS: Record<string, string> = {
   CASH: 'Especes', MOBILE_MONEY: 'Mobile Money', BANK_TRANSFER: 'Virement', CARD: 'Carte', CHECK: 'Cheque',
@@ -33,6 +35,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
 
   const [xlsxLoading, setXlsxLoading] = useState(false);
+  const [lightbox, setLightbox] = useState<{ parcelId: string; index: number; images: any[] } | null>(null);
 
   const handleDownloadPdf = async () => {
     setPdfLoading(true);
@@ -260,6 +263,89 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           </AppCard>
         </div>
 
+        {/* Detail par colis : tracking, designation, destinataire, images. */}
+        {Array.isArray(invoice.parcels) && invoice.parcels.length > 0 && (
+          <AppCard>
+            <AppCardHeader
+              title={`Detail des colis (${invoice.parcels.length})`}
+              description="Destinataire, masse/volume, prix, images"
+            />
+            <div className="space-y-4">
+              {invoice.parcels.map((p: any) => {
+                const imgs: any[] = [
+                  ...(p.imageUrl ? [{ id: 'cover', url: p.imageUrl, caption: 'Image principale' }] : []),
+                  ...((p.images ?? []) as any[]),
+                ].filter((img, idx, arr) => arr.findIndex((x) => x.url === img.url) === idx);
+                return (
+                  <div key={p.id} className="rounded-xl border border-gray-100 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
+                      <div>
+                        <Link href={`/parcels/${p.id}`} className="font-mono text-sm font-bold text-primary-700 hover:underline">
+                          {p.trackingNumber}
+                        </Link>
+                        <p className="text-sm text-gray-700 mt-0.5">{p.designation}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-gray-400">Prix transport</p>
+                        <p className="text-base font-bold text-gray-900">{formatAmount(Number(p.price ?? 0))}</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      <div className="rounded-lg bg-gray-50 p-3">
+                        <p className="text-[10px] uppercase tracking-wider text-gray-400">Destination</p>
+                        <p className="text-sm font-medium text-gray-900 mt-0.5">{p.destination || '-'}</p>
+                      </div>
+                      <div className="rounded-lg bg-gray-50 p-3">
+                        <p className="text-[10px] uppercase tracking-wider text-gray-400">Masse / Volume</p>
+                        <p className="text-sm font-medium text-gray-900 mt-0.5">
+                          {p.weight != null && Number(p.weight) > 0 ? `${Number(p.weight).toFixed(1)} kg` : null}
+                          {p.weight != null && Number(p.weight) > 0 && p.volume != null && Number(p.volume) > 0 ? ' / ' : null}
+                          {p.volume != null && Number(p.volume) > 0 ? `${Number(p.volume).toFixed(3)} m3` : null}
+                          {(!p.weight || Number(p.weight) === 0) && (!p.volume || Number(p.volume) === 0) ? '-' : null}
+                        </p>
+                      </div>
+                      <div className="rounded-lg bg-gray-50 p-3">
+                        <p className="text-[10px] uppercase tracking-wider text-gray-400">Destinataire</p>
+                        {p.recipient ? (
+                          <div className="mt-0.5">
+                            <p className="text-sm font-medium text-gray-900">{p.recipient.fullName}</p>
+                            {p.recipient.phone && (
+                              <p className="text-[11px] text-gray-500">{p.recipient.phone}</p>
+                            )}
+                            {p.recipient.email && (
+                              <p className="text-[11px] text-gray-500 truncate">{p.recipient.email}</p>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-400 mt-0.5">Non renseigne</p>
+                        )}
+                      </div>
+                    </div>
+                    {imgs.length > 0 && (
+                      <div className="mt-3">
+                        <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-2">Images ({imgs.length})</p>
+                        <div className="flex flex-wrap gap-2">
+                          {imgs.map((img: any, idx: number) => (
+                            <button
+                              key={img.id || idx}
+                              type="button"
+                              onClick={() => setLightbox({ parcelId: p.id, index: idx, images: imgs })}
+                              className="block h-20 w-20 overflow-hidden rounded-lg border border-gray-100 cursor-zoom-in"
+                              aria-label="Agrandir image"
+                            >
+                              <AuthedImage src={img.url} alt={img.caption || 'Image colis'} className="h-full w-full object-cover transition-transform hover:scale-105" />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </AppCard>
+        )}
+
         {/* Invoice details */}
         <AppCard>
           <AppCardHeader title="Details de facturation" />
@@ -439,6 +525,13 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
         open={showDiscount}
         onClose={() => setShowDiscount(false)}
         invoice={invoice ? { id: invoice.id, totalAmount: invoice.totalAmount, discount: invoice.discount, paidAmount: invoice.paidAmount } : null}
+      />
+
+      <ImageLightbox
+        images={(lightbox?.images ?? []).map((img: any) => ({ url: img.url, caption: img.caption }))}
+        index={lightbox?.index ?? null}
+        onClose={() => setLightbox(null)}
+        onIndexChange={(i) => setLightbox((prev) => (prev ? { ...prev, index: i } : prev))}
       />
     </PageTransition>
   );

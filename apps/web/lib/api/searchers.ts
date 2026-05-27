@@ -86,6 +86,15 @@ export const searchers = {
     return items.map((a) => ({ value: a.id, label: a.name, sublabel: a.city }));
   }, 'searchers.agencies'),
 
+  carriers: tag(async (q: string, limit = DEFAULT_LIMIT): Promise<SearchOption[]> => {
+    const items = await searchPaginated<{ id: string; name: string; phone?: string | null; carrierType?: string | null }>('/carriers', q, limit);
+    return items.map((c) => ({
+      value: c.id,
+      label: c.name,
+      sublabel: [c.carrierType, c.phone].filter(Boolean).join(' · ') || undefined,
+    }));
+  }, 'searchers.carriers'),
+
   employees: tag(async (q: string, limit = DEFAULT_LIMIT, extra?: Record<string, unknown>): Promise<SearchOption[]> => {
     // Recherche dans le scope de l'utilisateur (toutes ses agences). Si extra.agencyId
     // est fourni, on filtre cote API via l'endpoint scope par agence.

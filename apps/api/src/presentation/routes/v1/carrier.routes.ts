@@ -48,10 +48,39 @@ router.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const organizationId = req.user!.organizationId;
-      const created = await prisma.carrier.create({
-        data: { organizationId, ...req.body, email: req.body.email || null },
+      // Cree un Client associe au transporteur : permet d'imputer
+      // depenses / paiements / dettes via la mecanique Client standard.
+      // Si phone deja pris (cas re-creation), on suffix random pour
+      // garantir l'unicite. organizationId pass via connect implicite
+      // (Client.organization est M:N via Organization[]).
+      const phone = req.body.phone || `CARRIER-${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
+      const result = await prisma.$transaction(async (tx) => {
+        const client = await tx.client.create({
+          data: {
+            organizationId,
+            fullName: req.body.name,
+            phone,
+            email: req.body.email || null,
+            address: req.body.address || null,
+          },
+        });
+        const carrier = await tx.carrier.create({
+          data: {
+            organizationId,
+            name: req.body.name,
+            contactName: req.body.contactName || null,
+            phone: req.body.phone || null,
+            email: req.body.email || null,
+            address: req.body.address || null,
+            carrierType: req.body.carrierType || null,
+            notes: req.body.notes || null,
+            clientId: client.id,
+          },
+          include: { client: { select: { id: true, fullName: true, phone: true } } },
+        });
+        return carrier;
       });
-      res.status(201).json({ success: true, data: created });
+      res.status(201).json({ success: true, data: result });
     } catch (err) { next(err); }
   },
 );

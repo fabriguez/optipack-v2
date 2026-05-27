@@ -1213,6 +1213,8 @@ model Client {
   parcelGroups            ParcelGroup[]                   @relation("ClientParcelGroups")
   // Lien retour 1-1 si ce client correspond a un membre du personnel.
   employee                Employee?                       @relation("EmployeeClient")
+  // Lien retour 1-1 si ce client correspond a un transporteur.
+  carrier                 Carrier?
   // Decaissements rembourses a ce client (cas remboursement client).
   disbursements           DisbursementVoucher[]
   headOfficeDisbursements HeadOfficeDisbursementVoucher[] @relation("HeadOfficeDisbursementClient")
@@ -1315,8 +1317,14 @@ model Container {
   // Hierarchie : un conteneur d'acheminement (isForwarding=true) peut etre place
   // dans un conteneur parent AIR/SEA. Le parent ne peut pas etre lui-meme forwarding.
   parentContainerId      String?
-  // Transporteur (facultatif) : nom/reference de la compagnie/personne en charge.
+  // Transporteur (legacy, texte libre, gardé pour compat ascendante).
   carrier                String?
+  // Transporteur (nouveau, FK structuree). Si renseigne, lien vers la table
+  // Carrier (qui porte un Client associe pour comptabilite/dettes).
+  carrierId              String?
+  // Cout du transport (montant convenu avec le transporteur pour ce
+  // conteneur). Genere automatiquement une Expense au create/update.
+  carrierCost            Decimal         @default(0) @db.Decimal(15, 2)
   capacity               Decimal         @db.Decimal(15, 2)
   // currentLoad : valeur snapshot, peut driver. Repository la recalcule a la lecture.
   currentLoad            Decimal         @default(0) @db.Decimal(15, 2)
@@ -1340,6 +1348,7 @@ model Container {
   updatedAt              DateTime        @updatedAt
 
   transitRoute                TransitRoute?                   @relation(fields: [transitRouteId], references: [id])
+  carrierEntity               Carrier?                        @relation(fields: [carrierId], references: [id])
   departureAgency             Agency                          @relation("DepartureAgency", fields: [departureAgencyId], references: [id])
   arrivalAgency               Agency                          @relation("ArrivalAgency", fields: [arrivalAgencyId], references: [id])
   // Hierarchie legacy 1:1 (conserve pour compat ascendante / migration).
@@ -1376,6 +1385,7 @@ model Container {
   @@index([arrivalAgencyId])
   @@index([status])
   @@index([parentContainerId])
+  @@index([carrierId])
   @@map("containers")
 }
 
@@ -2330,12 +2340,17 @@ model Carrier {
   // ne pas contraindre prematurement.
   carrierType    String?
   notes          String?
+  // Client associe automatiquement : permet d'imputer des paiements /
+  // dettes / decaissements au transporteur via la mecanique Client standard.
+  clientId       String?  @unique
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id])
+  client       Client?      @relation(fields: [clientId], references: [id])
   debts        Debt[]
+  containers   Container[]
 
   @@unique([organizationId, name])
   @@index([organizationId])

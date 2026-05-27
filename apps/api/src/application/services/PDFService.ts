@@ -20,6 +20,10 @@ interface InvoiceAgency {
 interface InvoiceParcel {
   trackingNumber: string;
   designation: string;
+  /** Destinataire prevu pour ce colis (peut differer du client payeur). */
+  recipientName?: string | null;
+  recipientPhone?: string | null;
+  recipientEmail?: string | null;
   // Masse en kg, null pour les colis tarifes par volume uniquement.
   weight: number | null;
   // Volume en m3, null pour les colis tarifes par masse uniquement.
@@ -385,6 +389,14 @@ export class PDFService {
       const od = `${p.origin || '-'}  →  ${p.destination || '-'}`;
       doc.text(od, 55, y, { width: pageWidth - 10, lineBreak: false, ellipsis: true });
       y += 11;
+      // Ligne 2bis : destinataire (peut differer du client payeur)
+      if (p.recipientName) {
+        const recBits = [`Destinataire: ${p.recipientName}`];
+        if (p.recipientPhone) recBits.push(p.recipientPhone);
+        if (p.recipientEmail) recBits.push(p.recipientEmail);
+        doc.text(recBits.join('  ·  '), 55, y, { width: pageWidth - 10, lineBreak: false, ellipsis: true });
+        y += 11;
+      }
       // Ligne 3 : masse/volume + prix transport
       const mv: string[] = [];
       if (p.weight != null && Number(p.weight) > 0) mv.push(`${Number(p.weight).toFixed(2)} kg`);

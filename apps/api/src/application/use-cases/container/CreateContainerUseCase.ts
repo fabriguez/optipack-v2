@@ -53,6 +53,8 @@ export class CreateContainerUseCase {
       isForwarding?: boolean;
       parentContainerId?: string;
       carrier?: string;
+      carrierId?: string;
+      carrierCost?: number;
     },
     userId: string,
   ) {
@@ -95,6 +97,21 @@ export class CreateContainerUseCase {
     if (!arrAgency) throw new NotFoundError("Agence d'arrivee", input.arrivalAgencyId);
 
     const carrier = input.carrier?.trim() || null;
+    const carrierCost = input.carrierCost != null && Number(input.carrierCost) > 0 ? Number(input.carrierCost) : 0;
+
+    // Verifie le transporteur (FK) s'il est fourni.
+    let carrierEntity: { id: string; name: string } | null = null;
+    if (input.carrierId) {
+      const c = await prisma.carrier.findUnique({
+        where: { id: input.carrierId },
+        select: { id: true, name: true, organizationId: true },
+      });
+      if (!c) throw new NotFoundError('Transporteur', input.carrierId);
+      if (c.organizationId !== depAgency.organizationId) {
+        throw new BusinessError("Le transporteur n'appartient pas a la meme organisation.");
+      }
+      carrierEntity = { id: c.id, name: c.name };
+    }
 
     // Designation : si l'utilisateur n'en fournit pas (ou laisse vide), on
     // genere automatiquement <ORG>-<TYPE>-<DEST>-<NUM>. La retry sur P2002
@@ -117,7 +134,9 @@ export class CreateContainerUseCase {
         type: input.type,
         isForwarding,
         capacity: input.capacity,
+        carrierCost,
         ...(carrier && { carrier }),
+        ...(carrierEntity && { carrierEntity: { connect: { id: carrierEntity.id } } }),
         departureAgency: { connect: { id: input.departureAgencyId } },
         arrivalAgency: { connect: { id: input.arrivalAgencyId } },
         ...(input.transitRouteId && { transitRoute: { connect: { id: input.transitRouteId } } }),
@@ -155,6 +174,41 @@ export class CreateContainerUseCase {
       throw lastErr ?? new BusinessError('Impossible de generer une designation unique pour le conteneur.');
     })();
 
+    // Depense automatique de transport : si un cout transporteur est
+    // renseigne (> 0), on cree immediatement une Expense imputee au
+    // conteneur. La propagation aux parents (cas forwarding) se fera
+    // automatiquement au depart via DepartContainerUseCase.
+    if (carrierCost > 0) {
+      try {
+        const carrierName = carrierEntity?.name ?? carrier ?? 'Transporteur';
+        await prisma.expense.create({
+          data: {
+            agencyId: depAgency.id,
+            title: `Transport ${carrierName} - ${created.designation}`,
+            reason: `Cout transport conteneur ${created.designation}`,
+            description: `Cout fixe convenu avec le transporteur ${carrierName}.`,
+            category: 'TRANSPORT',
+            amount: carrierCost,
+            containerId: created.id,
+            approvedByUserId: userId,
+            isPaid: false,
+          },
+        });
+      } catch (err) {
+        // Best-effort : echec de creation de depense n'annule pas le conteneur.
+        // Logge dans l'historique pour visibilite.
+        try {
+          await this.history.recordContainer({
+            containerId: created.id,
+            action: 'TRANSPORT_EXPENSE_FAILED',
+            userId,
+            comment: 'Echec creation auto depense transport',
+            changes: { error: err instanceof Error ? err.message : String(err) } as any,
+          });
+        } catch { /* skip */ }
+      }
+    }
+
     await this.history.recordContainer({
       containerId: created.id,
       action: 'CREATED',
@@ -167,6 +221,8 @@ export class CreateContainerUseCase {
         capacity: Number(created.capacity),
         isForwarding,
         carrier,
+        carrierId: carrierEntity?.id ?? null,
+        carrierCost,
         parentContainerId: input.parentContainerId ?? null,
         departureAgencyId: input.departureAgencyId,
         arrivalAgencyId: input.arrivalAgencyId,
