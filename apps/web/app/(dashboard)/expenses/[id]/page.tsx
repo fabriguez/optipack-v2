@@ -11,6 +11,7 @@ import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
+import { AttachmentsCard } from '@/components/shared/AttachmentsCard';
 
 export default function ExpenseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -111,6 +112,8 @@ export default function ExpenseDetailPage({ params }: { params: Promise<{ id: st
             <InfoRow icon={Receipt} label="Montant" value={formatAmount(Number(expense.amount))} />
           </div>
         </AppCard>
+
+        <AttachmentsCard parentType="expense" parentId={id} readonly={!!expense.isPaid} />
       </div>
     </PageTransition>
   );

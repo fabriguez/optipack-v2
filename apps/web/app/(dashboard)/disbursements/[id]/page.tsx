@@ -14,6 +14,7 @@ import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
+import { AttachmentsCard } from '@/components/shared/AttachmentsCard';
 import { toast } from 'sonner';
 
 export default function DisbursementDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -171,6 +172,8 @@ export default function DisbursementDetailPage({ params }: { params: Promise<{ i
             <InfoRow icon={Receipt} label="Montant" value={formatAmount(Number(voucher.amount))} />
           </div>
         </AppCard>
+
+        <AttachmentsCard parentType="disbursement" parentId={voucher.id} readonly={!!voucher.isVoided} />
       </div>
     </PageTransition>
   );

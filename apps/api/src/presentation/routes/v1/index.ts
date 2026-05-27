@@ -18,6 +18,7 @@ import expenseRoutes from './expense.routes';
 import debtRoutes from './debt.routes';
 import carrierRoutes from './carrier.routes';
 import paymentMethodRoutes from './payment-method.routes';
+import attachmentRoutes from './attachment.routes';
 import loyaltyRoutes from './loyalty.routes';
 import penaltyRoutes from './penalty.routes';
 import employeeRoutes from './employee.routes';
@@ -80,6 +81,7 @@ router.use('/expenses', expenseRoutes);
 router.use('/debts', debtRoutes);
 router.use('/carriers', carrierRoutes);
 router.use('/payment-methods', paymentMethodRoutes);
+router.use(attachmentRoutes);
 router.use('/finance', financeRoutes);
 router.use('/head-office', headOfficeRoutes);
 

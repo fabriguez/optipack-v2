@@ -52,6 +52,17 @@ export class HandoverParcelUseCase {
       );
     }
 
+    // Regle metier : le colis ne peut etre remis qu'a son emetteur (client)
+    // ou a son destinataire (recipient) enregistre. Pas de tiers.
+    const allowed = new Set<string>();
+    if (parcel.clientId) allowed.add(parcel.clientId);
+    if (parcel.recipientId) allowed.add(parcel.recipientId);
+    if (allowed.size > 0 && !allowed.has(input.receivedByClientId)) {
+      throw new BusinessError(
+        'Le recepteur doit etre l\'emetteur ou le destinataire enregistre sur ce colis.',
+      );
+    }
+
     const updated = await this.parcelRepo.update(parcelId, {
       status: 'DELIVERED',
       pickupDate: new Date(),

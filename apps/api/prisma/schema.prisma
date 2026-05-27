@@ -577,6 +577,9 @@ model User {
   debtPaymentsVoided              DebtPayment[]                   @relation("DebtPaymentVoidedBy")
   debtHistoryActions              DebtHistory[]
   paymentAttachmentsUploaded      PaymentAttachment[]             @relation("PaymentAttachmentUploader")
+  expenseAttachmentsUploaded      ExpenseAttachment[]              @relation("ExpenseAttachmentUploader")
+  disbursementAttachmentsUploaded DisbursementAttachment[]         @relation("DisbursementAttachmentUploader")
+  debtAttachmentsUploaded         DebtAttachment[]                 @relation("DebtAttachmentUploader")
   permissionOverrides             UserPermissionOverride[]
   justificationsSubmitted         AttendanceJustification[]       @relation("JustificationSubmitter")
   justificationsReviewed          AttendanceJustification[]       @relation("JustificationReviewer")
@@ -1968,6 +1971,8 @@ model DisbursementVoucher {
   // Lien inverse vers la depense (Expense) qui a declenche ce decaissement.
   // Permet la dedup dans le rapport journalier (cf Expense.disbursementId).
   expense      Expense?             @relation("ExpenseDisbursement")
+  // Pieces jointes additionnelles (images / PDF de preuve).
+  attachments  DisbursementAttachment[]
 
   @@index([agencyId])
   @@index([cashRegisterId])
@@ -1975,6 +1980,23 @@ model DisbursementVoucher {
   @@index([parcelId])
   @@index([clientId])
   @@map("disbursement_vouchers")
+}
+
+model DisbursementAttachment {
+  id               String   @id @default(uuid())
+  disbursementId   String
+  url              String
+  key              String
+  kind             String // 'IMAGE' | 'PDF' | 'OTHER'
+  caption          String?
+  uploadedByUserId String?
+  createdAt        DateTime @default(now())
+
+  disbursement DisbursementVoucher @relation(fields: [disbursementId], references: [id], onDelete: Cascade)
+  uploadedBy   User?               @relation("DisbursementAttachmentUploader", fields: [uploadedByUserId], references: [id])
+
+  @@index([disbursementId])
+  @@map("disbursement_attachments")
 }
 
 // ============================================================
@@ -2182,6 +2204,8 @@ model Expense {
   // Self-relation pour propagation forwarding -> parents.
   parentExpense          Expense?                @relation("ForwardingExpensePropagation", fields: [parentExpenseId], references: [id])
   childExpenses          Expense[]               @relation("ForwardingExpensePropagation")
+  // Pieces jointes additionnelles (justificatifs / preuves / images).
+  attachments            ExpenseAttachment[]
 
   @@index([agencyId])
   @@index([agencyChargeId, period])
@@ -2189,6 +2213,23 @@ model Expense {
   @@index([headOfficeCashRegisterId])
   @@index([parentExpenseId])
   @@map("expenses")
+}
+
+model ExpenseAttachment {
+  id               String   @id @default(uuid())
+  expenseId        String
+  url              String
+  key              String
+  kind             String // 'IMAGE' | 'PDF' | 'OTHER'
+  caption          String?
+  uploadedByUserId String?
+  createdAt        DateTime @default(now())
+
+  expense    Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  uploadedBy User?   @relation("ExpenseAttachmentUploader", fields: [uploadedByUserId], references: [id])
+
+  @@index([expenseId])
+  @@map("expense_attachments")
 }
 
 // ============================================================
@@ -2275,6 +2316,7 @@ model Debt {
   voidedBy     User?         @relation("DebtVoidedBy", fields: [voidedByUserId], references: [id])
   payments     DebtPayment[]
   histories    DebtHistory[]
+  attachments  DebtAttachment[]
 
   @@index([organizationId])
   @@index([agencyId])
@@ -2287,6 +2329,23 @@ model Debt {
   @@index([status])
   @@index([nextDueDate])
   @@map("debts")
+}
+
+model DebtAttachment {
+  id               String   @id @default(uuid())
+  debtId           String
+  url              String
+  key              String
+  kind             String // 'IMAGE' | 'PDF' | 'OTHER'
+  caption          String?
+  uploadedByUserId String?
+  createdAt        DateTime @default(now())
+
+  debt       Debt  @relation(fields: [debtId], references: [id], onDelete: Cascade)
+  uploadedBy User? @relation("DebtAttachmentUploader", fields: [uploadedByUserId], references: [id])
+
+  @@index([debtId])
+  @@map("debt_attachments")
 }
 
 enum DebtType {

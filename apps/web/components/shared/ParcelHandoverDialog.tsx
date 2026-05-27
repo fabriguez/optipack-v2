@@ -21,6 +21,8 @@ interface Props {
     id: string;
     trackingNumber: string;
     designation: string;
+    clientId?: string | null;
+    client?: { id: string; fullName: string; phone?: string | null } | null;
     recipientId?: string | null;
     recipient?: { id: string; fullName: string; phone?: string | null } | null;
   } | null;
@@ -43,7 +45,10 @@ export function ParcelHandoverDialog({ open, onClose, parcel, untracked, onSucce
 
   useEffect(() => {
     if (!open) return;
-    setClientId(parcel?.recipientId ?? '');
+    // Pre-selection : destinataire enregistre si dispo, sinon emetteur,
+    // sinon vide (cas untracked ou colis sans recipient/client).
+    const defaultId = parcel?.recipientId ?? parcel?.clientId ?? '';
+    setClientId(defaultId);
     setIdentityConfirmed(false);
     setNote('');
     setDesignation('');
@@ -157,14 +162,84 @@ export function ParcelHandoverDialog({ open, onClose, parcel, untracked, onSucce
           </div>
         )}
 
-        <AppSearchSelect
-          label="Client recepteur (qui retire le colis)"
-          value={clientId}
-          onChange={(v) => setClientId(v ?? '')}
-          search={searchers.clients}
-          required
-          placeholder="Rechercher un client..."
-        />
+        {parcel ? (
+          (() => {
+            // Recepteur autorise : uniquement l'emetteur (client) ou le
+            // destinataire (recipient) enregistres sur le colis. Empeche
+            // de remettre a un tiers arbitraire. Si l'un des deux manque
+            // (cas legacy), seule l'option disponible est affichee.
+            const options: { id: string; label: string; sublabel?: string; role: string }[] = [];
+            if (parcel.client && parcel.clientId) {
+              options.push({
+                id: parcel.clientId,
+                label: parcel.client.fullName,
+                sublabel: parcel.client.phone ?? undefined,
+                role: 'Emetteur',
+              });
+            }
+            if (parcel.recipient && parcel.recipientId && parcel.recipientId !== parcel.clientId) {
+              options.push({
+                id: parcel.recipientId,
+                label: parcel.recipient.fullName,
+                sublabel: parcel.recipient.phone ?? undefined,
+                role: 'Destinataire',
+              });
+            }
+            if (options.length === 0) {
+              return (
+                <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  Ce colis n&apos;a ni emetteur ni destinataire valide. Remise impossible.
+                </p>
+              );
+            }
+            return (
+              <div>
+                <label className="mb-2 block text-xs font-medium text-gray-700">
+                  Client recepteur (uniquement emetteur ou destinataire du colis)
+                </label>
+                <div className="space-y-2">
+                  {options.map((opt) => {
+                    const checked = clientId === opt.id;
+                    return (
+                      <button
+                        type="button"
+                        key={opt.id}
+                        onClick={() => setClientId(opt.id)}
+                        className={`flex w-full items-center justify-between rounded-xl border p-3 text-left transition ${
+                          checked
+                            ? 'border-primary-500 bg-primary-50 ring-2 ring-primary-200'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-gray-900">{opt.label}</span>
+                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                              opt.role === 'Emetteur' ? 'bg-blue-50 text-blue-700' : 'bg-emerald-50 text-emerald-700'
+                            }`}>
+                              {opt.role}
+                            </span>
+                          </div>
+                          {opt.sublabel && <p className="text-xs text-gray-500 mt-0.5">{opt.sublabel}</p>}
+                        </div>
+                        {checked && <CheckCircle2 className="h-4 w-4 text-primary-600" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()
+        ) : (
+          <AppSearchSelect
+            label="Client recepteur (qui retire le colis)"
+            value={clientId}
+            onChange={(v) => setClientId(v ?? '')}
+            search={searchers.clients}
+            required
+            placeholder="Rechercher un client..."
+          />
+        )}
 
         {client && (
           <div className="rounded-2xl border border-gray-100 p-3">

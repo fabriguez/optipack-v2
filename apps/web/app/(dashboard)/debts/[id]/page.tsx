@@ -12,6 +12,7 @@ import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { formatAmount, formatDate, formatDateTime } from '@transitsoftservices/shared';
+import { AttachmentsCard } from '@/components/shared/AttachmentsCard';
 import { RecordDebtPaymentDialog } from '../RecordDebtPaymentDialog';
 import { AdjustDebtDialog } from '../AdjustDebtDialog';
 import { AppDialog } from '@/components/ui/AppDialog';
@@ -412,6 +413,12 @@ export default function DebtDetailPage({ params }: { params: Promise<{ id: strin
             </div>
           )}
         </AppCard>
+
+        <AttachmentsCard
+          parentType="debt"
+          parentId={debt.id}
+          readonly={debt.status === 'CANCELLED'}
+        />
       </div>
 
       <RecordDebtPaymentDialog
