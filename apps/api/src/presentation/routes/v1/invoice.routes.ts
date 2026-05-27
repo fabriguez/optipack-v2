@@ -8,6 +8,7 @@ import type { InvoiceData } from '../../../application/services/PDFService';
 import { ExcelService } from '../../../infrastructure/excel/ExcelService';
 import { container } from '../../../container';
 import { StorageService } from '../../../infrastructure/storage/StorageService';
+import sharp from 'sharp';
 
 /**
  * Resout les ids de colis a facturer pour une facture donnee :
@@ -63,7 +64,7 @@ interface StorageFeeDetail {
   reason: string;
 }
 
-async function fetchImageBuffer(url: string): Promise<Buffer | null> {
+async function loadRawImage(url: string): Promise<Buffer | null> {
   if (!url) return null;
   // Cas 1 : URL servie par /uploads/object/<key>. La cle peut etre encodee
   // (encodeURIComponent par segment) -- on decode pour MinIO.
@@ -102,6 +103,31 @@ async function fetchImageBuffer(url: string): Promise<Buffer | null> {
     for await (const ch of obj.stream as any) chunks.push(ch as Buffer);
     return Buffer.concat(chunks);
   } catch {
+    return null;
+  }
+}
+
+/**
+ * Charge une image et la convertit en JPEG : PDFKit ne supporte que JPEG/PNG
+ * en natif (WebP, GIF, HEIC, AVIF echouent silencieusement). On normalise
+ * tout en JPEG via sharp pour garantir le rendu.
+ */
+async function fetchImageBuffer(url: string): Promise<Buffer | null> {
+  const raw = await loadRawImage(url);
+  if (!raw) return null;
+  try {
+    return await sharp(raw, { failOn: 'none' })
+      .rotate() // applique l'orientation EXIF
+      .resize({ width: 400, height: 300, fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 80 })
+      .toBuffer();
+  } catch (err) {
+    // Fallback : si sharp echoue mais que c'est deja JPEG/PNG, on renvoie brut.
+    if (raw.length >= 4) {
+      const isJpeg = raw[0] === 0xff && raw[1] === 0xd8 && raw[2] === 0xff;
+      const isPng = raw[0] === 0x89 && raw[1] === 0x50 && raw[2] === 0x4e && raw[3] === 0x47;
+      if (isJpeg || isPng) return raw;
+    }
     return null;
   }
 }
