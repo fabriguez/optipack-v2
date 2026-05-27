@@ -7,6 +7,7 @@ import { AppInput } from '@/components/ui/AppInput';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppSelect } from '@/components/ui/AppSelect';
 import { AppTextarea } from '@/components/ui/AppTextarea';
+import { AppPhoneInput } from '@/components/ui/AppPhoneInput';
 import { apiClient } from '@/lib/api/client';
 import { toast } from 'sonner';
 
@@ -151,11 +152,11 @@ export function CarrierFormDialog({ open, onClose, carrier, onSaved }: Props) {
           />
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <AppInput
+          <AppPhoneInput
             label="Telephone"
             value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder="+237..."
+            onChange={(v) => setPhone(v ?? '')}
+            placeholder="Numero de telephone"
           />
           <AppInput
             label="Email"

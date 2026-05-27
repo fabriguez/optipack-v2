@@ -9,9 +9,17 @@ export class PrismaClientRepository implements IClientRepository {
   async findById(id: string): Promise<Client | null> {
     // Les clients supprimes (soft delete) sont invisibles pour l'application,
     // sauf pour l'audit qui peut les retrouver via le client Prisma directement.
-    const c = await prisma.client.findUnique({ where: { id } });
+    // Inclut employee/carrier pour permettre a la vue detail de naviguer vers
+    // l'entite metier liee (employe ou transporteur).
+    const c = await prisma.client.findUnique({
+      where: { id },
+      include: {
+        employee: { select: { id: true, fullName: true, position: true } },
+        carrier: { select: { id: true, name: true, carrierType: true } },
+      },
+    });
     if (!c || c.isDeleted) return null;
-    return c;
+    return c as Client;
   }
 
   async findByPhone(phone: string): Promise<Client | null> {
@@ -50,6 +58,10 @@ export class PrismaClientRepository implements IClientRepository {
         include: {
           agency: { select: { id: true, name: true, code: true } },
           _count: { select: { parcels: true, invoices: true } },
+          // Lien 1-1 vers Employee / Carrier : permet d'afficher un badge
+          // sur la liste clients ("Employe" / "Transporteur").
+          employee: { select: { id: true, position: true } },
+          carrier: { select: { id: true, name: true, carrierType: true } },
         },
       }),
       prisma.client.count({ where }),

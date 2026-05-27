@@ -248,6 +248,16 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
               )}
               <AppBadge variant={TIER_VARIANT[client.loyaltyTier] || 'default'}>{client.loyaltyTier}</AppBadge>
               {!client.isActive && <AppBadge variant="default">Inactif</AppBadge>}
+              {client.employee && (
+                <Link href={`/employees/${client.employee.id}`} className="inline-flex">
+                  <AppBadge variant="info">Employe →</AppBadge>
+                </Link>
+              )}
+              {client.carrier && (
+                <Link href={`/carriers/${client.carrier.id}`} className="inline-flex">
+                  <AppBadge variant="warning">Transporteur →</AppBadge>
+                </Link>
+              )}
             </div>
             <p className="text-sm text-gray-500 mt-0.5">{client.phone} {client.email ? `-- ${client.email}` : ''}</p>
           </div>

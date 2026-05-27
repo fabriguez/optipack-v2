@@ -58,6 +58,7 @@ interface Expense {
 export function ContainerExpensesTab({ containerId }: { containerId: string }) {
   const qc = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<Expense | null>(null);
   const [payTarget, setPayTarget] = useState<Expense | null>(null);
   const [confirmClose, setConfirmClose] = useState(false);
 
@@ -180,6 +181,7 @@ export function ContainerExpensesTab({ containerId }: { containerId: string }) {
               expense={e}
               currentContainerId={containerId}
               onPay={() => setPayTarget(e)}
+              onEdit={() => setEditTarget(e)}
               onDelete={async () => {
                 if (!confirm(`Supprimer la depense "${e.title}"? Les depenses auto liees seront aussi supprimees.`)) return;
                 try {
@@ -201,6 +203,11 @@ export function ContainerExpensesTab({ containerId }: { containerId: string }) {
         onClose={() => setCreateOpen(false)}
         containerId={containerId}
         onCreated={() => { invalidate(); setCreateOpen(false); }}
+      />
+      <EditExpenseDialog
+        expense={editTarget}
+        onClose={() => setEditTarget(null)}
+        onSaved={() => { invalidate(); setEditTarget(null); }}
       />
       <PayExpenseDialog
         expense={payTarget}
@@ -232,7 +239,7 @@ export function ContainerExpensesTab({ containerId }: { containerId: string }) {
   );
 }
 
-function ExpenseCard({ expense: e, currentContainerId, onPay, onDelete, disabled }: { expense: Expense; currentContainerId: string; onPay: () => void; onDelete: () => void; disabled: boolean }) {
+function ExpenseCard({ expense: e, currentContainerId, onPay, onEdit, onDelete, disabled }: { expense: Expense; currentContainerId: string; onPay: () => void; onEdit: () => void; onDelete: () => void; disabled: boolean }) {
   const isAuto = !!e.isAutoFromForwarding;
   const hasChildren = (e.childExpenses?.length ?? 0) > 0;
   const childTotal = (e.childExpenses ?? []).reduce((s, c) => s + Number(c.amount), 0);
@@ -415,6 +422,16 @@ function ExpenseCard({ expense: e, currentContainerId, onPay, onDelete, disabled
             {!e.isPaid && !isAuto && !disabled && (
               <button
                 type="button"
+                onClick={onEdit}
+                className="inline-flex items-center gap-1 text-[11px] text-primary-600 hover:underline"
+              >
+                <Edit className="h-3 w-3" />
+                Modifier
+              </button>
+            )}
+            {!e.isPaid && !isAuto && !disabled && (
+              <button
+                type="button"
                 onClick={onDelete}
                 className="inline-flex items-center gap-1 text-[11px] text-red-500 hover:underline"
               >
@@ -479,6 +496,73 @@ function CreateExpenseDialog({ open, onClose, containerId, onCreated }: { open: 
       }
     >
       <div className="space-y-3">
+        <AppInput label="Titre" value={title} onChange={(e) => setTitle(e.target.value)} required />
+        <AppInput label="Motif" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Defaut = titre" />
+        <AppTextarea label="Description" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
+        <div className="grid grid-cols-2 gap-3">
+          <AppInput label="Categorie" value={category} onChange={(e) => setCategory(e.target.value)} />
+          <AppInput label="Montant" type="number" min={0} value={amount} onChange={(e) => setAmount(e.target.value)} required />
+        </div>
+      </div>
+    </AppDialog>
+  );
+}
+
+function EditExpenseDialog({ expense, onClose, onSaved }: { expense: Expense | null; onClose: () => void; onSaved: () => void }) {
+  const [title, setTitle] = useState('');
+  const [reason, setReason] = useState('');
+  const [description, setDescription] = useState('');
+  const [category, setCategory] = useState('CONTAINER');
+  const [amount, setAmount] = useState('');
+
+  useEffect(() => {
+    if (!expense) return;
+    setTitle(expense.title);
+    setReason(expense.reason ?? '');
+    setDescription(expense.description ?? '');
+    setCategory(expense.category ?? 'CONTAINER');
+    setAmount(String(expense.amount ?? ''));
+  }, [expense]);
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      apiClient.patch(`/expenses/${expense!.id}`, {
+        title,
+        reason: reason || title,
+        description: description || undefined,
+        category,
+        amount: Number(amount),
+      }),
+    onSuccess: () => {
+      toast.success('Depense modifiee');
+      onSaved();
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Echec modification'),
+  });
+
+  return (
+    <AppDialog
+      open={!!expense}
+      onClose={onClose}
+      title={expense ? `Modifier ${expense.title}` : 'Modifier depense'}
+      size="md"
+      footer={
+        <>
+          <AppButton variant="ghost" onClick={onClose}>Annuler</AppButton>
+          <AppButton
+            onClick={() => mutation.mutate()}
+            loading={mutation.isPending}
+            disabled={!title.trim() || !amount || Number(amount) <= 0}
+          >
+            Enregistrer
+          </AppButton>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <p className="text-xs text-gray-500">
+          Edition uniquement pour depenses non payees. Si depense forwarding et conteneur en transit, la propagation aux parents sera recalculee.
+        </p>
         <AppInput label="Titre" value={title} onChange={(e) => setTitle(e.target.value)} required />
         <AppInput label="Motif" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Defaut = titre" />
         <AppTextarea label="Description" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />

@@ -98,14 +98,24 @@ export class ContainerController {
   }
 
   /**
-   * Snapshot des colis presents dans le conteneur a l'arrivee : inclut les
-   * colis encore charges + ceux deja decharges (lastContainerId). Sert au
-   * calcul du benefice qui ne doit pas baisser pendant le dechargement.
+   * Snapshot des colis pour le calcul du benefice :
+   *  - Avant transit (EMPTY/LOADING) : retourne les colis ACTUELLEMENT
+   *    charges (containerId == id). Le total suit dynamiquement les
+   *    ajouts / retraits.
+   *  - Au depart et apres (IN_TRANSIT/RECEIVED/UNLOADED) : retourne le
+   *    snapshot fige (containerId OU lastContainerId == id). Permet de
+   *    preserver la valeur meme apres dechargement.
    */
   static async getArrivalSnapshot(req: Request, res: Response, next: NextFunction) {
     try {
-      const repo = container.resolve<any>(PARCEL_REPOSITORY);
-      const parcels = await repo.findArrivalSnapshot(req.params.id);
+      const containerRepo = container.resolve<any>(CONTAINER_REPOSITORY);
+      const parcelRepo = container.resolve<any>(PARCEL_REPOSITORY);
+      const cont = await containerRepo.findById(req.params.id);
+      if (!cont) throw new NotFoundError('Conteneur', req.params.id);
+      const FROZEN = new Set(['IN_TRANSIT', 'RECEIVED', 'UNLOADED']);
+      const parcels = FROZEN.has(cont.status)
+        ? await parcelRepo.findArrivalSnapshot(req.params.id)
+        : await parcelRepo.findByContainer(req.params.id);
       res.json({ success: true, data: parcels });
     } catch (err) {
       next(err);

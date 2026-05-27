@@ -93,7 +93,15 @@ function ClientsContent() {
             <Users className="h-4 w-4 text-primary-600" />
           </div>
           <div>
-            <Link href={`/clients/${row.id}`} className="font-medium text-primary-700 hover:underline" onClick={(e) => e.stopPropagation()}>{row.fullName}</Link>
+            <div className="flex items-center gap-1.5">
+              <Link href={`/clients/${row.id}`} className="font-medium text-primary-700 hover:underline" onClick={(e) => e.stopPropagation()}>{row.fullName}</Link>
+              {row.employee && (
+                <AppBadge variant="info" className="text-[10px]">Employe</AppBadge>
+              )}
+              {row.carrier && (
+                <AppBadge variant="warning" className="text-[10px]">Transporteur</AppBadge>
+              )}
+            </div>
             <p className="text-xs text-gray-400">{row.phone}</p>
           </div>
         </div>

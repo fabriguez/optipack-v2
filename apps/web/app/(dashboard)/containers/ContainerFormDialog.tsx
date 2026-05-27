@@ -119,6 +119,7 @@ export function ContainerFormDialog({ open, onClose, container: editTarget }: Co
   ];
 
   return (
+    <>
     <AppDialog
       open={open}
       onClose={onClose}
@@ -301,11 +302,16 @@ export function ContainerFormDialog({ open, onClose, container: editTarget }: Co
         />
 
       </form>
-      <CarrierFormDialog
-        open={showCarrierDialog}
-        onClose={() => setShowCarrierDialog(false)}
-        onSaved={(c) => setValue('carrierId' as any, c.id)}
-      />
     </AppDialog>
+    {/* Rendu en frere du AppDialog parent : evite la propagation des
+        evenements de fermeture (ESC, outside-click) du dialog enfant vers
+        le dialog parent (sinon fermer le form transporteur fermait aussi
+        le form conteneur). */}
+    <CarrierFormDialog
+      open={showCarrierDialog}
+      onClose={() => setShowCarrierDialog(false)}
+      onSaved={(c) => setValue('carrierId' as any, c.id)}
+    />
+    </>
   );
 }
