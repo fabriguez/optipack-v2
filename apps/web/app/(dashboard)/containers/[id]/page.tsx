@@ -519,11 +519,15 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
   ];
 
   const expensesForBenefice: any[] = containerExpensesData?.data ?? [];
-  // Benefice base sur le snapshot d'arrivee, pas sur les colis actuellement
-  // dans le conteneur : sinon le total baisse au fur et a mesure du
-  // dechargement et peut devenir negatif.
+  // Snapshot = tous les colis charges dans ce conteneur (etat fige a partir
+  // du depart). Recu = snapshot moins les colis marques LOST (non recus).
+  // La valeur facturable du conteneur (et donc le benefice) est calculee
+  // sur les colis REELLEMENT RECUS, pas sur le total envoye : un colis
+  // perdu ne genere pas de revenu pour ce conteneur.
   const arrivalSnapshot: any[] = arrivalSnapshotData?.data ?? [];
-  const parcelsValueTotal = arrivalSnapshot.reduce((s: number, p: any) => s + Number(p.price ?? 0), 0);
+  const receivedParcels = arrivalSnapshot.filter((p: any) => p.status !== 'LOST');
+  const lostCount = arrivalSnapshot.length - receivedParcels.length;
+  const parcelsValueTotal = receivedParcels.reduce((s: number, p: any) => s + Number(p.price ?? 0), 0);
   const expensesTotal = expensesForBenefice.reduce((s, e) => s + Number(e.amount ?? 0), 0);
   const benefice = parcelsValueTotal - expensesTotal;
 
@@ -532,9 +536,13 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
       {!container.isForwarding && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <AppCard>
-            <p className="text-sm text-gray-500">Valeur totale colis</p>
+            <p className="text-sm text-gray-500">Valeur colis recus</p>
             <p className="mt-1 text-lg font-bold text-green-600">+{formatAmount(parcelsValueTotal)}</p>
-            <p className="text-[11px] text-gray-400 mt-0.5">{arrivalSnapshot.length} colis (a l&apos;arrivee)</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">
+              {arrivalSnapshot.length} envoye(s){' · '}
+              <span className="text-emerald-700">{receivedParcels.length} recu(s)</span>
+              {lostCount > 0 && <> · <span className="text-red-600">{lostCount} non recu(s)</span></>}
+            </p>
           </AppCard>
           <AppCard>
             <p className="text-sm text-gray-500">Total depenses</p>
