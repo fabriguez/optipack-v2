@@ -1,7 +1,6 @@
 import { inject, injectable } from 'tsyringe';
 import { CONTAINER_REPOSITORY, type IContainerRepository } from '../../interfaces/IContainerRepository';
 import { PARCEL_REPOSITORY, type IParcelRepository } from '../../interfaces/IParcelRepository';
-import { MANIFEST_REPOSITORY, type IManifestRepository } from '../../interfaces/IManifestRepository';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
 import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 import { HistoryService } from '../../services/HistoryService';
@@ -11,7 +10,6 @@ export class ArriveContainerUseCase {
   constructor(
     @inject(CONTAINER_REPOSITORY) private containerRepo: IContainerRepository,
     @inject(PARCEL_REPOSITORY) private parcelRepo: IParcelRepository,
-    @inject(MANIFEST_REPOSITORY) private manifestRepo: IManifestRepository,
     private history: HistoryService,
   ) {}
 
@@ -68,38 +66,9 @@ export class ArriveContainerUseCase {
       changes: { arrivalDate: arrivalDate.toISOString(), parcelCount: parcelIds.length },
     });
 
-    // Auto-generation du bordereau de reception a l'arrivee.
-    // Best-effort : un echec est loggue dans l'historique conteneur pour
-    // visibilite, mais ne bloque pas l'arrivee. Idempotent : si un bordereau
-    // de reception existe deja pour ce conteneur, on saute.
-    if (parcelIds.length > 0) {
-      try {
-        const existing = await this.manifestRepo.findByContainer(containerId);
-        const alreadyHasReception = existing.some((m) => m.type === 'RECEPTION');
-        if (alreadyHasReception) {
-          // Pas de regeneration auto : on garde le bordereau existant.
-        } else {
-        const manifest = await this.manifestRepo.createReceptionManifest(containerId, userId);
-        await this.history.recordContainer({
-          containerId,
-          action: 'RECEPTION_MANIFEST_CREATED',
-          userId,
-          comment: `Bordereau de reception ${manifest.number} genere automatiquement`,
-          changes: { manifestId: manifest.id, number: manifest.number, lineCount: manifest.lines.length },
-        });
-        }
-      } catch (err) {
-        try {
-          await this.history.recordContainer({
-            containerId,
-            action: 'RECEPTION_MANIFEST_FAILED',
-            userId,
-            comment: 'Echec generation auto bordereau reception',
-            changes: { error: err instanceof Error ? err.message : String(err) } as any,
-          });
-        } catch { /* skip */ }
-      }
-    }
+    // Bordereau de reception : generation MANUELLE par l'utilisateur depuis
+    // l'UI (decision metier : on attend que le dechargement soit complet ou
+    // suffisant avant d'enregistrer). Plus de generation auto a l'arrivee.
 
     eventBus.emit({
       type: DomainEvents.CONTAINER_ARRIVED,
