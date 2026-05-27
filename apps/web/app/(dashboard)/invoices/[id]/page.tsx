@@ -323,6 +323,58 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           </AppCard>
         )}
 
+        {/* Historique des remises : visible si au moins une remise a ete
+            appliquee ou retiree. Permet de tracer le pourquoi et le quand. */}
+        {Array.isArray(invoice.discountHistory) && invoice.discountHistory.length > 0 && (
+          <AppCard>
+            <AppCardHeader
+              title={`Historique des remises (${invoice.discountHistory.length})`}
+              description={`Remise actuelle : ${formatAmount(Number(invoice.discount))}`}
+            />
+            <div className="overflow-hidden rounded-xl border border-gray-100">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 text-xs text-gray-500">
+                  <tr>
+                    <th className="p-2 text-left">Date</th>
+                    <th className="p-2 text-left">Action</th>
+                    <th className="p-2 text-right">Avant</th>
+                    <th className="p-2 text-right">Apres</th>
+                    <th className="p-2 text-left">Raison</th>
+                    <th className="p-2 text-left">Par</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {invoice.discountHistory.map((entry: any) => {
+                    const c = entry.changes || {};
+                    const prev = Number(c.previousDiscount ?? 0);
+                    const next = Number(c.newDiscount ?? 0);
+                    const isApplied = entry.action === 'DISCOUNT_APPLIED';
+                    const user = entry.user
+                      ? `${entry.user.firstName ?? ''} ${entry.user.lastName ?? ''}`.trim() || '-'
+                      : '-';
+                    return (
+                      <tr key={entry.id} className="hover:bg-gray-50 align-top">
+                        <td className="p-2 text-gray-700 whitespace-nowrap">{formatDateTime(entry.createdAt)}</td>
+                        <td className="p-2">
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                            isApplied ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                          }`}>
+                            {isApplied ? 'Appliquee' : 'Retiree'}
+                          </span>
+                        </td>
+                        <td className="p-2 text-right text-gray-500">{formatAmount(prev)}</td>
+                        <td className="p-2 text-right font-semibold text-gray-900">{formatAmount(next)}</td>
+                        <td className="p-2 text-gray-700">{c.reason || '-'}</td>
+                        <td className="p-2 text-gray-700">{user}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </AppCard>
+        )}
+
         {/* Payments */}
         <AppCard>
           <div className="flex items-center justify-between mb-4">

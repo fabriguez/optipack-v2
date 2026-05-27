@@ -33,6 +33,7 @@ import { ParcelFormDialog } from '../ParcelFormDialog';
 import { PaymentFormDialog } from '../../payments/PaymentFormDialog';
 import { ImageInput } from '@/components/shared/ImageInput';
 import { AuthedImage } from '@/components/shared/AuthedImage';
+import { ImageLightbox } from '@/components/shared/ImageLightbox';
 import { uploadImage } from '@/lib/api/uploads';
 import { toast } from 'sonner';
 
@@ -136,6 +137,7 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
   const [imageCaption, setImageCaption] = useState('');
   const [imageUploading, setImageUploading] = useState(false);
   const [imageToDelete, setImageToDelete] = useState<string | null>(null);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
 
@@ -451,9 +453,16 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-            {images.map((img) => (
+            {images.map((img, idx) => (
               <div key={img.id} className="group relative overflow-hidden rounded-xl border border-gray-100">
-                <AuthedImage src={img.url} alt={img.caption || 'Image colis'} className="h-32 w-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => setLightboxIndex(idx)}
+                  className="block h-32 w-full cursor-zoom-in"
+                  aria-label="Agrandir l'image"
+                >
+                  <AuthedImage src={img.url} alt={img.caption || 'Image colis'} className="h-32 w-full object-cover transition-transform group-hover:scale-105" />
+                </button>
                 {img.caption && (
                   <p className="px-2 py-1 text-xs text-gray-600 truncate">{img.caption}</p>
                 )}
@@ -637,6 +646,13 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
         message="Cette action est irreversible."
         confirmLabel="Supprimer"
         variant="destructive"
+      />
+
+      <ImageLightbox
+        images={images.map((img: any) => ({ url: img.url, caption: img.caption }))}
+        index={lightboxIndex}
+        onClose={() => setLightboxIndex(null)}
+        onIndexChange={setLightboxIndex}
       />
     </PageTransition>
   );
