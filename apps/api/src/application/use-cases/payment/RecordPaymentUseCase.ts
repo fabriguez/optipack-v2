@@ -76,6 +76,20 @@ export class RecordPaymentUseCase {
       throw new BusinessError('Cette facture est annulee');
     }
 
+    // Refus paiement si TOUS les colis lies a la facture sont LOST :
+    // facturer un colis perdu n'a pas de sens (annulation / remboursement
+    // attendu plutot). Si un seul colis sur N est LOST, on autorise (les
+    // autres restent dus).
+    const invoiceParcelsForLostCheck = await prisma.parcel.findMany({
+      where: { invoiceId: invoice.id, isDeleted: false },
+      select: { status: true },
+    });
+    if (invoiceParcelsForLostCheck.length > 0 && invoiceParcelsForLostCheck.every((p) => p.status === 'LOST')) {
+      throw new BusinessError(
+        'Tous les colis de cette facture sont marques comme perdus. Aucun paiement ne peut etre enregistre.',
+      );
+    }
+
     // 2. Validate amount
     const balance = Number(invoice.balance);
     if (input.amount > balance) {

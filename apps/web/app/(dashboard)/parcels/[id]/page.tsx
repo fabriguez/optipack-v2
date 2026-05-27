@@ -244,7 +244,7 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
                     Voir la facture
                   </AppButton>
                 </Link>
-                {parcel.invoice.status !== 'PAID' && (
+                {parcel.invoice.status !== 'PAID' && parcel.status !== 'LOST' && (
                   // Ouvre le dialog directement plutot que de rediriger vers
                   // la page /payments. La facture est pre-fixee et grisee dans
                   // le formulaire pour eviter toute mauvaise selection.
@@ -256,6 +256,11 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
                     <CreditCard className="h-4 w-4" />
                     Enregistrer paiement
                   </AppButton>
+                )}
+                {parcel.status === 'LOST' && (
+                  <p className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
+                    Colis marque comme non recu (perdu). Aucun paiement ne peut etre enregistre pour ce colis.
+                  </p>
                 )}
               </div>
             </div>
