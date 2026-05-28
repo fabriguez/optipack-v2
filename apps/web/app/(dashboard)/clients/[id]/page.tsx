@@ -63,6 +63,14 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   });
   const outstanding = outstandingData?.data ?? null;
 
+  // Score de fiabilite (GOOD / RISKY / BAD).
+  const { data: scoreData } = useQuery({
+    queryKey: ['clients', id, 'score'],
+    queryFn: () => apiClient.get(`/clients/${id}/score`).then((r) => r.data),
+    enabled: !!id,
+  });
+  const score = scoreData?.data ?? null;
+
   const client = data?.data;
 
   if (isLoading) return <DashboardSkeleton />;
@@ -255,6 +263,15 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                 <AppBadge variant="info">Entreprise</AppBadge>
               )}
               <AppBadge variant={TIER_VARIANT[client.loyaltyTier] || 'default'}>{client.loyaltyTier}</AppBadge>
+              {score && (
+                <span title={score.reasons.join(' · ')} className="inline-flex">
+                  <AppBadge
+                    variant={score.score === 'GOOD' ? 'success' : score.score === 'RISKY' ? 'warning' : 'error'}
+                  >
+                    {score.score === 'GOOD' ? 'Bon payeur' : score.score === 'RISKY' ? 'Risque' : 'Mauvais payeur'}
+                  </AppBadge>
+                </span>
+              )}
               {!client.isActive && <AppBadge variant="default">Inactif</AppBadge>}
               {client.employee && (
                 <Link href={`/employees/${client.employee.id}`} className="inline-flex">

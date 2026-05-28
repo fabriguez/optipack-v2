@@ -43,6 +43,7 @@ import permissionRoutes from './permission.routes';
 import holidayRoutes from './holiday.routes';
 import workScheduleRoutes from './work-schedule.routes';
 import publicTrackingRoutes from './public-tracking.routes';
+import whatsappWebhookRoutes from './whatsapp-webhook.routes';
 import financeRoutes from './finance.routes';
 import headOfficeRoutes from './head-office.routes';
 
@@ -57,6 +58,9 @@ router.use('/auth', authRoutes);
 router.use('/client-portal', clientPortalRoutes);
 // Suivi public (QR code scanne par le destinataire) — sans auth
 router.use('/public', publicTrackingRoutes);
+// Webhook WhatsApp Meta Cloud API (verification + reception messages).
+// Public, appele par Meta. Verifie via WHATSAPP_VERIFY_TOKEN env.
+router.use('/webhooks/whatsapp', whatsappWebhookRoutes);
 
 // Logistique
 router.use('/agencies', agencyRoutes);

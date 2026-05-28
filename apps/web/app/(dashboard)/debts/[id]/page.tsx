@@ -272,26 +272,55 @@ export default function DebtDetailPage({ params }: { params: Promise<{ id: strin
                 {debt.dueDateFinal ? formatDate(debt.dueDateFinal) : 'Non definie'}
               </span>
             </p>
-            {subDueDates.length > 0 && (
-              <details className="mt-2">
-                <summary className="cursor-pointer text-xs text-primary-700 hover:underline">
-                  {subDueDates.length} sous-echeance(s)
-                </summary>
-                <ul className="mt-2 space-y-1 text-xs">
-                  {subDueDates.map((s, i) => (
-                    <li key={i} className="flex items-center justify-between">
-                      <span>
-                        {s.label || `Echeance ${i + 1}`} - {formatDate(s.date)}
-                      </span>
-                      <span className={s.paid ? 'text-green-600' : 'text-red-600'}>
-                        {formatAmount(Number(s.amount))} {s.paid ? '(paye)' : ''}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </details>
-            )}
           </AppCard>
+
+          {subDueDates.length > 0 && (
+            <AppCard>
+              <AppCardHeader
+                title={`Echeancier (${subDueDates.length})`}
+                description="Plan de paiement echelonne"
+              />
+              <div className="overflow-hidden rounded-xl border border-gray-100">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-xs text-gray-500">
+                    <tr>
+                      <th className="p-2 text-left">#</th>
+                      <th className="p-2 text-left">Echeance</th>
+                      <th className="p-2 text-left">Libelle</th>
+                      <th className="p-2 text-right">Montant</th>
+                      <th className="p-2 text-center">Statut</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {subDueDates.map((s: any, i: number) => {
+                      const dueDate = new Date(s.date);
+                      const now = new Date();
+                      const isOverdue = !s.paid && dueDate < now;
+                      return (
+                        <tr key={i} className="hover:bg-gray-50">
+                          <td className="p-2 text-gray-500">{i + 1}</td>
+                          <td className={`p-2 whitespace-nowrap ${isOverdue ? 'text-red-700 font-semibold' : 'text-gray-900'}`}>
+                            {formatDate(s.date)}
+                          </td>
+                          <td className="p-2 text-gray-700">{s.label || `Echeance ${i + 1}`}</td>
+                          <td className="p-2 text-right font-semibold text-gray-900">{formatAmount(Number(s.amount))}</td>
+                          <td className="p-2 text-center">
+                            {s.paid ? (
+                              <AppBadge variant="success">Paye</AppBadge>
+                            ) : isOverdue ? (
+                              <AppBadge variant="error">En retard</AppBadge>
+                            ) : (
+                              <AppBadge variant="warning">Attente</AppBadge>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </AppCard>
+          )}
 
           {debt.status === 'CANCELLED' && (
             <AppCard>

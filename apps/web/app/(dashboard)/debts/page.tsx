@@ -83,6 +83,11 @@ export default function DebtsPage() {
     }
   })();
 
+  const { data: dashboard } = useQuery({
+    queryKey: ['finance', 'debt-dashboard'],
+    queryFn: () => apiClient.get('/finance/debt-dashboard').then((r) => r.data),
+  });
+
   const { data, isLoading } = useQuery({
     queryKey: ['debts', { page, bucket: tab, search, statusTab }],
     queryFn: () =>
@@ -221,6 +226,18 @@ export default function DebtsPage() {
           </AppButton>
         </div>
 
+        {dashboard?.data && (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+            <DashCard label="Creances clients" value={dashboard.data.clientReceivableTotal} tone="warn" />
+            <DashCard label="Dettes entreprise" value={dashboard.data.companyDebtTotal} tone="warn" />
+            <DashCard label="Echus clients" value={dashboard.data.overdueClientTotal} tone="error" />
+            <DashCard label="Echus entreprise" value={dashboard.data.overdueCompanyTotal} tone="error" />
+            <DashCard label="Recu aujourd'hui" value={dashboard.data.recoveredToday} tone="success" />
+            <DashCard label="Recu ce mois" value={dashboard.data.recoveredMonth} tone="success" />
+            <DashCard label="Echeance aujourd'hui" value={dashboard.data.dueTodayCount} tone="default" raw />
+          </div>
+        )}
+
         {/* Onglets : Dettes clients vs Dettes entreprise (personnel + agence
             + transporteur cumules). Le total restant du bucket est affiche
             a cote pour vue d'ensemble rapide. */}
@@ -315,5 +332,21 @@ export default function DebtsPage() {
         <DebtFormDialog open={showCreate} onClose={() => setShowCreate(false)} defaultBucket={tab} />
       </div>
     </PageTransition>
+  );
+}
+
+function DashCard({ label, value, tone, raw }: { label: string; value: number; tone: 'warn' | 'error' | 'success' | 'default'; raw?: boolean }) {
+  const color =
+    tone === 'error' ? 'text-red-700'
+    : tone === 'warn' ? 'text-amber-700'
+    : tone === 'success' ? 'text-emerald-700'
+    : 'text-gray-900';
+  return (
+    <AppCard padding="sm">
+      <p className="text-[10px] uppercase tracking-wider text-gray-500">{label}</p>
+      <p className={`mt-1 text-base font-bold ${color}`}>
+        {raw ? value : formatAmount(value)}
+      </p>
+    </AppCard>
   );
 }

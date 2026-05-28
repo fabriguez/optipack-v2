@@ -53,11 +53,41 @@ function makeTwilioSmsProvider(): ExternalChannelProvider {
 }
 
 function makeMetaWhatsappProvider(): ExternalChannelProvider {
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const apiVersion = process.env.WHATSAPP_API_VERSION || 'v21.0';
+  const enabled = !!accessToken && !!phoneNumberId;
+  if (!enabled) {
+    logger.warn(
+      'Meta WhatsApp provider non active : WHATSAPP_ACCESS_TOKEN et/ou WHATSAPP_PHONE_NUMBER_ID manquant(s)',
+    );
+  }
   return {
     name: 'meta-cloud-api',
-    enabled: false,
-    async send(_to, _message) {
-      throw new Error('Meta WhatsApp Cloud API non implemente -- a brancher.');
+    enabled,
+    async send(to, message) {
+      if (!enabled) throw new Error('Meta WhatsApp provider non configure');
+      // Meta exige format E.164 sans le +, ex: 237691234567.
+      const recipient = to.replace(/[^0-9]/g, '');
+      const url = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: recipient,
+          type: 'text',
+          text: { preview_url: false, body: message },
+        }),
+      });
+      if (!res.ok) {
+        const errBody = await res.text().catch(() => '');
+        throw new Error(`Meta WhatsApp HTTP ${res.status}: ${errBody.slice(0, 300)}`);
+      }
     },
   };
 }

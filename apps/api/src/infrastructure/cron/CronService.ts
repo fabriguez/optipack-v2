@@ -44,6 +44,17 @@ export function startCronJobs(): void {
     }
   });
 
+  // Relances quotidiennes dettes OVERDUE (multi-canal) chaque jour a 9h.
+  // Anti-spam : 1 relance par jour max par dette (fenetre 24h via DebtHistory).
+  cron.schedule('0 9 * * *', async () => {
+    logger.info('Running overdue debt reminders...');
+    try {
+      await sendOverdueRemindersDaily();
+    } catch (err) {
+      logger.error({ err }, 'Overdue debt reminders failed');
+    }
+  });
+
   // #02 — Verification de coherence Parcel (warehouseId XOR containerId) toutes les 6h
   cron.schedule('0 */6 * * *', async () => {
     try {
@@ -104,9 +115,9 @@ async function checkDebtAlerts(): Promise<void> {
   threeDaysFromNow.setDate(threeDaysFromNow.getDate() + 3);
 
   // Find debts due within 3 days that haven't been alerted yet.
-  // Depuis la refonte (Phase 1), seules les dettes CLIENT ont un clientId
-  // sur lequel envoyer une notif client ; les autres types (EMPLOYEE/AGENCY/
-  // CARRIER) seront alertes via un autre canal en Phase 2.
+  // Multi-canal : IN_APP toujours + EMAIL + SMS + WHATSAPP (les externes
+  // sont SKIPPED si pas de provider configure). Priorite CRITICAL force
+  // tous les canaux. Pour les autres, IN_APP + EMAIL suffisent.
   const debts = await prisma.debt.findMany({
     where: {
       type: 'CLIENT',
@@ -118,34 +129,99 @@ async function checkDebtAlerts(): Promise<void> {
     include: {
       client: { select: { id: true, fullName: true, phone: true, email: true } },
       invoice: { select: { id: true, reference: true } },
+      agency: { select: { id: true } },
     },
   });
 
+  const { notificationService } = await import('../../application/services/notifications/NotificationService');
+
   let alerted = 0;
   for (const debt of debts) {
-    // clientId garanti non-null par le filtre `clientId: { not: null }`
-    // ci-dessus ; on assert pour le compilateur.
-    await prisma.notification.create({
-      data: {
-        clientId: debt.clientId!,
-        title: 'Echeance de dette proche',
-        message: `Votre echeance de ${Number(debt.remainingAmount).toLocaleString()} FCFA arrive le ${debt.nextDueDate?.toLocaleDateString('fr-FR')}. Facture: ${debt.invoice?.reference || '-'}`,
-        type: 'IN_APP',
-        status: 'PENDING',
-        metadata: { debtId: debt.id, invoiceId: debt.invoiceId },
-      },
-    });
-
-    // Mark alert as sent
-    await prisma.debt.update({
-      where: { id: debt.id },
-      data: { alertSent: true },
-    });
-
-    alerted++;
+    const channels = debt.priority === 'CRITICAL'
+      ? (['IN_APP', 'EMAIL', 'SMS', 'WHATSAPP'] as const)
+      : (['IN_APP', 'EMAIL'] as const);
+    const dueDate = debt.nextDueDate?.toLocaleDateString('fr-FR') ?? '-';
+    const amount = Number(debt.remainingAmount).toLocaleString();
+    try {
+      await notificationService.notify(
+        { clientId: debt.clientId!, agencyId: debt.agencyId },
+        {
+          title: 'Echeance de dette proche',
+          message: `Bonjour ${debt.client?.fullName ?? ''}, votre echeance de ${amount} FCFA arrive le ${dueDate}. Reference ${debt.reference}${debt.invoice?.reference ? ` (facture ${debt.invoice.reference})` : ''}.`,
+          channels: channels as any,
+          metadata: { debtId: debt.id, invoiceId: debt.invoiceId, kind: 'DEBT_DUE_SOON' },
+        },
+      );
+      await prisma.debt.update({ where: { id: debt.id }, data: { alertSent: true } });
+      alerted++;
+    } catch (err) {
+      logger.error({ err, debtId: debt.id }, 'Debt alert dispatch failed');
+    }
   }
 
   logger.info({ alerted, total: debts.length }, 'Debt alerts processed');
+}
+
+/**
+ * Relance quotidienne dettes OVERDUE : multi-canal (IN_APP + EMAIL + SMS
+ * + WHATSAPP). On cible les dettes OVERDUE non-soldees. Anti-spam : flag
+ * lastReminderAt non persiste -- on espace via une fenetre 24h via
+ * verification dans DebtHistory (entree REMINDER_SENT < 24h => skip).
+ */
+async function sendOverdueRemindersDaily(): Promise<void> {
+  const debts = await prisma.debt.findMany({
+    where: {
+      type: 'CLIENT',
+      clientId: { not: null },
+      status: 'OVERDUE',
+    },
+    include: {
+      client: { select: { id: true, fullName: true } },
+      agency: { select: { id: true } },
+    },
+  });
+
+  const { notificationService } = await import('../../application/services/notifications/NotificationService');
+  const now = new Date();
+  const oneDayMs = 24 * 60 * 60 * 1000;
+  let sent = 0;
+
+  for (const debt of debts) {
+    // Anti-spam : skip si une relance a deja ete envoyee dans les 24h.
+    const lastReminder = await prisma.debtHistory.findFirst({
+      where: { debtId: debt.id, action: 'REMINDER_SENT' },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (lastReminder && now.getTime() - lastReminder.createdAt.getTime() < oneDayMs) {
+      continue;
+    }
+
+    const amount = Number(debt.remainingAmount).toLocaleString();
+    try {
+      await notificationService.notify(
+        { clientId: debt.clientId!, agencyId: debt.agencyId },
+        {
+          title: 'Dette en retard',
+          message: `Bonjour ${debt.client?.fullName ?? ''}, votre dette ${debt.reference} d'un montant de ${amount} FCFA est en retard. Merci de regulariser au plus vite.`,
+          channels: ['IN_APP', 'EMAIL', 'SMS', 'WHATSAPP'] as any,
+          metadata: { debtId: debt.id, kind: 'DEBT_OVERDUE_REMINDER' },
+        },
+      );
+      await prisma.debtHistory.create({
+        data: {
+          debtId: debt.id,
+          action: 'REMINDER_SENT',
+          changes: { kind: 'OVERDUE', priority: debt.priority } as any,
+          comment: 'Relance automatique envoyee (multi-canal).',
+          userId: null,
+        },
+      });
+      sent++;
+    } catch (err) {
+      logger.error({ err, debtId: debt.id }, 'Overdue reminder dispatch failed');
+    }
+  }
+  logger.info({ sent, total: debts.length }, 'Overdue debt reminders processed');
 }
 
 async function markOverdueDebts(): Promise<void> {

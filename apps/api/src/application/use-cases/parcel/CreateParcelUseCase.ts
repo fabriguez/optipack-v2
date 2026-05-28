@@ -41,6 +41,42 @@ export class CreateParcelUseCase {
     if (!transitRoute) throw new NotFoundError('Route de transit', input.transitRouteId);
     if (!destinationAgency) throw new NotFoundError('Agence de destination', input.destinationAgencyId);
 
+    // Blocage nouvelle expedition si le client a un cumul de dettes CLIENT
+    // au-dessus du plafond configure. Lecture SystemConfig clé
+    // 'debt_shipment_block_enabled' + 'debt_shipment_block_threshold'.
+    // Par defaut desactive (back-compat).
+    const orgForClient = await prisma.agency.findUnique({
+      where: { id: warehouse.agencyId },
+      select: { organizationId: true },
+    });
+    if (orgForClient) {
+      const [enabledCfg, thresholdCfg] = await Promise.all([
+        prisma.systemConfig.findUnique({
+          where: { organizationId_key: { organizationId: orgForClient.organizationId, key: 'debt_shipment_block_enabled' } },
+        }),
+        prisma.systemConfig.findUnique({
+          where: { organizationId_key: { organizationId: orgForClient.organizationId, key: 'debt_shipment_block_threshold' } },
+        }),
+      ]);
+      if (enabledCfg?.value === 'true') {
+        const threshold = Number(thresholdCfg?.value ?? 0);
+        const agg = await prisma.debt.aggregate({
+          where: {
+            clientId: client.id,
+            type: 'CLIENT',
+            status: { notIn: ['CLEARED' as never, 'CANCELLED' as never] },
+          },
+          _sum: { remainingAmount: true },
+        });
+        const cumul = Number(agg._sum.remainingAmount ?? 0);
+        if (cumul > threshold) {
+          throw new BusinessError(
+            `Nouvelle expedition refusee : ${client.fullName} a un cumul de dettes impayees de ${cumul} (plafond ${threshold}). Apurer la dette pour debloquer.`,
+          );
+        }
+      }
+    }
+
     // Regle stricte par type de transit :
     //   AIR  -> masse obligatoire, volume force a null
     //   SEA  -> volume obligatoire, masse forcee a null

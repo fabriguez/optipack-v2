@@ -53,6 +53,77 @@ export class ClientController {
   }
 
   /**
+   * Score de fiabilite client (BON / RISQUE / MAUVAIS) derive de :
+   *  - Nombre de dettes OVERDUE actuelles
+   *  - Ratio total OVERDUE / total cleared historique
+   *  - Delai moyen de paiement (jours entre creation dette et clearance)
+   *  - Cumul restant actuel
+   * Aucun champ persiste : calcul a la demande.
+   */
+  static async getScore(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { prisma } = await import('../../config/database');
+      const clientId = req.params.id;
+      const [overdueCount, activeDebts, clearedDebts] = await Promise.all([
+        prisma.debt.count({ where: { clientId, type: 'CLIENT', status: 'OVERDUE' } }),
+        prisma.debt.findMany({
+          where: { clientId, type: 'CLIENT', status: { notIn: ['CANCELLED' as never, 'CLEARED' as never] } },
+          select: { remainingAmount: true },
+        }),
+        prisma.debt.findMany({
+          where: { clientId, type: 'CLIENT', status: 'CLEARED' },
+          select: { createdAt: true, updatedAt: true },
+        }),
+      ]);
+
+      const activeOutstanding = activeDebts.reduce((s, d) => s + Number(d.remainingAmount), 0);
+      const clearedCount = clearedDebts.length;
+      const totalDebtsHistorical = clearedCount + activeDebts.length;
+      const overdueRatio = totalDebtsHistorical > 0 ? overdueCount / totalDebtsHistorical : 0;
+
+      // Delai moyen paiement (jours).
+      let avgPaymentDays: number | null = null;
+      if (clearedDebts.length > 0) {
+        const totalDays = clearedDebts.reduce(
+          (s, d) => s + (d.updatedAt.getTime() - d.createdAt.getTime()) / (24 * 3600 * 1000),
+          0,
+        );
+        avgPaymentDays = Math.round(totalDays / clearedDebts.length);
+      }
+
+      // Determination score :
+      //  - GOOD : 0 OVERDUE + ratio < 5% + paye sous 14j en moyenne
+      //  - RISKY : 1-2 OVERDUE OU ratio 5-25% OU paye 14-30j
+      //  - BAD : 3+ OVERDUE OU ratio > 25% OU paye > 30j
+      let score: 'GOOD' | 'RISKY' | 'BAD' = 'GOOD';
+      const reasons: string[] = [];
+      if (overdueCount >= 3) { score = 'BAD'; reasons.push(`${overdueCount} dettes en retard`); }
+      else if (overdueCount > 0) { score = 'RISKY'; reasons.push(`${overdueCount} dette(s) en retard`); }
+      if (overdueRatio > 0.25) { score = 'BAD'; reasons.push(`${Math.round(overdueRatio * 100)}% des dettes ont ete en retard`); }
+      else if (overdueRatio > 0.05 && score === 'GOOD') { score = 'RISKY'; reasons.push(`${Math.round(overdueRatio * 100)}% des dettes ont ete en retard`); }
+      if (avgPaymentDays !== null) {
+        if (avgPaymentDays > 30) { score = 'BAD'; reasons.push(`Paiement moyen ${avgPaymentDays}j (lent)`); }
+        else if (avgPaymentDays > 14 && score === 'GOOD') { score = 'RISKY'; reasons.push(`Paiement moyen ${avgPaymentDays}j`); }
+      }
+      if (reasons.length === 0) reasons.push('Aucune dette problematique');
+
+      res.json({
+        success: true,
+        data: {
+          score,
+          overdueCount,
+          activeDebtsCount: activeDebts.length,
+          clearedCount,
+          activeOutstanding,
+          overdueRatio: Number(overdueRatio.toFixed(3)),
+          avgPaymentDays,
+          reasons,
+        },
+      });
+    } catch (err) { next(err); }
+  }
+
+  /**
    * Cumul reste a payer du client : somme des soldes des factures non
    * annulees (status != CANCELLED) + somme des remainingAmount des dettes
    * actives (status != CANCELLED && != CLEARED). Inclus breakdown.
