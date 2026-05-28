@@ -22,7 +22,7 @@ export class DebtController {
   static async list(req: Request, res: Response, next: NextFunction) {
     try {
       const repo = container.resolve<any>(DEBT_REPOSITORY);
-      const { clientId, employeeId, carrierId, agencyId, type, status, bucket } = req.query;
+      const { clientId, employeeId, carrierId, agencyId, type, status, bucket, category, priority, timeFilter } = req.query;
       const result = await repo.findAll(
         {
           clientId: clientId as string | undefined,
@@ -31,6 +31,9 @@ export class DebtController {
           agencyId: agencyId as string | undefined,
           type: type as string | undefined,
           status: status as string | undefined,
+          category: category as string | undefined,
+          priority: priority as string | undefined,
+          timeFilter: timeFilter as 'overdue' | 'due_today' | 'open' | undefined,
           bucket: bucket as 'client' | 'company' | undefined,
         },
         req.query,

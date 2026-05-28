@@ -162,6 +162,42 @@ export function DebtFormDialog({ open, onClose, defaultBucket = 'client' }: Prop
           />
         </div>
 
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <AppSelect
+            label="Categorie"
+            {...register('category')}
+            options={[
+              { value: 'FREIGHT', label: 'Fret' },
+              { value: 'CUSTOMS', label: 'Douane' },
+              { value: 'STORAGE', label: 'Magasinage' },
+              { value: 'DELIVERY', label: 'Livraison' },
+              { value: 'TRANSIT', label: 'Transit' },
+              { value: 'PENALTY', label: 'Penalite' },
+              { value: 'ADVANCE', label: 'Avance' },
+              { value: 'TRANSPORT', label: 'Transport' },
+              { value: 'SUPPLY', label: 'Fourniture' },
+              { value: 'PORT_FEES', label: 'Frais portuaires' },
+              { value: 'FUEL', label: 'Carburant' },
+              { value: 'LABOR', label: 'Main d\'oeuvre' },
+              { value: 'TAXES', label: 'Taxes' },
+              { value: 'MAINTENANCE', label: 'Entretien' },
+              { value: 'RENT', label: 'Loyer' },
+              { value: 'OTHER', label: 'Autre' },
+            ]}
+            placeholder="Selectionner"
+          />
+          <AppSelect
+            label="Priorite"
+            {...register('priority')}
+            options={[
+              { value: 'LOW', label: 'Faible' },
+              { value: 'MEDIUM', label: 'Moyenne' },
+              { value: 'CRITICAL', label: 'Critique' },
+            ]}
+            placeholder="Moyenne"
+          />
+        </div>
+
         {/* Champs typees -- affiches conditionnellement selon le type choisi.
             Le backend refuse explicitement les FK non coherentes. */}
         {type === 'CLIENT' && (

@@ -63,6 +63,11 @@ export class PrismaDebtRepository implements IDebtRepository {
       agencyId?: string;
       type?: string;
       status?: string;
+      category?: string;
+      priority?: string;
+      // 'overdue_today' : echeance depasse aujourd'hui (nextDueDate < now).
+      // 'due_today' : echeance EST aujourd'hui.
+      timeFilter?: 'overdue' | 'due_today' | 'open' | undefined;
       // 'company' : raccourci pour types EMPLOYEE+AGENCY+CARRIER (dette entreprise).
       bucket?: 'client' | 'company' | undefined;
     },
@@ -78,6 +83,21 @@ export class PrismaDebtRepository implements IDebtRepository {
       ...(filters.agencyId && { agencyId: filters.agencyId }),
       ...(filters.type && { type: filters.type as any }),
       ...(filters.status && { status: filters.status as any }),
+      ...(filters.category && { category: filters.category as any }),
+      ...(filters.priority && { priority: filters.priority as any }),
+      ...(filters.timeFilter === 'overdue' && {
+        nextDueDate: { lt: new Date() },
+        status: { notIn: ['CLEARED', 'CANCELLED'] as any },
+      }),
+      ...(filters.timeFilter === 'due_today' && {
+        nextDueDate: {
+          gte: new Date(new Date().setHours(0, 0, 0, 0)),
+          lt: new Date(new Date().setHours(24, 0, 0, 0)),
+        },
+      }),
+      ...(filters.timeFilter === 'open' && {
+        status: { notIn: ['CLEARED', 'CANCELLED'] as any },
+      }),
       ...(filters.bucket === 'client' && { type: 'CLIENT' as const }),
       ...(filters.bucket === 'company' && {
         type: { in: ['EMPLOYEE', 'AGENCY', 'CARRIER'] as const },

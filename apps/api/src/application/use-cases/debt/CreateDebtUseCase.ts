@@ -98,6 +98,8 @@ export class CreateDebtUseCase {
           nextDueDate: input.nextDueDate ? new Date(input.nextDueDate) : null,
           dueDateFinal: input.dueDateFinal ? new Date(input.dueDateFinal) : null,
           subDueDates: (input.subDueDates as any) ?? null,
+          category: (input.category as any) ?? 'OTHER',
+          priority: (input.priority as any) ?? 'MEDIUM',
           createdByUserId: userId,
         },
       });

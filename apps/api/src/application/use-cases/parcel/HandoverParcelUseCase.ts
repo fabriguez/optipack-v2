@@ -64,6 +64,49 @@ export class HandoverParcelUseCase {
       );
     }
 
+    // Blocage si client emetteur a un cumul de dettes CLIENT actives au-dela
+    // du seuil configure. Lecture SystemConfig (cle 'debt_handover_block_*').
+    // Defaut : desactive (back-compat). Si active + pas de seuil : tout dette
+    // active bloque. Avec seuil : bloque seulement si cumul > seuil.
+    if (parcel.clientId) {
+      const agencyForOrg = await prisma.agency.findUnique({
+        where: { id: parcel.warehouseId ? (await prisma.warehouse.findUnique({ where: { id: parcel.warehouseId }, select: { agencyId: true } }))?.agencyId ?? '' : '' },
+        select: { organizationId: true },
+      }).catch(() => null);
+      const organizationId = agencyForOrg?.organizationId;
+      if (organizationId) {
+        const [enabledCfg, thresholdCfg] = await Promise.all([
+          prisma.systemConfig.findUnique({
+            where: { organizationId_key: { organizationId, key: 'debt_handover_block_enabled' } },
+          }),
+          prisma.systemConfig.findUnique({
+            where: { organizationId_key: { organizationId, key: 'debt_handover_block_threshold' } },
+          }),
+        ]);
+        const isEnabled = enabledCfg?.value === 'true';
+        if (isEnabled) {
+          const threshold = Number(thresholdCfg?.value ?? 0);
+          const agg = await prisma.debt.aggregate({
+            where: {
+              clientId: parcel.clientId,
+              type: 'CLIENT',
+              status: { notIn: ['CLEARED' as never, 'CANCELLED' as never] },
+              // Exclut la facture du colis courant : sinon le client ne pourra
+              // jamais retirer si la dette auto-creee a la remise se cumule.
+              ...(parcel.invoiceId && { invoiceId: { not: parcel.invoiceId } }),
+            },
+            _sum: { remainingAmount: true },
+          });
+          const cumul = Number(agg._sum.remainingAmount ?? 0);
+          if (cumul > threshold) {
+            throw new BusinessError(
+              `Retrait bloque : ${receiver.fullName} a un cumul de dettes impayees de ${cumul} (seuil ${threshold}). Apurer la dette avant la remise.`,
+            );
+          }
+        }
+      }
+    }
+
     const updated = await this.parcelRepo.update(parcelId, {
       status: 'DELIVERED',
       pickupDate: new Date(),

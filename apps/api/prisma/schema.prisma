@@ -2310,9 +2310,15 @@ model Debt {
   dueDateFinal DateTime?
   subDueDates  Json?
 
-  status    DebtStatus @default(ACTIVE)
-  isCleared Boolean    @default(false)
-  alertSent Boolean    @default(false)
+  // Categorie metier (transport, douane, magasinage, ...). Sert au tri/filtrage
+  // dans la vue dettes + a la generation de rapports financiers.
+  category  DebtCategory @default(OTHER)
+  // Priorite manuelle. Determine l'ordre dans le tableau de suivi et le
+  // declencheur des relances (CRITICAL = relance immediate apres echeance).
+  priority  DebtPriority @default(MEDIUM)
+  status    DebtStatus   @default(ACTIVE)
+  isCleared Boolean      @default(false)
+  alertSent Boolean      @default(false)
 
   // Trace : qui a cree, qui a annule (le cas echeant). Annulation est
   // soft : status = CANCELLED, voidReason rempli, mais la ligne reste.
@@ -2382,6 +2388,32 @@ enum DebtStatus {
   OVERDUE // echeance depassee (calcul cron)
   LITIGATED // contestee : pas de relance auto, fige le statut
   CANCELLED // annulee par admin avec voidReason
+}
+
+// Categorie metier de la dette (pour rapports + filtres).
+enum DebtCategory {
+  FREIGHT // Fret / transport principal
+  CUSTOMS // Douane / taxes import-export
+  STORAGE // Magasinage / surestaries
+  DELIVERY // Livraison finale / dernier kilometre
+  TRANSIT // Frais de transit / dossier
+  PENALTY // Penalite / amende
+  ADVANCE // Avance client
+  TRANSPORT // Cout transporteur (dette envers carrier)
+  SUPPLY // Fourniture / consommables
+  PORT_FEES // Frais portuaires
+  FUEL // Carburant
+  LABOR // Main d'oeuvre / manutention
+  TAXES // Taxes diverses
+  MAINTENANCE // Entretien materiel / vehicule
+  RENT // Loyer / bail
+  OTHER // Autre / non categorise
+}
+
+enum DebtPriority {
+  LOW
+  MEDIUM
+  CRITICAL
 }
 
 // ============================================================

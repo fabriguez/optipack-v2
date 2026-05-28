@@ -4,6 +4,16 @@ import { z } from 'zod';
 export const DebtTypeValues = ['CLIENT', 'EMPLOYEE', 'AGENCY', 'CARRIER'] as const;
 export type DebtType = (typeof DebtTypeValues)[number];
 
+export const DebtCategoryValues = [
+  'FREIGHT', 'CUSTOMS', 'STORAGE', 'DELIVERY', 'TRANSIT', 'PENALTY', 'ADVANCE',
+  'TRANSPORT', 'SUPPLY', 'PORT_FEES', 'FUEL', 'LABOR', 'TAXES', 'MAINTENANCE',
+  'RENT', 'OTHER',
+] as const;
+export type DebtCategory = (typeof DebtCategoryValues)[number];
+
+export const DebtPriorityValues = ['LOW', 'MEDIUM', 'CRITICAL'] as const;
+export type DebtPriority = (typeof DebtPriorityValues)[number];
+
 export const DebtStatusValues = [
   'ACTIVE',
   'PARTIALLY_PAID',
@@ -41,6 +51,8 @@ export const createDebtSchema = z
     nextDueDate: z.string().or(z.date()).optional(),
     dueDateFinal: z.string().or(z.date()).optional(),
     subDueDates: z.array(subDueDateSchema).optional(),
+    category: z.enum(DebtCategoryValues).optional(),
+    priority: z.enum(DebtPriorityValues).optional(),
   })
   .refine(
     (data) => {

@@ -44,20 +44,57 @@ const TYPE_LABEL: Record<string, string> = {
 };
 
 type Bucket = 'client' | 'company';
+type StatusFilter = 'all' | 'overdue' | 'partial' | 'cleared' | 'due_today';
+
+const PRIORITY_VARIANT: Record<string, 'error' | 'warning' | 'default'> = {
+  CRITICAL: 'error',
+  MEDIUM: 'warning',
+  LOW: 'default',
+};
+const PRIORITY_LABEL: Record<string, string> = {
+  LOW: 'Faible',
+  MEDIUM: 'Moyenne',
+  CRITICAL: 'Critique',
+};
+const CATEGORY_LABEL: Record<string, string> = {
+  FREIGHT: 'Fret', CUSTOMS: 'Douane', STORAGE: 'Magasinage', DELIVERY: 'Livraison',
+  TRANSIT: 'Transit', PENALTY: 'Penalite', ADVANCE: 'Avance', TRANSPORT: 'Transport',
+  SUPPLY: 'Fourniture', PORT_FEES: 'Frais port.', FUEL: 'Carburant',
+  LABOR: 'Main d\'oeuvre', TAXES: 'Taxes', MAINTENANCE: 'Entretien',
+  RENT: 'Loyer', OTHER: 'Autre',
+};
 
 export default function DebtsPage() {
   const router = useRouter();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<Bucket>('client');
+  const [statusTab, setStatusTab] = useState<StatusFilter>('all');
   const [showCreate, setShowCreate] = useState(false);
 
+  // Conversion onglet statut -> params API (status / timeFilter).
+  const statusParams = (() => {
+    switch (statusTab) {
+      case 'overdue': return { timeFilter: 'overdue' as const };
+      case 'partial': return { status: 'PARTIALLY_PAID' };
+      case 'cleared': return { status: 'CLEARED' };
+      case 'due_today': return { timeFilter: 'due_today' as const };
+      default: return {};
+    }
+  })();
+
   const { data, isLoading } = useQuery({
-    queryKey: ['debts', { page, bucket: tab, search }],
+    queryKey: ['debts', { page, bucket: tab, search, statusTab }],
     queryFn: () =>
       apiClient
         .get('/debts', {
-          params: { page, limit: 20, bucket: tab, search: search || undefined },
+          params: {
+            page,
+            limit: 20,
+            bucket: tab,
+            search: search || undefined,
+            ...statusParams,
+          },
         })
         .then((r) => r.data),
   });
@@ -104,7 +141,23 @@ export default function DebtsPage() {
     {
       key: 'motif',
       label: 'Motif',
-      render: (row: any) => <span className="text-sm text-gray-700">{row.motif}</span>,
+      render: (row: any) => (
+        <div className="text-sm">
+          <div className="text-gray-700">{row.motif}</div>
+          {row.category && row.category !== 'OTHER' && (
+            <div className="text-[10px] text-gray-400">{CATEGORY_LABEL[row.category] ?? row.category}</div>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'priority',
+      label: 'Priorite',
+      render: (row: any) => (
+        <AppBadge variant={PRIORITY_VARIANT[row.priority] || 'default'}>
+          {PRIORITY_LABEL[row.priority] || row.priority}
+        </AppBadge>
+      ),
     },
     {
       key: 'totalAmount',
@@ -203,6 +256,32 @@ export default function DebtsPage() {
             Dettes entreprise
           </button>
         </nav>
+
+        {/* Sous-onglets de statut/echeance. Filtre cote backend via
+            status + timeFilter. */}
+        <div className="flex flex-wrap gap-1.5">
+          {([
+            { id: 'all', label: 'Toutes' },
+            { id: 'overdue', label: 'En retard' },
+            { id: 'partial', label: 'Partiellement payees' },
+            { id: 'cleared', label: 'Soldees' },
+            { id: 'due_today', label: 'Echeance aujourd\'hui' },
+          ] as { id: StatusFilter; label: string }[]).map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => { setStatusTab(s.id); setPage(1); }}
+              className={cn(
+                'rounded-full px-3 py-1 text-xs font-medium transition-colors',
+                statusTab === s.id
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200',
+              )}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
 
         <div className="flex items-center justify-between gap-3">
           <div className="flex-1">
