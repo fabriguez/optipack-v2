@@ -4,6 +4,7 @@ import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessErr
 import { HistoryService } from '../../services/HistoryService';
 import { StorageChargeService } from '../../services/StorageChargeService';
 import { prisma } from '../../../config/database';
+import { generateReference } from '@transitsoftservices/shared';
 
 interface HandoverInput {
   /** Client qui a recu le colis (peut etre different du recipient enregistre) */
@@ -78,6 +79,93 @@ export class HandoverParcelUseCase {
       reason: 'HANDOVER',
     });
 
+    // Auto-creation d'une dette CLIENT si la facture liee a un solde
+    // restant. Le colis a ete remis sans paiement complet : on materialise
+    // l'engagement de paiement du client via une Debt (type CLIENT, motif
+    // "Colis remis sans paiement complet"). Idempotent : skip si une dette
+    // active existe deja pour cette facture.
+    let createdDebt: { id: string; reference: string; amount: number } | null = null;
+    if (parcel.invoiceId) {
+      try {
+        const invoice = await prisma.invoice.findUnique({
+          where: { id: parcel.invoiceId },
+          select: {
+            id: true, reference: true, balance: true, status: true,
+            agencyId: true, clientId: true,
+            agency: { select: { organizationId: true } },
+          },
+        });
+        const remainingBalance = invoice ? Number(invoice.balance) : 0;
+        const shouldCreate =
+          invoice &&
+          remainingBalance > 0 &&
+          invoice.status !== 'CANCELLED' &&
+          invoice.status !== 'PAID';
+        if (shouldCreate) {
+          const existingDebt = await prisma.debt.findFirst({
+            where: {
+              invoiceId: invoice.id,
+              type: 'CLIENT',
+              status: { notIn: ['CANCELLED' as never, 'CLEARED' as never] },
+            },
+          });
+          if (!existingDebt) {
+            const reference = generateReference('DET', Date.now());
+            const debt = await prisma.$transaction(async (tx) => {
+              const created = await tx.debt.create({
+                data: {
+                  reference,
+                  organizationId: invoice.agency.organizationId,
+                  agencyId: invoice.agencyId,
+                  type: 'CLIENT',
+                  motif: `Colis ${parcel.trackingNumber} remis sans paiement complet`,
+                  description: `Facture ${invoice.reference} : solde ${remainingBalance} restant a payer au moment de la remise du colis.`,
+                  totalAmount: remainingBalance,
+                  paidAmount: 0,
+                  remainingAmount: remainingBalance,
+                  clientId: invoice.clientId,
+                  parcelId: parcel.id,
+                  invoiceId: invoice.id,
+                  createdByUserId: userId,
+                },
+              });
+              await tx.debtHistory.create({
+                data: {
+                  debtId: created.id,
+                  action: 'CREATED',
+                  changes: {
+                    type: 'CLIENT',
+                    totalAmount: remainingBalance,
+                    motif: created.motif,
+                    source: 'HANDOVER',
+                    parcelId: parcel.id,
+                    invoiceId: invoice.id,
+                  },
+                  comment: 'Cree automatiquement a la remise du colis (solde facture impaye).',
+                  userId,
+                },
+              });
+              return created;
+            });
+            createdDebt = { id: debt.id, reference: debt.reference, amount: remainingBalance };
+          }
+        }
+      } catch (err) {
+        // Non bloquant : remise reussit meme si la dette echoue.
+        try {
+          await this.history.recordParcel({
+            parcelId,
+            action: 'DEBT_AUTO_CREATE_FAILED',
+            userId,
+            parcelDesignationSnapshot: parcel.designation,
+            parcelTrackingSnapshot: parcel.trackingNumber,
+            comment: 'Echec creation auto dette a la remise',
+            metadata: { error: err instanceof Error ? err.message : String(err) },
+          });
+        } catch { /* skip */ }
+      }
+    }
+
     await this.history.recordParcel({
       parcelId,
       action: 'HANDED_OVER',
@@ -88,6 +176,7 @@ export class HandoverParcelUseCase {
       comment: [
         `Remis a ${receiver.fullName}`,
         input.note ? `Note: ${input.note}` : '',
+        createdDebt ? `Dette ${createdDebt.reference} creee (${createdDebt.amount})` : '',
         'Identite confirmee par confrontation photo CNI',
       ]
         .filter(Boolean)
@@ -97,10 +186,13 @@ export class HandoverParcelUseCase {
         receivedByName: receiver.fullName,
         proofUrl: input.proofUrl ?? null,
         identityConfirmed: true,
+        autoDebtId: createdDebt?.id ?? null,
+        autoDebtReference: createdDebt?.reference ?? null,
+        autoDebtAmount: createdDebt?.amount ?? null,
       },
     });
 
-    return updated;
+    return { ...updated, autoDebt: createdDebt };
   }
 }
 
