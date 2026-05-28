@@ -99,6 +99,8 @@ export interface InvoiceData {
   storageFeesTotal?: number;
   // Historique des remises (audit log). Affiche en bas de la facture.
   discountHistory?: InvoiceDiscountEntry[];
+  /** Branding tenant pour entete/pied de la facture. */
+  branding?: PDFBranding | null;
 }
 
 interface ManifestParcel {
@@ -136,6 +138,8 @@ export interface ManifestData {
   arrivalAgency: string;
   date: Date | string;
   parcels: ManifestParcel[];
+  /** Branding tenant pour entete/pied du bordereau. */
+  branding?: PDFBranding | null;
 }
 
 export interface ComparisonData {
@@ -147,6 +151,8 @@ export interface ComparisonData {
   received: ManifestParcel[];
   missingPhysical: Array<{ trackingNumber: string; designation: string; weight?: number | null; comment?: string | null }>;
   extraPhysical: Array<{ trackingNumber?: string; designation: string; weight?: number | null; comment?: string | null }>;
+  /** Branding tenant pour entete/pied. */
+  branding?: PDFBranding | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -190,21 +196,126 @@ const COLORS = {
   tableBorder: '#CCCCCC',
 } as const;
 
-function drawFooter(doc: PDFKit.PDFDocument, pageWidth: number) {
+/**
+ * Branding tenant pour entête/pied des documents imprimables.
+ * Le primaryColor override COLORS.primary localement (par doc).
+ */
+export interface PDFBranding {
+  organizationName: string | null;
+  organizationPhone?: string | null;
+  organizationEmail?: string | null;
+  organizationAddress?: string | null;
+  /** Bytes du logo organisation (precharges depuis MinIO par l'appelant). */
+  logoBuffer?: Buffer | null;
+  /** Couleur principale (#hex). Override le COLORS.primary par defaut. */
+  primaryColor?: string | null;
+}
+
+/**
+ * Dessine une entete brandee pour le document : logo + nom du tenant +
+ * titre du document + meta lignes (reference, date, ...). Retourne le Y
+ * sous la zone d'entete pour continuer le rendu.
+ */
+function drawBrandedHeader(
+  doc: PDFKit.PDFDocument,
+  pageWidth: number,
+  opts: {
+    branding?: PDFBranding | null;
+    title: string;
+    metaLines?: Array<string | null | undefined>;
+  },
+): number {
+  const branding = opts.branding ?? {} as PDFBranding;
+  const primary = branding.primaryColor || COLORS.primary;
+  // Bandeau couleur tenant
+  doc.rect(0, 0, doc.page.width, 90).fill(primary);
+
+  // Logo a gauche si fourni
+  const leftX = 50;
+  if (branding.logoBuffer) {
+    try {
+      doc.image(branding.logoBuffer, leftX, 16, { fit: [58, 58] });
+    } catch { /* logo invalide -> skip */ }
+  }
+  const textX = branding.logoBuffer ? leftX + 70 : leftX;
+
+  // Nom tenant
+  doc
+    .fillColor(COLORS.white)
+    .font('Helvetica-Bold')
+    .fontSize(16)
+    .text((branding.organizationName || 'OptiPack').toUpperCase(), textX, 18, {
+      width: pageWidth - (textX - leftX),
+    });
+
+  // Coordonnees tenant
+  doc.font('Helvetica').fontSize(8).fillColor(COLORS.white);
+  const contactBits: string[] = [];
+  if (branding.organizationAddress) contactBits.push(branding.organizationAddress);
+  if (branding.organizationPhone) contactBits.push(`Tel: ${branding.organizationPhone}`);
+  if (branding.organizationEmail) contactBits.push(branding.organizationEmail);
+  if (contactBits.length > 0) {
+    doc.text(contactBits.join('  ·  '), textX, 42, {
+      width: pageWidth - (textX - leftX),
+      lineBreak: false,
+      ellipsis: true,
+    });
+  }
+
+  // Bandeau titre du document
+  const titleY = 100;
+  doc.rect(50, titleY, pageWidth, 32).fillAndStroke(COLORS.lightGray, primary);
+  doc
+    .fillColor(primary)
+    .font('Helvetica-Bold')
+    .fontSize(14)
+    .text(opts.title, 60, titleY + 5, { width: pageWidth - 20 });
+
+  // Meta lignes a droite (reference, date)
+  const metaLines = (opts.metaLines ?? []).filter((m): m is string => !!m);
+  doc.font('Helvetica').fontSize(9).fillColor(COLORS.dark);
+  metaLines.forEach((line, idx) => {
+    doc.text(line, 60, titleY + 18 + idx * 11, { width: pageWidth - 20, align: 'right' });
+  });
+
+  return titleY + 40;
+}
+
+function drawFooter(doc: PDFKit.PDFDocument, pageWidth: number, branding?: PDFBranding | null) {
+  const primary = branding?.primaryColor || COLORS.primary;
   const footerY = doc.page.height - 60;
   doc
     .moveTo(50, footerY)
     .lineTo(50 + pageWidth, footerY)
-    .strokeColor(COLORS.primary)
+    .strokeColor(primary)
     .lineWidth(1)
     .stroke();
+
+  // Ligne 1 : tenant (si different de TransitSoftServices)
+  const tenantName = branding?.organizationName;
+  if (tenantName && tenantName.toLowerCase() !== 'transitsoftservices') {
+    const tenantBits = [tenantName];
+    if (branding?.organizationEmail) tenantBits.push(branding.organizationEmail);
+    if (branding?.organizationPhone) tenantBits.push(branding.organizationPhone);
+    doc
+      .fontSize(8)
+      .fillColor(COLORS.dark)
+      .text(tenantBits.join(' · '), 50, footerY + 6, {
+        align: 'center',
+        width: pageWidth,
+      });
+  }
+
+  // Ligne 2 : signature TransitSoftServices (toujours)
   doc
-    .fontSize(9)
+    .fontSize(8)
     .fillColor(COLORS.gray)
-    .text('TransitSoftServices - Transit & Logistique', 50, footerY + 8, {
-      align: 'center',
-      width: pageWidth,
-    });
+    .text(
+      'Propulse par TransitSoftServices - Transit & Logistique',
+      50,
+      footerY + (tenantName && tenantName.toLowerCase() !== 'transitsoftservices' ? 20 : 8),
+      { align: 'center', width: pageWidth },
+    );
 }
 
 function drawDiscrepancyTable(

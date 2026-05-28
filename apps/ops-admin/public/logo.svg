@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none" role="img" aria-label="TransitSoftServices">
+  <!--
+    Logo principal : detoure fidele du visuel original.
+    Cargo bleu + smile arrow blanc dans la coque, fond navy.
+  -->
+  <rect width="512" height="512" rx="72" fill="#0D1F40"/>
+  <g fill="#1A6CC4">
+    <!-- Mat / antennes -->
+    <rect x="100" y="90" width="8" height="38"/>
+    <rect x="216" y="74" width="8" height="34"/>
+    <!-- Petite cabine gauche -->
+    <rect x="80" y="128" width="56" height="62" rx="3"/>
+    <!-- Passerelle / bridge a droite (forme en T) -->
+    <rect x="150" y="108" width="160" height="42" rx="3"/>
+    <rect x="170" y="150" width="120" height="40" rx="3"/>
+    <!-- Rangee de conteneurs -->
+    <rect x="80" y="200" width="332" height="48" rx="4"/>
+    <!-- Coque (trapezoide) -->
+    <path d="M44 256 H 444 L 396 388 H 96 Z"/>
+  </g>
+  <!-- Smile arrow blanc dans la coque -->
+  <g fill="none" stroke="#FFFFFF" stroke-width="22" stroke-linecap="round">
+    <path d="M126 322 Q 252 392 354 304"/>
+  </g>
+  <path d="M354 304 L 322 286 L 336 338 Z" fill="#FFFFFF"/>
+</svg>

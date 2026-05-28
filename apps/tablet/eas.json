@@ -1,0 +1,49 @@
+{
+  "cli": {
+    "version": ">= 14.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.transitsoftservices.com/api/v1"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "channel": "preview",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.transitsoftservices.com/api/v1"
+      }
+    },
+    "production": {
+      "channel": "production",
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.transitsoftservices.com/api/v1"
+      }
+    },
+    "acme": {
+      "extends": "production",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.transitsoftservices.com/api/v1",
+        "EXPO_PUBLIC_TENANT_SLUG": "acme"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleId": "owner@transitsoftservices.com",
+        "ascAppId": "REMPLACER_APP_STORE_CONNECT_ID",
+        "appleTeamId": "REMPLACER_TEAM_ID"
+      },
+      "android": {
+        "serviceAccountKeyPath": "./secrets/play-service-account.json",
+        "track": "production"
+      }
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "@transitsoftservices/brand",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Assets de marque : logo SVG + script de generation PNG.",
+  "scripts": {
+    "generate": "node scripts/generate-pngs.mjs"
+  },
+  "files": [
+    "logo.svg",
+    "logo-mark.svg",
+    "logo-wordmark.svg",
+    "generated"
+  ],
+  "exports": {
+    "./logo.svg": "./logo.svg",
+    "./logo-mark.svg": "./logo-mark.svg",
+    "./logo-wordmark.svg": "./logo-wordmark.svg"
+  },
+  "devDependencies": {
+    "sharp": "^0.33.5"
+  }
+}

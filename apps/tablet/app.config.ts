@@ -31,7 +31,9 @@ const TENANTS: Record<string, TenantBranding> = {
 export default (): ExpoConfig => {
   const slug = process.env.EXPO_PUBLIC_TENANT_SLUG ?? 'default';
   const t = TENANTS[slug] ?? TENANTS.default;
-  return {
+  // Si pas d'icone tenant defini, on omet le champ : Expo utilisera son icone
+  // par defaut au prebuild (evite ENOENT si ./assets/icon.png est absent).
+  const config: ExpoConfig = {
     name: t.name,
     slug: `${slug}-tablet`,
     version: '0.1.0',
@@ -39,22 +41,12 @@ export default (): ExpoConfig => {
     userInterfaceStyle: 'light',
     scheme: t.scheme,
     platforms: ['ios', 'android'],
-    icon: t.iconPath ?? './assets/icon.png',
-    splash: {
-      image: t.splashPath ?? './assets/splash.png',
-      resizeMode: 'contain',
-      backgroundColor: t.splashColor,
-    },
     ios: {
       supportsTablet: true,
       requireFullScreen: true,
       bundleIdentifier: t.iosBundleId,
     },
     android: {
-      adaptiveIcon: {
-        foregroundImage: t.iconPath ?? './assets/adaptive-icon.png',
-        backgroundColor: t.splashColor,
-      },
       package: t.androidPackage,
     },
     plugins: ['expo-router', 'expo-secure-store'],
@@ -62,4 +54,15 @@ export default (): ExpoConfig => {
       tenantSlug: slug,
     },
   };
+  if (t.iconPath) {
+    config.icon = t.iconPath;
+    config.android = { ...config.android, adaptiveIcon: { foregroundImage: t.iconPath, backgroundColor: t.splashColor } };
+  }
+  if (t.splashPath) {
+    (config.plugins as unknown[]).push([
+      'expo-splash-screen',
+      { image: t.splashPath, resizeMode: 'contain', backgroundColor: t.splashColor },
+    ]);
+  }
+  return config;
 };

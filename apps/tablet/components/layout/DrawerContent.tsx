@@ -1,7 +1,16 @@
 import { useState } from 'react';
 import { View, Text, Pressable, ScrollView, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import type { DrawerContentComponentProps } from '@react-navigation/drawer';
+// Type opaque pour le drawer en SDK 56 : expo-router fournit ses types
+// re-exportes mais ils ne sont plus compatibles structurellement avec
+// @react-navigation/drawer. On declare les seuls champs utilises ici.
+interface DrawerContentComponentProps {
+  state: { routes: Array<{ name: string }>; index: number };
+  navigation: {
+    navigate: (name: never) => void;
+    reset: (state: { index: number; routes: Array<{ name: string }> }) => void;
+  };
+}
 import { navSections, type NavItem, type NavSection } from '@/lib/nav/nav-config';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { usePermission, useIsTenantAdmin } from '@/lib/hooks/usePermission';
