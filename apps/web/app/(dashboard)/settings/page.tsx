@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Settings, Globe, Trash2, Plus, Save, Award, Palette, Boxes, Layout, Mail, CreditCard } from 'lucide-react';
+import { Settings, Globe, Trash2, Plus, Save, Award, Palette, Boxes, Layout, Mail, CreditCard, ShieldAlert } from 'lucide-react';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -75,6 +75,19 @@ export default function SettingsPage() {
               </AppCard>
             </Link>
           )}
+          <Link href="/settings/debt-block" className="block">
+            <AppCard className="hover:border-primary-300 transition">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50">
+                  <ShieldAlert className="h-5 w-5 text-primary-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Blocage sur dettes</p>
+                  <p className="text-xs text-gray-500">Refus auto remise/creation colis si dette &gt; seuil</p>
+                </div>
+              </div>
+            </AppCard>
+          </Link>
           <Link href="/settings/payment-methods" className="block">
             <AppCard className="hover:border-primary-300 transition">
               <div className="flex items-center gap-3">

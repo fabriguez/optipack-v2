@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { Search, Package } from 'lucide-react';
 import { AppCard, AppCardHeader } from '@/components/ui/AppCard';
 import { AppInput } from '@/components/ui/AppInput';
@@ -11,7 +12,7 @@ import { clientPortalApi } from '@/lib/api/client-portal';
 
 interface Parcel {
   id: string;
-  tracking: string;
+  trackingNumber: string;
   designation: string;
   status: string;
   destination: string;
@@ -31,6 +32,7 @@ const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'success'
 const LIMIT = 20;
 
 export default function PortalParcelsPage() {
+  const router = useRouter();
   const [parcels, setParcels] = useState<Parcel[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -68,11 +70,11 @@ export default function PortalParcelsPage() {
 
   const columns: Column<Parcel>[] = [
     {
-      key: 'tracking',
+      key: 'trackingNumber',
       label: 'Tracking',
       render: (row) => (
         <span className="font-mono text-sm font-medium text-primary-700">
-          {row.tracking}
+          {row.trackingNumber}
         </span>
       ),
     },
@@ -160,6 +162,9 @@ export default function PortalParcelsPage() {
             total={total}
             limit={LIMIT}
             onPageChange={setPage}
+            onRowClick={(row) =>
+              router.push(`/portal/parcels/${row.trackingNumber}`)
+            }
             emptyMessage="Aucun colis trouve"
             emptyIcon={<Package className="h-10 w-10 text-gray-300" />}
           />

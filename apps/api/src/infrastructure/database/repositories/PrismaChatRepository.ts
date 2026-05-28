@@ -115,6 +115,7 @@ export class PrismaChatRepository implements IChatRepository {
         orderBy: sortBy ? { [sortBy]: sortOrder } : { createdAt: 'asc' },
         include: {
           senderUser: { select: { id: true, firstName: true, lastName: true, email: true } },
+          senderClient: { select: { id: true, fullName: true, phone: true } },
         },
       }),
       prisma.chatMessage.count({ where }),
@@ -133,18 +134,25 @@ export class PrismaChatRepository implements IChatRepository {
       data,
       include: {
         senderUser: { select: { id: true, firstName: true, lastName: true, email: true } },
+        senderClient: { select: { id: true, fullName: true, phone: true } },
       },
     });
   }
 
   async markMessagesAsRead(
     conversationId: string,
-    userId: string,
+    readerId: string,
+    readerType: 'USER' | 'CLIENT' = 'USER',
   ): Promise<void> {
+    // Marque comme lus les messages que CE lecteur n'a pas envoyes.
+    const notSelf =
+      readerType === 'USER'
+        ? { senderUserId: { not: readerId } }
+        : { senderClientId: { not: readerId } };
     await prisma.chatMessage.updateMany({
       where: {
         conversationId,
-        senderId: { not: userId },
+        ...notSelf,
         isRead: false,
       },
       data: { isRead: true, readAt: new Date() },

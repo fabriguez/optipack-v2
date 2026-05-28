@@ -3,8 +3,15 @@
  *
  * Activation par env vars :
  *   - SMS_PROVIDER         : 'twilio' | 'africas-talking' | 'vonage' | 'log' (defaut: 'log')
- *   - WHATSAPP_PROVIDER    : 'twilio' | 'meta' | 'log' (defaut: 'log')
+ *   - WHATSAPP_PROVIDER    : 'meta' | 'africas-talking' | 'log' (defaut: 'log')
  *   - PUSH_PROVIDER        : 'fcm' | 'log' (defaut: 'log')
+ *
+ * Credentials Africa's Talking (SMS + WhatsApp partagent username/apiKey) :
+ *   AT_USERNAME, AT_API_KEY
+ *   AT_SMS_FROM (sender id optionnel)
+ *   AT_SMS_SANDBOX=true pour l'env sandbox
+ *   AT_WA_FROM (numero WhatsApp expediteur)
+ *   AT_WA_SANDBOX=true pour l'env sandbox
  *
  * Le provider 'log' est un stub qui ne fait rien sauf logger. Permet de
  * developper l'UI sans coute reseau, et de detecter quels evenements
@@ -48,6 +55,152 @@ function makeTwilioSmsProvider(): ExternalChannelProvider {
     enabled: false,
     async send(_to, _message) {
       throw new Error('Twilio SMS provider non implemente -- a brancher.');
+    },
+  };
+}
+
+/**
+ * Africa's Talking SMS provider.
+ * Doc : https://developers.africastalking.com/docs/sms/overview
+ * Env :
+ *   AT_USERNAME             (sandbox: "sandbox", prod: votre username AT)
+ *   AT_API_KEY              cle d'API
+ *   AT_SMS_FROM             expediteur / sender id (optionnel)
+ *   AT_SMS_SANDBOX=true     pour utiliser l'env sandbox
+ */
+function makeAfricasTalkingSmsProvider(): ExternalChannelProvider {
+  const username = process.env.AT_USERNAME ?? '';
+  const apiKey = process.env.AT_API_KEY ?? '';
+  const from = process.env.AT_SMS_FROM ?? '';
+  const sandbox = (process.env.AT_SMS_SANDBOX ?? '').toLowerCase() === 'true';
+  const enabled = !!username && !!apiKey;
+  if (!enabled) {
+    logger.warn(
+      'Africa\'s Talking SMS provider non active : AT_USERNAME et/ou AT_API_KEY manquant(s)',
+    );
+  }
+  const baseUrl = sandbox
+    ? 'https://api.sandbox.africastalking.com/version1/messaging'
+    : 'https://api.africastalking.com/version1/messaging';
+  return {
+    name: 'africas-talking',
+    enabled,
+    async send(to, message) {
+      if (!enabled) throw new Error('Africa\'s Talking SMS provider non configure');
+      const body = new URLSearchParams();
+      body.set('username', username);
+      body.set('to', to);
+      body.set('message', message);
+      if (from) body.set('from', from);
+      const res = await fetch(baseUrl, {
+        method: 'POST',
+        headers: {
+          apiKey,
+          Accept: 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: body.toString(),
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(`Africa's Talking SMS HTTP ${res.status}: ${txt.slice(0, 300)}`);
+      }
+      const data = (await res.json().catch(() => null)) as
+        | { SMSMessageData?: { Recipients?: Array<{ status?: string; statusCode?: number; messageId?: string }> } }
+        | null;
+      const rcpt = data?.SMSMessageData?.Recipients?.[0];
+      // statusCode 100..102 = Success/Queued; tout autre = echec
+      if (rcpt && rcpt.statusCode && rcpt.statusCode > 102) {
+        throw new Error(`Africa's Talking SMS rejected: ${rcpt.status} (${rcpt.statusCode})`);
+      }
+    },
+  };
+}
+
+/**
+ * Vonage / Nexmo SMS provider (stub, a brancher si besoin).
+ * Env : VONAGE_API_KEY, VONAGE_API_SECRET, VONAGE_FROM
+ */
+function makeVonageSmsProvider(): ExternalChannelProvider {
+  const apiKey = process.env.VONAGE_API_KEY ?? '';
+  const apiSecret = process.env.VONAGE_API_SECRET ?? '';
+  const from = process.env.VONAGE_FROM ?? 'OptiPack';
+  const enabled = !!apiKey && !!apiSecret;
+  if (!enabled) {
+    logger.warn('Vonage SMS provider non active : VONAGE_API_KEY/SECRET manquant(s)');
+  }
+  return {
+    name: 'vonage',
+    enabled,
+    async send(to, message) {
+      if (!enabled) throw new Error('Vonage SMS provider non configure');
+      const body = new URLSearchParams({
+        api_key: apiKey,
+        api_secret: apiSecret,
+        to: to.replace(/[^0-9]/g, ''),
+        from,
+        text: message,
+      });
+      const res = await fetch('https://rest.nexmo.com/sms/json', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString(),
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(`Vonage SMS HTTP ${res.status}: ${txt.slice(0, 300)}`);
+      }
+    },
+  };
+}
+
+/**
+ * Africa's Talking WhatsApp provider.
+ * Doc : https://developers.africastalking.com/docs/whatsapp/overview
+ * Env :
+ *   AT_USERNAME
+ *   AT_API_KEY
+ *   AT_WA_FROM              numero WhatsApp expediteur enregistre AT
+ *   AT_WA_SANDBOX=true      pour utiliser l'env sandbox
+ */
+function makeAfricasTalkingWhatsappProvider(): ExternalChannelProvider {
+  const username = process.env.AT_USERNAME ?? '';
+  const apiKey = process.env.AT_API_KEY ?? '';
+  const waFrom = process.env.AT_WA_FROM ?? '';
+  const sandbox = (process.env.AT_WA_SANDBOX ?? '').toLowerCase() === 'true';
+  const enabled = !!username && !!apiKey && !!waFrom;
+  if (!enabled) {
+    logger.warn(
+      'Africa\'s Talking WhatsApp provider non active : AT_USERNAME, AT_API_KEY ou AT_WA_FROM manquant(s)',
+    );
+  }
+  const url = sandbox
+    ? 'https://chat.sandbox.africastalking.com/whatsapp/message'
+    : 'https://chat.africastalking.com/whatsapp/message';
+  return {
+    name: 'africas-talking',
+    enabled,
+    async send(to, message) {
+      if (!enabled) throw new Error('Africa\'s Talking WhatsApp provider non configure');
+      const recipient = to.startsWith('+') ? to : `+${to.replace(/[^0-9]/g, '')}`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          apiKey,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          username,
+          waNumber: waFrom,
+          phoneNumber: recipient,
+          body: { type: 'PlainText', text: message },
+        }),
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(`Africa's Talking WhatsApp HTTP ${res.status}: ${txt.slice(0, 300)}`);
+      }
     },
   };
 }
@@ -109,11 +262,14 @@ export function registerNotificationProviders(): void {
 
   setSmsProvider(
     smsKind === 'twilio' ? makeTwilioSmsProvider()
+    : smsKind === 'africas-talking' ? makeAfricasTalkingSmsProvider()
+    : smsKind === 'vonage' ? makeVonageSmsProvider()
     : smsKind === 'log' ? makeLogProvider('SMS')
     : null,
   );
   setWhatsappProvider(
     waKind === 'meta' ? makeMetaWhatsappProvider()
+    : waKind === 'africas-talking' ? makeAfricasTalkingWhatsappProvider()
     : waKind === 'log' ? makeLogProvider('WHATSAPP')
     : null,
   );

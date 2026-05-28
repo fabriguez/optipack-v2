@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { FileText } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { FileText, CreditCard } from 'lucide-react';
 import { AppCard, AppCardHeader } from '@/components/ui/AppCard';
 import { AppBadge } from '@/components/ui/AppBadge';
 import { AppDataTable, type Column } from '@/components/ui/AppDataTable';
@@ -11,30 +12,36 @@ import { clientPortalApi } from '@/lib/api/client-portal';
 interface Invoice {
   id: string;
   reference: string;
-  amount: number;
-  amountPaid: number;
+  totalAmount: string | number;
+  paidAmount: string | number;
+  balance: string | number;
   status: string;
   createdAt: string;
 }
 
-const PAYMENT_STATUS_MAP: Record<string, { label: string; variant: 'default' | 'success' | 'warning' | 'error' }> = {
+const PAYMENT_STATUS_MAP: Record<
+  string,
+  { label: string; variant: 'default' | 'success' | 'warning' | 'error' }
+> = {
   UNPAID: { label: 'Impaye', variant: 'error' },
   PARTIAL: { label: 'Partiel', variant: 'warning' },
   PAID: { label: 'Solde', variant: 'success' },
+  CANCELLED: { label: 'Annule', variant: 'default' },
 };
 
-function formatAmount(value: number): string {
+function formatAmount(value: number | string | null | undefined): string {
   return new Intl.NumberFormat('fr-FR', {
     style: 'currency',
     currency: 'XAF',
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
-  }).format(value);
+  }).format(Number(value ?? 0));
 }
 
 const LIMIT = 20;
 
 export default function PortalInvoicesPage() {
+  const router = useRouter();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -45,9 +52,10 @@ export default function PortalInvoicesPage() {
     setLoading(true);
     try {
       const res = await clientPortalApi.getInvoices({ page, limit: LIMIT });
-      setInvoices(res.data?.items || res.data || []);
-      setTotalPages(res.data?.totalPages || 1);
-      setTotal(res.data?.total || 0);
+      const list: Invoice[] = res.data?.items || res.data || [];
+      setInvoices(list);
+      setTotalPages(res.meta?.totalPages || res.data?.totalPages || 1);
+      setTotal(res.meta?.total || res.data?.total || list.length);
     } catch {
       setInvoices([]);
     } finally {
@@ -70,20 +78,33 @@ export default function PortalInvoicesPage() {
       ),
     },
     {
-      key: 'amount',
-      label: 'Montant',
+      key: 'totalAmount',
+      label: 'Total',
       render: (row) => (
         <span className="text-sm font-semibold text-gray-900">
-          {formatAmount(row.amount)}
+          {formatAmount(row.totalAmount)}
         </span>
       ),
     },
     {
-      key: 'amountPaid',
+      key: 'paidAmount',
       label: 'Paye',
       render: (row) => (
         <span className="text-sm text-gray-600">
-          {formatAmount(row.amountPaid ?? 0)}
+          {formatAmount(row.paidAmount)}
+        </span>
+      ),
+    },
+    {
+      key: 'balance',
+      label: 'Restant',
+      render: (row) => (
+        <span
+          className={`text-sm font-semibold ${
+            Number(row.balance) > 0 ? 'text-red-600' : 'text-green-600'
+          }`}
+        >
+          {formatAmount(row.balance)}
         </span>
       ),
     },
@@ -111,6 +132,29 @@ export default function PortalInvoicesPage() {
         </span>
       ),
     },
+    {
+      key: 'actions',
+      label: 'Action',
+      render: (row) => {
+        const payable =
+          row.status !== 'PAID' &&
+          row.status !== 'CANCELLED' &&
+          Number(row.balance) > 0;
+        if (!payable) return <span className="text-xs text-gray-400">-</span>;
+        return (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              router.push(`/portal/payments?invoiceId=${row.id}`);
+            }}
+            className="inline-flex items-center gap-1 rounded-lg bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary-700 hover:bg-primary-100"
+          >
+            <CreditCard className="h-3 w-3" />
+            Payer
+          </button>
+        );
+      },
+    },
   ];
 
   return (
@@ -119,7 +163,7 @@ export default function PortalInvoicesPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Mes Factures</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Consultez vos factures et leur statut de paiement.
+            Consultez vos factures et declarez vos paiements.
           </p>
         </div>
 

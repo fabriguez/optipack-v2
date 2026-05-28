@@ -577,10 +577,10 @@ model User {
   debtPaymentsVoided              DebtPayment[]                   @relation("DebtPaymentVoidedBy")
   debtHistoryActions              DebtHistory[]
   paymentAttachmentsUploaded      PaymentAttachment[]             @relation("PaymentAttachmentUploader")
-  expenseAttachmentsUploaded      ExpenseAttachment[]              @relation("ExpenseAttachmentUploader")
-  disbursementAttachmentsUploaded DisbursementAttachment[]         @relation("DisbursementAttachmentUploader")
-  debtAttachmentsUploaded         DebtAttachment[]                 @relation("DebtAttachmentUploader")
-  fundTransferAttachmentsUploaded FundTransferAttachment[]         @relation("FundTransferAttachmentUploader")
+  expenseAttachmentsUploaded      ExpenseAttachment[]             @relation("ExpenseAttachmentUploader")
+  disbursementAttachmentsUploaded DisbursementAttachment[]        @relation("DisbursementAttachmentUploader")
+  debtAttachmentsUploaded         DebtAttachment[]                @relation("DebtAttachmentUploader")
+  fundTransferAttachmentsUploaded FundTransferAttachment[]        @relation("FundTransferAttachmentUploader")
   permissionOverrides             UserPermissionOverride[]
   justificationsSubmitted         AttendanceJustification[]       @relation("JustificationSubmitter")
   justificationsReviewed          AttendanceJustification[]       @relation("JustificationReviewer")
@@ -591,6 +591,13 @@ model User {
   @@index([organizationId])
   @@index([email])
   @@map("users")
+}
+
+enum IdVerificationStatus {
+  NONE
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 enum UserRole {
@@ -654,60 +661,60 @@ model PasswordResetToken {
 // ============================================================
 
 model Employee {
-  id                String               @id @default(uuid())
-  agencyId          String
-  fullName          String
-  idNumber          String?
-  phone             String?
+  id                       String               @id @default(uuid())
+  agencyId                 String
+  fullName                 String
+  idNumber                 String?
+  phone                    String?
   // Libelle libre du poste (legacy : conserve pour compat). La verite metier
   // passe progressivement par positionId (FK vers Position) ; ce champ reste
   // synchro pour l'affichage rapide et la retro-compatibilite.
-  position          String
+  position                 String
   // FK vers la table Position (ABAC). Nullable le temps de la migration des
   // donnees existantes ; les nouveaux Employee doivent renseigner positionId.
-  positionId        String?
+  positionId               String?
   // Lien 1-1 vers le profil Client correspondant (un personnel est aussi un
   // potentiel client). Rempli automatiquement par CreateEmployeeUseCase.
-  clientId          String?              @unique
+  clientId                 String?              @unique
   // Override du planning RH pour cet employe. NULL = herite du planning agence
   // (Agency.workScheduleId). Permet d'eviter les doublons quand le personnel
   // suit l'horaire standard.
-  scheduleId        String?
-  level             String?
+  scheduleId               String?
+  level                    String?
   // Niveau d'etudes (ex : Licence, Master, BAC+3, ...) et specialite (ex : Logistique, Comptabilite)
-  educationLevel    String?
-  specialty         String?
-  baseSalary        Decimal              @default(0) @db.Decimal(15, 2)
-  startDate         DateTime             @default(now())
-  endDate           DateTime?
+  educationLevel           String?
+  specialty                String?
+  baseSalary               Decimal              @default(0) @db.Decimal(15, 2)
+  startDate                DateTime             @default(now())
+  endDate                  DateTime?
   // Photos employe : selfie (visage), plan (localisation domicile),
   // document d'identification (CNI, passeport...).
   // idDocumentBack* pour le verso (CNI a 2 faces, passeport peut avoir page d'identification recto/verso).
-  selfieUrl         String?
-  selfieKey         String?
-  locationPlanUrl   String?
-  locationPlanKey   String?
-  idDocumentUrl     String?
-  idDocumentKey     String?
-  idDocumentBackUrl String?
-  idDocumentBackKey String?
+  selfieUrl                String?
+  selfieKey                String?
+  locationPlanUrl          String?
+  locationPlanKey          String?
+  idDocumentUrl            String?
+  idDocumentKey            String?
+  idDocumentBackUrl        String?
+  idDocumentBackKey        String?
   // Type de contrat
-  contractType      EmployeeContractType @default(CDI)
+  contractType             EmployeeContractType @default(CDI)
   // Contact d'urgence (optionnel) : personne a joindre en cas de probleme.
   emergencyContactName     String?
   emergencyContactPhone    String?
   emergencyContactRelation String?
   // Superieur hierarchique direct (FK self vers Employee)
-  managerId         String?
+  managerId                String?
   // Lien optionnel vers User pour permettre la connexion de l'employe sur la plateforme
   // (role PERSONNEL ou CHEF_AGENCE). Un meme User <-> 1 Employee.
-  userId            String?              @unique
+  userId                   String?              @unique
   // Marqueur "chef d'agence" (utilise pour validation hierarchique meme si role User est PERSONNEL).
   // Permet de promouvoir un employe en chef sans toucher au User.
-  isAgencyManager   Boolean              @default(false)
-  isActive          Boolean              @default(true)
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
+  isAgencyManager          Boolean              @default(false)
+  isActive                 Boolean              @default(true)
+  createdAt                DateTime             @default(now())
+  updatedAt                DateTime             @updatedAt
 
   agency            Agency                     @relation(fields: [agencyId], references: [id])
   manager           Employee?                  @relation("EmployeeManager", fields: [managerId], references: [id])
@@ -1167,44 +1174,44 @@ model PayslipPayment {
 // ============================================================
 
 model Client {
-  id                String      @id @default(uuid())
-  organizationId    String
+  id                       String      @id @default(uuid())
+  organizationId           String
   // Agence d'enregistrement (optionnel) : trace l'agence qui a cree le client.
   // Un client appartient a l'organisation, pas a une agence : il peut etre
   // expediteur/destinataire dans n'importe quelle agence du tenant. Ce champ
   // sert d'audit + de pre-remplissage UX, pas de cloison metier.
-  agencyId          String?
-  fullName          String
-  phone             String      @unique
-  email             String?
-  idNumber          String?
-  imageUrl          String?
-  imageKey          String?
+  agencyId                 String?
+  fullName                 String
+  phone                    String      @unique
+  email                    String?
+  idNumber                 String?
+  imageUrl                 String?
+  imageKey                 String?
   // Photos document d'identification recto + verso. Servent au moment du
   // retrait d'un colis pour que l'agent confronte la personne en face avec
   // la photo et valide la remise.
-  idDocumentUrl     String?
-  idDocumentKey     String?
-  idDocumentBackUrl String?
-  idDocumentBackKey String?
-  address           String?
-  clientType        ClientType  @default(INDIVIDUAL)
+  idDocumentUrl            String?
+  idDocumentKey            String?
+  idDocumentBackUrl        String?
+  idDocumentBackKey        String?
+  address                  String?
+  clientType               ClientType  @default(INDIVIDUAL)
   // Contact d'urgence (optionnel) : personne a joindre en cas de probleme.
   // Trois champs libres : nom, telephone, lien (parent / conjoint / ami).
   emergencyContactName     String?
   emergencyContactPhone    String?
   emergencyContactRelation String?
-  loyaltyTier       LoyaltyTier @default(STANDARD)
-  loyaltyPoints     Int         @default(0)
-  totalSpent        Decimal     @default(0) @db.Decimal(15, 2)
-  isActive          Boolean     @default(true)
+  loyaltyTier              LoyaltyTier @default(STANDARD)
+  loyaltyPoints            Int         @default(0)
+  totalSpent               Decimal     @default(0) @db.Decimal(15, 2)
+  isActive                 Boolean     @default(true)
   // Soft delete : la suppression conserve la ligne (audit, references) mais
   // la masque de tous les listings et recherches.
-  isDeleted         Boolean     @default(false)
-  deletedAt         DateTime?
-  deletedByUserId   String?
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
+  isDeleted                Boolean     @default(false)
+  deletedAt                DateTime?
+  deletedByUserId          String?
+  createdAt                DateTime    @default(now())
+  updatedAt                DateTime    @updatedAt
 
   // Auth fields for client portal
   passwordHash      String?
@@ -1213,6 +1220,14 @@ model Client {
   // Permet au client (via portail) de choisir s'il veut WhatsApp, SMS, email...
   // pour chaque type d'evenement.
   notificationPrefs Json?
+
+  // KYC : verification d'identite. Statut piloté par admins.
+  // Une fois APPROVED, profil + documents verrouilles jusqu'a idExpiryDate.
+  idVerificationStatus IdVerificationStatus @default(NONE)
+  idVerifiedAt         DateTime?
+  idVerifiedByUserId   String?
+  idExpiryDate         DateTime?
+  idRejectionReason    String?
 
   organization            Organization[]
   agency                  Agency?                         @relation(fields: [agencyId], references: [id])
@@ -1223,6 +1238,7 @@ model Client {
   loyaltyTransactions     LoyaltyTransaction[]
   penalties               Penalty[]
   chatConversations       ChatConversation[]
+  chatMessages            ChatMessage[]                   @relation("ClientChatMessages")
   notifications           Notification[]                  @relation("ClientNotifications")
   partnerPricings         PartnerPricing[]
   parcelGroups            ParcelGroup[]                   @relation("ClientParcelGroups")
@@ -1778,18 +1794,18 @@ enum InvoiceStatus {
 // ============================================================
 
 model Payment {
-  id                   String        @id @default(uuid())
-  reference            String        @unique
+  id                   String  @id @default(uuid())
+  reference            String  @unique
   invoiceId            String
   agencyId             String
   // Optionnel : scope d'un paiement a un colis precis de la facture
   // (cas facture multi-colis et client paie un seul). Si null, le paiement
   // s'applique a toute la facture (repartition proportionnelle au prix).
   parcelId             String?
-  amount               Decimal       @db.Decimal(15, 2)
-  discount             Decimal       @default(0) @db.Decimal(15, 2)
+  amount               Decimal @db.Decimal(15, 2)
+  discount             Decimal @default(0) @db.Decimal(15, 2)
   discountReason       String?
-  tva                  Decimal       @default(0) @db.Decimal(15, 2)
+  tva                  Decimal @default(0) @db.Decimal(15, 2)
   // String libre referencant PaymentMethodConfig.code. Le code des methodes
   // systeme (CASH, MOBILE_MONEY, ...) reste compatible avec l'ancien enum.
   paymentMethod        String
@@ -1959,19 +1975,19 @@ model DisbursementVoucher {
   createdAt DateTime @default(now())
   // PAS de updatedAt -- immutable
 
-  agency       Agency               @relation(fields: [agencyId], references: [id])
-  cashRegister AgencyCashRegister   @relation(fields: [cashRegisterId], references: [id])
-  ordererUser  User?                @relation("OrdererUser", fields: [ordererUserId], references: [id])
-  container    Container?           @relation(fields: [containerId], references: [id])
-  parcel       Parcel?              @relation(fields: [parcelId], references: [id])
-  client       Client?              @relation(fields: [clientId], references: [id])
-  issuedBy     User                 @relation("IssuedByUser", fields: [issuedByUserId], references: [id])
-  approvedBy   User?                @relation("ApprovedByUser", fields: [approvedByUserId], references: [id])
-  reverseEntry DisbursementVoucher? @relation("ReverseVoucher", fields: [reverseEntryId], references: [id])
-  reversedBy   DisbursementVoucher? @relation("ReverseVoucher")
+  agency       Agency                   @relation(fields: [agencyId], references: [id])
+  cashRegister AgencyCashRegister       @relation(fields: [cashRegisterId], references: [id])
+  ordererUser  User?                    @relation("OrdererUser", fields: [ordererUserId], references: [id])
+  container    Container?               @relation(fields: [containerId], references: [id])
+  parcel       Parcel?                  @relation(fields: [parcelId], references: [id])
+  client       Client?                  @relation(fields: [clientId], references: [id])
+  issuedBy     User                     @relation("IssuedByUser", fields: [issuedByUserId], references: [id])
+  approvedBy   User?                    @relation("ApprovedByUser", fields: [approvedByUserId], references: [id])
+  reverseEntry DisbursementVoucher?     @relation("ReverseVoucher", fields: [reverseEntryId], references: [id])
+  reversedBy   DisbursementVoucher?     @relation("ReverseVoucher")
   // Lien inverse vers la depense (Expense) qui a declenche ce decaissement.
   // Permet la dedup dans le rapport journalier (cf Expense.disbursementId).
-  expense      Expense?             @relation("ExpenseDisbursement")
+  expense      Expense?                 @relation("ExpenseDisbursement")
   // Pieces jointes additionnelles (images / PDF de preuve).
   attachments  DisbursementAttachment[]
 
@@ -2035,13 +2051,13 @@ model FundTransfer {
   createdAt DateTime @default(now())
   // PAS de updatedAt -- immutable
 
-  sourceAgency       Agency?       @relation("SourceAgency", fields: [sourceAgencyId], references: [id])
-  sourceOrganization Organization? @relation("HeadOfficeSourceTransfers", fields: [sourceOrganizationId], references: [id])
-  destinationAgency  Agency?       @relation("DestinationAgencyRel", fields: [destinationAgencyId], references: [id])
-  initiatedBy        User          @relation("InitiatedByUser", fields: [initiatedByUserId], references: [id])
-  confirmedBy        User?         @relation("ConfirmedByUser", fields: [confirmedByUserId], references: [id])
-  reverseEntry       FundTransfer? @relation("ReverseTransfer", fields: [reverseEntryId], references: [id])
-  reversedBy         FundTransfer? @relation("ReverseTransfer")
+  sourceAgency       Agency?                  @relation("SourceAgency", fields: [sourceAgencyId], references: [id])
+  sourceOrganization Organization?            @relation("HeadOfficeSourceTransfers", fields: [sourceOrganizationId], references: [id])
+  destinationAgency  Agency?                  @relation("DestinationAgencyRel", fields: [destinationAgencyId], references: [id])
+  initiatedBy        User                     @relation("InitiatedByUser", fields: [initiatedByUserId], references: [id])
+  confirmedBy        User?                    @relation("ConfirmedByUser", fields: [confirmedByUserId], references: [id])
+  reverseEntry       FundTransfer?            @relation("ReverseTransfer", fields: [reverseEntryId], references: [id])
+  reversedBy         FundTransfer?            @relation("ReverseTransfer")
   // Pieces jointes (images / PDF de preuve transfert).
   attachments        FundTransferAttachment[]
 
@@ -2330,16 +2346,16 @@ model Debt {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  organization Organization  @relation(fields: [organizationId], references: [id])
-  agency       Agency        @relation(fields: [agencyId], references: [id])
-  client       Client?       @relation(fields: [clientId], references: [id])
-  employee     Employee?     @relation("EmployeeDebts", fields: [employeeId], references: [id])
-  carrier      Carrier?      @relation(fields: [carrierId], references: [id])
-  parcel       Parcel?       @relation(fields: [parcelId], references: [id])
-  invoice      Invoice?      @relation(fields: [invoiceId], references: [id])
-  agencyCharge AgencyCharge? @relation(fields: [agencyChargeId], references: [id])
-  createdBy    User?         @relation("DebtCreatedBy", fields: [createdByUserId], references: [id])
-  voidedBy     User?         @relation("DebtVoidedBy", fields: [voidedByUserId], references: [id])
+  organization Organization     @relation(fields: [organizationId], references: [id])
+  agency       Agency           @relation(fields: [agencyId], references: [id])
+  client       Client?          @relation(fields: [clientId], references: [id])
+  employee     Employee?        @relation("EmployeeDebts", fields: [employeeId], references: [id])
+  carrier      Carrier?         @relation(fields: [carrierId], references: [id])
+  parcel       Parcel?          @relation(fields: [parcelId], references: [id])
+  invoice      Invoice?         @relation(fields: [invoiceId], references: [id])
+  agencyCharge AgencyCharge?    @relation(fields: [agencyChargeId], references: [id])
+  createdBy    User?            @relation("DebtCreatedBy", fields: [createdByUserId], references: [id])
+  voidedBy     User?            @relation("DebtVoidedBy", fields: [voidedByUserId], references: [id])
   payments     DebtPayment[]
   histories    DebtHistory[]
   attachments  DebtAttachment[]
@@ -2421,10 +2437,10 @@ enum DebtPriority {
 // Chaque paiement = une ligne ici, le solde est recalcule par le use case.
 // ============================================================
 model DebtPayment {
-  id                   String        @id @default(uuid())
-  reference            String        @unique
+  id                   String  @id @default(uuid())
+  reference            String  @unique
   debtId               String
-  amount               Decimal       @db.Decimal(15, 2)
+  amount               Decimal @db.Decimal(15, 2)
   // String libre referencant PaymentMethodConfig.code (idem Payment).
   paymentMethod        String
   // Justificatif (image ou PDF) : URL MinIO + key pour suppression/rotation.
@@ -2488,27 +2504,27 @@ model DebtHistory {
 // nomme, distinct des agences internes.
 // ============================================================
 model Carrier {
-  id             String   @id @default(uuid())
-  organizationId String
-  name           String
-  contactName    String?
-  phone          String?
-  email          String?
-  address        String?
+  id                       String   @id @default(uuid())
+  organizationId           String
+  name                     String
+  contactName              String?
+  phone                    String?
+  email                    String?
+  address                  String?
   // Type d'activite (terrestre, maritime, aerien, multi). Texte libre pour
   // ne pas contraindre prematurement.
-  carrierType    String?
-  notes          String?
+  carrierType              String?
+  notes                    String?
   // Contact d'urgence (optionnel) : personne a joindre en cas de probleme.
   emergencyContactName     String?
   emergencyContactPhone    String?
   emergencyContactRelation String?
   // Client associe automatiquement : permet d'imputer des paiements /
   // dettes / decaissements au transporteur via la mecanique Client standard.
-  clientId       String?  @unique
-  isActive       Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  clientId                 String?  @unique
+  isActive                 Boolean  @default(true)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id])
   client       Client?      @relation(fields: [clientId], references: [id])
@@ -2886,7 +2902,10 @@ enum ConversationStatus {
 model ChatMessage {
   id             String    @id @default(uuid())
   conversationId String
-  senderId       String
+  // Author identifiers (mutually exclusive). senderType discriminates:
+  // 'USER' -> senderUserId set ; 'CLIENT' -> senderClientId set ; 'SYSTEM' -> both null.
+  senderUserId   String?
+  senderClientId String?
   senderType     String
   message        String
   isRead         Boolean   @default(false)
@@ -2894,7 +2913,8 @@ model ChatMessage {
   createdAt      DateTime  @default(now())
 
   conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  senderUser   User?            @relation(fields: [senderId], references: [id])
+  senderUser   User?            @relation(fields: [senderUserId], references: [id])
+  senderClient Client?          @relation("ClientChatMessages", fields: [senderClientId], references: [id])
 
   @@index([conversationId])
   @@index([createdAt])

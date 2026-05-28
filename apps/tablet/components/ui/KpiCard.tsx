@@ -1,7 +1,7 @@
 import { View, Text } from 'react-native';
 import { Card } from './Card';
 import { colors } from '@/lib/theme/colors';
-import { spacing, radius } from '@/lib/theme/spacing';
+import { radius } from '@/lib/theme/spacing';
 
 interface KpiCardProps {
   label: string;

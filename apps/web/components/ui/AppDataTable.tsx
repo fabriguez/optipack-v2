@@ -62,8 +62,8 @@ export function AppDataTable<T extends Record<string, any>>({
 
   return (
     <div>
-      <div className="overflow-x-auto">
-        <table className="w-full">
+      <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
+        <table className="w-full min-w-160">
           <thead>
             <tr className="border-b-2 border-gray-100">
               {columns.map((col) => (

@@ -1,99 +1,34 @@
-import { View, Text, ScrollView, RefreshControl, Pressable, ActivityIndicator } from 'react-native';
 import { useState } from 'react';
-import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { useQuery } from '@tanstack/react-query';
-import { Card, CardHeader } from '@/components/ui/Card';
+import { ResourceListScreen } from '@/components/data/ResourceListScreen';
+import { ListRow } from '@/components/data/ListRow';
 import { apiClient } from '@/lib/api/client';
-import { colors } from '@/lib/theme/colors';
-import { spacing } from '@/lib/theme/spacing';
+import { WarehouseFormDialog } from './WarehouseFormDialog';
+
+interface Warehouse {
+  id: string;
+  name: string;
+  location?: string | null;
+  agency?: { name?: string } | null;
+  capacity?: number | null;
+}
 
 export default function WarehousesScreen() {
-  const router = useRouter();
-  const [refreshing, setRefreshing] = useState(false);
-
-  const { data: agenciesData } = useQuery({
-    queryKey: ['agencies-for-warehouses'],
-    queryFn: () => apiClient.get('/agencies?limit=50').then((r) => r.data),
-  });
-
-  const agencies: any[] = agenciesData?.data ?? [];
-  const agencyId = agencies[0]?.id;
-
-  const { data, isLoading, refetch } = useQuery({
-    queryKey: ['warehouses', agencyId],
-    queryFn: () => apiClient.get(`/warehouses/agency/${agencyId}`).then((r) => r.data),
-    enabled: !!agencyId,
-  });
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await refetch();
-    setRefreshing(false);
-  };
-
-  const warehouses: any[] = data?.data ?? [];
-
+  const [open, setOpen] = useState(false);
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: colors.background }}
-      contentContainerStyle={{ padding: spacing['2xl'] }}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary[500]} />}
-    >
-      <View style={{ marginBottom: spacing['2xl'] }}>
-        <Text style={{ fontSize: 26, fontWeight: '700', color: colors.gray[900] }}>Magasins</Text>
-        <Text style={{ fontSize: 14, color: colors.gray[500], marginTop: 4 }}>
-          {agencyId ? `Magasins de ${agencies[0]?.name ?? 'l\'agence'}` : 'Chargement des agences...'}
-        </Text>
-      </View>
-
-      {isLoading || !agencyId ? (
-        <ActivityIndicator size="large" color={colors.primary[500]} style={{ marginTop: 40 }} />
-      ) : (
-        <Card>
-          <CardHeader title="Tous les magasins" subtitle={`${warehouses.length} resultats`} />
-          {warehouses.length === 0 ? (
-            <Text style={{ textAlign: 'center', fontSize: 13, color: colors.gray[400], paddingVertical: 20 }}>Aucun magasin trouve</Text>
-          ) : (
-            warehouses.map((warehouse, i) => {
-              return (
-                <Pressable
-                  key={warehouse.id}
-                  onPress={() => {}}
-                  style={{
-                    flexDirection: 'row',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    paddingVertical: 12,
-                    borderBottomWidth: i < warehouses.length - 1 ? 1 : 0,
-                    borderBottomColor: '#F3F4F6',
-                  }}
-                >
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 14, fontWeight: '600', color: colors.gray[900] }}>{warehouse.name}</Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
-                      <Ionicons name="location-outline" size={12} color={colors.gray[400]} />
-                      <Text style={{ fontSize: 12, color: colors.gray[500] }}>{warehouse.location ?? '-'}</Text>
-                    </View>
-                  </View>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <View style={{ alignItems: 'flex-end' }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                        <Ionicons name="cube-outline" size={14} color={colors.gray[400]} />
-                        <Text style={{ fontSize: 13, fontWeight: '600', color: colors.gray[700] }}>
-                          {warehouse.parcelCount ?? 0}
-                        </Text>
-                      </View>
-                      <Text style={{ fontSize: 11, color: colors.gray[400], marginTop: 2 }}>colis</Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={16} color={colors.gray[300]} />
-                  </View>
-                </Pressable>
-              );
-            })
-          )}
-        </Card>
-      )}
-    </ScrollView>
+    <>
+      <ResourceListScreen<Warehouse>
+        title="Magasins"
+        subtitle="Lieux de stockage"
+        queryKey={['warehouses']}
+        fetcher={(params) => apiClient.get('/warehouses', { params }).then((r) => r.data)}
+        keyExtractor={(w) => w.id}
+        createPermission="warehouse.manage"
+        onCreate={() => setOpen(true)}
+        renderRow={(w) => (
+          <ListRow title={w.name} subtitle={w.location ?? undefined} metadata={[w.agency?.name ?? '', w.capacity ? `Capacite ${w.capacity}` : '']} />
+        )}
+      />
+      <WarehouseFormDialog open={open} onClose={() => setOpen(false)} />
+    </>
   );
 }

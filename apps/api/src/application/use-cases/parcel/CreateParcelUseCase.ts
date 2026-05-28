@@ -10,6 +10,7 @@ import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessErr
 import { PricingService } from '../../services/PricingService';
 import { HistoryService } from '../../services/HistoryService';
 import { StorageChargeService } from '../../services/StorageChargeService';
+import { DebtBlockConfigService } from '../../services/DebtBlockConfigService';
 import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 import { prisma } from '../../../config/database';
 
@@ -23,6 +24,7 @@ export class CreateParcelUseCase {
     @inject(INVOICE_REPOSITORY) private invoiceRepo: IInvoiceRepository,
     private history: HistoryService,
     private storageCharges: StorageChargeService,
+    private debtBlockConfig: DebtBlockConfigService,
   ) {}
 
   async execute(input: CreateParcelInput, userId: string) {
@@ -41,25 +43,15 @@ export class CreateParcelUseCase {
     if (!transitRoute) throw new NotFoundError('Route de transit', input.transitRouteId);
     if (!destinationAgency) throw new NotFoundError('Agence de destination', input.destinationAgencyId);
 
-    // Blocage nouvelle expedition si le client a un cumul de dettes CLIENT
-    // au-dessus du plafond configure. Lecture SystemConfig clé
-    // 'debt_shipment_block_enabled' + 'debt_shipment_block_threshold'.
-    // Par defaut desactive (back-compat).
+    // Blocage nouvelle expedition si client a cumul dettes > seuil. Defaut
+    // active via DebtBlockConfigService.
     const orgForClient = await prisma.agency.findUnique({
       where: { id: warehouse.agencyId },
       select: { organizationId: true },
     });
     if (orgForClient) {
-      const [enabledCfg, thresholdCfg] = await Promise.all([
-        prisma.systemConfig.findUnique({
-          where: { organizationId_key: { organizationId: orgForClient.organizationId, key: 'debt_shipment_block_enabled' } },
-        }),
-        prisma.systemConfig.findUnique({
-          where: { organizationId_key: { organizationId: orgForClient.organizationId, key: 'debt_shipment_block_threshold' } },
-        }),
-      ]);
-      if (enabledCfg?.value === 'true') {
-        const threshold = Number(thresholdCfg?.value ?? 0);
+      const cfg = await this.debtBlockConfig.get(orgForClient.organizationId);
+      if (cfg.shipmentEnabled) {
         const agg = await prisma.debt.aggregate({
           where: {
             clientId: client.id,
@@ -69,9 +61,9 @@ export class CreateParcelUseCase {
           _sum: { remainingAmount: true },
         });
         const cumul = Number(agg._sum.remainingAmount ?? 0);
-        if (cumul > threshold) {
+        if (cumul > cfg.shipmentThreshold) {
           throw new BusinessError(
-            `Nouvelle expedition refusee : ${client.fullName} a un cumul de dettes impayees de ${cumul} (plafond ${threshold}). Apurer la dette pour debloquer.`,
+            `Nouvelle expedition refusee : ${client.fullName} a un cumul de dettes impayees de ${cumul} (plafond ${cfg.shipmentThreshold}). Apurer la dette pour debloquer.`,
           );
         }
       }

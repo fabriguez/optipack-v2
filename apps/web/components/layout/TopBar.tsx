@@ -26,7 +26,7 @@ export function TopBar() {
   const userEmail = session?.user?.email || '';
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-2 border-b border-gray-200 bg-white px-3 sm:px-6">
+    <header className="sticky top-0 z-50 flex h-16 items-center justify-between gap-2 border-b border-gray-200 bg-white px-3 sm:px-6">
       <button
         type="button"
         onClick={() => setMobileOpen(!mobileOpen)}
@@ -125,7 +125,7 @@ function GlobalSearch() {
   );
 
   return (
-    <div ref={ref} className="relative w-full max-w-lg">
+    <div ref={ref} className="relative w-full flex-1 max-w-lg min-w-0">
       <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
       <input
         type="text"

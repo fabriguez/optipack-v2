@@ -89,7 +89,7 @@ export default function DashboardPage() {
         </div>
 
         {/* KPI Cards */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 sm:gap-4">
           {kpis.map((kpi) => (
             <AppCard key={kpi.label} className="relative overflow-hidden group hover:shadow-elevated transition-shadow">
               <div className="flex items-start justify-between">
@@ -107,7 +107,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Charts Row */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-3">
           {/* Bar Chart */}
           <AppCard className="lg:col-span-2">
             <AppCardHeader title="Volume de colis" description="Colis enregistres cette semaine" />
@@ -160,7 +160,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Bottom Row */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-3">
           {/* Cash in agencies */}
           <AppCard>
             <AppCardHeader title="Solde caisses" action={<AppBadge variant="success">Temps reel</AppBadge>} />

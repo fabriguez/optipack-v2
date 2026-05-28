@@ -45,13 +45,15 @@ export function AppDialog({
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent
         className={cn(
-          'rounded-2xl p-0 gap-0 flex flex-col max-h-[85vh]',
+          'p-0 gap-0 flex flex-col',
+          'w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] max-h-[calc(100dvh-2rem)] rounded-xl',
+          'sm:w-auto sm:rounded-2xl sm:max-h-[85vh]',
           sizeStyles[size],
         )}
         showCloseButton={false}
       >
         {/* Header (fixe) */}
-        <DialogHeader className="flex shrink-0 flex-row items-center justify-between border-b border-gray-100 px-6 py-4">
+        <DialogHeader className="flex shrink-0 flex-row items-center justify-between border-b border-gray-100 px-4 py-3 sm:px-6 sm:py-4">
           <div>
             <DialogTitle className="text-lg font-semibold text-gray-900">
               {title}
@@ -65,13 +67,13 @@ export function AppDialog({
         </DialogHeader>
 
         {/* Body (scrollable) */}
-        <div className="flex-1 min-h-0 max-h-[75vh] overflow-y-auto px-6 py-4">
+        <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 sm:px-6">
           {children}
         </div>
 
         {/* Footer (fixe) — optionnel */}
         {footer && (
-          <div className="flex shrink-0 items-center justify-end gap-3 border-t border-gray-100 bg-white px-6 py-3 rounded-b-2xl">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 sm:gap-3 border-t border-gray-100 bg-white px-4 py-3 sm:px-6 rounded-b-xl sm:rounded-b-2xl">
             {footer}
           </div>
         )}

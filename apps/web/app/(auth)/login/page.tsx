@@ -71,7 +71,7 @@ export default function LoginPage() {
         </div>
 
         {/* Form */}
-        <div className="rounded-2xl bg-white p-8 shadow-card border border-gray-100">
+        <div className="rounded-2xl bg-white p-5 sm:p-8 shadow-card border border-gray-100">
           {/* Bandeau diagnostique : explique pourquoi l'utilisateur a ete deconnecte
               et expose les logs persistants pour investigation. */}
           {reason && (

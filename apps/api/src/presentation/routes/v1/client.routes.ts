@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { ClientController } from '../../controllers/ClientController';
 import { PartnerPricingController } from '../../controllers/PartnerPricingController';
+import { ClientKycAdminController } from '../../controllers/ClientKycAdminController';
 import { authenticate, authorize } from '../../middleware/authMiddleware';
 import { validate } from '../../middleware/validate';
 import { uploadImageMiddleware, uploadDocumentMiddleware } from '../../middleware/upload';
@@ -21,6 +22,9 @@ router.post(
 );
 
 router.get('/', validate(paginationSchema, 'query'), ClientController.list);
+// KYC : file de validation + decision admin
+router.get('/kyc/pending', authorize('SUPER_ADMIN', 'ADMIN'), ClientKycAdminController.listPending);
+router.post('/:id/verify', authorize('SUPER_ADMIN', 'ADMIN'), ClientKycAdminController.verify);
 router.get('/:id', ClientController.getById);
 router.get('/:id/outstanding', ClientController.getOutstanding);
 router.get('/:id/score', ClientController.getScore);

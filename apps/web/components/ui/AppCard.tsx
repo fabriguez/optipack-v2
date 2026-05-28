@@ -9,16 +9,16 @@ interface AppCardProps {
 }
 
 const paddingStyles = {
-  sm: '[&>*[data-slot=card-content]]:px-4 py-4',
-  md: '[&>*[data-slot=card-content]]:px-6 py-6',
-  lg: '[&>*[data-slot=card-content]]:px-8 py-8',
+  sm: '[&>*[data-slot=card-content]]:px-3 sm:[&>*[data-slot=card-content]]:px-4 py-3 sm:py-4',
+  md: '[&>*[data-slot=card-content]]:px-4 sm:[&>*[data-slot=card-content]]:px-6 py-4 sm:py-6',
+  lg: '[&>*[data-slot=card-content]]:px-4 sm:[&>*[data-slot=card-content]]:px-6 lg:[&>*[data-slot=card-content]]:px-8 py-5 sm:py-6 lg:py-8',
 };
 
 export function AppCard({ children, className, padding = 'md' }: AppCardProps) {
   return (
     <Card
       className={cn(
-        'rounded-2xl shadow-card border-gray-100 gap-0',
+        'rounded-xl sm:rounded-2xl shadow-card border-gray-100 gap-0',
         paddingStyles[padding],
         className,
       )}

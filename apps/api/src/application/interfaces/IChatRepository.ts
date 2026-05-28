@@ -21,7 +21,11 @@ export interface IChatRepository {
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<ChatMessage>>;
   createMessage(data: Prisma.ChatMessageCreateInput): Promise<ChatMessage>;
-  markMessagesAsRead(conversationId: string, userId: string): Promise<void>;
+  markMessagesAsRead(
+    conversationId: string,
+    readerId: string,
+    readerType?: 'USER' | 'CLIENT',
+  ): Promise<void>;
 }
 
 export const CHAT_REPOSITORY = Symbol.for('IChatRepository');

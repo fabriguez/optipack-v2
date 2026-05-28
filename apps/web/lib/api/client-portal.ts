@@ -66,6 +66,31 @@ export const clientPortalApi = {
       .post('/client-portal/login', { phone, password })
       .then((r) => r.data),
 
+  register: (payload: {
+    fullName?: string;
+    phone: string;
+    email?: string;
+    password: string;
+  }) =>
+    portalClient
+      .post('/client-portal/register', payload)
+      .then((r) => r.data),
+
+  me: () => portalClient.get('/client-portal/me').then((r) => r.data),
+
+  // Profile + KYC
+  updateProfile: (data: { fullName?: string; phone?: string; email?: string; address?: string }) =>
+    portalClient.patch('/client-portal/me', data).then((r) => r.data),
+
+  uploadDocument: (slot: 'avatar' | 'idDocument' | 'idDocumentBack', file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('slot', slot);
+    return portalClient
+      .post('/client-portal/me/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      .then((r) => r.data);
+  },
+
   // Dashboard
   getDashboard: () =>
     portalClient.get('/client-portal/dashboard').then((r) => r.data),
@@ -87,6 +112,29 @@ export const clientPortalApi = {
       .get('/client-portal/invoices', { params })
       .then((r) => r.data),
 
+  // Payments
+  getPayments: (params?: { page?: number; limit?: number }) =>
+    portalClient
+      .get('/client-portal/payments', { params })
+      .then((r) => r.data),
+
+  declarePayment: (payload: {
+    invoiceId: string;
+    amount: number;
+    paymentMethod: string;
+    transactionReference?: string;
+    note?: string;
+  }) =>
+    portalClient
+      .post('/client-portal/payments/declare', payload)
+      .then((r) => r.data),
+
+  // Debts
+  getDebts: (params?: { page?: number; limit?: number }) =>
+    portalClient
+      .get('/client-portal/debts', { params })
+      .then((r) => r.data),
+
   // Notifications
   getNotifications: (params?: { page?: number; limit?: number }) =>
     portalClient
@@ -95,7 +143,39 @@ export const clientPortalApi = {
 
   markNotificationRead: (id: string) =>
     portalClient
-      .patch(`/client-portal/notifications/${id}/read`)
+      .post(`/client-portal/notifications/${id}/read`)
+      .then((r) => r.data),
+
+  markAllNotificationsRead: () =>
+    portalClient
+      .post('/client-portal/notifications/read-all')
+      .then((r) => r.data),
+
+  // Conversations
+  getConversations: () =>
+    portalClient.get('/client-portal/conversations').then((r) => r.data),
+
+  createConversation: (payload: {
+    agencyId?: string;
+    firstMessage?: string;
+  }) =>
+    portalClient
+      .post('/client-portal/conversations', payload)
+      .then((r) => r.data),
+
+  getConversationMessages: (id: string) =>
+    portalClient
+      .get(`/client-portal/conversations/${id}/messages`)
+      .then((r) => r.data),
+
+  sendConversationMessage: (id: string, message: string) =>
+    portalClient
+      .post(`/client-portal/conversations/${id}/messages`, { message })
+      .then((r) => r.data),
+
+  markConversationRead: (id: string) =>
+    portalClient
+      .post(`/client-portal/conversations/${id}/read`)
       .then((r) => r.data),
 
   // Agencies

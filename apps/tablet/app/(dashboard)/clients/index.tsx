@@ -1,105 +1,110 @@
-import { View, Text, ScrollView, RefreshControl, Pressable, ActivityIndicator } from 'react-native';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { useQuery } from '@tanstack/react-query';
-import { Card, CardHeader } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Badge';
-import { apiClient } from '@/lib/api/client';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import { Pressable, Text, View } from 'react-native';
+import { ResourceListScreen } from '@/components/data/ResourceListScreen';
+import { ListRow } from '@/components/data/ListRow';
+import { AppDialog, AppTextInput, AppPhoneInput, AppSearchSelect } from '@/components/forms';
+import { clientsApi } from '@/lib/api/clients';
+import { useCreateClient } from '@/lib/hooks/useClients';
+import { searchers } from '@/lib/api/searchers';
 import { colors } from '@/lib/theme/colors';
-import { spacing } from '@/lib/theme/spacing';
-import { formatAmount } from '@transitsoftservices/shared';
+import { radius, spacing } from '@/lib/theme/spacing';
+
+interface Client {
+  id: string;
+  fullName: string;
+  phone?: string | null;
+  email?: string | null;
+  clientType?: string | null;
+  agency?: { name?: string } | null;
+}
+
+const schema = z.object({
+  fullName: z.string().min(1, 'Nom requis'),
+  phone: z.string().min(4, 'Telephone requis'),
+  email: z.string().email('Email invalide').optional().or(z.literal('')),
+  agencyId: z.string().min(1, 'Agence requise'),
+});
+type FormValues = z.infer<typeof schema>;
+
+function ClientFormDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const create = useCreateClient();
+  const { control, handleSubmit, reset } = useForm<FormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: { fullName: '', phone: '', email: '', agencyId: '' },
+  });
+  const submit = handleSubmit(async (v) => {
+    await create.mutateAsync({
+      fullName: v.fullName,
+      phone: v.phone,
+      email: v.email || undefined,
+      agencyId: v.agencyId,
+    } as never);
+    reset();
+    onClose();
+  });
+  return (
+    <AppDialog
+      open={open}
+      onClose={() => { reset(); onClose(); }}
+      title="Nouveau client"
+      footer={
+        <>
+          <Pressable onPress={() => { reset(); onClose(); }} style={{ height: 40, paddingHorizontal: spacing.lg, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.gray[100] }}>
+            <Text style={{ fontSize: 14, color: colors.gray[700], fontWeight: '500' }}>Annuler</Text>
+          </Pressable>
+          <Pressable onPress={submit} disabled={create.isPending} style={{ height: 40, paddingHorizontal: spacing.lg, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary[500], opacity: create.isPending ? 0.6 : 1 }}>
+            <Text style={{ fontSize: 14, color: colors.white, fontWeight: '600' }}>{create.isPending ? '...' : 'Enregistrer'}</Text>
+          </Pressable>
+        </>
+      }
+    >
+      <AppTextInput control={control} name="fullName" label="Nom complet" required />
+      <View style={{ flexDirection: 'row', gap: spacing.lg }}>
+        <View style={{ flex: 1 }}>
+          <AppPhoneInput control={control} name="phone" label="Telephone" required />
+        </View>
+        <View style={{ flex: 1 }}>
+          <AppTextInput control={control} name="email" label="Email" keyboardType="email-address" autoCapitalize="none" />
+        </View>
+      </View>
+      <AppSearchSelect
+        control={control}
+        name="agencyId"
+        label="Agence"
+        required
+        search={(q) => searchers.agencies(q).then((items) => items.map((i) => ({ value: i.value, label: i.label, hint: i.sublabel ?? undefined })))}
+      />
+    </AppDialog>
+  );
+}
 
 export default function ClientsScreen() {
+  const [open, setOpen] = useState(false);
   const router = useRouter();
-  const [refreshing, setRefreshing] = useState(false);
-
-  const { data, isLoading, refetch } = useQuery({
-    queryKey: ['clients'],
-    queryFn: () => apiClient.get('/clients?limit=50').then((r) => r.data),
-  });
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await refetch();
-    setRefreshing(false);
-  };
-
-  const clients: any[] = data?.data ?? [];
-
-  const tierVariant = (tier: string) => {
-    if (tier === 'GOLD') return 'warning';
-    if (tier === 'PLATINUM' || tier === 'VIP') return 'info';
-    if (tier === 'SILVER') return 'default';
-    return 'default';
-  };
-
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: colors.background }}
-      contentContainerStyle={{ padding: spacing['2xl'] }}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary[500]} />}
-    >
-      <View style={{ marginBottom: spacing['2xl'] }}>
-        <Text style={{ fontSize: 26, fontWeight: '700', color: colors.gray[900] }}>Clients</Text>
-        <Text style={{ fontSize: 14, color: colors.gray[500], marginTop: 4 }}>Gestion des clients</Text>
-      </View>
-
-      {isLoading ? (
-        <ActivityIndicator size="large" color={colors.primary[500]} style={{ marginTop: 40 }} />
-      ) : (
-        <Card>
-          <CardHeader title="Tous les clients" subtitle={`${clients.length} resultats`} />
-          {clients.length === 0 ? (
-            <Text style={{ textAlign: 'center', fontSize: 13, color: colors.gray[400], paddingVertical: 20 }}>Aucun client trouve</Text>
-          ) : (
-            clients.map((client, i) => (
-              <Pressable
-                key={client.id}
-                onPress={() => {}}
-                style={{
-                  flexDirection: 'row',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  paddingVertical: 12,
-                  borderBottomWidth: i < clients.length - 1 ? 1 : 0,
-                  borderBottomColor: '#F3F4F6',
-                }}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 14, fontWeight: '600', color: colors.gray[900] }}>{client.fullName}</Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4 }}>
-                    {client.phone && (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                        <Ionicons name="call-outline" size={12} color={colors.gray[400]} />
-                        <Text style={{ fontSize: 12, color: colors.gray[500] }}>{client.phone}</Text>
-                      </View>
-                    )}
-                    {client.email && (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                        <Ionicons name="mail-outline" size={12} color={colors.gray[400]} />
-                        <Text style={{ fontSize: 12, color: colors.gray[500] }}>{client.email}</Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <View style={{ alignItems: 'flex-end', marginRight: 4 }}>
-                    <Text style={{ fontSize: 13, fontWeight: '600', color: colors.gray[900] }}>
-                      {formatAmount(Number(client.totalSpent ?? 0))}
-                    </Text>
-                    <Text style={{ fontSize: 11, color: colors.gray[400], marginTop: 2 }}>
-                      {client.loyaltyPoints ?? 0} pts
-                    </Text>
-                  </View>
-                  {client.loyaltyTier && <Badge variant={tierVariant(client.loyaltyTier)}>{client.loyaltyTier}</Badge>}
-                  <Ionicons name="chevron-forward" size={16} color={colors.gray[300]} />
-                </View>
-              </Pressable>
-            ))
-          )}
-        </Card>
-      )}
-    </ScrollView>
+    <>
+      <ResourceListScreen<Client>
+        title="Clients"
+        subtitle="Annuaire clients"
+        queryKey={['clients']}
+        fetcher={(params) => clientsApi.list(params)}
+        keyExtractor={(c) => c.id}
+        createPermission="client.create"
+        onCreate={() => setOpen(true)}
+        renderRow={(c) => (
+          <ListRow
+            title={c.fullName}
+            subtitle={c.phone ?? undefined}
+            metadata={[c.email ?? '', c.agency?.name ?? '', c.clientType ?? '']}
+            onPress={() => router.push(`/(dashboard)/clients/${c.id}` as never)}
+          />
+        )}
+      />
+      <ClientFormDialog open={open} onClose={() => setOpen(false)} />
+    </>
   );
 }

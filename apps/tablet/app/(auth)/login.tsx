@@ -3,19 +3,28 @@ import { View, Text, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
-import { useAuth } from '@/lib/hooks/useAuth';
+import { useAuth } from '@/lib/auth/AuthContext';
 import { colors } from '@/lib/theme/colors';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const { loginMutation } = useAuth();
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { login } = useAuth();
   const router = useRouter();
 
-  const handleLogin = () => {
-    loginMutation.mutate({ email, password }, {
-      onSuccess: () => router.replace('/(dashboard)'),
-    });
+  const handleLogin = async () => {
+    setError(null);
+    setSubmitting(true);
+    try {
+      await login(email, password);
+      router.replace('/(dashboard)');
+    } catch {
+      setError('Email ou mot de passe incorrect');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -24,7 +33,6 @@ export default function LoginScreen() {
       style={{ flex: 1, backgroundColor: colors.gray[50], justifyContent: 'center', alignItems: 'center' }}
     >
       <View style={{ width: 400, padding: 32 }}>
-        {/* Logo */}
         <View style={{ alignItems: 'center', marginBottom: 40 }}>
           <View style={{ width: 64, height: 64, borderRadius: 16, backgroundColor: colors.primary[500], alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
             <Text style={{ fontSize: 24, fontWeight: '700', color: colors.white }}>OP</Text>
@@ -33,19 +41,18 @@ export default function LoginScreen() {
           <Text style={{ fontSize: 14, color: colors.gray[500], marginTop: 4 }}>Connectez-vous a votre compte</Text>
         </View>
 
-        {/* Form */}
         <View style={{ backgroundColor: colors.white, borderRadius: 16, padding: 32, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 }}>
-          {loginMutation.isError && (
+          {error && (
             <View style={{ backgroundColor: '#FEF2F2', borderRadius: 12, padding: 12, marginBottom: 16 }}>
-              <Text style={{ fontSize: 13, color: '#B91C1C' }}>Email ou mot de passe incorrect</Text>
+              <Text style={{ fontSize: 13, color: '#B91C1C' }}>{error}</Text>
             </View>
           )}
 
           <View style={{ gap: 16 }}>
             <Input label="Email" value={email} onChangeText={setEmail} placeholder="votre@email.com" keyboardType="email-address" autoCapitalize="none" />
             <Input label="Mot de passe" value={password} onChangeText={setPassword} placeholder="Votre mot de passe" secureTextEntry />
-            <Button onPress={handleLogin} loading={loginMutation.isPending}>
-              {loginMutation.isPending ? 'Connexion...' : 'Se connecter'}
+            <Button onPress={handleLogin} loading={submitting}>
+              {submitting ? 'Connexion...' : 'Se connecter'}
             </Button>
           </View>
         </View>

@@ -252,6 +252,12 @@ export class ClientPortalController {
           email: true,
           idNumber: true,
           imageUrl: true,
+          idDocumentUrl: true,
+          idDocumentBackUrl: true,
+          idVerificationStatus: true,
+          idVerifiedAt: true,
+          idExpiryDate: true,
+          idRejectionReason: true,
           address: true,
           agencyId: true,
           loyaltyTier: true,
@@ -425,7 +431,12 @@ export class ClientPortalController {
           take: limit,
           include: {
             invoice: {
-              select: { reference: true, totalAmount: true, status: true },
+              select: {
+                id: true,
+                reference: true,
+                totalAmount: true,
+                status: true,
+              },
             },
           },
         }),

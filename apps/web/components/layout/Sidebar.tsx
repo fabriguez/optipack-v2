@@ -204,9 +204,9 @@ export function Sidebar() {
         // md+ : behavior original
         'md:sticky md:translate-x-0',
         collapsed ? 'md:w-17' : 'md:w-65',
-        // Mobile : fixed off-canvas
-        'fixed left-0',
-        mobileOpen ? 'translate-x-0 w-65' : '-translate-x-full w-65',
+        // Mobile : fixed off-canvas, 85vw max pour laisser voir l'overlay
+        'fixed left-0 w-[min(280px,85vw)] md:w-auto',
+        mobileOpen ? 'translate-x-0' : '-translate-x-full',
       )}
     >
       {/* Logo + nom dynamique du tenant */}
