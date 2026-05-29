@@ -332,6 +332,77 @@ router.patch(
 );
 
 /**
+ * GET /api/v1/tenant-meta/payment-providers
+ * AUTH admin. Liste des providers disponibles + canaux.
+ */
+router.get(
+  '/payment-providers',
+  authenticate,
+  tenantGuard,
+  authorize('SUPER_ADMIN', 'ADMIN'),
+  async (_req, res, next) => {
+    try {
+      const { listPaymentProviders } = await import('../../../infrastructure/payments/registry');
+      const providers = listPaymentProviders().map((p) => ({ name: p.name, channel: p.channel }));
+      res.json({ success: true, data: providers });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * GET /api/v1/tenant-meta/payment-config
+ * AUTH admin. Renvoie la config providers du tenant (secrets visibles : admin only).
+ */
+router.get(
+  '/payment-config',
+  authenticate,
+  tenantGuard,
+  authorize('SUPER_ADMIN', 'ADMIN'),
+  async (req, res, next) => {
+    try {
+      const orgId = getOrgId(req);
+      const org = await prisma.organization.findUnique({
+        where: { id: orgId },
+        select: { paymentProvidersConfig: true },
+      });
+      res.json({ success: true, data: org?.paymentProvidersConfig ?? { channels: [] } });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * PATCH /api/v1/tenant-meta/payment-config
+ * AUTH admin. Met a jour la config providers (canaux, priorites, credentials).
+ */
+router.patch(
+  '/payment-config',
+  authenticate,
+  tenantGuard,
+  authorize('SUPER_ADMIN', 'ADMIN'),
+  async (req, res, next) => {
+    try {
+      const orgId = getOrgId(req);
+      const body = req.body as { channels?: unknown } | null | undefined;
+      if (!body || !Array.isArray(body.channels)) {
+        return res.status(400).json({ success: false, message: 'channels[] requis' });
+      }
+      const updated = await prisma.organization.update({
+        where: { id: orgId },
+        data: { paymentProvidersConfig: body as any },
+        select: { paymentProvidersConfig: true },
+      });
+      res.json({ success: true, data: updated.paymentProvidersConfig });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
  * GET /api/v1/tenant-meta/skins
  * PUBLIC : liste des peaux disponibles (catalogue) pour le Studio cote tenant.
  * Utilise le registre central de @transitsoftservices/skins, donc ajouter une

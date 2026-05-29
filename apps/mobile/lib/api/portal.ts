@@ -22,6 +22,19 @@ export const portalApi = {
   parcelLabelUrl: (tracking: string) => `/client-portal/parcels/${encodeURIComponent(tracking)}/label`,
   invoicePdfUrl: (id: string) => `/client-portal/invoices/${id}/pdf`,
 
+  // Payment intents : flux multi-provider avec fallback.
+  initiatePayment: (data: {
+    invoiceId: string;
+    channel: 'MOBILE_MONEY' | 'CARD' | 'BANK_TRANSFER' | 'USSD';
+    amount?: number;
+    country?: string;
+    payerPhone?: string;
+    payerEmail?: string;
+    returnUrl?: string;
+  }) => apiClient.post('/client-portal/payment-intents', data).then((r) => r.data),
+  paymentIntent: (id: string) =>
+    apiClient.get(`/client-portal/payment-intents/${id}`).then((r) => r.data),
+
   // Public tracking (no auth)
   publicTrack: (tracking: string) =>
     apiClient.get(`/public-tracking/${tracking}`).then((r) => r.data),

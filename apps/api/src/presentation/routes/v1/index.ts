@@ -32,6 +32,7 @@ import configRoutes from './config.routes';
 import manifestRoutes from './manifest.routes';
 import routingRoutes from './routing.routes';
 import clientPortalRoutes from './client-portal.routes';
+import paymentIntentRoutes from './payment-intent.routes';
 import tenantMetaRoutes from './tenant-meta.routes';
 import systemRoutes from './system.routes';
 import uploadRoutes from './upload.routes';
@@ -56,6 +57,7 @@ router.use('/organization', tenantMetaRoutes);  // alias pour PATCH /organizatio
 router.use('/system', systemRoutes);  // Phase 4.5 : updates pilote par tenant
 router.use('/auth', authRoutes);
 router.use('/client-portal', clientPortalRoutes);
+router.use('/client-portal/payment-intents', paymentIntentRoutes);
 // Suivi public (QR code scanne par le destinataire) — sans auth
 router.use('/public', publicTrackingRoutes);
 // Webhook WhatsApp Meta Cloud API (verification + reception messages).

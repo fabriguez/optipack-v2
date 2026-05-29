@@ -1,36 +1,24 @@
 import { useState } from 'react';
-import {
-  ScrollView,
-  View,
-  Text,
-  ActivityIndicator,
-  Pressable,
-  Modal,
-  TextInput,
-  Alert,
-  RefreshControl,
-} from 'react-native';
+import { ScrollView, View, Text, ActivityIndicator, Pressable, RefreshControl } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { PayDialog } from '@/components/payment/PayDialog';
 import { portalApi } from '@/lib/api/portal';
-import { apiClient } from '@/lib/api/client';
 import { downloadAndShare } from '@/lib/downloads';
 import { invoiceStatusLabel, paymentMethodLabel, parcelStatusLabel } from '@/lib/labels';
-import { colors, radius, spacing } from '@/lib/theme/colors';
+import { colors, spacing } from '@/lib/theme/colors';
 import { formatAmount } from '@transitsoftservices/shared';
 import { toast } from '@/lib/toast';
 
 export default function InvoiceDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const qc = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
   const [payOpen, setPayOpen] = useState(false);
-  const [amount, setAmount] = useState('');
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['portal', 'invoices', id],
@@ -43,42 +31,10 @@ export default function InvoiceDetail() {
   const paid = Number(i?.paidAmount ?? 0);
   const remaining = i?.balance != null ? Number(i.balance) : Math.max(total - paid, 0);
 
-  const payMutation = useMutation({
-    mutationFn: () =>
-      apiClient.post('/client-portal/payments/declare', {
-        invoiceId: id,
-        amount: Number(amount),
-        paymentMethod: 'MOBILE_MONEY',
-      }),
-    onSuccess: () => {
-      toast.success('Declaration envoyee');
-      setPayOpen(false);
-      setAmount('');
-      qc.invalidateQueries({ queryKey: ['portal', 'invoices', id] });
-      qc.invalidateQueries({ queryKey: ['portal'] });
-    },
-    onError: (e: any) => {
-      const err = e as { isOfflineQueued?: boolean };
-      if (err?.isOfflineQueued) {
-        toast.info('Mise en file');
-        setPayOpen(false);
-        return;
-      }
-      toast.error(e?.response?.data?.message ?? 'Echec');
-    },
-  });
-
   const onRefresh = async () => {
     setRefreshing(true);
     await refetch();
     setRefreshing(false);
-  };
-
-  const submitPay = () => {
-    const v = Number(amount);
-    if (!v || v <= 0) return Alert.alert('Montant invalide');
-    if (v > remaining) return Alert.alert('Trop eleve', `Restant : ${formatAmount(remaining)}`);
-    payMutation.mutate();
   };
 
   const handleDownload = async () => {
@@ -143,7 +99,7 @@ export default function InvoiceDetail() {
             </View>
             {remaining > 0 && (
               <View style={{ flex: 1 }}>
-                <Button onPress={() => { setAmount(String(remaining)); setPayOpen(true); }}>
+                <Button onPress={() => setPayOpen(true)}>
                   Payer
                 </Button>
               </View>
@@ -208,33 +164,15 @@ export default function InvoiceDetail() {
         </ScrollView>
       )}
 
-      <Modal visible={payOpen} transparent animationType="fade" onRequestClose={() => setPayOpen(false)}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <View style={{ backgroundColor: colors.white, borderRadius: radius.lg, padding: spacing.xl, width: '100%', maxWidth: 380, gap: 14 }}>
-            <Text style={{ fontSize: 17, fontWeight: '600', color: colors.gray[900] }}>Declarer un paiement</Text>
-            <Text style={{ fontSize: 13, color: colors.gray[500] }}>Restant : {formatAmount(remaining)}</Text>
-            <TextInput
-              value={amount}
-              onChangeText={setAmount}
-              placeholder="Montant"
-              keyboardType="decimal-pad"
-              autoFocus
-              style={{ height: 48, borderWidth: 1, borderColor: colors.gray[300], borderRadius: radius.md, paddingHorizontal: spacing.lg, fontSize: 16 }}
-            />
-            <Text style={{ fontSize: 11, color: colors.gray[500] }}>
-              Validation par votre agence. Notification dès confirmation.
-            </Text>
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <Pressable onPress={() => setPayOpen(false)} style={{ flex: 1, height: 44, borderRadius: radius.md, backgroundColor: colors.gray[100], alignItems: 'center', justifyContent: 'center' }}>
-                <Text style={{ fontSize: 14, color: colors.gray[700], fontWeight: '500' }}>Annuler</Text>
-              </Pressable>
-              <Pressable onPress={submitPay} disabled={payMutation.isPending} style={{ flex: 1, height: 44, borderRadius: radius.md, backgroundColor: colors.primary[500], alignItems: 'center', justifyContent: 'center', opacity: payMutation.isPending ? 0.6 : 1 }}>
-                <Text style={{ fontSize: 14, color: colors.white, fontWeight: '600' }}>{payMutation.isPending ? '...' : 'Envoyer'}</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {i && id && (
+        <PayDialog
+          open={payOpen}
+          onClose={() => setPayOpen(false)}
+          invoiceId={id}
+          amount={remaining}
+          invoiceReference={i.reference}
+        />
+      )}
     </View>
   );
 }

@@ -20,6 +20,8 @@ import { registerHandlers as registerNotificationHandlers } from './infrastructu
 import { registerDailyReportEmailHandler } from './infrastructure/events/handlers/DailyReportEmailHandler';
 import { registerDailyReportRegenHandler } from './infrastructure/events/handlers/DailyReportRegenHandler';
 import { registerNotificationProviders } from './infrastructure/notifications/providers';
+import { registerAllPaymentProviders } from './infrastructure/payments/providers';
+import { webhookRouter as paymentWebhookRouter } from './presentation/routes/v1/payment-intent.routes';
 import jwt from 'jsonwebtoken';
 import type { JwtPayload } from '@transitsoftservices/shared';
 import { realtimeService } from './infrastructure/realtime/RealtimeService';
@@ -41,6 +43,18 @@ app.use(cors(corsOptions));
 // Repond aux preflight OPTIONS pour toutes les routes (cors() le fait deja
 // implicitement, on l'ajoute explicitement pour les cas litigieux).
 app.options('*', cors(corsOptions));
+// Webhooks paiement : raw body OBLIGATOIRE pour la verification HMAC.
+// Doit etre monte AVANT express.json() pour conserver le body brut.
+app.use(
+  '/api/v1/webhooks/payment',
+  express.json({
+    verify: (req: any, _res, buf) => {
+      req.rawBody = Buffer.from(buf);
+    },
+    limit: '1mb',
+  }),
+  paymentWebhookRouter,
+);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
@@ -118,6 +132,7 @@ async function start(): Promise<void> {
     // Register event handlers
     registerNotificationHandlers();
     registerNotificationProviders();
+    registerAllPaymentProviders();
     registerDailyReportEmailHandler();
     registerDailyReportRegenHandler();
 
