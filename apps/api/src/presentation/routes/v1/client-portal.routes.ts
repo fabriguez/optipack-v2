@@ -92,28 +92,19 @@ router.get('/parcels/:tracking/label', authenticateClient, async (req, res, next
 
 router.get('/invoices/:id/pdf', authenticateClient, async (req, res, next) => {
   try {
-    const { prisma: prismaModule } = await import('../../../config/database');
-    const { PDFService } = await import('../../../application/services/PDFService');
+    const { buildInvoicePdfBuffer } = await import('./invoice.routes');
     const { clientId } = req.clientPortal!;
-    const invoice = await prismaModule.invoice.findUnique({
-      where: { id: req.params.id },
-      include: {
-        client: true,
-        parcels: true,
-        payments: true,
-        agency: true,
-      },
-    });
-    if (!invoice || invoice.clientId !== clientId) {
-      return res.status(404).json({ success: false, message: 'Facture introuvable' });
+    const out = await buildInvoicePdfBuffer(req.params.id);
+    if (!out) return res.status(404).json({ success: false, message: 'Facture introuvable' });
+    if (out.clientId !== clientId) {
+      return res.status(403).json({ success: false, message: 'Acces refuse' });
     }
-    const pdf = await PDFService.generateInvoicePDF(invoice as any);
     res.set({
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `inline; filename="facture-${invoice.reference}.pdf"`,
-      'Content-Length': pdf.length.toString(),
+      'Content-Disposition': `inline; filename="facture-${out.reference}.pdf"`,
+      'Content-Length': out.pdf.length.toString(),
     });
-    res.send(pdf);
+    res.send(out.pdf);
   } catch (err) {
     next(err);
   }

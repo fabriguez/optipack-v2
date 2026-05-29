@@ -19,7 +19,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { StatusStepper } from '@/components/parcel/StatusStepper';
 import { ImageGallery } from '@/components/parcel/ImageGallery';
-import { parcelStatusLabel } from '@/lib/labels';
+import { parcelStatusLabel, invoiceStatusLabel, parcelActionLabel, paymentMethodLabel } from '@/lib/labels';
 import { portalApi } from '@/lib/api/portal';
 import { apiClient } from '@/lib/api/client';
 import { downloadAndShare } from '@/lib/downloads';
@@ -227,7 +227,7 @@ export default function ParcelDetail() {
                 subtitle={invoice.reference}
                 right={
                   <Badge variant={invoice.status === 'PAID' ? 'success' : invoice.status === 'OVERDUE' ? 'error' : 'warning'}>
-                    {invoice.status}
+                    {invoiceStatusLabel(invoice.status)}
                   </Badge>
                 }
               />
@@ -265,7 +265,7 @@ export default function ParcelDetail() {
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={{ fontSize: 13, color: colors.gray[900], fontWeight: '600' }}>{pay.reference ?? pay.id.slice(0, 8)}</Text>
-                      <Text style={{ fontSize: 11, color: colors.gray[500] }}>{pay.paymentMethod} · {pay.createdAt?.slice(0, 16)}</Text>
+                      <Text style={{ fontSize: 11, color: colors.gray[500] }}>{paymentMethodLabel(pay.paymentMethod)} · {pay.createdAt?.slice(0, 16)}</Text>
                     </View>
                     <Text style={{ fontSize: 14, fontWeight: '700', color: colors.gray[900] }}>{formatAmount(Number(pay.amount ?? 0))}</Text>
                   </View>
@@ -284,7 +284,7 @@ export default function ParcelDetail() {
                     <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary[500], marginTop: 6 }} />
                     <View style={{ flex: 1 }}>
                       <Text style={{ fontSize: 13, fontWeight: '500', color: colors.gray[900] }}>
-                        {h.action ?? `${h.statusBefore ?? '-'} → ${h.statusAfter ?? '-'}`}
+                        {h.action ? parcelActionLabel(h.action) : `${parcelStatusLabel(h.statusBefore)} → ${parcelStatusLabel(h.statusAfter)}`}
                       </Text>
                       <Text style={{ fontSize: 11, color: colors.gray[500] }}>
                         {h.createdAt?.slice(0, 16)}

@@ -443,19 +443,27 @@ router.get('/:id', async (req, res, next) => {
 });
 
 // Generate invoice PDF
-router.get('/:id/pdf', async (req, res, next) => {
-  try {
-    const invoice = await prisma.invoice.findUnique({
-      where: { id: req.params.id },
-      include: {
-        client: { select: { id: true, fullName: true, phone: true, email: true } },
-        agency: { select: { id: true, name: true, code: true, address: true, phone: true } },
-      },
-    });
+/**
+ * Helper reutilisable : construit le PDF d'une facture a partir d'un id.
+ * Retourne null si la facture est introuvable. Utilise par la route admin
+ * `/invoices/:id/pdf` et par la route portail client `/client-portal/invoices/:id/pdf`.
+ */
+export async function buildInvoicePdfBuffer(
+  invoiceId: string,
+): Promise<{ pdf: Buffer; reference: string; clientId: string } | null> {
+  const invoice = await prisma.invoice.findUnique({
+    where: { id: invoiceId },
+    include: {
+      client: { select: { id: true, fullName: true, phone: true, email: true } },
+      agency: { select: { id: true, name: true, code: true, address: true, phone: true } },
+    },
+  });
+  if (!invoice) return null;
+  const pdf = await __buildPdfFromInvoice(invoice);
+  return { pdf, reference: invoice.reference, clientId: invoice.clientId };
+}
 
-    if (!invoice) {
-      return res.status(404).json({ success: false, message: 'Facture introuvable' });
-    }
+async function __buildPdfFromInvoice(invoice: any): Promise<Buffer> {
 
     // Calcul des frais de magasinage par colis a l'instant T. On les rend
     // visibles sur la facture pour transparence. discountAudit = historique
@@ -581,14 +589,19 @@ router.get('/:id/pdf', async (req, res, next) => {
       }),
     };
 
-    const pdfBuffer = await PDFService.generateInvoicePDF(invoiceData);
+    return PDFService.generateInvoicePDF(invoiceData);
+}
 
+router.get('/:id/pdf', async (req, res, next) => {
+  try {
+    const out = await buildInvoicePdfBuffer(req.params.id);
+    if (!out) return res.status(404).json({ success: false, message: 'Facture introuvable' });
     res.set({
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `inline; filename="facture-${invoice.reference}.pdf"`,
-      'Content-Length': pdfBuffer.length.toString(),
+      'Content-Disposition': `inline; filename="facture-${out.reference}.pdf"`,
+      'Content-Length': out.pdf.length.toString(),
     });
-    res.send(pdfBuffer);
+    res.send(out.pdf);
   } catch (err) {
     next(err);
   }
