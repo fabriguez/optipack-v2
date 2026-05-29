@@ -61,7 +61,7 @@ export default function InvoiceDetail() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: 'transparent' }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', padding: spacing.lg, gap: 12 }}>
         <Pressable onPress={() => router.back()} hitSlop={10}>
           <Ionicons name="arrow-back" size={22} color={colors.gray[700]} />

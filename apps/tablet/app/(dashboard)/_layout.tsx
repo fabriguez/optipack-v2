@@ -12,11 +12,9 @@ export default function DashboardLayout() {
         return <Component {...props} />;
       }}
       screenOptions={{
+        headerShown: false,
         drawerType: 'permanent',
         drawerStyle: { backgroundColor: colors.sidebar.bg, width: 280 },
-        headerStyle: { backgroundColor: colors.white, elevation: 0, shadowOpacity: 0 },
-        headerTintColor: colors.gray[900],
-        headerTitleStyle: { fontWeight: '600', fontSize: 18 },
       }}
     >
       {allNavScreens.map((it) => (

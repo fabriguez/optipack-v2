@@ -19,7 +19,7 @@ export default function CashRegisterScreen() {
   const reg = data?.data;
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.background }} contentContainerStyle={{ padding: spacing['2xl'] }}>
+    <ScrollView style={{ flex: 1, backgroundColor: 'transparent' }} contentContainerStyle={{ padding: spacing['2xl'] }}>
       <View style={{ marginBottom: spacing['2xl'] }}>
         <Text style={{ fontSize: 26, fontWeight: '700', color: colors.gray[900] }}>Caisse</Text>
         <Text style={{ fontSize: 14, color: colors.gray[500], marginTop: 4 }}>Solde et mouvements</Text>

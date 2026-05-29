@@ -36,7 +36,7 @@ export default function ClientDetailScreen() {
   }
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.background }} contentContainerStyle={{ padding: spacing['2xl'], gap: spacing.lg }}>
+    <ScrollView style={{ flex: 1, backgroundColor: 'transparent' }} contentContainerStyle={{ padding: spacing['2xl'], gap: spacing.lg }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
         <Pressable onPress={() => router.back()} hitSlop={10}>
           <Ionicons name="arrow-back" size={22} color={colors.gray[700]} />

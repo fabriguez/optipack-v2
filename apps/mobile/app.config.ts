@@ -67,7 +67,19 @@ export default (): ExpoConfig => {
     android: {
       package: t.androidPackage,
     },
-    plugins: ['expo-router', 'expo-secure-store'],
+    plugins: [
+      'expo-router',
+      'expo-secure-store',
+      [
+        'expo-image-picker',
+        {
+          photosPermission:
+            "L'application accede a vos photos pour vous permettre d'ajouter une photo de profil ou de telecharger une piece d'identite.",
+          cameraPermission:
+            "L'application utilise la camera pour prendre une photo de votre piece d'identite.",
+        },
+      ],
+    ],
     extra: {
       tenantSlug: slug,
     },

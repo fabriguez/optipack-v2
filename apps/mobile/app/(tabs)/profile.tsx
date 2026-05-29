@@ -27,17 +27,27 @@ interface ProfileMe {
 }
 
 async function pickImage(): Promise<ImagePicker.ImagePickerAsset | null> {
-  const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (perm.status !== 'granted') {
-    Alert.alert('Permission requise', 'Acces aux photos necessaire.');
+  try {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert(
+        'Permission requise',
+        'Acces aux photos necessaire. Active la permission dans Reglages.',
+      );
+      return null;
+    }
+    const res = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.85,
+      selectionLimit: 1,
+    });
+    if (res.canceled || !res.assets || res.assets.length === 0) return null;
+    return res.assets[0];
+  } catch (err: any) {
+    Alert.alert('Erreur', err?.message ?? "Impossible d'ouvrir la galerie.");
     return null;
   }
-  const res = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ImagePicker.MediaTypeOptions.Images,
-    quality: 0.85,
-  });
-  if (res.canceled) return null;
-  return res.assets[0];
 }
 
 async function uploadFile(uri: string, slot: 'avatar' | 'idDocument' | 'idDocumentBack'): Promise<string> {
@@ -100,7 +110,7 @@ export default function ProfileTab() {
   };
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.background }} contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg, paddingBottom: 80 }}>
+    <ScrollView style={{ flex: 1, backgroundColor: 'transparent' }} contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg, paddingBottom: 80 }}>
       <Card>
         <View style={{ alignItems: 'center', gap: spacing.md }}>
           <Pressable onPress={() => handleUpload('avatar')} disabled={uploading === 'avatar'}>

@@ -26,7 +26,7 @@ export default function InvoicesTab() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
+    <View style={{ flex: 1, backgroundColor: 'transparent' }}>
       {isLoading ? (
         <ActivityIndicator color={colors.primary[500]} style={{ marginTop: 40 }} />
       ) : (

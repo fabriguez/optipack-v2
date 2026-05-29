@@ -17,7 +17,7 @@ export function PlaceholderScreen({
   description = 'Cette section sera disponible prochainement sur tablette.',
 }: PlaceholderScreenProps) {
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background, padding: spacing['2xl'] }}>
+    <View style={{ flex: 1, backgroundColor: 'transparent', padding: spacing['2xl'] }}>
       <View style={{ marginBottom: spacing['2xl'] }}>
         <Text style={{ fontSize: 26, fontWeight: '700', color: colors.gray[900] }}>{title}</Text>
         {subtitle && (

@@ -88,7 +88,7 @@ export function ResourceListScreen<T>({
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
+    <View style={{ flex: 1, backgroundColor: 'transparent' }}>
       <View style={{ padding: spacing['2xl'], paddingBottom: spacing.lg }}>
         <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.lg }}>
           <View style={{ flex: 1 }}>

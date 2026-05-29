@@ -37,7 +37,7 @@ export default function HomeScreen() {
 
   return (
     <ScrollView
-      style={{ flex: 1, backgroundColor: colors.background }}
+      style={{ flex: 1, backgroundColor: 'transparent' }}
       contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary[500]} />}
     >

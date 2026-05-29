@@ -25,7 +25,7 @@ function Tile({ icon, title, description, permission }: { icon: keyof typeof Ion
 
 export default function AdminScreen() {
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.background }} contentContainerStyle={{ padding: spacing['2xl'], gap: spacing.lg }}>
+    <ScrollView style={{ flex: 1, backgroundColor: 'transparent' }} contentContainerStyle={{ padding: spacing['2xl'], gap: spacing.lg }}>
       <View>
         <Text style={{ fontSize: 26, fontWeight: '700', color: colors.gray[900] }}>Administration RH</Text>
         <Text style={{ fontSize: 14, color: colors.gray[500], marginTop: 4 }}>Postes, permissions, plannings, conges</Text>

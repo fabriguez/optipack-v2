@@ -22,7 +22,7 @@ export default function DashboardScreen() {
 
   return (
     <ScrollView
-      style={{ flex: 1, backgroundColor: colors.background }}
+      style={{ flex: 1, backgroundColor: 'transparent' }}
       contentContainerStyle={{ padding: spacing['2xl'] }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary[500]} />}
     >

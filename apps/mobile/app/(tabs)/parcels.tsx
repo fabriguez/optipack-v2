@@ -28,7 +28,7 @@ export default function ParcelsTab() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
+    <View style={{ flex: 1, backgroundColor: 'transparent' }}>
       <View style={{ padding: spacing.lg }}>
         <View
           style={{
