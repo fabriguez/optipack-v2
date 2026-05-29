@@ -90,6 +90,40 @@ router.get('/parcels/:tracking/label', authenticateClient, async (req, res, next
   }
 });
 
+// Detail facture pour le portail client (lecture seule, ownership verifiee).
+router.get('/invoices/:id', authenticateClient, async (req, res, next) => {
+  try {
+    const { prisma: prismaModule } = await import('../../../config/database');
+    const { clientId } = req.clientPortal!;
+    const invoice = await prismaModule.invoice.findUnique({
+      where: { id: req.params.id },
+      include: {
+        agency: { select: { id: true, name: true, city: true, country: true, phone: true } },
+        parcels: {
+          select: {
+            id: true,
+            trackingNumber: true,
+            designation: true,
+            price: true,
+            status: true,
+          },
+        },
+        payments: {
+          where: { isVoided: false },
+          select: { id: true, reference: true, amount: true, paymentMethod: true, createdAt: true },
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+    if (!invoice || invoice.clientId !== clientId) {
+      return res.status(404).json({ success: false, message: 'Facture introuvable' });
+    }
+    res.json({ success: true, data: invoice });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get('/invoices/:id/pdf', authenticateClient, async (req, res, next) => {
   try {
     const { buildInvoicePdfBuffer } = await import('./invoice.routes');

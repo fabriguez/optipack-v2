@@ -139,9 +139,16 @@ export default function ParcelDetail() {
         <Pressable onPress={() => router.back()} hitSlop={10}>
           <Ionicons name="arrow-back" size={22} color={colors.gray[700]} />
         </Pressable>
-        <Text style={{ fontSize: 17, fontWeight: '600', color: colors.gray[900], flex: 1 }} numberOfLines={1}>
-          {p?.trackingNumber ?? 'Colis'}
-        </Text>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 16, fontWeight: '700', color: colors.gray[900] }} numberOfLines={1}>
+            {p?.designation ?? 'Colis'}
+          </Text>
+          {p?.trackingNumber && (
+            <Text style={{ fontSize: 11, color: colors.gray[500], fontFamily: 'monospace' }} numberOfLines={1}>
+              {p.trackingNumber}
+            </Text>
+          )}
+        </View>
         {p?.trackingNumber && (
           <Pressable onPress={handleDownloadLabel} hitSlop={10}>
             <Ionicons name="download-outline" size={22} color={colors.primary[600]} />
@@ -158,15 +165,17 @@ export default function ParcelDetail() {
           contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg, paddingBottom: 80 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary[500]} />}
         >
-          {/* Bandeau tete : tracking + statut */}
+          {/* Bandeau tete : designation + tracking + statut */}
           <Card>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <Text style={{ fontSize: 18, fontWeight: '700', color: colors.gray[900], fontFamily: 'monospace' }}>{p.trackingNumber}</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8, gap: 8 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 16, fontWeight: '700', color: colors.gray[900] }}>{p.designation}</Text>
+                <Text style={{ fontSize: 12, color: colors.gray[500], fontFamily: 'monospace', marginTop: 2 }}>{p.trackingNumber}</Text>
+              </View>
               <Badge variant={p.status === 'DELIVERED' ? 'success' : p.status === 'IN_TRANSIT' ? 'warning' : 'default'}>
                 {parcelStatusLabel(p.status)}
               </Badge>
             </View>
-            <Text style={{ fontSize: 14, color: colors.gray[700] }}>{p.designation}</Text>
           </Card>
 
           {/* Images galerie */}

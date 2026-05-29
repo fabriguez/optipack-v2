@@ -1,4 +1,5 @@
-import { ScrollView, View, Text, Pressable, Image, ActivityIndicator, Alert } from 'react-native';
+import { ScrollView, View, Text, Pressable, ActivityIndicator, Alert } from 'react-native';
+import { AuthedImage } from '@/components/ui/AuthedImage';
 import { useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
@@ -114,21 +115,25 @@ export default function ProfileTab() {
       <Card>
         <View style={{ alignItems: 'center', gap: spacing.md }}>
           <Pressable onPress={() => handleUpload('avatar')} disabled={uploading === 'avatar'}>
-            <View style={{ width: 88, height: 88, borderRadius: 44, backgroundColor: colors.primary[50], alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-              {me?.imageUrl ? (
-                <Image source={{ uri: me.imageUrl }} style={{ width: 88, height: 88 }} />
-              ) : (
-                <Text style={{ fontSize: 28, fontWeight: '700', color: colors.primary[700] }}>
-                  {me?.fullName?.[0]?.toUpperCase() ?? '?'}
-                </Text>
-              )}
-              {uploading === 'avatar' && (
-                <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' }}>
-                  <ActivityIndicator color={colors.white} />
-                </View>
-              )}
-              <View style={{ position: 'absolute', bottom: 0, right: 0, width: 26, height: 26, borderRadius: 13, backgroundColor: colors.primary[500], alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.white }}>
-                <Ionicons name="camera" size={13} color={colors.white} />
+            {/* Wrapper sans overflow:hidden : laisse le badge camera depasser. */}
+            <View style={{ width: 96, height: 96, alignItems: 'center', justifyContent: 'center' }}>
+              <View style={{ width: 88, height: 88, borderRadius: 44, backgroundColor: colors.primary[50], alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                {me?.imageUrl ? (
+                  <AuthedImage uri={me.imageUrl} style={{ width: 88, height: 88 }} placeholderBg={colors.primary[50]} />
+                ) : (
+                  <Text style={{ fontSize: 28, fontWeight: '700', color: colors.primary[700] }}>
+                    {me?.fullName?.[0]?.toUpperCase() ?? '?'}
+                  </Text>
+                )}
+                {uploading === 'avatar' && (
+                  <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' }}>
+                    <ActivityIndicator color={colors.white} />
+                  </View>
+                )}
+              </View>
+              {/* Badge camera positionne sur le wrapper (pas clipped). */}
+              <View style={{ position: 'absolute', bottom: 2, right: 2, width: 30, height: 30, borderRadius: 15, backgroundColor: colors.primary[500], alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.white }}>
+                <Ionicons name="camera" size={15} color={colors.white} />
               </View>
             </View>
           </Pressable>
@@ -192,7 +197,7 @@ function DocSlot({ label, uri, onUpload, uploading, disabled }: { label: string;
   return (
     <Pressable onPress={onUpload} disabled={uploading || disabled} style={{ borderWidth: 1, borderColor: colors.gray[200], borderStyle: uri ? 'solid' : 'dashed', borderRadius: radius.md, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: 12, opacity: disabled ? 0.6 : 1 }}>
       {uri ? (
-        <Image source={{ uri }} style={{ width: 56, height: 56, borderRadius: 8, backgroundColor: colors.gray[100] }} />
+        <AuthedImage uri={uri} style={{ width: 56, height: 56, borderRadius: 8 }} placeholderBg={colors.gray[100]} />
       ) : (
         <View style={{ width: 56, height: 56, borderRadius: 8, backgroundColor: colors.gray[100], alignItems: 'center', justifyContent: 'center' }}>
           <Ionicons name="image-outline" size={24} color={colors.gray[400]} />
