@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { portalApi } from '@/lib/api/portal';
 import { Badge } from '@/components/ui/Badge';
+import { parcelStatusLabel } from '@/lib/labels';
 import { colors, radius, spacing } from '@/lib/theme/colors';
 import { formatAmount } from '@transitsoftservices/shared';
 
@@ -69,7 +70,7 @@ export default function ParcelsTab() {
           }
           renderItem={({ item: p }) => (
             <Pressable
-              onPress={() => router.push(`/parcels/${p.id}` as never)}
+              onPress={() => router.push(`/parcels/${p.trackingNumber}` as never)}
               style={({ pressed }) => ({
                 backgroundColor: pressed ? colors.gray[50] : colors.white,
                 borderRadius: radius.lg,
@@ -88,7 +89,7 @@ export default function ParcelsTab() {
                 {p.price != null && <Text style={{ fontSize: 11, color: colors.gray[500], marginTop: 2 }}>{formatAmount(Number(p.price))}</Text>}
               </View>
               <View style={{ alignItems: 'flex-end', gap: 4 }}>
-                <Badge variant={p.status === 'DELIVERED' ? 'success' : p.status === 'IN_TRANSIT' ? 'warning' : 'default'}>{p.status}</Badge>
+                <Badge variant={p.status === 'DELIVERED' ? 'success' : p.status === 'IN_TRANSIT' ? 'warning' : 'default'}>{parcelStatusLabel(p.status)}</Badge>
                 <Ionicons name="chevron-forward" size={16} color={colors.gray[300]} />
               </View>
             </Pressable>

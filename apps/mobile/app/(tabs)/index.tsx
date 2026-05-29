@@ -9,6 +9,7 @@ import { portalApi } from '@/lib/api/portal';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { colors, radius, spacing } from '@/lib/theme/colors';
 import { formatAmount } from '@transitsoftservices/shared';
+import { parcelStatusLabel } from '@/lib/labels';
 
 export default function HomeScreen() {
   const { user } = useAuth();
@@ -92,12 +93,20 @@ export default function HomeScreen() {
       ) : (
         <>
           <View style={{ flexDirection: 'row', gap: spacing.md }}>
-            <KpiTile label="Colis" value={stats?.totalParcels ?? 0} icon="cube-outline" color={colors.primary[500]} />
-            <KpiTile label="En transit" value={stats?.parcelsByStatus?.IN_TRANSIT ?? 0} icon="airplane-outline" color="#FF9800" />
+            <KpiTile label="Colis" value={stats?.parcels?.total ?? 0} icon="cube-outline" color={colors.primary[500]} />
+            <KpiTile label="En transit" value={stats?.parcels?.inTransit ?? 0} icon="airplane-outline" color="#FF9800" />
           </View>
           <View style={{ flexDirection: 'row', gap: spacing.md }}>
-            <KpiTile label="Livres" value={stats?.parcelsByStatus?.DELIVERED ?? 0} icon="checkmark-circle-outline" color="#388E3C" />
-            <KpiTile label="Dettes" value={stats?.outstandingDebts != null ? formatAmount(Number(stats.outstandingDebts)) : '0'} icon="alert-circle-outline" color={colors.error} small />
+            <KpiTile label="Livres" value={stats?.parcels?.delivered ?? 0} icon="checkmark-circle-outline" color="#388E3C" />
+            <KpiTile
+              label="Dettes"
+              value={formatAmount(
+                Number(stats?.debts?.remaining ?? 0) + Number(stats?.invoices?.unpaidBalance ?? 0),
+              )}
+              icon="alert-circle-outline"
+              color={colors.error}
+              small
+            />
           </View>
 
           {(stats?.recentParcels ?? []).length > 0 && (
@@ -106,14 +115,14 @@ export default function HomeScreen() {
               {(stats?.recentParcels ?? []).slice(0, 5).map((p: any) => (
                 <Pressable
                   key={p.id}
-                  onPress={() => router.push(`/parcels/${p.id}` as never)}
+                  onPress={() => router.push(`/parcels/${p.trackingNumber}` as never)}
                   style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.gray[100] }}
                 >
                   <View style={{ flex: 1 }}>
                     <Text style={{ fontSize: 12, fontWeight: '700', fontFamily: 'monospace', color: colors.primary[700] }}>{p.trackingNumber}</Text>
                     <Text style={{ fontSize: 12, color: colors.gray[600] }} numberOfLines={1}>{p.designation}</Text>
                   </View>
-                  <Badge variant={p.status === 'DELIVERED' ? 'success' : p.status === 'IN_TRANSIT' ? 'warning' : 'default'}>{p.status}</Badge>
+                  <Badge variant={p.status === 'DELIVERED' ? 'success' : p.status === 'IN_TRANSIT' ? 'warning' : 'default'}>{parcelStatusLabel(p.status)}</Badge>
                 </Pressable>
               ))}
             </Card>

@@ -14,8 +14,13 @@ export const portalApi = {
   // Parcels
   parcels: (params?: { search?: string; status?: string; limit?: number; page?: number }) =>
     apiClient.get('/client-portal/parcels', { params }).then((r) => r.data),
-  parcelById: (id: string) =>
-    apiClient.get(`/client-portal/parcels/${id}`).then((r) => r.data),
+  parcelByTracking: (tracking: string) =>
+    apiClient.get(`/client-portal/parcels/${encodeURIComponent(tracking)}`).then((r) => r.data),
+  // Compat ascendante : ancienne signature, prend tracking number en arg.
+  parcelById: (tracking: string) =>
+    apiClient.get(`/client-portal/parcels/${encodeURIComponent(tracking)}`).then((r) => r.data),
+  parcelLabelUrl: (tracking: string) => `/client-portal/parcels/${encodeURIComponent(tracking)}/label`,
+  invoicePdfUrl: (id: string) => `/client-portal/invoices/${id}/pdf`,
 
   // Public tracking (no auth)
   publicTrack: (tracking: string) =>

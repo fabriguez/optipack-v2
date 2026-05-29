@@ -17,6 +17,7 @@ import {
 import { createQueryClient, queryPersister } from '@/lib/queryClient';
 import { AuthProvider, useAuth } from '@/lib/auth/AuthContext';
 import { TenantProvider, useTenant } from '@/lib/tenant/TenantContext';
+import { RealtimeProvider } from '@/lib/realtime/RealtimeContext';
 import { startOfflineDrain } from '@/lib/api/offlineDrain';
 import { setTenantSlug } from '@/lib/api/client';
 import { colors } from '@/lib/theme/colors';
@@ -105,6 +106,7 @@ export default function RootLayout() {
       >
         <TenantProvider>
           <AuthProvider>
+            <RealtimeProvider>
             <StatusBar style="dark" />
             <AuthGate>
               {/* Gradient global subtil (blanc -> teinte primaire tres pale).
@@ -126,6 +128,7 @@ export default function RootLayout() {
                 </SafeAreaView>
               </LinearGradient>
             </AuthGate>
+            </RealtimeProvider>
           </AuthProvider>
         </TenantProvider>
       </PersistQueryClientProvider>

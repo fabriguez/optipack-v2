@@ -8,6 +8,7 @@ import { UpdateParcelUseCase } from '../../application/use-cases/parcel/UpdatePa
 import { UpdateParcelStatusUseCase } from '../../application/use-cases/parcel/UpdateParcelStatusUseCase';
 import { prisma } from '../../config/database';
 import { HistoryService } from '../../application/services/HistoryService';
+import { realtimeService } from '../../infrastructure/realtime/RealtimeService';
 import {
   HandoverParcelUseCase,
   HandoverUntrackedParcelUseCase,
@@ -24,6 +25,13 @@ export class ParcelController {
     try {
       const useCase = container.resolve(CreateParcelUseCase);
       const result = await useCase.execute(req.body, req.user!.userId);
+      // Realtime : notifie le client expediteur que son colis vient d'etre cree.
+      try {
+        const clientId = (result as { clientId?: string })?.clientId;
+        if (clientId) realtimeService.toClient(clientId, 'parcel:created', { parcel: result });
+      } catch {
+        /* non bloquant */
+      }
       res.status(201).json({ success: true, data: result });
     } catch (err) {
       next(err);
@@ -148,6 +156,20 @@ export class ParcelController {
         req.user!.userId,
         warehouseChange,
       );
+      // Realtime : notifie le client proprietaire que son colis change d'etat.
+      try {
+        const clientId = (parcel as { clientId?: string })?.clientId;
+        if (clientId) {
+          realtimeService.toClient(clientId, 'parcel:updated', {
+            parcelId: (parcel as { id?: string })?.id,
+            trackingNumber: (parcel as { trackingNumber?: string })?.trackingNumber,
+            status: req.body.status,
+            parcel,
+          });
+        }
+      } catch {
+        /* non bloquant */
+      }
       res.json({ success: true, data: parcel });
     } catch (err) {
       next(err);

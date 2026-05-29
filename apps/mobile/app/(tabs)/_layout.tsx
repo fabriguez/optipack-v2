@@ -5,10 +5,12 @@ import { colors } from '@/lib/theme/colors';
 export default function TabsLayout() {
   return (
     <Tabs
+      sceneContainerStyle={{ backgroundColor: 'transparent' }}
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.primary[600],
         tabBarInactiveTintColor: colors.gray[400],
+        // TabBar reste opaque (lisibilite + visibilite des icones).
         tabBarStyle: { backgroundColor: colors.white, borderTopColor: colors.gray[200], height: 60, paddingBottom: 8, paddingTop: 6 },
         tabBarLabelStyle: { fontSize: 11, fontWeight: '500' },
       }}

@@ -5,12 +5,33 @@ import { VoidPaymentUseCase } from '../../application/use-cases/payment/VoidPaym
 import { PAYMENT_REPOSITORY } from '../../application/interfaces/IPaymentRepository';
 import { NotFoundError } from '../../domain/errors/BusinessError';
 import type { PaginationInput } from '@transitsoftservices/shared';
+import { realtimeService } from '../../infrastructure/realtime/RealtimeService';
+import { prisma } from '../../config/database';
 
 export class PaymentController {
   static async record(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(RecordPaymentUseCase);
       const result = await useCase.execute(req.body, req.user!.userId);
+      // Realtime : notifie le client proprietaire de la facture
+      try {
+        const invoiceId = (result as { invoiceId?: string })?.invoiceId;
+        if (invoiceId) {
+          const invoice = await prisma.invoice.findUnique({
+            where: { id: invoiceId },
+            select: { clientId: true },
+          });
+          if (invoice?.clientId) {
+            realtimeService.toClient(invoice.clientId, 'payment:created', {
+              payment: result,
+              invoiceId,
+            });
+            realtimeService.toClient(invoice.clientId, 'invoice:updated', { invoiceId });
+          }
+        }
+      } catch {
+        /* non bloquant */
+      }
       res.status(201).json({ success: true, data: result });
     } catch (err) {
       next(err);

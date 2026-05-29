@@ -11,10 +11,13 @@ export default function DashboardLayout() {
         const Component = DrawerContent as unknown as (p: typeof props) => ReactElement;
         return <Component {...props} />;
       }}
+      sceneContainerStyle={{ backgroundColor: 'transparent' }}
       screenOptions={{
         headerShown: false,
         drawerType: 'permanent',
+        // Sidebar reste opaque (lisibilite + isolation visuelle).
         drawerStyle: { backgroundColor: colors.sidebar.bg, width: 280 },
+        sceneStyle: { backgroundColor: 'transparent' },
       }}
     >
       {allNavScreens.map((it) => (
