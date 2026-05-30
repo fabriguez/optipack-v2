@@ -1,0 +1,165 @@
+name: Full reset & redeploy
+
+# Workflow MANUEL UNIQUEMENT (workflow_dispatch).
+#
+# Sequence destructive : stop tous les services, wipe les volumes Postgres
+# (tenant + ops) et optionnellement MinIO, redeploye orchestrator + api + web
+# + web-client + ops-admin depuis main, reseed les BDD, et reconcile Caddy.
+#
+# A utiliser pour repartir d'un etat propre en staging/demo. NE PAS LANCER
+# EN PROD SANS BACKUP : toutes les donnees applicatives sont detruites.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Tape "RESET" pour confirmer la destruction des BDD'
+        required: true
+        default: ''
+      wipe_minio:
+        description: 'Effacer aussi les fichiers MinIO (uploads, logos, etc.)'
+        type: boolean
+        default: false
+      seed_tenant:
+        description: 'Lancer le seed du tenant principal apres reset'
+        type: boolean
+        default: true
+      seed_ops:
+        description: 'Lancer le seed orchestrator (super-admin + tenant principal)'
+        type: boolean
+        default: true
+      reconcile_caddy:
+        description: 'Reconcilier Caddy a la fin (necessite OPS_PASSWORD + OPS_TOTP secrets)'
+        type: boolean
+        default: true
+
+jobs:
+  full-reset:
+    name: Full reset on main VPS
+    runs-on: ubuntu-latest
+    if: ${{ inputs.confirm == 'RESET' }}
+
+    steps:
+      - name: Reset & redeploy via SSH
+        uses: appleboy/ssh-action@v1
+        env:
+          WIPE_MINIO: ${{ inputs.wipe_minio }}
+          SEED_TENANT: ${{ inputs.seed_tenant }}
+          SEED_OPS: ${{ inputs.seed_ops }}
+          RECONCILE_CADDY: ${{ inputs.reconcile_caddy }}
+          OPS_PASSWORD: ${{ secrets.OPS_PASSWORD }}
+          OPS_TOTP: ${{ secrets.OPS_TOTP }}
+          OPS_RECOVERY: ${{ secrets.OPS_RECOVERY }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          command_timeout: 60m
+          envs: WIPE_MINIO,SEED_TENANT,SEED_OPS,RECONCILE_CADDY,OPS_PASSWORD,OPS_TOTP,OPS_RECOVERY
+          script: |
+            set -e
+            cd ~/optipack-v2
+
+            echo "==== [1] Sync main ===="
+            git remote prune origin || true
+            rm -f .git/refs/remotes/origin/main.lock 2>/dev/null || true
+            if ! git fetch origin main --force --prune; then
+              git update-ref -d refs/remotes/origin/main 2>/dev/null || true
+              git gc --prune=now 2>/dev/null || true
+              git fetch origin main --force --prune
+            fi
+            git reset --hard origin/main
+
+            echo "==== [2] Stop & remove containers (tenant + control-plane) ===="
+            docker compose -f docker-compose.prod.yml down --remove-orphans || true
+            docker compose -f docker-compose.control-plane.yml down --remove-orphans || true
+
+            echo "==== [3] Wipe Postgres volumes ===="
+            # Les noms reels sont prefixes par le project name compose
+            # (dossier courant par defaut). On utilise `docker volume ls` pour
+            # cibler avec un filtre robuste.
+            for vol in $(docker volume ls -q | grep -E '_(postgres-data|ops-postgres-data)$' || true); do
+              echo "Removing $vol"
+              docker volume rm -f "$vol" || true
+            done
+
+            if [ "$WIPE_MINIO" = "true" ]; then
+              echo "==== [3b] Wipe MinIO volume ===="
+              for vol in $(docker volume ls -q | grep -E '_minio-data$' || true); do
+                echo "Removing $vol"
+                docker volume rm -f "$vol" || true
+              done
+            fi
+
+            echo "==== [4] Pull / rebuild images ===="
+            docker compose -f docker-compose.prod.yml pull || true
+            docker compose -f docker-compose.control-plane.yml pull || true
+            docker compose -f docker-compose.prod.yml build api web web-client
+            docker compose -f docker-compose.control-plane.yml build orchestrator ops-admin
+
+            echo "==== [5] Boot databases (recreees vides) ===="
+            docker compose -f docker-compose.prod.yml up -d postgres
+            docker compose -f docker-compose.control-plane.yml up -d ops-postgres ops-redis
+
+            # Attente sante pg : entrypoint api/orchestrator a son propre wait,
+            # mais on laisse 5s de marge pour eviter race conditions.
+            sleep 5
+
+            echo "==== [6] Boot services ===="
+            # API + web + web-client (tenant principal). Les entrypoints
+            # api/orchestrator jouent prisma migrate deploy puis seed
+            # automatiquement si SEED_ON_BOOT=true en env.
+            docker compose -f docker-compose.prod.yml up -d minio api web web-client
+            docker compose -f docker-compose.control-plane.yml up -d orchestrator ops-admin
+
+            if [ "$SEED_TENANT" = "true" ]; then
+              echo "==== [7] Seed tenant (apps/api) ===="
+              # Attente que l'api soit healthy + migrations passees
+              for i in 1 2 3 4 5 6 7 8 9 10; do
+                if docker compose -f docker-compose.prod.yml exec -T api node -e "process.exit(0)" 2>/dev/null; then
+                  break
+                fi
+                echo "Wait api ready... ($i/10)"
+                sleep 5
+              done
+              docker compose -f docker-compose.prod.yml exec -T api pnpm --filter @transitsoftservices/api run seed || {
+                echo "[warn] Seed tenant a echoue, voir les logs"
+              }
+            fi
+
+            if [ "$SEED_OPS" = "true" ]; then
+              echo "==== [8] Seed orchestrator (super-admin + tenant principal) ===="
+              for i in 1 2 3 4 5 6 7 8 9 10; do
+                if docker compose -f docker-compose.control-plane.yml exec -T orchestrator node -e "process.exit(0)" 2>/dev/null; then
+                  break
+                fi
+                echo "Wait orchestrator ready... ($i/10)"
+                sleep 5
+              done
+              docker compose -f docker-compose.control-plane.yml exec -T orchestrator pnpm --filter @transitsoftservices/orchestrator run seed || {
+                echo "[warn] Seed orchestrator a echoue, voir les logs"
+              }
+            fi
+
+            if [ "$RECONCILE_CADDY" = "true" ]; then
+              echo "==== [9] Reconcile Caddy ===="
+              if [ -z "$OPS_PASSWORD" ]; then
+                echo "[warn] OPS_PASSWORD secret manquant, skip reconcile-caddy"
+              else
+                # Le script attend OPS_PASSWORD + OPS_TOTP (ou OPS_RECOVERY).
+                # OPS_URL par defaut = http://127.0.0.1:4020 (orchestrator local).
+                chmod +x ./scripts/reconcile-caddy.sh || true
+                OPS_PASSWORD="$OPS_PASSWORD" OPS_TOTP="$OPS_TOTP" OPS_RECOVERY="$OPS_RECOVERY" \
+                  ./scripts/reconcile-caddy.sh || {
+                  echo "[warn] Reconcile Caddy a echoue, verifier manuellement"
+                }
+              fi
+            fi
+
+            echo "==== [10] Cleanup images orphelines ===="
+            docker image prune -f
+
+            echo "==== Reset complet termine ===="
+            docker compose -f docker-compose.prod.yml ps
+            docker compose -f docker-compose.control-plane.yml ps
