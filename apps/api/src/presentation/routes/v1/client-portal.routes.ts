@@ -6,6 +6,7 @@ import {
 } from '../../controllers/ClientPortalController';
 import { ClientPortalExtraController } from '../../controllers/ClientPortalExtraController';
 import { ClientPortalKycController } from '../../controllers/ClientPortalKycController';
+import { forgotPasswordLimiter, resetPasswordLimiter } from '../../middleware/rateLimit';
 
 const router = Router();
 
@@ -25,6 +26,8 @@ const kycUpload = multer({
 // Public routes
 router.post('/login', ClientPortalController.login);
 router.post('/register', ClientPortalController.register);
+router.post('/forgot-password', forgotPasswordLimiter, ClientPortalController.forgotPassword);
+router.post('/reset-password', resetPasswordLimiter, ClientPortalController.resetPassword);
 
 // Authenticated routes
 router.get('/me', authenticateClient, ClientPortalController.me);

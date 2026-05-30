@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { randomInt } from 'crypto';
 import { config } from '../../config';
 import { prisma } from '../../config/database';
 import {
@@ -8,6 +9,14 @@ import {
   NotFoundError,
   BusinessError,
 } from '../../domain/errors/BusinessError';
+import { notificationService } from '../../application/services/notifications/NotificationService';
+import type { NotificationChannel } from '../../application/services/notifications/types';
+
+// OTP reset portail client : 10 min de validite, 5 tentatives max.
+const CLIENT_OTP_TTL_MS = 10 * 60 * 1000;
+const CLIENT_OTP_MAX_ATTEMPTS = 5;
+// Par defaut on tente SMS (canal de connexion) puis email en repli.
+const CLIENT_RESET_CHANNELS: NotificationChannel[] = ['SMS', 'EMAIL'];
 
 /**
  * Normalise un numero de telephone pour le stockage / la comparaison.
@@ -234,6 +243,121 @@ export class ClientPortalController {
           },
         },
       });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * Demande d'un code OTP de reinitialisation pour le portail client.
+   * Identification par telephone. Dispatch SMS + repli email via le
+   * NotificationService. Reponse toujours { ok: true } (anti-enumeration).
+   */
+  static async forgotPassword(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { phone: rawPhone } = req.body as { phone?: string };
+      if (!rawPhone) throw new BusinessError('Telephone requis');
+      const phone = normalizePhone(String(rawPhone));
+
+      const client = await prisma.client.findUnique({ where: { phone } });
+      // On ne revele pas l'existence du compte ni l'etat du portail.
+      if (client && client.isPortalActive && client.passwordHash && client.isActive) {
+        await prisma.clientPasswordResetToken.deleteMany({
+          where: { clientId: client.id, usedAt: null },
+        });
+
+        const code = String(randomInt(100000, 1000000));
+        const tokenHash = await bcrypt.hash(code, 10);
+        const expiresAt = new Date(Date.now() + CLIENT_OTP_TTL_MS);
+        await prisma.clientPasswordResetToken.create({
+          data: { clientId: client.id, token: tokenHash, expiresAt },
+        });
+
+        const ttlMin = Math.round(CLIENT_OTP_TTL_MS / 60000);
+        try {
+          await notificationService.notify(
+            {
+              clientId: client.id,
+              phone: client.phone,
+              email: client.email,
+              organizationId: client.organizationId,
+            },
+            {
+              title: 'Code de reinitialisation',
+              message:
+                `Votre code de reinitialisation est : ${code}. ` +
+                `Il est valide ${ttlMin} minutes. Ne le communiquez a personne.`,
+              channels: CLIENT_RESET_CHANNELS,
+              metadata: { kind: 'PASSWORD_RESET' },
+            },
+          );
+        } catch {
+          // best-effort : ne pas faire echouer la demande.
+        }
+      }
+      res.json({ success: true, data: { ok: true } });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * Verifie le code OTP (phone + code) et applique le nouveau mot de passe.
+   * Politique client : min 6 caracteres (alignee sur l'inscription portail).
+   */
+  static async resetPassword(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { phone: rawPhone, code, newPassword } = req.body as {
+        phone?: string;
+        code?: string;
+        newPassword?: string;
+      };
+      if (!rawPhone || !code || !newPassword) {
+        throw new BusinessError('Telephone, code et nouveau mot de passe requis');
+      }
+      if (newPassword.length < 6) {
+        throw new BusinessError('Le mot de passe doit contenir au moins 6 caracteres');
+      }
+      const phone = normalizePhone(String(rawPhone));
+
+      const client = await prisma.client.findUnique({ where: { phone } });
+      if (!client) throw new BusinessError('Code invalide ou expire.');
+
+      const item = await prisma.clientPasswordResetToken.findFirst({
+        where: { clientId: client.id, usedAt: null },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (!item) throw new BusinessError('Code invalide ou expire.');
+      if (item.expiresAt < new Date()) {
+        await prisma.clientPasswordResetToken.delete({ where: { id: item.id } });
+        throw new BusinessError('Code expire. Demandez-en un nouveau.');
+      }
+      if (item.attempts >= CLIENT_OTP_MAX_ATTEMPTS) {
+        await prisma.clientPasswordResetToken.delete({ where: { id: item.id } });
+        throw new BusinessError('Trop de tentatives. Demandez un nouveau code.');
+      }
+
+      const ok = await bcrypt.compare(String(code), item.token);
+      if (!ok) {
+        await prisma.clientPasswordResetToken.update({
+          where: { id: item.id },
+          data: { attempts: { increment: 1 } },
+        });
+        throw new BusinessError('Code invalide ou expire.');
+      }
+
+      const passwordHash = await bcrypt.hash(newPassword, 10);
+      await prisma.$transaction([
+        prisma.client.update({
+          where: { id: client.id },
+          data: { passwordHash, isPortalActive: true },
+        }),
+        prisma.clientPasswordResetToken.update({
+          where: { id: item.id },
+          data: { usedAt: new Date() },
+        }),
+      ]);
+      res.json({ success: true, data: { ok: true } });
     } catch (err) {
       next(err);
     }

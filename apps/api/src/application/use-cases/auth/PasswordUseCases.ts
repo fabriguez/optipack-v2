@@ -1,10 +1,30 @@
 import { injectable } from 'tsyringe';
 import bcrypt from 'bcryptjs';
-import { randomBytes } from 'crypto';
+import { randomInt } from 'crypto';
 import { prisma } from '../../../config/database';
 import { AuthenticationError, BusinessError, NotFoundError } from '../../../domain/errors/BusinessError';
-import { emailService } from '../../../infrastructure/email/EmailService';
-import { config } from '../../../config';
+import { notificationService } from '../../services/notifications/NotificationService';
+import type { NotificationChannel } from '../../services/notifications/types';
+
+// Duree de vie + tolerance du code OTP de reinitialisation.
+const OTP_TTL_MS = 10 * 60 * 1000; // 10 min
+const OTP_MAX_ATTEMPTS = 5; // au-dela, le code est invalide
+// Canaux par defaut pour un reset staff : email uniquement (pas d'IN_APP, l'user
+// n'est pas connecte). L'appelant peut surcharger (ex: ['EMAIL','SMS']).
+const DEFAULT_RESET_CHANNELS: NotificationChannel[] = ['EMAIL'];
+
+/** Politique mot de passe alignee sur l'inscription : min 8, 1 majuscule, 1 chiffre. */
+function assertPasswordPolicy(pwd: string) {
+  if (!pwd || pwd.length < 8) {
+    throw new BusinessError('Le mot de passe doit contenir au moins 8 caracteres.');
+  }
+  if (!/[A-Z]/.test(pwd)) {
+    throw new BusinessError('Le mot de passe doit contenir au moins une majuscule.');
+  }
+  if (!/[0-9]/.test(pwd)) {
+    throw new BusinessError('Le mot de passe doit contenir au moins un chiffre.');
+  }
+}
 
 @injectable()
 export class ChangePasswordUseCase {
@@ -13,9 +33,7 @@ export class ChangePasswordUseCase {
    * actuel, hashe le nouveau, invalide tous les refresh tokens (force re-login).
    */
   async execute(userId: string, currentPassword: string, newPassword: string) {
-    if (!newPassword || newPassword.length < 6) {
-      throw new BusinessError('Le nouveau mot de passe doit contenir au moins 6 caracteres.');
-    }
+    assertPasswordPolicy(newPassword);
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundError('Utilisateur', userId);
 
@@ -35,32 +53,44 @@ export class ChangePasswordUseCase {
 @injectable()
 export class RequestPasswordResetUseCase {
   /**
-   * Cree un token de reset valable 1h et envoie un mail.
+   * Genere un code OTP a 6 chiffres valable 10 min et le dispatche via le
+   * NotificationService sur les canaux demandes (EMAIL par defaut, SMS possible).
+   * Le code est stocke hashe (bcrypt), jamais en clair.
    * Pour eviter l'enumeration de comptes, retourne toujours `{ ok: true }`
    * meme si l'email n'existe pas.
    */
-  async execute(email: string) {
-    const user = await prisma.user.findUnique({ where: { email } });
+  async execute(email: string, channels: NotificationChannel[] = DEFAULT_RESET_CHANNELS) {
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
     if (!user || !user.isActive) return { ok: true };
 
-    // Invalide les tokens precedents non utilises
+    // Invalide les codes precedents non utilises (un seul code actif a la fois).
     await prisma.passwordResetToken.deleteMany({
       where: { userId: user.id, usedAt: null },
     });
 
-    const token = randomBytes(24).toString('hex');
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1h
+    // Code a 6 chiffres (100000-999999), tirage cryptographique.
+    const code = String(randomInt(100000, 1000000));
+    const tokenHash = await bcrypt.hash(code, 10);
+    const expiresAt = new Date(Date.now() + OTP_TTL_MS);
 
     await prisma.passwordResetToken.create({
-      data: { userId: user.id, token, expiresAt },
+      data: { userId: user.id, token: tokenHash, expiresAt },
     });
 
-    const resetUrl = `${config.webUrl}/reset-password?token=${token}`;
+    const ttlMin = Math.round(OTP_TTL_MS / 60000);
     try {
-      await emailService.sendPasswordResetLink(
-        user.email,
-        `${user.firstName} ${user.lastName}`,
-        resetUrl,
+      // Dispatch best-effort multi-canal. On exclut IN_APP (user non connecte).
+      await notificationService.notify(
+        { userId: user.id, email: user.email, phone: user.phone, organizationId: user.organizationId },
+        {
+          title: 'Code de reinitialisation',
+          message:
+            `Votre code de reinitialisation est : ${code}. ` +
+            `Il est valide ${ttlMin} minutes. Ne le communiquez a personne.`,
+          channels: channels.length > 0 ? channels : DEFAULT_RESET_CHANNELS,
+          metadata: { kind: 'PASSWORD_RESET' },
+        },
       );
     } catch {
       // best-effort : on ne fait pas echouer la demande, l'admin peut verifier les logs
@@ -71,23 +101,49 @@ export class RequestPasswordResetUseCase {
 
 @injectable()
 export class ResetPasswordUseCase {
-  async execute(token: string, newPassword: string) {
-    if (!newPassword || newPassword.length < 6) {
-      throw new BusinessError('Le mot de passe doit contenir au moins 6 caracteres.');
+  /**
+   * Verifie le couple (email, code OTP), applique la politique mot de passe,
+   * met a jour le hash et invalide tous les refresh tokens.
+   */
+  async execute(email: string, code: string, newPassword: string) {
+    assertPasswordPolicy(newPassword);
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+    // Message generique : pas de distinction email inconnu / code faux.
+    if (!user) throw new BusinessError('Code invalide ou expire.');
+
+    const item = await prisma.passwordResetToken.findFirst({
+      where: { userId: user.id, usedAt: null },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!item) throw new BusinessError('Code invalide ou expire.');
+    if (item.expiresAt < new Date()) {
+      await prisma.passwordResetToken.delete({ where: { id: item.id } });
+      throw new BusinessError('Code expire. Demandez-en un nouveau.');
     }
-    const item = await prisma.passwordResetToken.findUnique({ where: { token } });
-    if (!item) throw new BusinessError('Token invalide ou expire.');
-    if (item.usedAt) throw new BusinessError('Ce lien a deja ete utilise.');
-    if (item.expiresAt < new Date()) throw new BusinessError('Ce lien a expire.');
+    if (item.attempts >= OTP_MAX_ATTEMPTS) {
+      await prisma.passwordResetToken.delete({ where: { id: item.id } });
+      throw new BusinessError('Trop de tentatives. Demandez un nouveau code.');
+    }
+
+    const ok = await bcrypt.compare(code, item.token);
+    if (!ok) {
+      await prisma.passwordResetToken.update({
+        where: { id: item.id },
+        data: { attempts: { increment: 1 } },
+      });
+      throw new BusinessError('Code invalide ou expire.');
+    }
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
     await prisma.$transaction([
-      prisma.user.update({ where: { id: item.userId }, data: { passwordHash } }),
+      prisma.user.update({ where: { id: user.id }, data: { passwordHash } }),
       prisma.passwordResetToken.update({
         where: { id: item.id },
         data: { usedAt: new Date() },
       }),
-      prisma.refreshToken.deleteMany({ where: { userId: item.userId } }),
+      prisma.refreshToken.deleteMany({ where: { userId: user.id } }),
     ]);
     return { ok: true };
   }

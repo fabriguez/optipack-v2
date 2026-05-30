@@ -30,6 +30,10 @@ import { corsOptions, socketCorsOptions } from './config/cors';
 const app = express();
 const httpServer = createServer(app);
 
+// Derriere Caddy (1 proxy) : permet a Express de resoudre l'IP client reelle
+// depuis X-Forwarded-For, indispensable pour le rate-limit par IP.
+app.set('trust proxy', 1);
+
 // Socket.io
 // CORS centralise via ./config/cors.ts (cf. import en haut). Allowlist par
 // regex sur tous les sous-domaines de BASE_DOMAIN + ALLOWED_ORIGINS env.

@@ -13,7 +13,8 @@ import { ArrowLeft } from 'lucide-react';
 function ResetPasswordInner() {
   const params = useSearchParams();
   const router = useRouter();
-  const token = params.get('token') ?? '';
+  const [email, setEmail] = useState(params.get('email') ?? '');
+  const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
@@ -26,7 +27,7 @@ function ResetPasswordInner() {
     }
     setBusy(true);
     try {
-      await apiClient.post('/auth/reset-password', { token, newPassword: password });
+      await apiClient.post('/auth/reset-password', { email, code, newPassword: password });
       toast.success('Mot de passe reinitialise. Vous pouvez vous connecter.');
       router.push('/login');
     } catch (err: any) {
@@ -45,31 +46,57 @@ function ResetPasswordInner() {
             Connexion
           </Link>
           <h1 className="text-xl font-bold">Nouveau mot de passe</h1>
-          {!token ? (
-            <p className="mt-3 text-sm text-red-600">Lien invalide. Reessayez depuis l&apos;email recu.</p>
-          ) : (
-            <form onSubmit={submit} className="mt-4 space-y-3">
-              <AppInput
-                label="Nouveau mot de passe"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={6}
-              />
-              <AppInput
-                label="Confirmer"
-                type="password"
-                value={confirm}
-                onChange={(e) => setConfirm(e.target.value)}
-                required
-                minLength={6}
-              />
-              <AppButton type="submit" loading={busy} className="w-full" disabled={!password || !confirm}>
-                Reinitialiser
-              </AppButton>
-            </form>
-          )}
+          <p className="mt-1 text-sm text-gray-500">
+            Saisissez le code recu par email puis votre nouveau mot de passe.
+          </p>
+          <form onSubmit={submit} className="mt-4 space-y-3">
+            <AppInput
+              label="Email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+            <AppInput
+              label="Code de verification"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              maxLength={6}
+              required
+            />
+            <AppInput
+              label="Nouveau mot de passe"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={8}
+            />
+            <AppInput
+              label="Confirmer"
+              type="password"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              required
+              minLength={8}
+            />
+            <AppButton
+              type="submit"
+              loading={busy}
+              className="w-full"
+              disabled={!email || code.length !== 6 || !password || !confirm}
+            >
+              Reinitialiser
+            </AppButton>
+            <Link
+              href="/forgot-password"
+              className="block text-center text-xs text-gray-500 hover:text-primary-700"
+            >
+              Renvoyer un code
+            </Link>
+          </form>
         </AppCard>
       </div>
     </div>

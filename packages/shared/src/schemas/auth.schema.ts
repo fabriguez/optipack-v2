@@ -27,6 +27,29 @@ export const verify2FASchema = z.object({
   code: z.string().length(6, 'Le code doit contenir 6 chiffres'),
 });
 
+// Politique mot de passe partagee (alignee sur l'inscription).
+const passwordSchema = z
+  .string()
+  .min(8, 'Le mot de passe doit contenir au moins 8 caracteres')
+  .regex(/[A-Z]/, 'Le mot de passe doit contenir au moins une majuscule')
+  .regex(/[0-9]/, 'Le mot de passe doit contenir au moins un chiffre');
+
+export const forgotPasswordSchema = z.object({
+  email: z.string().email('Email invalide'),
+});
+
+export const resetPasswordSchema = z
+  .object({
+    email: z.string().email('Email invalide'),
+    code: z.string().regex(/^\d{6}$/, 'Le code doit contenir 6 chiffres'),
+    newPassword: passwordSchema,
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: 'Les mots de passe ne correspondent pas',
+    path: ['confirmPassword'],
+  });
+
 export const refreshTokenSchema = z.object({
   refreshToken: z.string().min(1),
 });
@@ -34,3 +57,5 @@ export const refreshTokenSchema = z.object({
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type Verify2FAInput = z.infer<typeof verify2FASchema>;
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;

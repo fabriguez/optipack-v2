@@ -7,4 +7,8 @@ export const authApi = {
   refresh: () => apiClient.post('/auth/refresh').then((r) => r.data),
   logout: () => apiClient.post('/auth/logout').then((r) => r.data),
   me: () => apiClient.get('/auth/me').then((r) => r.data),
+  forgotPassword: (email: string) =>
+    apiClient.post('/auth/forgot-password', { email }).then((r) => r.data),
+  resetPassword: (payload: { email: string; code: string; newPassword: string }) =>
+    apiClient.post('/auth/reset-password', payload).then((r) => r.data),
 };

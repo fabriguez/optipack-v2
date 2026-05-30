@@ -667,7 +667,9 @@ model RefreshToken {
 model PasswordResetToken {
   id        String    @id @default(uuid())
   userId    String
+  // Hash bcrypt du code OTP a 6 chiffres (jamais stocke en clair).
   token     String    @unique
+  attempts  Int       @default(0)
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime  @default(now())
@@ -1273,6 +1275,7 @@ model Client {
   // Decaissements rembourses a ce client (cas remboursement client).
   disbursements           DisbursementVoucher[]
   headOfficeDisbursements HeadOfficeDisbursementVoucher[] @relation("HeadOfficeDisbursementClient")
+  passwordResetTokens     ClientPasswordResetToken[]
 
   @@index([organizationId])
   @@index([agencyId])
@@ -1280,6 +1283,24 @@ model Client {
   @@index([clientType])
   @@index([isDeleted])
   @@map("clients")
+}
+
+// Code OTP de reinitialisation de mot de passe pour le portail client.
+// Meme modele que PasswordResetToken (staff) : `token` = hash bcrypt du code.
+model ClientPasswordResetToken {
+  id        String    @id @default(uuid())
+  clientId  String
+  token     String    @unique
+  attempts  Int       @default(0)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([token])
+  @@map("client_password_reset_tokens")
 }
 
 enum ClientType {

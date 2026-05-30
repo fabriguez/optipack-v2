@@ -119,7 +119,8 @@ export class AuthController {
   static async forgotPassword(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(RequestPasswordResetUseCase);
-      const result = await useCase.execute(req.body?.email ?? '');
+      const channels = Array.isArray(req.body?.channels) ? req.body.channels : undefined;
+      const result = await useCase.execute(req.body?.email ?? '', channels);
       res.json({ success: true, data: result });
     } catch (err) {
       next(err);
@@ -129,7 +130,11 @@ export class AuthController {
   static async resetPassword(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(ResetPasswordUseCase);
-      const result = await useCase.execute(req.body?.token ?? '', req.body?.newPassword ?? '');
+      const result = await useCase.execute(
+        req.body?.email ?? '',
+        req.body?.code ?? '',
+        req.body?.newPassword ?? '',
+      );
       res.json({ success: true, data: result });
     } catch (err) {
       next(err);

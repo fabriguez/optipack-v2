@@ -75,6 +75,16 @@ export const portalApi = {
       .post<{ data: LoginResponse }>('/client-portal/register', payload)
       .then((r) => r.data.data),
 
+  forgotPassword: (phone: string) =>
+    apiClient
+      .post('/client-portal/forgot-password', { phone })
+      .then((r) => r.data.data),
+
+  resetPassword: (payload: { phone: string; code: string; newPassword: string }) =>
+    apiClient
+      .post('/client-portal/reset-password', payload)
+      .then((r) => r.data.data),
+
   getDashboard: () =>
     apiClient.get('/client-portal/dashboard').then((r) => r.data.data),
 

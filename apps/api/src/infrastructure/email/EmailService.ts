@@ -438,23 +438,6 @@ class EmailService {
   /**
    * Envoie un lien de reinitialisation de mot de passe.
    */
-  async sendPasswordResetLink(to: string, name: string, resetUrl: string, organizationId?: string | null) {
-    const content = [
-      heading('Reinitialisation de votre mot de passe'),
-      paragraph(
-        `Bonjour <strong>${name}</strong>, vous avez demande la reinitialisation ` +
-        'de votre mot de passe. Cliquez sur le bouton ci-dessous pour en definir un nouveau. ' +
-        'Le lien est valide 1 heure.',
-      ),
-      actionButton('Reinitialiser', resetUrl),
-      divider(),
-      paragraph(
-        'Si vous n\'etes pas a l\'origine de cette demande, ignorez ce mail.',
-      ),
-    ].join('');
-    return this.send(to, 'Reinitialisation mot de passe', content, organizationId, { event: 'PASSWORD_RESET' });
-  }
-
   async sendWelcome(to: string, clientName: string, organizationId?: string | null) {
     const content = [
       heading('Bienvenue chez TransitSoftServices'),

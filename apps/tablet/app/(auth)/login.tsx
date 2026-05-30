@@ -127,6 +127,9 @@ export default function LoginScreen() {
             <Button onPress={handleLogin} loading={submitting}>
               {submitting ? 'Connexion...' : 'Se connecter'}
             </Button>
+            <Pressable onPress={() => router.push('/(auth)/forgot-password')} style={{ alignItems: 'center' }}>
+              <Text style={{ fontSize: 13, color: colors.primary[600], fontWeight: '500' }}>Mot de passe oublie ?</Text>
+            </Pressable>
           </View>
 
           <Text style={{ fontSize: 11, color: colors.gray[400], textAlign: 'center' }}>
