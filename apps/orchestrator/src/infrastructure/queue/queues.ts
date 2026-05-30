@@ -36,14 +36,16 @@ export interface RollbackJobData {
   updateJobId: string;
 }
 
-export const provisionQueue = new Queue<ProvisionJobData>(QUEUE_NAMES.PROVISION, defaults);
-export const freezeQueue = new Queue<LifecycleJobData>(QUEUE_NAMES.FREEZE, defaults);
-export const unfreezeQueue = new Queue<LifecycleJobData>(QUEUE_NAMES.UNFREEZE, defaults);
-export const deleteQueue = new Queue<LifecycleJobData>(QUEUE_NAMES.DELETE, defaults);
-export const purgeQueue = new Queue<LifecycleJobData>(QUEUE_NAMES.PURGE, defaults);
-export const migrateQueue = new Queue<MigrateJobData>(QUEUE_NAMES.MIGRATE, defaults);
-export const updateQueue = new Queue<UpdateJobData>(QUEUE_NAMES.UPDATE, defaults);
-export const rollbackQueue = new Queue<RollbackJobData>(QUEUE_NAMES.ROLLBACK, defaults);
+// 3e generique (NameType) = string : BullMQ >= 5.70 typage strict du nom de job.
+// Sans ca, queue.add('provision', ...) refuse les strings litterales.
+export const provisionQueue = new Queue<ProvisionJobData, unknown, string>(QUEUE_NAMES.PROVISION, defaults);
+export const freezeQueue = new Queue<LifecycleJobData, unknown, string>(QUEUE_NAMES.FREEZE, defaults);
+export const unfreezeQueue = new Queue<LifecycleJobData, unknown, string>(QUEUE_NAMES.UNFREEZE, defaults);
+export const deleteQueue = new Queue<LifecycleJobData, unknown, string>(QUEUE_NAMES.DELETE, defaults);
+export const purgeQueue = new Queue<LifecycleJobData, unknown, string>(QUEUE_NAMES.PURGE, defaults);
+export const migrateQueue = new Queue<MigrateJobData, unknown, string>(QUEUE_NAMES.MIGRATE, defaults);
+export const updateQueue = new Queue<UpdateJobData, unknown, string>(QUEUE_NAMES.UPDATE, defaults);
+export const rollbackQueue = new Queue<RollbackJobData, unknown, string>(QUEUE_NAMES.ROLLBACK, defaults);
 
 export async function closeQueues(): Promise<void> {
   await Promise.all([
