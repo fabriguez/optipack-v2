@@ -1,4 +1,6 @@
-/** Babel — Expo + alias @/ + Reanimated (le plugin reanimated doit rester en dernier). */
+/** Babel — Expo + alias @/ ancre sur __dirname (mobile) + Reanimated en dernier. */
+const path = require('path');
+
 module.exports = function (api) {
   api.cache(true);
   return {
@@ -7,8 +9,8 @@ module.exports = function (api) {
       [
         'module-resolver',
         {
-          root: ['./'],
-          alias: { '@': './' },
+          root: [__dirname],
+          alias: { '@': __dirname },
           extensions: ['.ts', '.tsx', '.js', '.jsx', '.json'],
         },
       ],
@@ -16,3 +18,8 @@ module.exports = function (api) {
     ],
   };
 };
+
+// Ancre `@` sur le dossier du babel.config (apps/mobile). Sans cela,
+// './' resout via cwd : si Metro a tourne depuis apps/tablet en parallele,
+// `@` pointe sur tablet -> "Unable to resolve module ../../../tablet/...".
+void path;

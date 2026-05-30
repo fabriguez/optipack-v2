@@ -17,12 +17,4 @@ config.resolver.nodeModulesPaths = [
   path.resolve(workspaceRoot, 'node_modules'),
 ];
 
-// pnpm monorepo : .pnpm/ contient plusieurs versions de react-native
-// (RN 0.85 hois ailleurs, RN 0.74 ici). On bloque toutes les versions RN
-// du store sauf celle attendue. Sans ce blockList, Metro pioche la 0.85
-// (TS non-transpile) -> SyntaxError "as ReactNativePublicAPI".
-config.resolver.blockList = [
-  /\/\.pnpm\/react-native@(?!0\.74\.5)[^/]+\/.*/,
-];
-
 module.exports = config;

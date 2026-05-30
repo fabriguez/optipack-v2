@@ -1,7 +1,8 @@
 /**
- * Metro — configuration monorepo (pnpm).
- * Metro doit surveiller la racine et resoudre les modules hoisted
- * a la racine du workspace, pas seulement dans apps/mobile.
+ * Metro — configuration monorepo (pnpm) pour la tablette.
+ * Surveille la racine workspace + resoud les modules hoisted au niveau
+ * workspace. Pas de blockList : on suppose le store nettoye, une seule
+ * version de react-native (0.74.5 = Expo SDK 51).
  */
 const { getDefaultConfig } = require('expo/metro-config');
 const path = require('path');
@@ -15,14 +16,6 @@ config.watchFolders = [workspaceRoot];
 config.resolver.nodeModulesPaths = [
   path.resolve(projectRoot, 'node_modules'),
   path.resolve(workspaceRoot, 'node_modules'),
-];
-
-// pnpm monorepo : .pnpm/ contient plusieurs versions de react-native
-// (RN 0.85 hois ailleurs, RN 0.74 ici). On bloque toutes les versions RN
-// du store sauf celle attendue. Sans ce blockList, Metro pioche la 0.85
-// (TS non-transpile) -> SyntaxError "as ReactNativePublicAPI".
-config.resolver.blockList = [
-  /\/\.pnpm\/react-native@(?!0\.74\.5)[^/]+\/.*/,
 ];
 
 module.exports = config;

@@ -140,19 +140,47 @@ const server = app.listen(config.port, () => {
 });
 
 // Reconciliation Caddy au boot : reconstruit la config sur tous les VPS
-// actifs depuis la BDD. Indempotent. Non bloquant : si echec (ex: VPS
-// injoignable, Caddy admin pas pret), on log + continue. Skip via
-// OPS_DISABLE_BOOT_RECONCILE=1.
+// actifs depuis la BDD. Idempotent. Non bloquant : si echec global, on log
+// et continue. Les VPS individuels injoignables (SSH/Caddy admin KO) sont
+// automatiquement passes en status DECOMMISSIONED pour ne plus polluer les
+// futures reconciliations. Override via env :
+//   OPS_DISABLE_BOOT_RECONCILE=1    : skip totalement
+//   OPS_BOOT_RECONCILE_KEEP_FAILED=1 : log les echecs sans decommissioning
 const reconcileDisabled = process.env.OPS_DISABLE_BOOT_RECONCILE === '1';
+const keepFailed = process.env.OPS_BOOT_RECONCILE_KEEP_FAILED === '1';
 if (!reconcileDisabled) {
   setTimeout(() => {
     void (async () => {
       try {
         const useCase = container.resolve(ReconcileCaddyUseCase);
-        const results = await useCase.execute();
-        logger.info({ vpsCount: results.length, tenants: results.reduce((s, r) => s + r.tenantCount, 0) }, '[orchestrator] caddy boot reconcile done');
+        const { results, failures } = await useCase.executeBatch({
+          collectFailures: true,
+          markFailedAsDecommissioned: !keepFailed,
+        });
+        logger.info(
+          {
+            vpsCount: results.length,
+            tenants: results.reduce((s, r) => s + r.tenantCount, 0),
+            failed: failures.length,
+            decommissioned: failures.filter((f) => f.decommissioned).map((f) => ({
+              vpsId: f.vpsId,
+              vpsName: f.vpsName,
+              reason: f.reason,
+            })),
+          },
+          '[orchestrator] caddy boot reconcile done',
+        );
+        for (const f of failures) {
+          logger.warn(
+            { vpsId: f.vpsId, vpsName: f.vpsName, reason: f.reason, decommissioned: f.decommissioned },
+            '[orchestrator] caddy reconcile failed for VPS',
+          );
+        }
       } catch (err) {
-        logger.warn({ err: (err as Error).message }, '[orchestrator] caddy boot reconcile failed (non-fatal)');
+        logger.warn(
+          { err: (err as Error).message },
+          '[orchestrator] caddy boot reconcile failed (non-fatal)',
+        );
       }
     })();
   }, 3000);

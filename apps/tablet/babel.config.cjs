@@ -1,4 +1,4 @@
-/** Babel — Expo + alias @/ + Reanimated (le plugin reanimated doit rester en dernier). */
+/** Babel — Expo + alias @/ ancre sur __dirname + Reanimated en dernier. */
 module.exports = function (api) {
   api.cache(true);
   return {
@@ -7,8 +7,8 @@ module.exports = function (api) {
       [
         'module-resolver',
         {
-          root: ['./'],
-          alias: { '@': './' },
+          root: [__dirname],
+          alias: { '@': __dirname },
           extensions: ['.ts', '.tsx', '.js', '.jsx', '.json'],
         },
       ],
