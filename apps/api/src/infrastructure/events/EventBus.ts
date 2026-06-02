@@ -54,6 +54,12 @@ export const DomainEvents = {
   PARCEL_LOADED: 'parcel.loaded',
   PARCEL_UNLOADED: 'parcel.unloaded',
   PARCEL_DELIVERED: 'parcel.delivered',
+  // ETA conteneur depassee : colis encore en transit apres la date d'arrivee
+  // estimee. Emis par le cron de detection de retard.
+  PARCEL_DELAYED: 'parcel.delayed',
+  // Ouverture d'une charge de magasinage facturable (rate > 0). Emis par
+  // StorageChargeService.openCharge.
+  STORAGE_CHARGE_STARTED: 'storageCharge.started',
 
   CONTAINER_CREATED: 'container.created',
   CONTAINER_STATUS_CHANGED: 'container.statusChanged',

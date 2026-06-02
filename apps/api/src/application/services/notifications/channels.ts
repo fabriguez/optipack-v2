@@ -246,9 +246,20 @@ async function deliverExternal(
     });
     return { channel, status: 'SKIPPED', error: `Aucun provider ${channel} configure` };
   }
-  let to = target.phone ?? null;
-  if (!to && (channel === 'SMS' || channel === 'WHATSAPP')) {
+  // Resolution des destinataires : tokens push (multi-appareils) pour PUSH,
+  // numero de telephone unique pour SMS / WhatsApp.
+  let recipients: string[] = [];
+  if (channel === 'PUSH') {
     if (target.clientId) {
+      const c = await prisma.client.findUnique({
+        where: { id: target.clientId },
+        select: { pushTokens: true },
+      });
+      recipients = c?.pushTokens ?? [];
+    }
+  } else {
+    let to = target.phone ?? null;
+    if (!to && target.clientId) {
       const c = await prisma.client.findUnique({
         where: { id: target.clientId },
         select: { phone: true },
@@ -262,8 +273,9 @@ async function deliverExternal(
       });
       to = u?.phone ?? null;
     }
+    if (to) recipients = [to];
   }
-  if (!to) {
+  if (recipients.length === 0) {
     logChannelDelivery({
       status: 'SKIP',
       channel,
@@ -273,16 +285,29 @@ async function deliverExternal(
     });
     return { channel, status: 'SKIPPED', error: 'Pas de telephone / token' };
   }
+  const to = recipients.join(',');
 
   // Habillage tenant header/footer pour SMS/WhatsApp/Push.
   const tenantName = await resolveTenantName(organizationId);
   const wrapped = wrapMessage(tenantName, payload.title, payload.message, channel);
 
   try {
-    await provider.send(to, wrapped.message, {
-      title: wrapped.title,
-      ...(payload.metadata ?? {}),
-    });
+    // Best-effort multi-destinataires : on tente chaque token/numero ; succes
+    // si au moins un aboutit (pertinent pour le push multi-appareils).
+    let sentAny = false;
+    let lastErr: unknown = null;
+    for (const r of recipients) {
+      try {
+        await provider.send(r, wrapped.message, {
+          title: wrapped.title,
+          ...(payload.metadata ?? {}),
+        });
+        sentAny = true;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    if (!sentAny) throw lastErr ?? new Error('Aucun envoi abouti');
     const row = await prisma.notification.create({
       data: {
         userId: target.userId ?? null,

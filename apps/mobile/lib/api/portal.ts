@@ -1,5 +1,17 @@
 import { apiClient } from './client';
 
+/** Filtres communs de l'historique : recherche, statut, periode, pagination. */
+export interface HistoryParams {
+  search?: string;
+  status?: string;
+  /** Borne basse YYYY-MM-DD. */
+  from?: string;
+  /** Borne haute YYYY-MM-DD (inclusive jusqu'a fin de journee cote API). */
+  to?: string;
+  limit?: number;
+  page?: number;
+}
+
 export const portalApi = {
   // Auth
   login: (email: string, password: string) =>
@@ -12,7 +24,7 @@ export const portalApi = {
   dashboard: () => apiClient.get('/client-portal/dashboard').then((r) => r.data),
 
   // Parcels
-  parcels: (params?: { search?: string; status?: string; limit?: number; page?: number }) =>
+  parcels: (params?: HistoryParams) =>
     apiClient.get('/client-portal/parcels', { params }).then((r) => r.data),
   parcelByTracking: (tracking: string) =>
     apiClient.get(`/client-portal/parcels/${encodeURIComponent(tracking)}`).then((r) => r.data),
@@ -21,6 +33,8 @@ export const portalApi = {
     apiClient.get(`/client-portal/parcels/${encodeURIComponent(tracking)}`).then((r) => r.data),
   parcelLabelUrl: (tracking: string) => `/client-portal/parcels/${encodeURIComponent(tracking)}/label`,
   invoicePdfUrl: (id: string) => `/client-portal/invoices/${id}/pdf`,
+  // Recu de paiement (justificatif PDF) d'un paiement donne.
+  paymentReceiptUrl: (id: string) => `/client-portal/payments/${id}/pdf`,
 
   // Payment intents : flux multi-provider avec fallback.
   initiatePayment: (data: {
@@ -40,7 +54,7 @@ export const portalApi = {
     apiClient.get(`/public-tracking/${tracking}`).then((r) => r.data),
 
   // Invoices
-  invoices: (params?: { search?: string; status?: string; limit?: number; page?: number }) =>
+  invoices: (params?: HistoryParams) =>
     apiClient.get('/client-portal/invoices', { params }).then((r) => r.data),
   invoiceById: (id: string) =>
     apiClient.get(`/client-portal/invoices/${id}`).then((r) => r.data),
@@ -58,6 +72,12 @@ export const portalApi = {
   notifications: () => apiClient.get('/client-portal/notifications').then((r) => r.data),
   markNotificationRead: (id: string) =>
     apiClient.post(`/client-portal/notifications/${id}/read`).then((r) => r.data),
+
+  // Push : enregistrement / desenregistrement du token Expo de l'appareil.
+  registerPushToken: (token: string) =>
+    apiClient.post('/client-portal/push-token', { token }).then((r) => r.data),
+  unregisterPushToken: (token: string) =>
+    apiClient.delete('/client-portal/push-token', { data: { token } }).then((r) => r.data),
 
   // Agencies (public-ish for client to choose)
   agencies: () => apiClient.get('/client-portal/agencies').then((r) => r.data),

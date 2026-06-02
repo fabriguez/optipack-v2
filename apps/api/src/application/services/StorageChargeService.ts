@@ -1,6 +1,7 @@
 import { injectable } from 'tsyringe';
 import type { Prisma, ParcelStorageCharge } from '@prisma/client';
 import { prisma } from '../../config/database';
+import { eventBus, DomainEvents } from '../../infrastructure/events/EventBus';
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -163,7 +164,7 @@ export class StorageChargeService {
 
     const freeDays = input.noGrace ? 0 : rule.freeDays;
 
-    return db.parcelStorageCharge.create({
+    const charge = await db.parcelStorageCharge.create({
       data: {
         parcelId: input.parcelId,
         warehouseId: input.warehouseId,
@@ -175,6 +176,26 @@ export class StorageChargeService {
         startedAt: input.startedAt ?? new Date(),
       },
     });
+
+    // Notifie le client du debut des frais de magasinage (uniquement hors
+    // transaction : un emit dans un tx pourrait notifier puis rollback).
+    // Le handler resout colis/client et envoie IN_APP + SMS/WhatsApp/Push.
+    if (!tx) {
+      eventBus.emit({
+        type: DomainEvents.STORAGE_CHARGE_STARTED,
+        payload: {
+          parcelId: input.parcelId,
+          warehouseId: input.warehouseId,
+          agencyId: rule.agencyId,
+          phase: input.phase,
+          freeDays,
+          dailyRate: rule.dailyRate,
+        },
+        timestamp: new Date(),
+      });
+    }
+
+    return charge;
   }
 
   /**

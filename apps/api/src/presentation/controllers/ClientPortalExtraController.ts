@@ -29,12 +29,14 @@ export class ClientPortalExtraController {
         inTransitParcels,
         deliveredParcels,
         arrivedParcels,
+        inStorageParcels,
         unpaidInvoices,
         unpaidAgg,
         activeDebtsAgg,
         unreadNotifications,
         openConversations,
         recentParcels,
+        recentNotifications,
       ] = await Promise.all([
         prisma.parcel.count({ where: baseParcels }),
         prisma.parcel.count({
@@ -45,6 +47,10 @@ export class ClientPortalExtraController {
         }),
         prisma.parcel.count({
           where: { ...baseParcels, status: { in: ['ARRIVED', 'RECEIVED'] } },
+        }),
+        // Colis en magasinage : presents en stock magasin, en attente d'expedition.
+        prisma.parcel.count({
+          where: { ...baseParcels, status: 'IN_STOCK' },
         }),
         prisma.invoice.count({
           where: {
@@ -84,7 +90,24 @@ export class ClientPortalExtraController {
             updatedAt: true,
           },
         }),
+        // 5 dernieres notifications du client (lues ou non) pour le fil d'accueil.
+        prisma.notification.findMany({
+          where: { clientId },
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+          select: {
+            id: true,
+            title: true,
+            message: true,
+            type: true,
+            readAt: true,
+            createdAt: true,
+          },
+        }),
       ]);
+
+      const unpaidBalance = Number(unpaidAgg._sum.balance ?? 0);
+      const debtsRemaining = Number(activeDebtsAgg._sum.remainingAmount ?? 0);
 
       res.json({
         success: true,
@@ -93,20 +116,24 @@ export class ClientPortalExtraController {
             total: totalParcels,
             inTransit: inTransitParcels,
             arrived: arrivedParcels,
+            inStorage: inStorageParcels,
             delivered: deliveredParcels,
           },
           invoices: {
             unpaidCount: unpaidInvoices,
-            unpaidBalance: unpaidAgg._sum.balance ?? 0,
+            unpaidBalance,
           },
           debts: {
-            remaining: activeDebtsAgg._sum.remainingAmount ?? 0,
+            remaining: debtsRemaining,
           },
+          // Solde a payer consolide : factures impayees + dettes actives.
+          balanceDue: unpaidBalance + debtsRemaining,
           inbox: {
             unreadNotifications,
             openConversations,
           },
           recentParcels,
+          recentNotifications,
         },
       });
     } catch (err) {

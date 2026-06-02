@@ -93,21 +93,45 @@ export default function HomeScreen() {
       ) : (
         <>
           <View style={{ flexDirection: 'row', gap: spacing.md }}>
-            <KpiTile label="Colis" value={stats?.parcels?.total ?? 0} icon="cube-outline" color={colors.primary[500]} />
+            <KpiTile label="Total colis" value={stats?.parcels?.total ?? 0} icon="cube-outline" color={colors.primary[500]} />
             <KpiTile label="En transit" value={stats?.parcels?.inTransit ?? 0} icon="airplane-outline" color="#FF9800" />
           </View>
           <View style={{ flexDirection: 'row', gap: spacing.md }}>
-            <KpiTile label="Livres" value={stats?.parcels?.delivered ?? 0} icon="checkmark-circle-outline" color="#388E3C" />
-            <KpiTile
-              label="Dettes"
-              value={formatAmount(
-                Number(stats?.debts?.remaining ?? 0) + Number(stats?.invoices?.unpaidBalance ?? 0),
-              )}
-              icon="alert-circle-outline"
-              color={colors.error}
-              small
-            />
+            <KpiTile label="Arrives" value={stats?.parcels?.arrived ?? 0} icon="checkmark-done-outline" color="#388E3C" />
+            <KpiTile label="En magasinage" value={stats?.parcels?.inStorage ?? 0} icon="file-tray-stacked-outline" color="#7E57C2" />
           </View>
+          <KpiTile
+            label="Solde a payer"
+            value={formatAmount(
+              Number(
+                stats?.balanceDue ??
+                  Number(stats?.debts?.remaining ?? 0) + Number(stats?.invoices?.unpaidBalance ?? 0),
+              ),
+            )}
+            icon="wallet-outline"
+            color={colors.error}
+            small
+          />
+
+          {(stats?.recentNotifications ?? []).length > 0 && (
+            <Card>
+              <CardHeader title="Notifications recentes" />
+              {(stats?.recentNotifications ?? []).slice(0, 5).map((n: any) => (
+                <View
+                  key={n.id}
+                  style={{ flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.gray[100] }}
+                >
+                  <View style={{ width: 28, height: 28, borderRadius: 9, backgroundColor: n.readAt ? colors.gray[100] : colors.primary[50], alignItems: 'center', justifyContent: 'center', marginTop: 2 }}>
+                    <Ionicons name="notifications-outline" size={15} color={n.readAt ? colors.gray[400] : colors.primary[600]} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: colors.gray[900] }} numberOfLines={1}>{n.title}</Text>
+                    <Text style={{ fontSize: 12, color: colors.gray[600] }} numberOfLines={2}>{n.message}</Text>
+                  </View>
+                </View>
+              ))}
+            </Card>
+          )}
 
           {(stats?.recentParcels ?? []).length > 0 && (
             <Card>

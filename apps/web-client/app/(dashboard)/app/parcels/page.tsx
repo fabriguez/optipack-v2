@@ -10,11 +10,11 @@ import { portalApi } from '@/lib/api/client';
 interface Parcel {
   id: string;
   trackingNumber: string;
-  description: string;
+  designation: string;
   status: string;
   weight?: number;
-  receiverName?: string;
-  receiverCity?: string;
+  destination?: string;
+  recipient?: { fullName?: string } | null;
   createdAt: string;
 }
 
@@ -32,9 +32,16 @@ const STATUS_TONE: Record<string, { bg: string; fg: string }> = {
 
 export default function ParcelsPage() {
   const [search, setSearch] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
   const { data, isLoading } = useQuery<ParcelsResponse>({
-    queryKey: ['portal', 'parcels', search],
-    queryFn: () => portalApi.getParcels({ search }),
+    queryKey: ['portal', 'parcels', search, from, to],
+    queryFn: () =>
+      portalApi.getParcels({
+        search: search || undefined,
+        from: from || undefined,
+        to: to || undefined,
+      }),
   });
 
   const items = data?.data ?? [];
@@ -69,18 +76,56 @@ export default function ParcelsPage() {
         </Link>
       </motion.div>
 
-      <div className="relative">
-        <Search
-          className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4"
-          style={{ color: 'var(--skin-muted)' }}
-        />
-        <input
-          type="search"
-          placeholder="Rechercher par numero, destinataire..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="skin-input pl-10"
-        />
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="relative min-w-55 flex-1">
+          <Search
+            className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4"
+            style={{ color: 'var(--skin-muted)' }}
+          />
+          <input
+            type="search"
+            placeholder="Rechercher par numero, destinataire..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="skin-input pl-10"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium" style={{ color: 'var(--skin-muted)' }}>
+            Du
+          </label>
+          <input
+            type="date"
+            value={from}
+            max={to || undefined}
+            onChange={(e) => setFrom(e.target.value)}
+            className="skin-input"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium" style={{ color: 'var(--skin-muted)' }}>
+            Au
+          </label>
+          <input
+            type="date"
+            value={to}
+            min={from || undefined}
+            onChange={(e) => setTo(e.target.value)}
+            className="skin-input"
+          />
+        </div>
+        {(from || to) && (
+          <button
+            type="button"
+            onClick={() => {
+              setFrom('');
+              setTo('');
+            }}
+            className="px-3 py-2 text-sm font-medium skin-btn-ghost"
+          >
+            Reinitialiser
+          </button>
+        )}
       </div>
 
       <motion.div
@@ -127,7 +172,7 @@ export default function ParcelsPage() {
                           className="truncate text-sm font-semibold skin-font-heading"
                           style={{ color: 'var(--skin-foreground)' }}
                         >
-                          {p.description || 'Colis sans description'}
+                          {p.designation || 'Colis sans description'}
                         </p>
                       </div>
                       <p
@@ -135,8 +180,8 @@ export default function ParcelsPage() {
                         style={{ color: 'var(--skin-muted)' }}
                       >
                         #{p.trackingNumber} -{' '}
-                        {p.receiverName ?? 'Destinataire ?'}{' '}
-                        {p.receiverCity ? `- ${p.receiverCity}` : ''}
+                        {p.recipient?.fullName ?? 'Destinataire ?'}{' '}
+                        {p.destination ? `- ${p.destination}` : ''}
                       </p>
                     </div>
                     <span

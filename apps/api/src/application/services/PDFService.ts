@@ -366,10 +366,136 @@ function drawDiscrepancyTable(
 }
 
 // ---------------------------------------------------------------------------
+// Payment receipt (recu de paiement)
+// ---------------------------------------------------------------------------
+
+export interface ReceiptData {
+  /** Reference unique du paiement. */
+  reference: string;
+  createdAt: Date | string;
+  amount: number;
+  method: string;
+  transactionReference?: string | null;
+  client: InvoiceClient;
+  agency?: InvoiceAgency | null;
+  /** Facture reglee par ce paiement (etat apres encaissement). */
+  invoice: {
+    reference: string;
+    netAmount: number;
+    paidAmount: number;
+    balance: number;
+  };
+  /** Colis precis si le paiement est scope a un colis (sinon toute la facture). */
+  parcel?: { trackingNumber: string; designation: string } | null;
+  /** Agent ayant encaisse le paiement. */
+  receivedByName?: string | null;
+  branding?: PDFBranding | null;
+}
+
+// ---------------------------------------------------------------------------
 // Invoice PDF
 // ---------------------------------------------------------------------------
 
 export class PDFService {
+  /**
+   * Recu de paiement (justificatif d'encaissement) pour le portail client.
+   * Une page A4 : entete brandee, bloc client/agence, montant encaisse en
+   * evidence, details (mode, reference transaction, colis), etat de la facture
+   * apres paiement.
+   */
+  static async generatePaymentReceiptPDF(data: ReceiptData): Promise<Buffer> {
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    const pageWidth = doc.page.width - 100;
+    const primary = data.branding?.primaryColor || COLORS.primary;
+
+    let y = drawBrandedHeader(doc, pageWidth, {
+      branding: data.branding,
+      title: 'RECU DE PAIEMENT',
+      metaLines: [
+        `Recu N: ${data.reference}`,
+        `Date: ${formatDate(data.createdAt)}`,
+      ],
+    });
+
+    y += 10;
+
+    // Bloc emetteur (agence) / client
+    if (data.agency) {
+      doc.fontSize(9).fillColor(COLORS.gray).text('Emetteur:', 50, y);
+      let ya = y + 14;
+      doc.fontSize(10).fillColor(COLORS.dark).text(data.agency.name, 50, ya);
+      if (data.agency.address) { ya += 14; doc.fontSize(9).text(data.agency.address, 50, ya); }
+      if (data.agency.phone) { ya += 14; doc.fontSize(9).text(`Tel: ${data.agency.phone}`, 50, ya); }
+    }
+
+    let yc = y;
+    doc.fontSize(9).fillColor(COLORS.gray).text('Recu de:', 350, yc, { width: pageWidth - 300 });
+    yc += 14;
+    doc.fontSize(10).fillColor(COLORS.dark).text(data.client.fullName, 350, yc, { width: pageWidth - 300 });
+    if (data.client.phone) { yc += 14; doc.fontSize(9).text(`Tel: ${data.client.phone}`, 350, yc, { width: pageWidth - 300 }); }
+    if (data.client.email) { yc += 14; doc.fontSize(9).text(data.client.email, 350, yc, { width: pageWidth - 300 }); }
+
+    y = Math.max(y + 70, yc + 24);
+
+    // Montant encaisse en evidence
+    doc.rect(50, y, pageWidth, 50).fillAndStroke(COLORS.lightGray, primary);
+    doc.fillColor(COLORS.gray).font('Helvetica').fontSize(10)
+      .text('Montant encaisse', 65, y + 9);
+    doc.fillColor(primary).font('Helvetica-Bold').fontSize(22)
+      .text(formatCurrency(data.amount), 65, y + 22, { width: pageWidth - 30 });
+    doc.font('Helvetica');
+    y += 70;
+
+    // Details du paiement
+    const detailRows: Array<[string, string]> = [
+      ['Mode de paiement', data.method || '-'],
+      ['Facture', data.invoice.reference],
+    ];
+    if (data.parcel) {
+      detailRows.push(['Colis', `${data.parcel.trackingNumber} - ${data.parcel.designation}`]);
+    }
+    if (data.transactionReference) {
+      detailRows.push(['Reference transaction', data.transactionReference]);
+    }
+    if (data.receivedByName) {
+      detailRows.push(['Encaisse par', data.receivedByName]);
+    }
+
+    doc.fontSize(11).fillColor(primary).font('Helvetica-Bold').text('Details', 50, y);
+    y += 20;
+    doc.font('Helvetica').fontSize(10);
+    detailRows.forEach(([label, value], i) => {
+      const bg = i % 2 === 0 ? COLORS.white : COLORS.lightGray;
+      doc.rect(50, y, pageWidth, 20).fill(bg);
+      doc.fillColor(COLORS.gray).text(label, 60, y + 6, { width: 180 });
+      doc.fillColor(COLORS.dark).text(value, 240, y + 6, { width: pageWidth - 200, lineBreak: false, ellipsis: true });
+      y += 20;
+    });
+
+    y += 16;
+
+    // Etat de la facture apres paiement
+    doc.fontSize(11).fillColor(primary).font('Helvetica-Bold').text('Etat de la facture', 50, y);
+    y += 20;
+    doc.font('Helvetica').fontSize(10);
+    const stateRows: Array<[string, string]> = [
+      ['Montant facture', formatCurrency(data.invoice.netAmount)],
+      ['Total regle', formatCurrency(data.invoice.paidAmount)],
+      ['Reste a payer', formatCurrency(data.invoice.balance)],
+    ];
+    stateRows.forEach(([label, value], i) => {
+      const last = i === stateRows.length - 1;
+      doc.fillColor(COLORS.gray).font(last ? 'Helvetica-Bold' : 'Helvetica').text(label, 60, y, { width: 180 });
+      doc.fillColor(last && data.invoice.balance > 0 ? '#B71C1C' : COLORS.dark)
+        .font(last ? 'Helvetica-Bold' : 'Helvetica')
+        .text(value, 240, y, { width: pageWidth - 200, align: 'left' });
+      y += 18;
+    });
+
+    drawFooter(doc, pageWidth, data.branding);
+    return collectBuffer(doc);
+  }
+
   static async generateInvoicePDF(invoiceData: InvoiceData): Promise<Buffer> {
     const doc = new PDFDocument({ size: 'A4', margin: 50 });
     const pageWidth = doc.page.width - 100; // 50 margin each side

@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { apiClient, setUnauthenticatedHandler } from '@/lib/api/client';
 import { portalApi } from '@/lib/api/portal';
 import { storage, STORAGE_KEYS } from '@/lib/storage/storage';
+import { registerForPush, unregisterForPush } from '@/lib/push/registerPush';
 
 export interface ClientUser {
   id: string;
@@ -33,6 +34,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
 
   const logout = useCallback(async () => {
+    // Desenregistre le push AVANT de purger le token (l'appel API est authentifie).
+    await unregisterForPush();
     await Promise.all([
       storage.remove(STORAGE_KEYS.accessToken),
       storage.remove(STORAGE_KEYS.refreshToken),
@@ -47,6 +50,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (payload.refreshToken) await storage.set(STORAGE_KEYS.refreshToken, payload.refreshToken);
     if (payload.user) await storage.set(STORAGE_KEYS.user, payload.user);
     setState({ user: payload.user ?? null, accessToken: payload.accessToken, loading: false });
+    // Enregistre le token push de l'appareil (no-op si EAS non configure).
+    void registerForPush();
   }, []);
 
   const login = useCallback(
@@ -89,7 +94,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         storage.get<ClientUser>(STORAGE_KEYS.user),
       ]);
       setState({ user: user ?? null, accessToken: token ?? null, loading: false });
-      if (token) refreshMe();
+      if (token) {
+        refreshMe();
+        void registerForPush();
+      }
     })();
   }, [refreshMe]);
 

@@ -4,7 +4,8 @@
  * Activation par env vars :
  *   - SMS_PROVIDER         : 'twilio' | 'africas-talking' | 'vonage' | 'log' (defaut: 'log')
  *   - WHATSAPP_PROVIDER    : 'meta' | 'africas-talking' | 'log' (defaut: 'log')
- *   - PUSH_PROVIDER        : 'fcm' | 'log' (defaut: 'log')
+ *   - PUSH_PROVIDER        : 'expo' | 'fcm' | 'log' (defaut: 'log')
+ *     'expo' : push via ExpoPushToken (aucune credential serveur requise).
  *
  * Credentials Africa's Talking (SMS + WhatsApp partagent username/apiKey) :
  *   AT_USERNAME, AT_API_KEY
@@ -255,6 +256,54 @@ function makeFcmPushProvider(): ExternalChannelProvider {
   };
 }
 
+/**
+ * Push via l'API Expo (https://exp.host/--/api/v2/push/send). Aucune
+ * credential serveur requise : le ciblage se fait par l'ExpoPushToken de
+ * l'appareil (genere cote app mobile avec le projectId EAS). Tant qu'aucun
+ * client n'a enregistre de token, le canal PUSH est simplement SKIPPED.
+ *
+ * `to` est un unique ExpoPushToken (ExponentPushToken[...]). En cas de receipt
+ * d'erreur (DeviceNotRegistered), le nettoyage du token cote base est laisse a
+ * un job ulterieur ; ici on se contente de remonter l'erreur de transport.
+ */
+function makeExpoPushProvider(): ExternalChannelProvider {
+  const ENDPOINT = 'https://exp.host/--/api/v2/push/send';
+  return {
+    name: 'expo',
+    enabled: true,
+    async send(to, message, meta) {
+      const title = (meta?.title as string | undefined) ?? undefined;
+      const res = await fetch(ENDPOINT, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          to,
+          title,
+          body: message,
+          sound: 'default',
+          // Donnees de deep-link cote app (kind, trackingNumber, invoiceRef...).
+          data: meta ?? {},
+        }),
+      });
+      if (!res.ok) {
+        const errBody = await res.text().catch(() => '');
+        throw new Error(`Expo push HTTP ${res.status}: ${errBody.slice(0, 300)}`);
+      }
+      // L'API renvoie 200 meme pour des tickets en erreur : on inspecte le statut.
+      const json = (await res.json().catch(() => null)) as
+        | { data?: { status?: string; message?: string } | Array<{ status?: string; message?: string }> }
+        | null;
+      const ticket = Array.isArray(json?.data) ? json?.data[0] : json?.data;
+      if (ticket?.status === 'error') {
+        throw new Error(`Expo push ticket error: ${ticket.message ?? 'inconnu'}`);
+      }
+    },
+  };
+}
+
 export function registerNotificationProviders(): void {
   const smsKind = (process.env.SMS_PROVIDER ?? 'log').toLowerCase();
   const waKind = (process.env.WHATSAPP_PROVIDER ?? 'log').toLowerCase();
@@ -274,7 +323,8 @@ export function registerNotificationProviders(): void {
     : null,
   );
   setPushProvider(
-    pushKind === 'fcm' ? makeFcmPushProvider()
+    pushKind === 'expo' ? makeExpoPushProvider()
+    : pushKind === 'fcm' ? makeFcmPushProvider()
     : pushKind === 'log' ? makeLogProvider('PUSH')
     : null,
   );

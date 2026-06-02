@@ -70,6 +70,7 @@ export default (): ExpoConfig => {
     plugins: [
       'expo-router',
       'expo-secure-store',
+      'expo-notifications',
       [
         'expo-image-picker',
         {
@@ -82,6 +83,11 @@ export default (): ExpoConfig => {
     ],
     extra: {
       tenantSlug: slug,
+      // projectId EAS requis pour activer le push. Renseigner via EAS_PROJECT_ID
+      // (ou `eas init`). Tant qu'il est absent, le push reste inactif (no-op).
+      eas: {
+        projectId: process.env.EAS_PROJECT_ID ?? undefined,
+      },
     },
   };
   if (t.iconPath) {

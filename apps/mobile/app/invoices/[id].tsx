@@ -91,6 +91,27 @@ export default function InvoiceDetail() {
             </View>
           </Card>
 
+          <Card>
+            <CardHeader title="Detail des frais" />
+            <FeeRow label="Frais de transport" value={formatAmount(Number(i.fees?.transport ?? 0))} />
+            <FeeRow label="Frais de magasinage" value={formatAmount(Number(i.fees?.storage ?? 0))} />
+            {Number(i.fees?.discount ?? 0) > 0 && (
+              <FeeRow label="Remise" value={`- ${formatAmount(Number(i.fees.discount))}`} muted />
+            )}
+            {Number(i.fees?.tax ?? 0) > 0 && (
+              <FeeRow label="TVA" value={formatAmount(Number(i.fees.tax))} muted />
+            )}
+            <View style={{ height: 1, backgroundColor: colors.gray[100], marginVertical: 6 }} />
+            <FeeRow label="Net a payer" value={formatAmount(Number(i.fees?.net ?? total))} bold />
+            <FeeRow label="Avances versees" value={`- ${formatAmount(Number(i.fees?.advances ?? paid))}`} muted />
+            <FeeRow
+              label="Reste a payer"
+              value={formatAmount(Number(i.fees?.remaining ?? remaining))}
+              bold
+              highlight={remaining > 0}
+            />
+          </Card>
+
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <View style={{ flex: 1 }}>
               <Button variant="secondary" onPress={handleDownload}>
@@ -157,6 +178,19 @@ export default function InvoiceDetail() {
                     <Text style={{ fontSize: 11, color: colors.gray[500] }}>{paymentMethodLabel(pay.paymentMethod)} · {pay.createdAt?.slice(0, 16)}</Text>
                   </View>
                   <Text style={{ fontSize: 14, fontWeight: '700', color: colors.gray[900] }}>{formatAmount(Number(pay.amount ?? 0))}</Text>
+                  <Pressable
+                    onPress={async () => {
+                      try {
+                        await downloadAndShare(portalApi.paymentReceiptUrl(pay.id), `recu-${pay.reference ?? pay.id}.pdf`);
+                      } catch {
+                        toast.error('Telechargement impossible');
+                      }
+                    }}
+                    hitSlop={8}
+                    style={{ padding: 4 }}
+                  >
+                    <Ionicons name="receipt-outline" size={18} color={colors.primary[600]} />
+                  </Pressable>
                 </View>
               ))}
             </Card>
@@ -173,6 +207,32 @@ export default function InvoiceDetail() {
           invoiceReference={i.reference}
         />
       )}
+    </View>
+  );
+}
+
+function FeeRow({
+  label,
+  value,
+  bold,
+  muted,
+  highlight,
+}: {
+  label: string;
+  value: string;
+  bold?: boolean;
+  muted?: boolean;
+  highlight?: boolean;
+}) {
+  const color = highlight ? colors.error : muted ? colors.gray[500] : colors.gray[900];
+  return (
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 }}>
+      <Text style={{ fontSize: 13, color: muted ? colors.gray[500] : colors.gray[700], fontWeight: bold ? '700' : '500' }}>
+        {label}
+      </Text>
+      <Text style={{ fontSize: bold ? 15 : 13, color, fontWeight: bold ? '700' : '600' }}>
+        {value}
+      </Text>
     </View>
   );
 }

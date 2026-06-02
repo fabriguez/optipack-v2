@@ -121,7 +121,45 @@ router.get('/invoices/:id', authenticateClient, async (req, res, next) => {
     if (!invoice || invoice.clientId !== clientId) {
       return res.status(404).json({ success: false, message: 'Facture introuvable' });
     }
-    res.json({ success: true, data: invoice });
+
+    // Detail des frais : transport (prix colis) vs magasinage (live).
+    // Permet au client de voir la repartition + les avances + le reste a payer.
+    const { computeStorageFeesForParcels } = await import('./invoice.routes');
+    const parcelIds = invoice.parcels.map((p) => p.id);
+    const storage = await computeStorageFeesForParcels(parcelIds);
+
+    const transportFeesTotal = invoice.parcels.reduce(
+      (sum, p) => sum + Number(p.price ?? 0),
+      0,
+    );
+    const parcelsWithFees = invoice.parcels.map((p) => {
+      const s = storage.perParcel.get(p.id);
+      return {
+        ...p,
+        transportFee: Number(p.price ?? 0),
+        storageFee: s?.fee ?? 0,
+        storageDays: s?.days ?? 0,
+        storageWarehouseName: s?.warehouseName ?? null,
+      };
+    });
+
+    res.json({
+      success: true,
+      data: {
+        ...invoice,
+        parcels: parcelsWithFees,
+        // Recapitulatif des frais et reglements pour la gestion des paiements.
+        fees: {
+          transport: transportFeesTotal,
+          storage: storage.total,
+          discount: Number(invoice.discount ?? 0),
+          tax: Number(invoice.tva ?? 0),
+          net: Number(invoice.netAmount ?? 0),
+          advances: Number(invoice.paidAmount ?? 0),
+          remaining: Number(invoice.balance ?? 0),
+        },
+      },
+    });
   } catch (err) {
     next(err);
   }
@@ -139,6 +177,28 @@ router.get('/invoices/:id/pdf', authenticateClient, async (req, res, next) => {
     res.set({
       'Content-Type': 'application/pdf',
       'Content-Disposition': `inline; filename="facture-${out.reference}.pdf"`,
+      'Content-Length': out.pdf.length.toString(),
+    });
+    res.send(out.pdf);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Recu de paiement (justificatif PDF). Verifie la propriete via le clientId
+// de la facture liee au paiement.
+router.get('/payments/:id/pdf', authenticateClient, async (req, res, next) => {
+  try {
+    const { buildPaymentReceiptPdfBuffer } = await import('./invoice.routes');
+    const { clientId } = req.clientPortal!;
+    const out = await buildPaymentReceiptPdfBuffer(req.params.id);
+    if (!out) return res.status(404).json({ success: false, message: 'Recu introuvable' });
+    if (out.clientId !== clientId) {
+      return res.status(403).json({ success: false, message: 'Acces refuse' });
+    }
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="recu-${out.reference}.pdf"`,
       'Content-Length': out.pdf.length.toString(),
     });
     res.send(out.pdf);
@@ -188,6 +248,53 @@ router.post(
   authenticateClient,
   ClientPortalExtraController.markNotificationRead,
 );
+
+// Push : enregistrement / desenregistrement du token Expo de l'appareil.
+// Idempotent : on dedoublonne cote tableau. Le desenregistrement sert au
+// logout pour ne plus recevoir de push sur cet appareil.
+router.post('/push-token', authenticateClient, async (req, res, next) => {
+  try {
+    const { prisma } = await import('../../../config/database');
+    const { clientId } = req.clientPortal!;
+    const token = (req.body?.token as string | undefined)?.trim();
+    if (!token) {
+      return res.status(400).json({ success: false, message: 'token requis' });
+    }
+    const client = await prisma.client.findUnique({
+      where: { id: clientId },
+      select: { pushTokens: true },
+    });
+    const tokens = new Set(client?.pushTokens ?? []);
+    tokens.add(token);
+    await prisma.client.update({
+      where: { id: clientId },
+      data: { pushTokens: Array.from(tokens) },
+    });
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/push-token', authenticateClient, async (req, res, next) => {
+  try {
+    const { prisma } = await import('../../../config/database');
+    const { clientId } = req.clientPortal!;
+    const token = (req.body?.token as string | undefined)?.trim();
+    const client = await prisma.client.findUnique({
+      where: { id: clientId },
+      select: { pushTokens: true },
+    });
+    const tokens = (client?.pushTokens ?? []).filter((t) => t !== token);
+    await prisma.client.update({
+      where: { id: clientId },
+      data: { pushTokens: tokens },
+    });
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
 
 // Messagerie support
 router.get(

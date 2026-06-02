@@ -64,6 +64,38 @@ export interface RegisterPayload {
   password: string;
 }
 
+/** Filtres communs de l'historique (colis / factures / paiements). */
+export interface HistoryQuery {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: string;
+  /** Borne basse (YYYY-MM-DD ou ISO). */
+  from?: string;
+  /** Borne haute (YYYY-MM-DD ou ISO, inclusive jusqu'a fin de journee). */
+  to?: string;
+}
+
+/**
+ * Telecharge un PDF authentifie (le token est ajoute par l'intercepteur axios)
+ * en blob, puis l'ouvre dans un nouvel onglet. Revoque l'URL apres 60s.
+ */
+async function downloadPdf(path: string, filename: string): Promise<void> {
+  const res = await apiClient.get(path, { responseType: 'blob' });
+  const url = URL.createObjectURL(res.data as Blob);
+  if (typeof window !== 'undefined') {
+    const a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 export const portalApi = {
   login: (phone: string, password: string) =>
     apiClient
@@ -88,10 +120,33 @@ export const portalApi = {
   getDashboard: () =>
     apiClient.get('/client-portal/dashboard').then((r) => r.data.data),
 
-  getParcels: (params?: { page?: number; limit?: number; search?: string }) =>
+  getParcels: (params?: HistoryQuery) =>
     apiClient
       .get('/client-portal/parcels', { params })
       .then((r) => r.data),
+
+  getInvoices: (params?: HistoryQuery) =>
+    apiClient
+      .get('/client-portal/invoices', { params })
+      .then((r) => r.data),
+
+  getInvoiceById: (id: string) =>
+    apiClient
+      .get(`/client-portal/invoices/${id}`)
+      .then((r) => r.data.data),
+
+  getPayments: (params?: HistoryQuery) =>
+    apiClient
+      .get('/client-portal/payments', { params })
+      .then((r) => r.data),
+
+  /** Telecharge une facture PDF (ouvre dans un nouvel onglet). */
+  downloadInvoicePdf: (id: string, reference?: string) =>
+    downloadPdf(`/client-portal/invoices/${id}/pdf`, `facture-${reference ?? id}.pdf`),
+
+  /** Telecharge un recu de paiement PDF (ouvre dans un nouvel onglet). */
+  downloadReceiptPdf: (id: string, reference?: string) =>
+    downloadPdf(`/client-portal/payments/${id}/pdf`, `recu-${reference ?? id}.pdf`),
 
   getParcelByTracking: (tracking: string) =>
     apiClient

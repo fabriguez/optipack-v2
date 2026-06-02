@@ -12,6 +12,7 @@ import {
   Menu,
   X,
   Bell,
+  FileText,
 } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { isAuthenticated } from '@/lib/api/client';
@@ -21,6 +22,7 @@ import { cn } from '@/lib/utils';
 const NAV = [
   { href: '/app', label: 'Accueil', icon: Home },
   { href: '/app/parcels', label: 'Mes colis', icon: Package },
+  { href: '/app/invoices', label: 'Factures', icon: FileText },
   { href: '/app/new', label: 'Nouvel envoi', icon: PlusCircle },
   { href: '/app/profile', label: 'Profil', icon: User },
 ];

@@ -30,6 +30,33 @@ function normalizePhone(phone: string): string {
   return phone.replace(/[\s\-().]/g, '');
 }
 
+/**
+ * Construit un filtre Prisma createdAt { gte, lte } a partir des query params
+ * `from` / `to` (YYYY-MM-DD ou ISO). Le `to` est etendu a la fin de la journee
+ * pour inclure tous les enregistrements du jour. Retourne undefined si aucune
+ * borne valide n'est fournie. Sert au filtre par periode de l'historique.
+ */
+function parseDateRangeQuery(
+  query: Record<string, unknown>,
+): { gte?: Date; lte?: Date } | undefined {
+  const range: { gte?: Date; lte?: Date } = {};
+  const from = query.from as string | undefined;
+  const to = query.to as string | undefined;
+  if (from) {
+    const d = new Date(from);
+    if (!Number.isNaN(d.getTime())) range.gte = d;
+  }
+  if (to) {
+    const d = new Date(to);
+    if (!Number.isNaN(d.getTime())) {
+      // Si la borne est une date nue (sans heure), couvrir toute la journee.
+      if (/^\d{4}-\d{2}-\d{2}$/.test(to)) d.setHours(23, 59, 59, 999);
+      range.lte = d;
+    }
+  }
+  return range.gte || range.lte ? range : undefined;
+}
+
 interface ClientJwtPayload {
   clientId: string;
   phone: string;
@@ -417,9 +444,26 @@ export class ClientPortalController {
       const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
       const skip = (page - 1) * limit;
 
+      // Historique des expeditions : recherche libre + statut + plage de dates.
+      const search = (req.query.search as string | undefined)?.trim();
+      const status = (req.query.status as string | undefined)?.trim();
+      const createdAt = parseDateRangeQuery(req.query);
+
+      const where: Record<string, unknown> = { clientId, isDeleted: false };
+      if (createdAt) where.createdAt = createdAt;
+      if (status) where.status = status;
+      if (search) {
+        where.OR = [
+          { trackingNumber: { contains: search, mode: 'insensitive' } },
+          { designation: { contains: search, mode: 'insensitive' } },
+          { destination: { contains: search, mode: 'insensitive' } },
+          { recipient: { fullName: { contains: search, mode: 'insensitive' } } },
+        ];
+      }
+
       const [parcels, total] = await Promise.all([
         prisma.parcel.findMany({
-          where: { clientId, isDeleted: false },
+          where,
           orderBy: { createdAt: 'desc' },
           skip,
           take: limit,
@@ -429,7 +473,7 @@ export class ClientPortalController {
             container: { select: { designation: true } },
           },
         }),
-        prisma.parcel.count({ where: { clientId, isDeleted: false } }),
+        prisma.parcel.count({ where }),
       ]);
 
       res.json({
@@ -477,9 +521,21 @@ export class ClientPortalController {
       const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
       const skip = (page - 1) * limit;
 
+      // Historique facturation : recherche reference + statut + plage de dates.
+      const search = (req.query.search as string | undefined)?.trim();
+      const status = (req.query.status as string | undefined)?.trim();
+      const createdAt = parseDateRangeQuery(req.query);
+
+      const where: Record<string, unknown> = { clientId, isActive: true };
+      if (createdAt) where.createdAt = createdAt;
+      if (status) where.status = status;
+      if (search) {
+        where.reference = { contains: search, mode: 'insensitive' };
+      }
+
       const [invoices, total] = await Promise.all([
         prisma.invoice.findMany({
-          where: { clientId, isActive: true },
+          where,
           orderBy: { createdAt: 'desc' },
           skip,
           take: limit,
@@ -495,7 +551,7 @@ export class ClientPortalController {
             },
           },
         }),
-        prisma.invoice.count({ where: { clientId, isActive: true } }),
+        prisma.invoice.count({ where }),
       ]);
 
       res.json({

@@ -8,8 +8,21 @@ import type { TenantPaymentConfig } from '../../../infrastructure/payments/types
 import { getPaymentProvider } from '../../../infrastructure/payments/registry';
 import { config } from '../../../config';
 import { realtimeService } from '../../../infrastructure/realtime/RealtimeService';
+import { container } from '../../../container';
+import { OnlinePaymentSettlementService } from '../../../application/services/OnlinePaymentSettlementService';
 
 const router = Router();
+
+/** Reglement idempotent d'un intent en succes (cree le Payment + solde la facture). */
+async function settleIntentSafe(intentId: string): Promise<void> {
+  try {
+    await container.resolve(OnlinePaymentSettlementService).settleSucceededIntent(intentId);
+  } catch (err) {
+    // Le reglement ne doit jamais casser la reponse HTTP / le webhook : on
+    // logue et on laisse un appel ulterieur (poll / webhook retry) reessayer.
+    console.error('[payment-intent] settlement failed', intentId, err);
+  }
+}
 
 function buildWebhookBase(req: any): string {
   if (config.apiUrl) return config.apiUrl.replace(/\/$/, '');
@@ -92,7 +105,13 @@ router.post('/', authenticateClient, async (req, res, next) => {
       externalReference: invoice.reference,
     });
 
-    const refreshed = await prisma.paymentIntent.findUnique({ where: { id: intent.id } });
+    let refreshed = await prisma.paymentIntent.findUnique({ where: { id: intent.id } });
+    // Succes synchrone (certains providers confirment immediatement) : on solde
+    // tout de suite. Sinon le webhook / le polling s'en chargera.
+    if (refreshed?.status === 'SUCCEEDED' && !refreshed.paymentId) {
+      await settleIntentSafe(intent.id);
+      refreshed = await prisma.paymentIntent.findUnique({ where: { id: intent.id } });
+    }
     res.json({
       success: true,
       data: {
@@ -112,12 +131,21 @@ router.post('/', authenticateClient, async (req, res, next) => {
 router.get('/:id', authenticateClient, async (req, res, next) => {
   try {
     const { clientId } = req.clientPortal!;
-    const intent = await prisma.paymentIntent.findUnique({
+    let intent = await prisma.paymentIntent.findUnique({
       where: { id: req.params.id },
       include: { attempts: true },
     });
     if (!intent || intent.clientId !== clientId) {
       return res.status(404).json({ success: false, message: 'Intent introuvable' });
+    }
+    // Filet de securite : si l'intent est en succes mais pas encore regle
+    // (webhook manque / provider sans webhook), on solde au polling.
+    if (intent.status === 'SUCCEEDED' && !intent.paymentId) {
+      await settleIntentSafe(intent.id);
+      intent = await prisma.paymentIntent.findUnique({
+        where: { id: req.params.id },
+        include: { attempts: true },
+      });
     }
     res.json({ success: true, data: intent });
   } catch (err) {
@@ -179,6 +207,8 @@ webhookRouter.post('/:provider', async (req, res, next) => {
         where: { id: attempt.intentId },
         data: { status: 'SUCCEEDED' },
       });
+      // Reglement : cree le Payment + solde la facture (idempotent).
+      await settleIntentSafe(attempt.intentId);
       // Realtime : notifie le client
       realtimeService.toClient(attempt.intent.clientId, 'payment-intent:succeeded', {
         intentId: attempt.intentId,

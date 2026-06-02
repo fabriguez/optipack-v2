@@ -31,4 +31,5 @@ export const STORAGE_KEYS = {
   user: 'user',
   queryCache: 'queryCache.v1',
   offlineQueue: 'offlineQueue.v1',
+  pushToken: 'pushToken',
 } as const;

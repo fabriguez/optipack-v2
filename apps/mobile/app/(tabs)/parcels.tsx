@@ -8,13 +8,18 @@ import { Badge } from '@/components/ui/Badge';
 import { parcelStatusLabel } from '@/lib/labels';
 import { colors, radius, spacing } from '@/lib/theme/colors';
 import { formatAmount } from '@transitsoftservices/shared';
+import { PeriodChips, sinceDays } from '@/components/PeriodChips';
 
 export default function ParcelsTab() {
   const router = useRouter();
   const [search, setSearch] = useState('');
+  const [periodDays, setPeriodDays] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  const params = useMemo(() => ({ search: search || undefined, limit: 50 }), [search]);
+  const params = useMemo(
+    () => ({ search: search || undefined, from: sinceDays(periodDays), limit: 50 }),
+    [search, periodDays],
+  );
   const { data, refetch, isLoading } = useQuery({
     queryKey: ['portal', 'parcels', params],
     queryFn: () => portalApi.parcels(params),
@@ -53,6 +58,7 @@ export default function ParcelsTab() {
             style={{ flex: 1, fontSize: 14, color: colors.gray[900] }}
           />
         </View>
+        <PeriodChips value={periodDays} onChange={setPeriodDays} />
       </View>
       {isLoading ? (
         <ActivityIndicator color={colors.primary[500]} style={{ marginTop: 40 }} />

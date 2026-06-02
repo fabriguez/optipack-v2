@@ -1245,6 +1245,9 @@ model Client {
   // Permet au client (via portail) de choisir s'il veut WhatsApp, SMS, email...
   // pour chaque type d'evenement.
   notificationPrefs Json?
+  // Jetons de push Expo des appareils du client (app mobile). Un client peut
+  // avoir plusieurs appareils. Alimente le canal PUSH. Vide = pas de push.
+  pushTokens        String[] @default([])
 
   // KYC : verification d'identite. Statut piloté par admins.
   // Une fois APPROVED, profil + documents verrouilles jusqu'a idExpiryDate.
@@ -1622,6 +1625,9 @@ model Parcel {
   pickupDate         DateTime?
   penaltyStartDate   DateTime?
   warehouseEnteredAt DateTime?
+  // Horodatage de la derniere alerte "retard" envoyee au client (ETA conteneur
+  // depassee). Empeche le cron de renotifier chaque jour pour le meme colis.
+  delayNotifiedAt    DateTime?
 
   isDeleted        Boolean   @default(false)
   deletedAt        DateTime?
@@ -1856,7 +1862,10 @@ model Payment {
   // systeme (CASH, MOBILE_MONEY, ...) reste compatible avec l'ancien enum.
   paymentMethod        String
   transactionReference String?
-  receivedByUserId     String
+  // Agent encaisseur. NULL pour les paiements en ligne (Mobile Money / carte
+  // via le portail client) : aucun agent ne recoit physiquement les fonds, le
+  // reglement est automatique sur succes du provider.
+  receivedByUserId     String?
 
   // Immutabilite : pas de updatedAt, void seulement
   isVoided       Boolean   @default(false)
@@ -1870,7 +1879,7 @@ model Payment {
   invoice     Invoice             @relation(fields: [invoiceId], references: [id])
   agency      Agency              @relation(fields: [agencyId], references: [id])
   parcel      Parcel?             @relation("ParcelPayments", fields: [parcelId], references: [id])
-  receivedBy  User                @relation(fields: [receivedByUserId], references: [id])
+  receivedBy  User?               @relation(fields: [receivedByUserId], references: [id])
   voidedBy    User?               @relation("VoidedByUser", fields: [voidedByUserId], references: [id])
   attachments PaymentAttachment[]
   // Intent qui a abouti a la creation de ce paiement (lien 1-1 inverse).
@@ -1993,6 +2002,10 @@ model PaymentIntent {
   externalRef    String?
   // Lien vers le Payment cree apres succes (audit comptable).
   paymentId      String?             @unique
+  // Verrou d'idempotence du reglement en ligne : pose atomiquement avant de
+  // creer le Payment, empeche un double-reglement si webhook et polling
+  // arrivent en concurrence. Remis a null si le reglement echoue (retry).
+  settledAt      DateTime?
   expiresAt      DateTime?
   metadata       Json?
   createdAt      DateTime            @default(now())

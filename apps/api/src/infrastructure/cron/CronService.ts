@@ -105,9 +105,80 @@ export function startCronJobs(): void {
     }
   });
 
+  // Detection des retards : chaque jour a 6h, alerte les clients dont le colis
+  // est encore en transit alors que l'ETA du conteneur est depassee.
+  cron.schedule('0 6 * * *', async () => {
+    logger.info('Running delayed-parcel detection...');
+    try {
+      const result = await detectDelayedParcels();
+      if (result.notified > 0) logger.info(result, 'Delayed parcels notified');
+    } catch (err) {
+      logger.error({ err }, 'Delayed-parcel detection failed');
+    }
+  });
+
   logger.info(
-    'Cron jobs scheduled: penalty (2AM), debt alerts (8AM), overdue debts (1AM), parcel coherence (every 6h), auto cash close (every 10min), charge alerts (7AM)',
+    'Cron jobs scheduled: penalty (2AM), debt alerts (8AM), overdue debts (1AM), parcel coherence (every 6h), auto cash close (every 10min), charge alerts (7AM), delay detection (6AM)',
   );
+}
+
+/**
+ * Detecte les colis en retard : encore IN_TRANSIT alors que la date d'arrivee
+ * estimee de leur conteneur est passee (et le conteneur pas encore arrive).
+ * Emet PARCEL_DELAYED une seule fois par colis (verrou via delayNotifiedAt).
+ */
+async function detectDelayedParcels(): Promise<{ scanned: number; notified: number }> {
+  const now = new Date();
+  const parcels = await prisma.parcel.findMany({
+    where: {
+      status: 'IN_TRANSIT',
+      delayNotifiedAt: null,
+      isDeleted: false,
+      container: {
+        actualArrivalDate: null,
+        estimatedArrivalDate: { not: null, lt: now },
+      },
+    },
+    select: {
+      id: true,
+      clientId: true,
+      trackingNumber: true,
+      designation: true,
+      container: {
+        select: {
+          designation: true,
+          estimatedArrivalDate: true,
+          arrivalAgencyId: true,
+          departureAgencyId: true,
+        },
+      },
+    },
+    take: 1000,
+  });
+
+  let notified = 0;
+  for (const p of parcels) {
+    if (!p.clientId) continue;
+    eventBus.emit({
+      type: DomainEvents.PARCEL_DELAYED,
+      payload: {
+        parcelId: p.id,
+        clientId: p.clientId,
+        trackingNumber: p.trackingNumber,
+        designation: p.designation,
+        agencyId: p.container?.arrivalAgencyId ?? p.container?.departureAgencyId,
+        containerName: p.container?.designation,
+        estimatedArrivalDate: p.container?.estimatedArrivalDate,
+      },
+      timestamp: new Date(),
+    });
+    await prisma.parcel.update({
+      where: { id: p.id },
+      data: { delayNotifiedAt: now },
+    });
+    notified++;
+  }
+  return { scanned: parcels.length, notified };
 }
 
 async function checkDebtAlerts(): Promise<void> {

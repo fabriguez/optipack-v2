@@ -153,7 +153,7 @@ export interface StorageChargeBreakdown {
   stopReason: string | null;
 }
 
-async function computeStorageFeesForParcels(parcelIds: string[]): Promise<{
+export async function computeStorageFeesForParcels(parcelIds: string[]): Promise<{
   perParcel: Map<string, StorageFeeDetail>;
   total: number;
 }> {
@@ -461,6 +461,68 @@ export async function buildInvoicePdfBuffer(
   if (!invoice) return null;
   const pdf = await __buildPdfFromInvoice(invoice);
   return { pdf, reference: invoice.reference, clientId: invoice.clientId };
+}
+
+/**
+ * Helper reutilisable : construit le PDF d'un recu de paiement a partir d'un
+ * paymentId. Retourne null si le paiement est introuvable ou annule (void).
+ * Utilise par la route portail client `/client-portal/payments/:id/pdf`.
+ * Le `clientId` retourne permet a l'appelant de verifier la propriete.
+ */
+export async function buildPaymentReceiptPdfBuffer(
+  paymentId: string,
+): Promise<{ pdf: Buffer; reference: string; clientId: string } | null> {
+  const payment = await prisma.payment.findUnique({
+    where: { id: paymentId },
+    include: {
+      invoice: {
+        select: {
+          reference: true,
+          clientId: true,
+          netAmount: true,
+          paidAmount: true,
+          balance: true,
+          client: { select: { fullName: true, phone: true, email: true } },
+        },
+      },
+      agency: { select: { name: true, code: true, address: true, phone: true } },
+      parcel: { select: { trackingNumber: true, designation: true } },
+      receivedBy: { select: { firstName: true, lastName: true } },
+    },
+  });
+  if (!payment || payment.isVoided || !payment.invoice) return null;
+
+  const receivedByName = payment.receivedBy
+    ? `${payment.receivedBy.firstName ?? ''} ${payment.receivedBy.lastName ?? ''}`.trim() || null
+    : null;
+
+  const pdf = await PDFService.generatePaymentReceiptPDF({
+    reference: payment.reference,
+    createdAt: payment.createdAt,
+    amount: Number(payment.amount),
+    method: payment.paymentMethod,
+    transactionReference: payment.transactionReference,
+    client: {
+      fullName: payment.invoice.client.fullName,
+      phone: payment.invoice.client.phone,
+      email: payment.invoice.client.email,
+    },
+    agency: payment.agency
+      ? { name: payment.agency.name, code: payment.agency.code, address: payment.agency.address, phone: payment.agency.phone }
+      : null,
+    invoice: {
+      reference: payment.invoice.reference,
+      netAmount: Number(payment.invoice.netAmount ?? 0),
+      paidAmount: Number(payment.invoice.paidAmount ?? 0),
+      balance: Number(payment.invoice.balance ?? 0),
+    },
+    parcel: payment.parcel
+      ? { trackingNumber: payment.parcel.trackingNumber, designation: payment.parcel.designation }
+      : null,
+    receivedByName,
+  });
+
+  return { pdf, reference: payment.reference, clientId: payment.invoice.clientId };
 }
 
 async function __buildPdfFromInvoice(invoice: any): Promise<Buffer> {

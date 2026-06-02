@@ -52,7 +52,7 @@ async function dispatchExternal(
   target: NotificationTarget,
   payload: { title: string; message: string; metadata?: Record<string, unknown>; kind?: string },
 ): Promise<void> {
-  const requested: NotificationChannel[] = ['SMS', 'WHATSAPP'];
+  const requested: NotificationChannel[] = ['SMS', 'WHATSAPP', 'PUSH'];
   const allowed = await filterChannelsByPrefs(
     target,
     payload.kind ?? (payload.metadata?.kind as string | undefined),
@@ -247,13 +247,18 @@ function registerHandlers() {
       }
     }
 
-    if (['ARRIVED', 'DELIVERED'].includes(newStatus)) {
-      const body = newStatus === 'ARRIVED'
-        ? `Votre colis "${designation || ''}" (${trackingNumber || ''}) est arrive a destination. Vous pouvez venir le retirer.`
-        : `Votre colis "${designation || ''}" (${trackingNumber || ''}) a ete livre. Merci de votre confiance.`;
+    // Notifications externes (SMS / WhatsApp / Push) sur les jalons cles du
+    // cycle de vie : recu, expedie (en transit), arrive, livre.
+    const externalBodies: Record<string, string> = {
+      RECEIVED: `Votre colis "${designation || ''}" (${trackingNumber || ''}) a bien ete receptionne dans nos locaux.`,
+      IN_TRANSIT: `Votre colis "${designation || ''}" (${trackingNumber || ''}) a ete expedie et est en route vers sa destination.`,
+      ARRIVED: `Votre colis "${designation || ''}" (${trackingNumber || ''}) est arrive a destination. Vous pouvez venir le retirer.`,
+      DELIVERED: `Votre colis "${designation || ''}" (${trackingNumber || ''}) a ete livre. Merci de votre confiance.`,
+    };
+    if (externalBodies[newStatus]) {
       await dispatchExternal(
         { clientId, agencyId: agencyId || event.agencyId, organizationId },
-        { title: meta.title, message: body, metadata: { trackingNumber, newStatus }, kind: meta.kind },
+        { title: meta.title, message: externalBodies[newStatus], metadata: { trackingNumber, newStatus }, kind: meta.kind },
       );
     }
   });
@@ -374,6 +379,95 @@ function registerHandlers() {
         metadata: { trackingNumber, totalAmount, days },
         kind: 'PENALTY_APPLIED',
       },
+    );
+  });
+
+  // STORAGE_CHARGE_STARTED -> debut des frais de magasinage
+  eventBus.on(DomainEvents.STORAGE_CHARGE_STARTED, async (event: DomainEvent) => {
+    const payload = event.payload as Record<string, any>;
+    const { parcelId, agencyId, phase, freeDays, dailyRate } = payload;
+    const rate = Number(dailyRate || 0);
+    if (!parcelId || rate <= 0) return;
+
+    // Resolution colis + client (l'event ne porte que des ids techniques).
+    const parcel = await prisma.parcel.findUnique({
+      where: { id: parcelId },
+      select: { clientId: true, trackingNumber: true, designation: true, organizationId: true },
+    });
+    if (!parcel?.clientId) return;
+    const organizationId = parcel.organizationId ?? (await resolveEventOrg(event, payload));
+
+    const free = Number(freeDays || 0);
+    const graceTxt = free > 0 ? `${free} jour(s) gratuit(s), puis ` : '';
+    const phaseTxt = phase === 'DESTINATION' ? 'a destination' : 'en magasin';
+    const message =
+      `Votre colis "${parcel.designation || ''}" (${parcel.trackingNumber || ''}) est en magasinage ${phaseTxt}. ` +
+      `${graceTxt}${rate} FCFA/jour. Retirez-le au plus tot pour eviter des frais.`;
+
+    await createNotification({
+      clientId: parcel.clientId,
+      agencyId,
+      organizationId,
+      title: 'Debut des frais de magasinage',
+      message,
+      metadata: { trackingNumber: parcel.trackingNumber, phase, freeDays: free, dailyRate: rate, kind: 'STORAGE_CHARGE_STARTED' } as Prisma.InputJsonValue,
+    });
+
+    const email = await getClientEmail(parcel.clientId);
+    if (email) {
+      await emailService.send(
+        email,
+        `Debut des frais de magasinage - ${parcel.trackingNumber || ''}`,
+        `<p>${message}</p>`,
+        organizationId,
+        { event: 'STORAGE_CHARGE_STARTED' },
+      );
+    }
+
+    await dispatchExternal(
+      { clientId: parcel.clientId, agencyId, organizationId },
+      { title: 'Frais de magasinage', message, metadata: { trackingNumber: parcel.trackingNumber, phase }, kind: 'STORAGE_CHARGE_STARTED' },
+    );
+  });
+
+  // PARCEL_DELAYED -> retard eventuel (ETA conteneur depassee). Payload enrichi
+  // par le cron de detection (clientId, trackingNumber, designation, ETA).
+  eventBus.on(DomainEvents.PARCEL_DELAYED, async (event: DomainEvent) => {
+    const payload = event.payload as Record<string, any>;
+    const { clientId, agencyId, trackingNumber, designation, estimatedArrivalDate } = payload;
+    if (!clientId) return;
+    const organizationId = await resolveEventOrg(event, payload);
+
+    const etaTxt = estimatedArrivalDate
+      ? ` (arrivee estimee : ${new Date(estimatedArrivalDate).toLocaleDateString('fr-FR')})`
+      : '';
+    const message =
+      `Votre colis "${designation || ''}" (${trackingNumber || ''}) connait un retard d'acheminement${etaTxt}. ` +
+      `Nos equipes suivent la situation, merci de votre patience.`;
+
+    await createNotification({
+      clientId,
+      agencyId: agencyId || event.agencyId,
+      organizationId,
+      title: 'Retard de votre colis',
+      message,
+      metadata: { trackingNumber, estimatedArrivalDate, kind: 'PARCEL_DELAYED' } as Prisma.InputJsonValue,
+    });
+
+    const email = await getClientEmail(clientId);
+    if (email) {
+      await emailService.send(
+        email,
+        `Retard de votre colis - ${trackingNumber || ''}`,
+        `<p>${message}</p>`,
+        organizationId,
+        { event: 'PARCEL_DELAYED' },
+      );
+    }
+
+    await dispatchExternal(
+      { clientId, agencyId: agencyId || event.agencyId, organizationId },
+      { title: 'Retard de votre colis', message, metadata: { trackingNumber }, kind: 'PARCEL_DELAYED' },
     );
   });
 
