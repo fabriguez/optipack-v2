@@ -101,14 +101,21 @@ export function authenticateClient(
 export class ClientPortalController {
   static async login(req: Request, res: Response, next: NextFunction) {
     try {
-      const { phone: rawPhone, password } = req.body;
+      // Connexion par telephone OU email. `identifier` est le champ unifie ;
+      // `phone`/`email` restent acceptes pour compat ascendante.
+      const { phone: rawPhone, email: rawEmail, identifier, password } = req.body;
+      const rawId = identifier ?? rawEmail ?? rawPhone;
 
-      if (!rawPhone || !password) {
-        throw new BusinessError('Telephone et mot de passe requis');
+      if (!rawId || !password) {
+        throw new BusinessError('Identifiant et mot de passe requis');
       }
 
-      const phone = normalizePhone(String(rawPhone));
-      const client = await prisma.client.findUnique({ where: { phone } });
+      const looksLikeEmail = String(rawId).includes('@');
+      const client = looksLikeEmail
+        ? await prisma.client.findFirst({
+            where: { email: { equals: String(rawId).trim(), mode: 'insensitive' } },
+          })
+        : await prisma.client.findUnique({ where: { phone: normalizePhone(String(rawId)) } });
 
       if (!client) {
         throw new AuthenticationError('Identifiants incorrects');

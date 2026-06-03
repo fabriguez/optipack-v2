@@ -1,6 +1,6 @@
 'use client';
 
-import { Controller, useForm } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import Link from 'next/link';
@@ -10,10 +10,9 @@ import { useLogin } from '@/lib/hooks/useAuth';
 import { AuthShell } from '@/components/auth/AuthShell';
 import { Field } from '@/components/auth/Field';
 import { SocialAuthButtons } from '@/components/auth/SocialAuthButtons';
-import { AppPhoneInput } from '@/components/ui/AppPhoneInput';
 
 const schema = z.object({
-  phone: z.string().min(8, 'Numero invalide'),
+  identifier: z.string().min(4, 'Telephone ou email requis'),
   password: z.string().min(6, '6 caracteres minimum'),
 });
 
@@ -24,7 +23,6 @@ export default function LoginPage() {
   const login = useLogin();
   const {
     register,
-    control,
     handleSubmit,
     formState: { errors },
   } = useForm<FormValues>({ resolver: zodResolver(schema) });
@@ -34,7 +32,7 @@ export default function LoginPage() {
       side="left"
       badge="Connexion"
       title="Bon retour parmi nous."
-      subtitle="Entrez votre numero et votre mot de passe pour reprendre la ou vous en etiez."
+      subtitle="Entrez votre telephone ou email et votre mot de passe pour reprendre la ou vous en etiez."
     >
       <SocialAuthButtons intent="login" />
 
@@ -43,18 +41,14 @@ export default function LoginPage() {
         className="mt-6 space-y-5"
         noValidate
       >
-        <Field label="Telephone" error={errors.phone?.message}>
-          <Controller
-            control={control}
-            name="phone"
-            render={({ field }) => (
-              <AppPhoneInput
-                value={field.value}
-                onChange={field.onChange}
-                placeholder="+237 6XX XXX XXX"
-                error={errors.phone?.message}
-              />
-            )}
+        <Field label="Telephone ou email" error={errors.identifier?.message}>
+          <input
+            type="text"
+            autoComplete="username"
+            inputMode="text"
+            placeholder="+237 6XX XXX XXX  ou  vous@exemple.com"
+            className="skin-input"
+            {...register('identifier')}
           />
         </Field>
 

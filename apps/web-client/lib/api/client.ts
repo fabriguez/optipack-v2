@@ -97,9 +97,10 @@ async function downloadPdf(path: string, filename: string): Promise<void> {
 }
 
 export const portalApi = {
-  login: (phone: string, password: string) =>
+  // identifier = telephone OU email (le backend resout selon la presence de '@').
+  login: (identifier: string, password: string) =>
     apiClient
-      .post<{ data: LoginResponse }>('/client-portal/login', { phone, password })
+      .post<{ data: LoginResponse }>('/client-portal/login', { identifier, password })
       .then((r) => r.data.data),
 
   register: (payload: RegisterPayload) =>

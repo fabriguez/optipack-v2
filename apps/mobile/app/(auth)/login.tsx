@@ -23,7 +23,7 @@ export default function LoginScreen() {
       await login(email.trim(), password);
       router.replace('/(tabs)');
     } catch (e: any) {
-      const msg = e?.response?.data?.message ?? 'Email ou mot de passe incorrect';
+      const msg = e?.response?.data?.message ?? 'Identifiant ou mot de passe incorrect';
       setError(msg);
       toast.error(msg);
     } finally {
@@ -51,13 +51,12 @@ export default function LoginScreen() {
 
           <View style={{ gap: 14 }}>
             <Input
-              label="Email"
+              label="Telephone ou email"
               value={email}
               onChangeText={setEmail}
-              placeholder="vous@email.com"
-              keyboardType="email-address"
+              placeholder="+237 6XX XX XX XX  ou  vous@email.com"
               autoCapitalize="none"
-              autoComplete="email"
+              autoComplete="username"
             />
             <Input
               label="Mot de passe"

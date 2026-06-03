@@ -8,8 +8,8 @@ import { portalApi, setToken, clearToken, type RegisterPayload } from '@/lib/api
 export function useLogin() {
   const router = useRouter();
   return useMutation({
-    mutationFn: (vars: { phone: string; password: string }) =>
-      portalApi.login(vars.phone, vars.password),
+    mutationFn: (vars: { identifier: string; password: string }) =>
+      portalApi.login(vars.identifier, vars.password),
     onSuccess: (data) => {
       setToken(data.accessToken);
       toast.success(`Bienvenue ${data.client.fullName}`);

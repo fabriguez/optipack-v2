@@ -71,6 +71,16 @@ export class CreateEmployeeUseCase {
   ) {}
 
   async execute(input: CreateEmployeeInput, organizationId?: string) {
+    // Un employe est AUSSI un client : on cree systematiquement sa fiche client
+    // (sauf syncClient=false explicite). Comme Client.phone est obligatoire et
+    // unique, le telephone devient requis pour creer un employe.
+    const shouldSyncClient = input.syncClient !== false;
+    if (shouldSyncClient && !input.phone) {
+      throw new BusinessError(
+        'Le telephone est obligatoire : un employe est aussi un client, sa fiche est creee automatiquement.',
+      );
+    }
+
     // 0) Invariant chef unique : si on cree un nouveau chef, demote tout
     //    autre chef actif de l'agence (flag + role User si CHEF_AGENCE).
     if (input.isAgencyManager) {
@@ -186,13 +196,25 @@ export class CreateEmployeeUseCase {
     // Un personnel est un potentiel client : on lui cree (ou lie) un profil
     // Client pour l'inclure dans la base commerciale et eviter les doublons.
     // Desactivable via syncClient=false (cas tests / imports historiques).
-    const shouldSyncClient = input.syncClient !== false;
     if (shouldSyncClient && organizationId && input.phone) {
       try {
         // Cherche par telephone (Client.phone est unique)
         const existingClient = await prisma.client.findUnique({
           where: { phone: input.phone },
         });
+        // Email : on ne le pose sur la fiche que s'il n'appartient pas deja a
+        // un AUTRE client (Client.email est unique). Sinon on cree la fiche
+        // sans email pour garantir la creation du client (phone reste la cle).
+        let clientEmail: string | null = input.email ?? null;
+        if (clientEmail) {
+          const emailOwner = await prisma.client.findUnique({
+            where: { email: clientEmail },
+            select: { id: true },
+          });
+          if (emailOwner && emailOwner.id !== existingClient?.id) {
+            clientEmail = null;
+          }
+        }
         const client = existingClient
           ? existingClient
           : await prisma.client.create({
@@ -201,7 +223,7 @@ export class CreateEmployeeUseCase {
                 agencyId: input.agencyId,
                 fullName: input.fullName,
                 phone: input.phone,
-                email: input.email ?? null,
+                email: clientEmail,
                 idNumber: input.idNumber ?? null,
                 clientType: 'INDIVIDUAL',
                 isActive: true,

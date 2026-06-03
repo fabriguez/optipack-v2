@@ -1,6 +1,6 @@
 'use client';
 
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -10,6 +10,7 @@ import { ArrowRight, Loader2, Package, MapPin, User } from 'lucide-react';
 import { toast } from 'sonner';
 import { portalApi } from '@/lib/api/client';
 import { Field } from '@/components/auth/Field';
+import { AppPhoneInput } from '@/components/ui/AppPhoneInput';
 
 const schema = z.object({
   description: z.string().min(2, 'Decrivez votre colis'),
@@ -35,6 +36,7 @@ export default function NewParcelPage() {
   const qc = useQueryClient();
   const {
     register,
+    control,
     handleSubmit,
     watch,
     setValue,
@@ -168,11 +170,17 @@ export default function NewParcelPage() {
               />
             </Field>
             <Field label="Telephone" error={errors.receiverPhone?.message}>
-              <input
-                type="tel"
-                placeholder="+237 6XX XXX XXX"
-                className="skin-input"
-                {...register('receiverPhone')}
+              <Controller
+                control={control}
+                name="receiverPhone"
+                render={({ field }) => (
+                  <AppPhoneInput
+                    value={field.value}
+                    onChange={field.onChange}
+                    placeholder="+237 6XX XXX XXX"
+                    error={errors.receiverPhone?.message}
+                  />
+                )}
               />
             </Field>
           </div>

@@ -890,6 +890,9 @@ importers:
       react-hook-form:
         specifier: ^7.54.2
         version: 7.76.1(react@19.2.6)
+      react-phone-number-input:
+        specifier: ^3.4.16
+        version: 3.4.16(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       sonner:
         specifier: ^2.0.1
         version: 2.0.7(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
@@ -2196,7 +2199,7 @@ packages:
 
   '@expo/bunyan@4.0.1':
     resolution: {integrity: sha512-+Lla7nYSiHZirgK+U/uYzsLv/X+HaJienbD5AKX1UQZHYfWaP+9uuQluRB4GrEVWF0GZ7vEVp/jzaOT9k/SQlg==}
-    engines: {node: '>=0.10.0'}
+    engines: {'0': node >=0.10.0}
 
   '@expo/cli@0.18.31':
     resolution: {integrity: sha512-v9llw9fT3Uv+TCM6Xllo54t672CuYtinEQZ2LPJ2EJsCwuTc4Cd2gXQaouuIVD21VoeGQnr5JtJuWbF97sBKzQ==}

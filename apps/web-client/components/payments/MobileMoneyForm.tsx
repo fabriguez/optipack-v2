@@ -2,11 +2,12 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowRight, Loader2, Smartphone } from 'lucide-react';
+import { ArrowRight, Loader2 } from 'lucide-react';
 import { useCheckout, usePreviewChain } from '@/lib/hooks/usePayment';
 import { ProviderBadge } from './ProviderBadge';
 import { PaymentStatusView } from './PaymentStatusView';
 import { Field } from '@/components/auth/Field';
+import { AppPhoneInput } from '@/components/ui/AppPhoneInput';
 
 interface Props {
   amount: number;
@@ -72,20 +73,11 @@ export function MobileMoneyForm(props: Props) {
         label="Numero mobile money"
         hint="L'agregateur sera choisi automatiquement selon l'operateur."
       >
-        <div className="relative">
-          <Smartphone
-            className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4"
-            style={{ color: 'var(--skin-muted)' }}
-          />
-          <input
-            type="tel"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder="+237 6XX XXX XXX"
-            className="skin-input pl-10"
-            autoComplete="tel"
-          />
-        </div>
+        <AppPhoneInput
+          value={phone}
+          onChange={(v) => setPhone(v ?? '')}
+          placeholder="+237 6XX XXX XXX"
+        />
       </Field>
 
       {chain.length > 0 && (
