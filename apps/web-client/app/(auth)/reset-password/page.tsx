@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense } from 'react';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import Link from 'next/link';
@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { portalApi } from '@/lib/api/client';
 import { AuthShell } from '@/components/auth/AuthShell';
 import { Field } from '@/components/auth/Field';
+import { AppPhoneInput } from '@/components/ui/AppPhoneInput';
 
 const schema = z
   .object({
@@ -31,6 +32,7 @@ function ResetPasswordInner() {
   const params = useSearchParams();
   const {
     register,
+    control,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
@@ -61,7 +63,18 @@ function ResetPasswordInner() {
     >
       <form onSubmit={handleSubmit(onSubmit)} className="mt-6 space-y-5" noValidate>
         <Field label="Telephone" error={errors.phone?.message}>
-          <input type="tel" autoComplete="tel" placeholder="+237 6XX XXX XXX" className="skin-input" {...register('phone')} />
+          <Controller
+            control={control}
+            name="phone"
+            render={({ field }) => (
+              <AppPhoneInput
+                value={field.value}
+                onChange={field.onChange}
+                placeholder="+237 6XX XXX XXX"
+                error={errors.phone?.message}
+              />
+            )}
+          />
         </Field>
 
         <Field label="Code de verification" error={errors.code?.message}>

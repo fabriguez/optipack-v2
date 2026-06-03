@@ -1,6 +1,6 @@
 'use client';
 
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import Link from 'next/link';
@@ -10,6 +10,7 @@ import { useLogin } from '@/lib/hooks/useAuth';
 import { AuthShell } from '@/components/auth/AuthShell';
 import { Field } from '@/components/auth/Field';
 import { SocialAuthButtons } from '@/components/auth/SocialAuthButtons';
+import { AppPhoneInput } from '@/components/ui/AppPhoneInput';
 
 const schema = z.object({
   phone: z.string().min(8, 'Numero invalide'),
@@ -23,6 +24,7 @@ export default function LoginPage() {
   const login = useLogin();
   const {
     register,
+    control,
     handleSubmit,
     formState: { errors },
   } = useForm<FormValues>({ resolver: zodResolver(schema) });
@@ -42,12 +44,17 @@ export default function LoginPage() {
         noValidate
       >
         <Field label="Telephone" error={errors.phone?.message}>
-          <input
-            type="tel"
-            autoComplete="tel"
-            placeholder="+237 6XX XXX XXX"
-            className="skin-input"
-            {...register('phone')}
+          <Controller
+            control={control}
+            name="phone"
+            render={({ field }) => (
+              <AppPhoneInput
+                value={field.value}
+                onChange={field.onChange}
+                placeholder="+237 6XX XXX XXX"
+                error={errors.phone?.message}
+              />
+            )}
           />
         </Field>
 
