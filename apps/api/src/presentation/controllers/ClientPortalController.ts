@@ -199,6 +199,18 @@ export class ClientPortalController {
         );
       }
 
+      // Email unique : refuse si l'email fourni appartient deja a un AUTRE client.
+      const normalizedEmail = email?.trim() || null;
+      if (normalizedEmail) {
+        const emailOwner = await prisma.client.findUnique({
+          where: { email: normalizedEmail },
+          select: { id: true },
+        });
+        if (emailOwner && emailOwner.id !== existing?.id) {
+          throw new BusinessError('Cet email est deja utilise par un autre compte.');
+        }
+      }
+
       const passwordHash = await bcrypt.hash(password, 10);
 
       let client = existing;

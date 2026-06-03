@@ -6,6 +6,7 @@ import { PayrollChargeService } from '../../services/PayrollChargeService';
 import { prisma } from '../../../config/database';
 import { BusinessError } from '../../../domain/errors/BusinessError';
 import { emailService } from '../../../infrastructure/email/EmailService';
+import { provisionClientPortalAccess } from '../../services/ClientPortalAccessService';
 
 interface CreateEmployeeInput {
   agencyId: string;
@@ -210,6 +211,18 @@ export class CreateEmployeeUseCase {
         await prisma.employee.update({
           where: { id: employee.id },
           data: { clientId: client.id },
+        });
+        // Un employe est aussi un client : on lui provisionne son acces au
+        // portail client (web/mobile) et on lui envoie ses identifiants par
+        // mail, en plus de ses acces backoffice (User) ci-dessus. No-op si le
+        // client a deja un portail actif ou n'a pas d'email.
+        await provisionClientPortalAccess({
+          clientId: client.id,
+          fullName: client.fullName,
+          phone: client.phone,
+          email: client.email ?? input.email ?? null,
+          isPortalActive: (client as { isPortalActive?: boolean }).isPortalActive ?? false,
+          organizationId,
         });
       } catch (err) {
         // On n'echoue pas la creation Employee si la sync Client echoue

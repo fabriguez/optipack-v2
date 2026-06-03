@@ -1208,7 +1208,10 @@ model Client {
   agencyId                 String?
   fullName                 String
   phone                    String      @unique
-  email                    String?
+  // Email unique (les NULL multiples restent autorises par Postgres : un client
+  // sans email ne bloque pas les autres). Sert d'identifiant secondaire + evite
+  // les doublons lors des creations backoffice / imports.
+  email                    String?     @unique
   idNumber                 String?
   imageUrl                 String?
   imageKey                 String?

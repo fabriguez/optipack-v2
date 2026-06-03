@@ -123,6 +123,7 @@ export class ImportClientsXlsxUseCase {
     };
 
     const seenPhones = new Set<string>();
+    const seenEmails = new Set<string>();
     const rowsToCreate: Array<Record<string, unknown>> = [];
 
     for (let i = 2; i <= ws.rowCount; i++) {
@@ -160,6 +161,26 @@ export class ImportClientsXlsxUseCase {
         result.skipped++;
         result.errors.push({ row: i, reason: `telephone existe deja (${phone})` });
         continue;
+      }
+
+      // Email unique : skip si email duplique dans le fichier ou deja en base.
+      const email = get(row, 'email');
+      if (email) {
+        if (seenEmails.has(email)) {
+          result.skipped++;
+          result.errors.push({ row: i, reason: `email duplique dans le fichier (${email})` });
+          continue;
+        }
+        const emailExists = await prisma.client.findUnique({
+          where: { email },
+          select: { id: true },
+        });
+        if (emailExists) {
+          result.skipped++;
+          result.errors.push({ row: i, reason: `email existe deja (${email})` });
+          continue;
+        }
+        seenEmails.add(email);
       }
 
       const clientType = (get(row, 'clientType') || 'INDIVIDUAL').toUpperCase();

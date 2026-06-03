@@ -436,6 +436,38 @@ class EmailService {
   }
 
   /**
+   * Envoie les identifiants initiaux de connexion au PORTAIL CLIENT (web/mobile).
+   * La connexion client se fait par numero de telephone + mot de passe.
+   * Mot de passe en clair (one-shot), a changer apres premiere connexion.
+   */
+  async sendClientPortalCredentials(
+    to: string,
+    clientName: string,
+    loginPhone: string,
+    password: string,
+    organizationId?: string | null,
+  ) {
+    const content = [
+      heading('Votre espace client'),
+      paragraph(
+        `Bonjour <strong>${clientName}</strong>, votre espace client a ete cree. ` +
+        'Vous pouvez suivre vos colis, consulter vos factures et payer en ligne ' +
+        'depuis le site web ou l\'application mobile.',
+      ),
+      highlightBlock(
+        'Identifiants de connexion',
+        `Telephone : <strong>${loginPhone}</strong><br/>Mot de passe : <strong>${password}</strong>`,
+      ),
+      divider(),
+      paragraph(
+        'Pour votre securite, changez votre mot de passe apres la premiere connexion.',
+      ),
+      actionButton('Acceder a mon espace', `${config.clientPortalUrl}/login`),
+    ].join('');
+    return this.send(to, 'Vos acces espace client', content, organizationId, { event: 'CLIENT_CREDENTIALS' });
+  }
+
+  /**
    * Envoie un lien de reinitialisation de mot de passe.
    */
   async sendWelcome(to: string, clientName: string, organizationId?: string | null) {

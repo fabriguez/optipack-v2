@@ -1,7 +1,8 @@
 import { inject, injectable } from 'tsyringe';
 import type { UpdateClientInput } from '@transitsoftservices/shared';
 import { CLIENT_REPOSITORY, type IClientRepository } from '../../interfaces/IClientRepository';
-import { NotFoundError } from '../../../domain/errors/BusinessError';
+import { ConflictError, NotFoundError } from '../../../domain/errors/BusinessError';
+import { prisma } from '../../../config/database';
 
 @injectable()
 export class UpdateClientUseCase {
@@ -13,6 +14,14 @@ export class UpdateClientUseCase {
     const client = await this.clientRepo.findById(id);
     if (!client) {
       throw new NotFoundError('Client', id);
+    }
+
+    // Email unique : refuse si un AUTRE client porte deja cet email.
+    if (input.email) {
+      const clash = await prisma.client.findUnique({ where: { email: input.email } });
+      if (clash && clash.id !== id) {
+        throw new ConflictError('Un client avec cet email existe deja');
+      }
     }
 
     return this.clientRepo.update(id, {

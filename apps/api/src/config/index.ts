@@ -7,6 +7,9 @@ export const config = {
   port: parseInt(process.env.API_PORT || '4000', 10),
   apiUrl: process.env.API_URL || 'http://localhost:4000',
   webUrl: process.env.WEB_URL || 'http://localhost:3000',
+  // URL du portail client (app web-client). Sert aux liens des mails d'acces
+  // client (distinct du backoffice webUrl). Retombe sur webUrl si non defini.
+  clientPortalUrl: process.env.CLIENT_PORTAL_URL || process.env.WEB_URL || 'http://localhost:3001',
 
   database: {
     url: process.env.DATABASE_URL || 'postgresql://transitsoftservices:transitsoftservices@localhost:5432/transitsoftservices',
