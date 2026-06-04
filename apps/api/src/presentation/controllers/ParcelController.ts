@@ -156,20 +156,10 @@ export class ParcelController {
         req.user!.userId,
         warehouseChange,
       );
-      // Realtime : notifie le client proprietaire que son colis change d'etat.
-      try {
-        const clientId = (parcel as { clientId?: string })?.clientId;
-        if (clientId) {
-          realtimeService.toClient(clientId, 'parcel:updated', {
-            parcelId: (parcel as { id?: string })?.id,
-            trackingNumber: (parcel as { trackingNumber?: string })?.trackingNumber,
-            status: req.body.status,
-            parcel,
-          });
-        }
-      } catch {
-        /* non bloquant */
-      }
+      // Realtime : l'emission `parcel:updated` est centralisee dans
+      // RealtimeParcelHandler (ecoute PARCEL_STATUS_CHANGED emis par le
+      // use-case) -> couvre TOUS les chemins de changement de statut sans
+      // duplication ici.
       res.json({ success: true, data: parcel });
     } catch (err) {
       next(err);

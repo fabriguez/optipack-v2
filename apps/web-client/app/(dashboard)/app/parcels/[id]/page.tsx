@@ -21,9 +21,11 @@ import {
 import { formatAmount } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
 import { portalApi } from '@/lib/api/client';
+import { AuthedImage } from '@/components/ui/AuthedImage';
 import { useTenantMeta } from '@/lib/providers/TenantMetaProvider';
 import {
   parcelStatusLabel,
+  parcelStatusContextLabel,
   invoiceStatusLabel,
   paymentMethodLabel,
   parcelActionLabel,
@@ -163,6 +165,11 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
           <p className="mt-1 font-mono text-sm" style={{ color: 'var(--skin-muted)' }}>
             #{p.trackingNumber}
           </p>
+          {(p.status === 'IN_TRANSIT' || p.status === 'ARRIVED') && (
+            <p className="mt-1 text-sm font-medium" style={{ color: 'var(--skin-primary)' }}>
+              {parcelStatusContextLabel(p)}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <span
@@ -240,8 +247,7 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
                       className="aspect-square overflow-hidden skin-radius border"
                       style={{ borderColor: 'var(--skin-border)' }}
                     >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={url} alt="" className="h-full w-full object-cover transition-transform hover:scale-105" />
+                      <AuthedImage src={url} alt="" className="h-full w-full object-cover transition-transform hover:scale-105" />
                     </button>
                   );
                 })}
@@ -524,8 +530,7 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
           >
             <X className="h-7 w-7" />
           </button>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={lightbox} alt="" className="max-h-[90vh] max-w-[90vw] object-contain" />
+          <AuthedImage src={lightbox} alt="" className="max-h-[90vh] max-w-[90vw] object-contain" />
         </div>
       )}
     </div>

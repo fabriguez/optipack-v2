@@ -134,7 +134,7 @@ export default function SimulateurPage() {
             </option>
             {routes?.map((r) => (
               <option key={r.id} value={r.id}>
-                {TYPE_META[r.type].label} — {r.departureCity} → {r.arrivalCity} ({r.name})
+                {r.name}
               </option>
             ))}
           </select>

@@ -19,6 +19,7 @@ import { startCronJobs } from './infrastructure/cron/CronService';
 import { registerHandlers as registerNotificationHandlers } from './infrastructure/events/handlers/NotificationHandler';
 import { registerDailyReportEmailHandler } from './infrastructure/events/handlers/DailyReportEmailHandler';
 import { registerDailyReportRegenHandler } from './infrastructure/events/handlers/DailyReportRegenHandler';
+import { registerRealtimeParcelHandlers } from './infrastructure/events/handlers/RealtimeParcelHandler';
 import { registerNotificationProviders } from './infrastructure/notifications/providers';
 import { registerAllPaymentProviders } from './infrastructure/payments/providers';
 import { webhookRouter as paymentWebhookRouter } from './presentation/routes/v1/payment-intent.routes';
@@ -139,6 +140,7 @@ async function start(): Promise<void> {
     registerAllPaymentProviders();
     registerDailyReportEmailHandler();
     registerDailyReportRegenHandler();
+    registerRealtimeParcelHandlers();
 
     // Start cron jobs
     startCronJobs();

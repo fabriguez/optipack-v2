@@ -26,6 +26,7 @@ import {
 } from '@/lib/api/client';
 import { useLogout } from '@/lib/hooks/useAuth';
 import { Field } from '@/components/auth/Field';
+import { AuthedImage } from '@/components/ui/AuthedImage';
 
 // Evenements notifiables cote client (memes cles que l'API).
 const EVENT_KINDS = [
@@ -160,12 +161,12 @@ function InfoCard({ me }: { me: ClientProfile }) {
               color: 'var(--skin-primary)',
             }}
           >
-            {me.imageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={me.imageUrl} alt={me.fullName} className="h-full w-full object-cover" />
-            ) : (
-              initials
-            )}
+            <AuthedImage
+              src={me.imageUrl}
+              alt={me.fullName}
+              className="h-full w-full object-cover"
+              fallback={<>{initials}</>}
+            />
           </div>
           <button
             type="button"

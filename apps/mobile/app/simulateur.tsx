@@ -121,10 +121,7 @@ export default function SimulateurScreen() {
                     />
                     <View style={{ flex: 1 }}>
                       <Text style={{ fontSize: 14, fontWeight: '500', color: colors.gray[900] }}>
-                        {r.departureCity} → {r.arrivalCity}
-                      </Text>
-                      <Text style={{ fontSize: 12, color: colors.gray[500] }}>
-                        {TYPE_LABEL[r.type]} · {r.estimatedDurationDays} j · facture au {r.unit}
+                        {r.name}
                       </Text>
                     </View>
                     {active && <Ionicons name="checkmark-circle" size={20} color={colors.primary[500]} />}

@@ -18,6 +18,56 @@ export function parcelStatusLabel(status?: string | null): string {
   return PARCEL_STATUS_LABEL[status] ?? status;
 }
 
+interface AgencyRef {
+  name?: string | null;
+  city?: string | null;
+}
+interface ContainerRef {
+  departureAgency?: AgencyRef | null;
+  arrivalAgency?: AgencyRef | null;
+}
+export interface ParcelStatusContextLike {
+  status?: string | null;
+  container?: ContainerRef | null;
+  lastContainer?: ContainerRef | null;
+  transitRoute?: { departureCity?: string | null; arrivalCity?: string | null } | null;
+  destinationAgency?: AgencyRef | null;
+  destination?: string | null;
+  origin?: string | null;
+}
+
+function agencyName(a?: AgencyRef | null, fallback?: string | null): string | null {
+  if (a?.name) return `${a.name}${a.city ? ` (${a.city})` : ''}`;
+  return fallback ?? null;
+}
+
+/**
+ * Libelle contextuel du trajet, cote client (web + mobile alignes) :
+ *   IN_TRANSIT -> "En transit de <depart conteneur> vers <arrivee conteneur>"
+ *   ARRIVED    -> "Arrive a <arrivee conteneur>"
+ * Pour tout autre statut : libelle nu (parcelStatusLabel).
+ */
+export function parcelStatusContextLabel(p?: ParcelStatusContextLike | null): string {
+  if (!p) return '—';
+  const ct = p.container ?? p.lastContainer;
+  switch (p.status) {
+    case 'IN_TRANSIT': {
+      const dep = agencyName(ct?.departureAgency, p.transitRoute?.departureCity ?? p.origin);
+      const arr = agencyName(
+        ct?.arrivalAgency,
+        p.transitRoute?.arrivalCity ?? p.destinationAgency?.city ?? p.destination,
+      );
+      return `En transit de ${dep ?? '—'} vers ${arr ?? '—'}`;
+    }
+    case 'ARRIVED': {
+      const arr = agencyName(ct?.arrivalAgency, p.destinationAgency?.name ?? p.destination);
+      return `Arrive a ${arr ?? '—'}`;
+    }
+    default:
+      return parcelStatusLabel(p.status);
+  }
+}
+
 export const INVOICE_STATUS_LABEL: Record<string, string> = {
   UNPAID: 'Impayee',
   PARTIAL: 'Partielle',

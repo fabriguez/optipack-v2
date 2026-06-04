@@ -572,6 +572,7 @@ export class ClientPortalController {
           idExpiryDate: true,
           idRejectionReason: true,
           address: true,
+          clientType: true,
           agencyId: true,
           loyaltyTier: true,
           loyaltyPoints: true,
@@ -587,8 +588,8 @@ export class ClientPortalController {
               phone: true,
             },
           },
-          // Statut partenaire : un client est partenaire s'il dispose d'au moins
-          // une tarification partenaire dediee (override des prix TransitRoute).
+          // Tarifs dedies : utile pour distinguer "partenaire sans tarif encore"
+          // de "partenaire avec tarifs".
           _count: { select: { partnerPricings: true } },
         },
       });
@@ -598,9 +599,17 @@ export class ClientPortalController {
       }
 
       const { _count, ...rest } = client;
+      // Source de verite du statut partenaire : clientType === 'PARTNER' (defini
+      // par l'admin). Le simple ajout d'une tarification ne suffit pas, et un
+      // partenaire fraichement promu (sans tarif encore) doit deja etre vu
+      // comme partenaire cote app.
       res.json({
         success: true,
-        data: { ...rest, isPartner: _count.partnerPricings > 0 },
+        data: {
+          ...rest,
+          isPartner: rest.clientType === 'PARTNER',
+          hasPartnerPricings: _count.partnerPricings > 0,
+        },
       });
     } catch (err) {
       next(err);

@@ -6,8 +6,9 @@ import { motion } from 'framer-motion';
 import { Search, Package, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import { portalApi } from '@/lib/api/client';
+import { parcelStatusLabel, parcelStatusContextLabel, type ParcelStatusContextLike } from '@/lib/labels';
 
-interface Parcel {
+interface Parcel extends ParcelStatusContextLike {
   id: string;
   trackingNumber: string;
   designation: string;
@@ -176,12 +177,20 @@ export default function ParcelsPage() {
                         {p.recipient?.fullName ?? 'Destinataire ?'}{' '}
                         {p.destination ? `- ${p.destination}` : ''}
                       </p>
+                      {(p.status === 'IN_TRANSIT' || p.status === 'ARRIVED') && (
+                        <p
+                          className="mt-0.5 truncate text-xs font-medium"
+                          style={{ color: 'var(--skin-primary)' }}
+                        >
+                          {parcelStatusContextLabel(p)}
+                        </p>
+                      )}
                     </div>
                     <span
                       className="px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide skin-radius-sm"
                       style={{ background: tone.bg, color: tone.fg }}
                     >
-                      {p.status}
+                      {parcelStatusLabel(p.status)}
                     </span>
                   </Link>
                 </li>
