@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Input } from '@/components/ui/Input';
 import { AppPhoneInput } from '@/components/ui/AppPhoneInput';
 import { Button } from '@/components/ui/Button';
+import { SocialAuthButtons } from '@/components/auth/SocialAuthButtons';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { colors, spacing } from '@/lib/theme/colors';
 import { toast } from '@/lib/toast';
@@ -51,6 +52,7 @@ export default function RegisterScreen() {
               <Text style={{ fontSize: 13, color: '#B91C1C' }}>{error}</Text>
             </View>
           )}
+          <SocialAuthButtons intent="register" />
           <Input label="Nom complet" value={form.fullName} onChangeText={(t) => setForm((f) => ({ ...f, fullName: t }))} placeholder="Jean Dupont" />
           <Input label="Email" value={form.email} onChangeText={(t) => setForm((f) => ({ ...f, email: t }))} placeholder="vous@email.com" keyboardType="email-address" autoCapitalize="none" />
           <AppPhoneInput

@@ -15,8 +15,9 @@ import type { NotificationChannel } from '../../application/services/notificatio
 // OTP reset portail client : 10 min de validite, 5 tentatives max.
 const CLIENT_OTP_TTL_MS = 10 * 60 * 1000;
 const CLIENT_OTP_MAX_ATTEMPTS = 5;
-// Par defaut on tente SMS (canal de connexion) puis email en repli.
-const CLIENT_RESET_CHANNELS: NotificationChannel[] = ['SMS', 'EMAIL'];
+// Diffusion du code OTP : email + SMS + WhatsApp (jamais PUSH : l'utilisateur
+// n'est pas connecte et n'a pas forcement un appareil enregistre).
+const CLIENT_RESET_CHANNELS: NotificationChannel[] = ['EMAIL', 'SMS', 'WHATSAPP'];
 
 /**
  * Normalise un numero de telephone pour le stockage / la comparaison.
@@ -28,6 +29,56 @@ const CLIENT_RESET_CHANNELS: NotificationChannel[] = ['SMS', 'EMAIL'];
  */
 function normalizePhone(phone: string): string {
   return phone.replace(/[\s\-().]/g, '');
+}
+
+/**
+ * Resout un client a partir d'un identifiant email OU telephone. L'email est
+ * detecte par la presence d'un '@' (comparaison insensible a la casse), sinon
+ * la valeur est traitee comme un telephone (normalise). Retourne null si
+ * introuvable. Sert au reset mot de passe (l'utilisateur peut saisir l'un ou
+ * l'autre, comme au login).
+ */
+async function findClientByIdentifier(rawId: string) {
+  const id = String(rawId).trim();
+  if (id.includes('@')) {
+    return prisma.client.findFirst({
+      where: { email: { equals: id, mode: 'insensitive' } },
+    });
+  }
+  return prisma.client.findUnique({ where: { phone: normalizePhone(id) } });
+}
+
+/**
+ * Charge le jeton de reset actif d'un client et valide le code OTP fourni.
+ * Gere l'expiration et le plafond de tentatives (suppression du jeton), et
+ * incremente le compteur sur code errone (anti-bruteforce). Retourne le jeton
+ * valide SANS le consommer (le caller decide de le marquer `usedAt`). Leve une
+ * BusinessError generique sinon (anti-enumeration). Partage par verifyResetCode
+ * (etape 2) et resetPassword (etape 3) du flux en deux temps.
+ */
+async function assertValidResetToken(clientId: string, code: string) {
+  const item = await prisma.clientPasswordResetToken.findFirst({
+    where: { clientId, usedAt: null },
+    orderBy: { createdAt: 'desc' },
+  });
+  if (!item) throw new BusinessError('Code invalide ou expire.');
+  if (item.expiresAt < new Date()) {
+    await prisma.clientPasswordResetToken.delete({ where: { id: item.id } });
+    throw new BusinessError('Code expire. Demandez-en un nouveau.');
+  }
+  if (item.attempts >= CLIENT_OTP_MAX_ATTEMPTS) {
+    await prisma.clientPasswordResetToken.delete({ where: { id: item.id } });
+    throw new BusinessError('Trop de tentatives. Demandez un nouveau code.');
+  }
+  const ok = await bcrypt.compare(String(code), item.token);
+  if (!ok) {
+    await prisma.clientPasswordResetToken.update({
+      where: { id: item.id },
+      data: { attempts: { increment: 1 } },
+    });
+    throw new BusinessError('Code invalide ou expire.');
+  }
+  return item;
 }
 
 /**
@@ -301,11 +352,17 @@ export class ClientPortalController {
    */
   static async forgotPassword(req: Request, res: Response, next: NextFunction) {
     try {
-      const { phone: rawPhone } = req.body as { phone?: string };
-      if (!rawPhone) throw new BusinessError('Telephone requis');
-      const phone = normalizePhone(String(rawPhone));
+      // Identifiant unifie : email OU telephone (comme au login). `phone`/`email`
+      // restent acceptes pour compat ascendante.
+      const { identifier, phone: rawPhone, email: rawEmail } = req.body as {
+        identifier?: string;
+        phone?: string;
+        email?: string;
+      };
+      const rawId = identifier ?? rawEmail ?? rawPhone;
+      if (!rawId) throw new BusinessError('Email ou telephone requis');
 
-      const client = await prisma.client.findUnique({ where: { phone } });
+      const client = await findClientByIdentifier(String(rawId));
       // On ne revele pas l'existence du compte ni l'etat du portail.
       if (client && client.isPortalActive && client.passwordHash && client.isActive) {
         await prisma.clientPasswordResetToken.deleteMany({

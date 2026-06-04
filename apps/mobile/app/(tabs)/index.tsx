@@ -159,7 +159,7 @@ export default function HomeScreen() {
 
 function KpiTile({ label, value, icon, color, small }: { label: string; value: string | number; icon: keyof typeof Ionicons.glyphMap; color: string; small?: boolean }) {
   return (
-    <View style={{ flex: 1, backgroundColor: colors.white, borderRadius: radius.lg, padding: spacing.lg, gap: 6 }}>
+    <View style={{ flex: 1, backgroundColor: colors.white, borderRadius: radius.lg, padding: spacing.lg, gap: 6, borderWidth: 1, borderColor: colors.gray[300] }}>
       <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: colors.primary[50], alignItems: 'center', justifyContent: 'center' }}>
         <Ionicons name={icon} size={18} color={color} />
       </View>

@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { AppPhoneInput } from '@/components/ui/AppPhoneInput';
+import { SocialAuthButtons } from '@/components/auth/SocialAuthButtons';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { colors, radius, spacing } from '@/lib/theme/colors';
 import { toast } from '@/lib/toast';
@@ -54,6 +55,8 @@ export default function LoginScreen() {
               <Text style={{ fontSize: 13, color: '#B91C1C' }}>{error}</Text>
             </View>
           )}
+
+          <SocialAuthButtons intent="login" />
 
           <View style={{ gap: 14 }}>
             {/* Toggle phone vs email : segmented control type iOS */}
