@@ -3,6 +3,7 @@ import type { UpdateClientInput } from '@transitsoftservices/shared';
 import { CLIENT_REPOSITORY, type IClientRepository } from '../../interfaces/IClientRepository';
 import { ConflictError, NotFoundError } from '../../../domain/errors/BusinessError';
 import { prisma } from '../../../config/database';
+import { realtimeService } from '../../../infrastructure/realtime/RealtimeService';
 
 @injectable()
 export class UpdateClientUseCase {
@@ -24,7 +25,7 @@ export class UpdateClientUseCase {
       }
     }
 
-    return this.clientRepo.update(id, {
+    const updated = await this.clientRepo.update(id, {
       ...(input.fullName !== undefined && { fullName: input.fullName }),
       ...(input.phone !== undefined && { phone: input.phone }),
       ...(input.email !== undefined && { email: input.email || null }),
@@ -41,5 +42,22 @@ export class UpdateClientUseCase {
           ? { agency: { connect: { id: input.agencyId } } }
           : { agency: { disconnect: true } })),
     });
+
+    // Temps reel : prevenir le portail client si son palier de fidelite ou son
+    // statut partenaire change, pour rafraichir profil + tarifs sans action.
+    const loyaltyChanged = input.loyaltyTier !== undefined && input.loyaltyTier !== client.loyaltyTier;
+    const typeChanged = input.clientType !== undefined && input.clientType !== client.clientType;
+    if (loyaltyChanged || typeChanged) {
+      realtimeService.toClient(id, 'client:profile:updated', {
+        loyaltyTier: updated.loyaltyTier,
+        clientType: updated.clientType,
+      });
+    }
+    if (typeChanged) {
+      // Promotion/retrogradation partenaire -> les tarifs dedies changent de visibilite.
+      realtimeService.toClient(id, 'client:tariffs:updated', {});
+    }
+
+    return updated;
   }
 }

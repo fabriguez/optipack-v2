@@ -1,56 +1,6 @@
 import { z } from 'zod';
 import { TransitType } from '../constants/enums';
-
-/**
- * Validation prix par type de transport :
- *  - AIR  -> facturation au kg uniquement (pricePerKg > 0 obligatoire)
- *  - SEA  -> facturation au m3 uniquement (pricePerVolume > 0 obligatoire)
- *  - LAND -> les deux acceptes, au moins un des deux > 0
- *
- * La DB conserve les deux champs (pricePerKg, pricePerVolume) comme Decimal
- * non null avec default 0 : c'est le refine ci-dessous qui exige les bonnes
- * valeurs selon le type. Le champ inutilise (pricePerKg pour SEA, etc.) est
- * persiste a 0 -- cela rend impossible le calcul de prix dans le mauvais mode
- * cote backend (PricingService verifie le mode actif de la route).
- */
-interface PricingShape {
-  type?: 'AIR' | 'SEA' | 'LAND';
-  pricePerKg?: number | null;
-  pricePerVolume?: number | null;
-}
-
-function validatePricing(
-  data: PricingShape,
-  ctx: z.RefinementCtx,
-): void {
-  const kg = data.pricePerKg ?? 0;
-  const vol = data.pricePerVolume ?? 0;
-  if (data.type === 'AIR') {
-    if (kg <= 0) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Une route aerienne exige un prix au kilogramme superieur a 0.',
-        path: ['pricePerKg'],
-      });
-    }
-  } else if (data.type === 'SEA') {
-    if (vol <= 0) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Une route maritime exige un prix au metre cube superieur a 0.',
-        path: ['pricePerVolume'],
-      });
-    }
-  } else if (data.type === 'LAND') {
-    if (kg <= 0 && vol <= 0) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Une route terrestre exige au moins un prix au kg ou au m3.',
-        path: ['pricePerKg'],
-      });
-    }
-  }
-}
+import { validatePricing } from './pricing-rules';
 
 export const createTransitRouteSchema = z
   .object({

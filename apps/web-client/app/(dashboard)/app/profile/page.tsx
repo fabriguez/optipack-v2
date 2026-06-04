@@ -49,6 +49,10 @@ export default function ProfilePage() {
   const { data: me, isLoading } = useQuery<ClientProfile>({
     queryKey: ['portal', 'me'],
     queryFn: () => portalApi.getMe(),
+    // Pas de socket cote web-client : on capte les changements (fidelite,
+    // promotion partenaire) au focus et via un polling leger.
+    refetchOnWindowFocus: true,
+    refetchInterval: 60_000,
   });
 
   return (

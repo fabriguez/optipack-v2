@@ -55,6 +55,12 @@ export class AuthController {
         success: true,
         data: {
           accessToken: result.accessToken,
+          // Le refresh token est AUSSI renvoye dans le body : le consommateur
+          // NextAuth (web admin) tourne server-side sur un autre domaine et ne
+          // recoit pas le cookie httpOnly pose ci-dessus. Sans ca, son JWT n'a
+          // pas de refreshToken -> le refresh ne part jamais -> deconnexion a
+          // l'expiration de l'access token (~45 min).
+          refreshToken: result.refreshToken,
           user: result.user,
         },
       });
@@ -81,7 +87,13 @@ export class AuthController {
         path: '/',
       });
 
-      res.json({ success: true, data: { accessToken: result.accessToken } });
+      // refreshToken renvoye dans le body apres rotation : NextAuth doit pouvoir
+      // mettre a jour son JWT avec le NOUVEAU token (l'ancien vient d'etre
+      // supprime cote serveur). cf. auth.ts -> data.data.refreshToken.
+      res.json({
+        success: true,
+        data: { accessToken: result.accessToken, refreshToken: result.refreshToken },
+      });
     } catch (err) {
       next(err);
     }

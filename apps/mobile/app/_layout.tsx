@@ -38,7 +38,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     // L'utilisateur peut basculer manuellement via /tenant-setup depuis le profil
     // s'il veut un autre tenant.
     const inAuth = segments[0] === '(auth)';
-    const inPublic = segments[0] === 'track' || segments[0] === 'tenant-setup';
+    const inPublic = segments[0] === 'track' || segments[0] === 'tenant-setup' || segments[0] === 'simulateur';
     const authed = !!accessToken;
     if (!authed && !inAuth && !inPublic) {
       router.replace('/(auth)/login');

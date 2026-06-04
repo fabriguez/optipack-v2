@@ -4,6 +4,8 @@ export * from './warehouse.schema';
 export * from './warehouse-storage-rule.schema';
 export * from './client.schema';
 export * from './recipient.schema';
+export * from './pricing-rules';
+export * from './simulate-price.schema';
 export * from './transit-route.schema';
 export * from './parcel.schema';
 export * from './container.schema';

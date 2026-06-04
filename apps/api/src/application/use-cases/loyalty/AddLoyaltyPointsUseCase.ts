@@ -4,6 +4,7 @@ import { LOYALTY_REPOSITORY, type ILoyaltyRepository } from '../../interfaces/IL
 import { CLIENT_REPOSITORY, type IClientRepository } from '../../interfaces/IClientRepository';
 import { NotFoundError } from '../../../domain/errors/BusinessError';
 import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
+import { realtimeService } from '../../../infrastructure/realtime/RealtimeService';
 
 @injectable()
 export class AddLoyaltyPointsUseCase {
@@ -56,6 +57,12 @@ export class AddLoyaltyPointsUseCase {
     } catch {
       // non bloquant
     }
+
+    // Temps reel : rafraichit le profil (palier + points) cote portail client.
+    realtimeService.toClient(clientId, 'client:profile:updated', {
+      loyaltyTier: newTier,
+      loyaltyPoints: newTotal,
+    });
 
     return { points, newTotal, tier: newTier };
   }

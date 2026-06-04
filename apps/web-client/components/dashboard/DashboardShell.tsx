@@ -14,16 +14,19 @@ import {
   FileText,
 } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
-import { isAuthenticated } from '@/lib/api/client';
+import { useQuery } from '@tanstack/react-query';
+import { Tag } from 'lucide-react';
+import { isAuthenticated, portalApi, type ClientProfile } from '@/lib/api/client';
 import { useLogout } from '@/lib/hooks/useAuth';
 import { cn } from '@/lib/utils';
 
-const NAV = [
+const BASE_NAV = [
   { href: '/app', label: 'Accueil', icon: Home },
   { href: '/app/parcels', label: 'Mes colis', icon: Package },
   { href: '/app/invoices', label: 'Factures', icon: FileText },
   { href: '/app/profile', label: 'Profil', icon: User },
 ];
+const PARTNER_NAV = { href: '/app/tarifs', label: 'Mes tarifs', icon: Tag };
 
 export function DashboardShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -34,6 +37,15 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!isAuthenticated()) router.replace('/login');
   }, [router]);
+
+  // "Mes tarifs" n'apparait que pour les clients partenaires. On lit isPartner
+  // via /me (cache partage avec la page profil).
+  const { data: me } = useQuery<ClientProfile>({
+    queryKey: ['portal', 'me'],
+    queryFn: () => portalApi.getMe(),
+    enabled: isAuthenticated(),
+  });
+  const NAV = me?.isPartner ? [...BASE_NAV, PARTNER_NAV] : BASE_NAV;
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--skin-background)' }}>

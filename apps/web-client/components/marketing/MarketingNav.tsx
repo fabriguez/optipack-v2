@@ -7,10 +7,11 @@ import { useState } from 'react';
 import { useTenantMeta } from '@/lib/providers/TenantMetaProvider';
 
 const LINKS = [
-  { href: '#journey', label: 'Le voyage' },
-  { href: '#features', label: 'Fonctionnalites' },
-  { href: '#stats', label: 'Chiffres' },
-  { href: '#pricing', label: 'Tarifs' },
+  { href: '/#journey', label: 'Le voyage' },
+  { href: '/#features', label: 'Fonctionnalites' },
+  { href: '/agencies', label: 'Agences' },
+  { href: '/simulateur', label: 'Simulateur' },
+  { href: '/track', label: 'Suivi' },
 ];
 
 export function MarketingNav() {

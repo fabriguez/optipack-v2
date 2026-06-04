@@ -5,7 +5,13 @@ import { ClientKycAdminController } from '../../controllers/ClientKycAdminContro
 import { authenticate, authorize } from '../../middleware/authMiddleware';
 import { validate } from '../../middleware/validate';
 import { uploadImageMiddleware, uploadDocumentMiddleware } from '../../middleware/upload';
-import { createClientSchema, updateClientSchema, paginationSchema } from '@transitsoftservices/shared';
+import {
+  createClientSchema,
+  updateClientSchema,
+  paginationSchema,
+  partnerPricingSchema,
+  updatePartnerPricingSchema,
+} from '@transitsoftservices/shared';
 
 const router = Router();
 
@@ -42,11 +48,13 @@ router.get('/:clientId/pricings', PartnerPricingController.list);
 router.post(
   '/:clientId/pricings',
   authorize('SUPER_ADMIN', 'ADMIN'),
+  validate(partnerPricingSchema),
   PartnerPricingController.create,
 );
 router.patch(
   '/pricings/:id',
   authorize('SUPER_ADMIN', 'ADMIN'),
+  validate(updatePartnerPricingSchema),
   PartnerPricingController.update,
 );
 router.delete(

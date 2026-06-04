@@ -29,7 +29,7 @@ export const clientsApi = {
     apiClient.get(`/clients/${clientId}/pricings`).then((r) => r.data),
   createPricing: (
     clientId: string,
-    data: { transitRouteId?: string | null; pricePerKg: number; pricePerVolume?: number; isActive?: boolean },
+    data: { transitRouteId?: string | null; pricePerKg?: number; pricePerVolume?: number; isActive?: boolean },
   ) => apiClient.post(`/clients/${clientId}/pricings`, data).then((r) => r.data),
   updatePricing: (id: string, data: Partial<{ pricePerKg: number; pricePerVolume: number; isActive: boolean }>) =>
     apiClient.patch(`/clients/pricings/${id}`, data).then((r) => r.data),

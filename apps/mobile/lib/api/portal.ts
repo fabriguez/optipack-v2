@@ -35,6 +35,9 @@ export const portalApi = {
   // Dashboard
   dashboard: () => apiClient.get('/client-portal/dashboard').then((r) => r.data),
 
+  // Tarifs partenaire dedies
+  myTariffs: () => apiClient.get('/client-portal/my-tariffs').then((r) => r.data),
+
   // Parcels
   parcels: (params?: HistoryParams) =>
     apiClient.get('/client-portal/parcels', { params }).then((r) => r.data),
@@ -60,6 +63,13 @@ export const portalApi = {
   }) => apiClient.post('/client-portal/payment-intents', data).then((r) => r.data),
   paymentIntent: (id: string) =>
     apiClient.get(`/client-portal/payment-intents/${id}`).then((r) => r.data),
+
+  // Simulateur de prix (public). Le token client, s'il existe, est ajoute par
+  // l'intercepteur => le tarif partenaire est applique automatiquement.
+  publicTransitRoutes: () =>
+    apiClient.get('/public/transit-routes').then((r) => r.data),
+  simulatePrice: (payload: { transitRouteId: string; weight?: number; volume?: number }) =>
+    apiClient.post('/public/simulate-price', payload).then((r) => r.data),
 
   // Public tracking (no auth)
   publicTrack: (tracking: string) =>

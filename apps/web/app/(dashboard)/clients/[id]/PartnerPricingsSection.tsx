@@ -12,8 +12,11 @@ import { AppBadge } from '@/components/ui/AppBadge';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { clientsApi, type PartnerPricing } from '@/lib/api/clients';
 import { searchers } from '@/lib/api/searchers';
+import { apiClient } from '@/lib/api/client';
 import { toast } from 'sonner';
-import { formatAmount } from '@transitsoftservices/shared';
+import { formatAmount, checkPricingForType } from '@transitsoftservices/shared';
+
+type RouteType = 'AIR' | 'SEA' | 'LAND';
 
 interface Props {
   clientId: string;
@@ -34,8 +37,19 @@ export function PartnerPricingsSection({ clientId, isPartner }: Props) {
     enabled: !!clientId,
   });
 
+  // Type de la route selectionnee : pilote le champ requis (kg si AIR, m3 si
+  // SEA, les deux si LAND). On le recupere via le detail de la route.
+  const { data: routeDetail } = useQuery({
+    queryKey: ['transit-routes', routeId],
+    queryFn: () => apiClient.get(`/transit-routes/${routeId}`).then((r) => r.data),
+    enabled: !!routeId,
+  });
+  const routeType: RouteType | undefined = routeDetail?.data?.type;
+  const showKg = routeType === 'AIR' || routeType === 'LAND';
+  const showVol = routeType === 'SEA' || routeType === 'LAND';
+
   const createMut = useMutation({
-    mutationFn: (payload: { transitRouteId?: string | null; pricePerKg: number; pricePerVolume?: number }) =>
+    mutationFn: (payload: { transitRouteId?: string | null; pricePerKg?: number; pricePerVolume?: number }) =>
       clientsApi.createPricing(clientId, payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['clients', clientId, 'pricings'] });
@@ -116,8 +130,11 @@ export function PartnerPricingsSection({ clientId, isPartner }: Props) {
                     {!p.isActive && <AppBadge variant="default" className="ml-2 text-[10px]">Inactif</AppBadge>}
                   </p>
                   <p className="text-xs text-gray-500">
-                    {formatAmount(Number(p.pricePerKg))}/kg
-                    {Number(p.pricePerVolume) > 0 && ` - ${formatAmount(Number(p.pricePerVolume))}/m3`}
+                    {p.transitRoute?.type === 'SEA'
+                      ? `${formatAmount(Number(p.pricePerVolume))}/m3`
+                      : p.transitRoute?.type === 'AIR'
+                        ? `${formatAmount(Number(p.pricePerKg))}/kg`
+                        : `${formatAmount(Number(p.pricePerKg))}/kg${Number(p.pricePerVolume) > 0 ? ` - ${formatAmount(Number(p.pricePerVolume))}/m3` : ''}`}
                     {p.transitRoute?.type && ` - ${p.transitRoute.type}`}
                   </p>
                 </div>
@@ -140,14 +157,21 @@ export function PartnerPricingsSection({ clientId, isPartner }: Props) {
             <AppButton variant="ghost" onClick={() => setOpen(false)}>Annuler</AppButton>
             <AppButton
               onClick={() => {
-                if (!pricePerKg) {
-                  toast.error('Prix par kg requis');
+                if (!routeId) {
+                  toast.error('Selectionnez une route de transit');
+                  return;
+                }
+                const kg = pricePerKg ? Number(pricePerKg) : null;
+                const vol = pricePerVolume ? Number(pricePerVolume) : null;
+                const err = checkPricingForType(routeType, kg, vol);
+                if (err) {
+                  toast.error(err);
                   return;
                 }
                 createMut.mutate({
                   transitRouteId: routeId,
-                  pricePerKg: Number(pricePerKg),
-                  pricePerVolume: pricePerVolume ? Number(pricePerVolume) : undefined,
+                  pricePerKg: kg ?? undefined,
+                  pricePerVolume: vol ?? undefined,
                 });
               }}
               loading={createMut.isPending}
@@ -161,28 +185,42 @@ export function PartnerPricingsSection({ clientId, isPartner }: Props) {
           <AppSearchSelect
             label="Route de transit"
             value={routeId}
-            onChange={setRouteId}
+            onChange={(v) => {
+              setRouteId(v);
+              // Reset des prix : le champ pertinent depend du nouveau type.
+              setPricePerKg('');
+              setPricePerVolume('');
+            }}
             search={searchers.transitRoutes}
-            placeholder="Toutes routes (laisser vide)"
+            placeholder="Selectionnez une route"
           />
-          <p className="text-xs text-gray-500">Si aucune route n&apos;est selectionnee, ce prix s&apos;applique a toutes les routes (a defaut d&apos;une regle specifique).</p>
+          <p className="text-xs text-gray-500">
+            Le type de la route determine le tarif : <strong>aerienne</strong> = prix au kg,{' '}
+            <strong>maritime</strong> = prix au m3, <strong>terrestre</strong> = au moins l&apos;un des deux.
+          </p>
 
-          <div className="grid grid-cols-2 gap-3">
-            <AppInput
-              label="Prix / kg (XAF)"
-              type="number"
-              step="0.01"
-              value={pricePerKg}
-              onChange={(e) => setPricePerKg(e.target.value)}
-            />
-            <AppInput
-              label="Prix / m3 (XAF)"
-              type="number"
-              step="0.01"
-              value={pricePerVolume}
-              onChange={(e) => setPricePerVolume(e.target.value)}
-            />
-          </div>
+          {!routeId ? null : (
+            <div className="grid grid-cols-2 gap-3">
+              {showKg && (
+                <AppInput
+                  label={`Prix / kg (XAF)${routeType === 'AIR' ? ' *' : ''}`}
+                  type="number"
+                  step="0.01"
+                  value={pricePerKg}
+                  onChange={(e) => setPricePerKg(e.target.value)}
+                />
+              )}
+              {showVol && (
+                <AppInput
+                  label={`Prix / m3 (XAF)${routeType === 'SEA' ? ' *' : ''}`}
+                  type="number"
+                  step="0.01"
+                  value={pricePerVolume}
+                  onChange={(e) => setPricePerVolume(e.target.value)}
+                />
+              )}
+            </div>
+          )}
 
         </div>
       </AppDialog>

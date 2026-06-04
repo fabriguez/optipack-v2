@@ -44,6 +44,8 @@ import permissionRoutes from './permission.routes';
 import holidayRoutes from './holiday.routes';
 import workScheduleRoutes from './work-schedule.routes';
 import publicTrackingRoutes from './public-tracking.routes';
+import publicAgenciesRoutes from './public-agencies.routes';
+import publicPricingRoutes from './public-pricing.routes';
 import whatsappWebhookRoutes from './whatsapp-webhook.routes';
 import financeRoutes from './finance.routes';
 import headOfficeRoutes from './head-office.routes';
@@ -60,6 +62,11 @@ router.use('/client-portal', clientPortalRoutes);
 router.use('/client-portal/payment-intents', paymentIntentRoutes);
 // Suivi public (QR code scanne par le destinataire) — sans auth
 router.use('/public', publicTrackingRoutes);
+// Listing public des agences (site vitrine) — sans auth
+router.use('/public', publicAgenciesRoutes);
+// Simulateur de prix public (vitrine + mobile) — sans auth, tarif partenaire
+// applique si token client present.
+router.use('/public', publicPricingRoutes);
 // Webhook WhatsApp Meta Cloud API (verification + reception messages).
 // Public, appele par Meta. Verifie via WHATSAPP_VERIFY_TOKEN env.
 router.use('/webhooks/whatsapp', whatsappWebhookRoutes);

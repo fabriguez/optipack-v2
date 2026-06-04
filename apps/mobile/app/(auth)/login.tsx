@@ -128,6 +128,12 @@ export default function LoginScreen() {
               <Text style={{ fontSize: 13, color: colors.primary[600], fontWeight: '500' }}>Suivre un colis (sans compte)</Text>
             </Pressable>
           </Link>
+
+          <Link href="/simulateur" asChild>
+            <Pressable style={{ marginTop: 12, alignItems: 'center' }}>
+              <Text style={{ fontSize: 13, color: colors.primary[600], fontWeight: '500' }}>Simuler un prix (sans compte)</Text>
+            </Pressable>
+          </Link>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

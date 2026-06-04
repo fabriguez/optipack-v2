@@ -33,6 +33,7 @@ router.post('/reset-password', resetPasswordLimiter, ClientPortalController.rese
 
 // Authenticated routes
 router.get('/me', authenticateClient, ClientPortalController.me);
+router.get('/my-tariffs', authenticateClient, ClientPortalController.myTariffs);
 router.patch('/me', authenticateClient, ClientPortalKycController.updateProfile);
 router.post('/me/upload', authenticateClient, kycUpload, ClientPortalKycController.uploadDocument);
 router.post('/me/password', authenticateClient, ClientPortalController.changePassword);

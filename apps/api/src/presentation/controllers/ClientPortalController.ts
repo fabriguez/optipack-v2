@@ -608,6 +608,88 @@ export class ClientPortalController {
   }
 
   /**
+   * GET /client-portal/my-tariffs
+   * Liste les tarifs partenaire DEDIES du client connecte : une ligne par route
+   * ou il dispose d'une PartnerPricing active. Pour chaque route on renvoie le
+   * prix standard (TransitRoute) et le prix partenaire afin d'afficher l'ecart
+   * (economie) cote front. Si le client n'est pas partenaire, liste vide.
+   */
+  static async myTariffs(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { clientId } = req.clientPortal!;
+
+      const pricings = await prisma.partnerPricing.findMany({
+        where: { clientId, isActive: true, transitRouteId: { not: null } },
+        include: {
+          transitRoute: {
+            select: {
+              id: true,
+              name: true,
+              type: true,
+              departureCity: true,
+              departureCountry: true,
+              arrivalCity: true,
+              arrivalCountry: true,
+              pricePerKg: true,
+              pricePerVolume: true,
+              estimatedDurationDays: true,
+              isActive: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      // On ne garde que les routes actives ; on calcule prix/economie selon le
+      // type (kg pour AIR, m3 pour SEA, le moindre pour LAND).
+      const data = pricings
+        .filter((p) => p.transitRoute && p.transitRoute.isActive)
+        .map((p) => {
+          const route = p.transitRoute!;
+          const partnerKg = Number(p.pricePerKg);
+          const partnerVol = Number(p.pricePerVolume);
+          const stdKg = Number(route.pricePerKg ?? 0);
+          const stdVol = Number(route.pricePerVolume ?? 0);
+
+          // Champ pertinent selon le type de route.
+          const unit = route.type === 'SEA' ? 'm3' : 'kg';
+          const partnerPrice = route.type === 'SEA' ? partnerVol : partnerKg;
+          const standardPrice = route.type === 'SEA' ? stdVol : stdKg;
+          const savings = standardPrice > 0 ? Math.max(0, standardPrice - partnerPrice) : 0;
+          const savingsPercent = standardPrice > 0 ? Math.round((savings / standardPrice) * 100) : 0;
+
+          return {
+            id: p.id,
+            route: {
+              id: route.id,
+              name: route.name,
+              type: route.type,
+              departureCity: route.departureCity,
+              departureCountry: route.departureCountry,
+              arrivalCity: route.arrivalCity,
+              arrivalCountry: route.arrivalCountry,
+              estimatedDurationDays: route.estimatedDurationDays,
+            },
+            unit,
+            partnerPricePerKg: partnerKg,
+            partnerPricePerVolume: partnerVol,
+            standardPricePerKg: stdKg,
+            standardPricePerVolume: stdVol,
+            partnerPrice,
+            standardPrice,
+            savings,
+            savingsPercent,
+            isAdvantage: savings > 0,
+          };
+        });
+
+      res.json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
    * POST /client-portal/me/password
    * Change le mot de passe du client connecte. Verifie le mot de passe actuel
    * avant de poser le nouveau (bcrypt). Min 6 caracteres.

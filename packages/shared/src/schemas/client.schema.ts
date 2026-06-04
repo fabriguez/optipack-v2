@@ -33,13 +33,26 @@ export const createClientSchema = z.object({
 
 export const updateClientSchema = createClientSchema.partial();
 
+// Tarification partenaire : la route est desormais OBLIGATOIRE a la creation.
+// Son `type` (AIR/SEA/LAND) determine le champ requis (kg / m3). La coherence
+// kg-vs-m3 ne peut pas etre verifiee ici (le type n'est pas dans le payload) :
+// elle est appliquee cote controller via checkPricingForType() apres lookup de
+// la route. Le schema ne valide que la forme.
 export const partnerPricingSchema = z.object({
-  transitRouteId: z.string().uuid().nullable().optional(),
-  pricePerKg: z.number().nonnegative('Prix par kg doit etre >= 0'),
-  pricePerVolume: z.number().nonnegative('Prix par volume doit etre >= 0').optional().default(0),
+  transitRouteId: z.string().uuid('Selectionnez une route de transit'),
+  pricePerKg: z.number().nonnegative('Prix par kg doit etre >= 0').nullable().optional(),
+  pricePerVolume: z.number().nonnegative('Prix par volume doit etre >= 0').nullable().optional(),
   isActive: z.boolean().optional().default(true),
+});
+
+// Update : tous les prix optionnels (la route n'est pas modifiable).
+export const updatePartnerPricingSchema = z.object({
+  pricePerKg: z.number().nonnegative('Prix par kg doit etre >= 0').nullable().optional(),
+  pricePerVolume: z.number().nonnegative('Prix par volume doit etre >= 0').nullable().optional(),
+  isActive: z.boolean().optional(),
 });
 
 export type CreateClientInput = z.infer<typeof createClientSchema>;
 export type UpdateClientInput = z.infer<typeof updateClientSchema>;
 export type PartnerPricingInput = z.infer<typeof partnerPricingSchema>;
+export type UpdatePartnerPricingInput = z.infer<typeof updatePartnerPricingSchema>;

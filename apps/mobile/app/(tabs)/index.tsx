@@ -88,6 +88,28 @@ export default function HomeScreen() {
         </View>
       </Card>
 
+      <Pressable
+        onPress={() => router.push('/simulateur' as never)}
+        style={({ pressed }) => ({
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 10,
+          padding: spacing.lg,
+          borderRadius: radius.md,
+          borderWidth: 1,
+          borderColor: colors.primary[200],
+          backgroundColor: colors.primary[50],
+          opacity: pressed ? 0.85 : 1,
+        })}
+      >
+        <Ionicons name="calculator-outline" size={20} color={colors.primary[600]} />
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 14, fontWeight: '600', color: colors.gray[900] }}>Simuler un prix</Text>
+          <Text style={{ fontSize: 12, color: colors.gray[500] }}>Estimez le cout avant d&apos;expedier</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={colors.gray[400]} />
+      </Pressable>
+
       {isLoading ? (
         <ActivityIndicator color={colors.primary[500]} />
       ) : (

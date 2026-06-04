@@ -80,6 +80,86 @@ export interface ClientProfile {
   agency: { id: string; name: string; city: string; phone: string } | null;
 }
 
+/** Une ligne de tarif partenaire dedie (cf. GET /client-portal/my-tariffs). */
+export interface MyTariff {
+  id: string;
+  route: {
+    id: string;
+    name: string;
+    type: 'AIR' | 'SEA' | 'LAND';
+    departureCity: string;
+    departureCountry: string;
+    arrivalCity: string;
+    arrivalCountry: string;
+    estimatedDurationDays: number;
+  };
+  /** Unite de facturation pertinente selon le type ('kg' ou 'm3'). */
+  unit: 'kg' | 'm3';
+  partnerPricePerKg: number;
+  partnerPricePerVolume: number;
+  standardPricePerKg: number;
+  standardPricePerVolume: number;
+  /** Prix partenaire applicable (selon l'unite). */
+  partnerPrice: number;
+  /** Prix standard de la route (selon l'unite). */
+  standardPrice: number;
+  savings: number;
+  savingsPercent: number;
+  isAdvantage: boolean;
+}
+
+/** Route de transit exposee publiquement pour le simulateur. */
+export interface PublicTransitRoute {
+  id: string;
+  name: string;
+  type: 'AIR' | 'SEA' | 'LAND';
+  departureCity: string;
+  departureCountry: string;
+  arrivalCity: string;
+  arrivalCountry: string;
+  pricePerKg: number | null;
+  pricePerVolume: number | null;
+  estimatedDurationDays: number;
+  /** Unite de facturation pertinente selon le type ('kg' ou 'm3'). */
+  unit: 'kg' | 'm3';
+}
+
+/** Resultat d'une simulation de prix (POST /public/simulate-price). */
+export interface PriceSimulation {
+  route: {
+    id: string;
+    name: string;
+    type: 'AIR' | 'SEA' | 'LAND';
+    departureCity: string;
+    departureCountry: string;
+    arrivalCity: string;
+    arrivalCountry: string;
+    estimatedDurationDays: number;
+    unit: 'kg' | 'm3';
+  };
+  weight: number | null;
+  volume: number | null;
+  price: number;
+  standardPrice: number;
+  breakdown: {
+    mode: 'weight' | 'volume' | 'max';
+    weight: number;
+    volume: number | null;
+    ratePerKg: number;
+    ratePerVolume: number;
+    rateSource: 'route' | 'partner';
+    priceByWeight: number;
+    priceByVolume: number;
+    basePrice: number;
+  };
+  /** True si le client connecte est partenaire. */
+  isPartner: boolean;
+  /** True si un tarif partenaire a effectivement ete applique sur cette route. */
+  partnerApplied: boolean;
+  /** Economie (FCFA) vs tarif standard quand un tarif partenaire s'applique. */
+  savings: number;
+}
+
 export interface RegisterPayload {
   fullName: string;
   phone: string;
@@ -174,6 +254,10 @@ export const portalApi = {
   getDashboard: () =>
     apiClient.get('/client-portal/dashboard').then((r) => r.data.data),
 
+  // ---- Tarifs partenaire ----
+  getMyTariffs: (): Promise<MyTariff[]> =>
+    apiClient.get('/client-portal/my-tariffs').then((r) => r.data.data),
+
   getParcels: (params?: HistoryQuery) =>
     apiClient
       .get('/client-portal/parcels', { params })
@@ -239,6 +323,18 @@ export const portalApi = {
 
   getAgencies: () =>
     apiClient.get('/client-portal/agencies').then((r) => r.data.data),
+
+  // ---- Simulateur de prix (public ; le token client, s'il existe, est ajoute
+  // par l'intercepteur et permet d'appliquer le tarif partenaire) ----
+  getPublicTransitRoutes: (): Promise<PublicTransitRoute[]> =>
+    apiClient.get('/public/transit-routes').then((r) => r.data.data),
+
+  simulatePrice: (payload: {
+    transitRouteId: string;
+    weight?: number;
+    volume?: number;
+  }): Promise<PriceSimulation> =>
+    apiClient.post('/public/simulate-price', payload).then((r) => r.data.data),
 
   // ---- Payments ----
   createCheckout: (payload: import('@transitsoftservices/payments').CheckoutInput) =>

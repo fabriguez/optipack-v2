@@ -1,4 +1,4 @@
-import { ScrollView, View, Text, Pressable, ActivityIndicator, Alert } from 'react-native';
+import { ScrollView, View, Text, Pressable, ActivityIndicator, Alert, Linking, RefreshControl } from 'react-native';
 import { AuthedImage } from '@/components/ui/AuthedImage';
 import { useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
@@ -9,6 +9,8 @@ import { Card, CardHeader } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/lib/auth/AuthContext';
+import { useTenant } from '@/lib/tenant/TenantContext';
+import { getWebBaseUrl } from '@/lib/config/webUrl';
 import { portalApi } from '@/lib/api/portal';
 import { apiClient } from '@/lib/api/client';
 import { colors, radius, spacing } from '@/lib/theme/colors';
@@ -90,12 +92,20 @@ export default function ProfileTab() {
   const { user, logout } = useAuth();
   const qc = useQueryClient();
   const router = useRouter();
+  const { meta } = useTenant();
   const [uploading, setUploading] = useState<string | null>(null);
 
-  const { data } = useQuery({
+  const [refreshing, setRefreshing] = useState(false);
+  const { data, refetch } = useQuery({
     queryKey: ['portal', 'me'],
     queryFn: () => portalApi.me(),
   });
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await refetch();
+    setRefreshing(false);
+  };
 
   const me = (data?.data ?? user) as ProfileMe;
   const verifyStatus = me?.idVerificationStatus ?? 'NONE';
@@ -121,7 +131,11 @@ export default function ProfileTab() {
   };
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: 'transparent' }} contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg, paddingBottom: 80 }}>
+    <ScrollView
+      style={{ flex: 1, backgroundColor: 'transparent' }}
+      contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg, paddingBottom: 80 }}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary[500]} />}
+    >
       <Card>
         <View style={{ alignItems: 'center', gap: spacing.md }}>
           <Pressable onPress={() => handleUpload('avatar')} disabled={uploading === 'avatar'}>
@@ -185,6 +199,16 @@ export default function ProfileTab() {
           <Text style={{ fontSize: 14, color: colors.gray[900], flex: 1 }}>Convertir mes points</Text>
           <Ionicons name="chevron-forward" size={16} color={colors.gray[300]} />
         </Pressable>
+        {me?.isPartner && (
+          <Pressable
+            onPress={() => router.push('/tarifs' as never)}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: spacing.sm, borderTopWidth: 1, borderTopColor: colors.gray[100] }}
+          >
+            <Ionicons name="pricetags-outline" size={20} color={colors.gray[700]} />
+            <Text style={{ fontSize: 14, color: colors.gray[900], flex: 1 }}>Mes tarifs partenaire</Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.gray[300]} />
+          </Pressable>
+        )}
       </Card>
 
       <Card>
@@ -227,6 +251,14 @@ export default function ProfileTab() {
           <Ionicons name="create-outline" size={20} color={colors.gray[700]} />
           <Text style={{ fontSize: 14, color: colors.gray[900], flex: 1 }}>Modifier mes informations</Text>
           <Ionicons name="chevron-forward" size={16} color={colors.gray[300]} />
+        </Pressable>
+        <Pressable
+          onPress={() => Linking.openURL(`${getWebBaseUrl(meta?.websiteUrl)}/agencies`)}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: spacing.md, borderTopWidth: 1, borderTopColor: colors.gray[100] }}
+        >
+          <Ionicons name="location-outline" size={20} color={colors.gray[700]} />
+          <Text style={{ fontSize: 14, color: colors.gray[900], flex: 1 }}>Voir nos agences</Text>
+          <Ionicons name="open-outline" size={16} color={colors.gray[300]} />
         </Pressable>
       </Card>
 

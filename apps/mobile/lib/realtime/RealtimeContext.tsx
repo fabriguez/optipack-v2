@@ -70,6 +70,16 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       qc.invalidateQueries({ queryKey: ['portal', 'notifications'] });
     });
 
+    // Profil : changement de palier fidelite ou statut partenaire -> refresh /me.
+    socket.on('client:profile:updated', () => {
+      qc.invalidateQueries({ queryKey: ['portal', 'me'] });
+    });
+    // Tarifs partenaire modifies cote admin -> refresh la vue "Mes tarifs".
+    socket.on('client:tariffs:updated', () => {
+      qc.invalidateQueries({ queryKey: ['portal', 'tariffs'] });
+      qc.invalidateQueries({ queryKey: ['portal', 'me'] });
+    });
+
     return () => {
       socket.disconnect();
       socketRef.current = null;
