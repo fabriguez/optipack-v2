@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Modal, View, Text, Pressable, TextInput, ActivityIndicator, Alert, Linking } from 'react-native';
+import { Modal, View, Text, Pressable, ActivityIndicator, Alert, Linking } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { portalApi } from '@/lib/api/portal';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { colors, radius, spacing } from '@/lib/theme/colors';
 import { formatAmount } from '@transitsoftservices/shared';
+import { AppPhoneInput } from '@/components/ui/AppPhoneInput';
 import { toast } from '@/lib/toast';
 
 type Channel = 'MOBILE_MONEY' | 'CARD';
@@ -135,17 +136,12 @@ export function PayDialog({ open, onClose, invoiceId, amount, invoiceReference }
           {step === 'form' && (
             <View style={{ gap: 10 }}>
               {channel === 'MOBILE_MONEY' && (
-                <View style={{ gap: 6 }}>
-                  <Text style={{ fontSize: 12, color: colors.gray[600] }}>Numero Mobile Money</Text>
-                  <TextInput
-                    value={phone}
-                    onChangeText={setPhone}
-                    placeholder="+237 6XX XX XX XX"
-                    keyboardType="phone-pad"
-                    autoFocus
-                    style={{ height: 48, borderWidth: 1, borderColor: colors.gray[300], borderRadius: radius.md, paddingHorizontal: spacing.lg, fontSize: 16 }}
-                  />
-                </View>
+                <AppPhoneInput
+                  label="Numero Mobile Money"
+                  value={phone}
+                  onChange={(v) => setPhone(v)}
+                  placeholder="6XX XX XX XX"
+                />
               )}
               <View style={{ gap: 6 }}>
                 <Text style={{ fontSize: 12, color: colors.gray[600] }}>Pays</Text>

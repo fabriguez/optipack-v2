@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Input } from '@/components/ui/Input';
+import { AppPhoneInput } from '@/components/ui/AppPhoneInput';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { colors, spacing } from '@/lib/theme/colors';
@@ -52,7 +53,12 @@ export default function RegisterScreen() {
           )}
           <Input label="Nom complet" value={form.fullName} onChangeText={(t) => setForm((f) => ({ ...f, fullName: t }))} placeholder="Jean Dupont" />
           <Input label="Email" value={form.email} onChangeText={(t) => setForm((f) => ({ ...f, email: t }))} placeholder="vous@email.com" keyboardType="email-address" autoCapitalize="none" />
-          <Input label="Telephone" value={form.phone} onChangeText={(t) => setForm((f) => ({ ...f, phone: t }))} placeholder="+225 0X XX XX XX XX" keyboardType="phone-pad" />
+          <AppPhoneInput
+            label="Telephone"
+            value={form.phone}
+            onChange={(v) => setForm((f) => ({ ...f, phone: v }))}
+            placeholder="6XX XX XX XX"
+          />
           <Input label="Mot de passe" value={form.password} onChangeText={(t) => setForm((f) => ({ ...f, password: t }))} placeholder="Min. 6 caracteres" secureTextEntry />
           <Button onPress={submit} loading={submitting}>
             {submitting ? 'Creation...' : 'Creer mon compte'}

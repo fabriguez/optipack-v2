@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { Input } from '@/components/ui/Input';
+import { AppPhoneInput } from '@/components/ui/AppPhoneInput';
 import { Button } from '@/components/ui/Button';
 import { apiClient } from '@/lib/api/client';
 import { portalApi } from '@/lib/api/portal';
@@ -51,7 +52,12 @@ export default function ProfileEditScreen() {
         </View>
         <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: 14 }}>
           <Input label="Nom complet" value={form.fullName} onChangeText={(t) => setForm((f) => ({ ...f, fullName: t }))} />
-          <Input label="Telephone" value={form.phone} onChangeText={(t) => setForm((f) => ({ ...f, phone: t }))} keyboardType="phone-pad" />
+          <AppPhoneInput
+            label="Telephone"
+            value={form.phone}
+            onChange={(v) => setForm((f) => ({ ...f, phone: v }))}
+            placeholder="6XX XX XX XX"
+          />
           <Input label="Adresse" value={form.address} onChangeText={(t) => setForm((f) => ({ ...f, address: t }))} multiline />
           <Button onPress={() => mutation.mutate(form)} loading={mutation.isPending}>
             {mutation.isPending ? 'Envoi...' : 'Enregistrer'}

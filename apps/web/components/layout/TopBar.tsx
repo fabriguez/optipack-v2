@@ -54,7 +54,7 @@ export function TopBar() {
             </button>
           }
           items={[
-            { label: 'Mon profil', icon: <User className="h-4 w-4" />, onClick: () => router.push('/settings') },
+            { label: 'Mon profil', icon: <User className="h-4 w-4" />, onClick: () => router.push('/profile') },
             { label: 'Parametres', icon: <Settings className="h-4 w-4" />, onClick: () => router.push('/settings') },
             { label: 'Deconnexion', icon: <LogOut className="h-4 w-4" />, onClick: () => logoutMutation.mutate(), variant: 'destructive' },
           ]}

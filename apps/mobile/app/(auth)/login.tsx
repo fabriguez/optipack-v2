@@ -4,13 +4,18 @@ import { Link, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
+import { AppPhoneInput } from '@/components/ui/AppPhoneInput';
 import { useAuth } from '@/lib/auth/AuthContext';
-import { colors, spacing } from '@/lib/theme/colors';
+import { colors, radius, spacing } from '@/lib/theme/colors';
 import { toast } from '@/lib/toast';
+
+type IdentifierMode = 'phone' | 'email';
 
 export default function LoginScreen() {
   const { login } = useAuth();
   const router = useRouter();
+  const [mode, setMode] = useState<IdentifierMode>('phone');
+  const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -20,7 +25,8 @@ export default function LoginScreen() {
     setError(null);
     setSubmitting(true);
     try {
-      await login(email.trim(), password);
+      const identifier = mode === 'phone' ? phone.replace(/\s/g, '') : email.trim();
+      await login(identifier, password);
       router.replace('/(tabs)');
     } catch (e: any) {
       const msg = e?.response?.data?.message ?? 'Identifiant ou mot de passe incorrect';
@@ -50,14 +56,49 @@ export default function LoginScreen() {
           )}
 
           <View style={{ gap: 14 }}>
-            <Input
-              label="Telephone ou email"
-              value={email}
-              onChangeText={setEmail}
-              placeholder="+237 6XX XX XX XX  ou  vous@email.com"
-              autoCapitalize="none"
-              autoComplete="username"
-            />
+            {/* Toggle phone vs email : segmented control type iOS */}
+            <View style={{ flexDirection: 'row', backgroundColor: colors.gray[100], borderRadius: radius.md, padding: 4 }}>
+              {(['phone', 'email'] as const).map((m) => {
+                const active = mode === m;
+                return (
+                  <Pressable
+                    key={m}
+                    onPress={() => setMode(m)}
+                    style={{
+                      flex: 1,
+                      paddingVertical: 10,
+                      borderRadius: radius.sm,
+                      backgroundColor: active ? colors.white : 'transparent',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <Text style={{ fontSize: 14, fontWeight: active ? '600' : '500', color: active ? colors.primary[600] : colors.gray[600] }}>
+                      {m === 'phone' ? 'Telephone' : 'Email'}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {mode === 'phone' ? (
+              <AppPhoneInput
+                label="Telephone"
+                value={phone}
+                onChange={(v) => setPhone(v)}
+                placeholder="6XX XX XX XX"
+              />
+            ) : (
+              <Input
+                label="Email"
+                value={email}
+                onChangeText={setEmail}
+                placeholder="vous@email.com"
+                autoCapitalize="none"
+                autoComplete="email"
+                keyboardType="email-address"
+              />
+            )}
+
             <Input
               label="Mot de passe"
               value={password}
