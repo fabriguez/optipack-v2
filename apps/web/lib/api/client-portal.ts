@@ -78,6 +78,24 @@ export const clientPortalApi = {
 
   me: () => portalClient.get('/client-portal/me').then((r) => r.data),
 
+  // Reset mot de passe en deux temps (identifiant = email OU telephone).
+  // 1) Demande du code OTP (envoye par email + SMS + WhatsApp). Reponse toujours
+  //    ok=true cote API (anti-enumeration).
+  forgotPassword: (identifier: string) =>
+    portalClient
+      .post('/client-portal/forgot-password', { identifier })
+      .then((r) => r.data),
+  // 2) Verifie le code sans le consommer (debloque l'etape mot de passe).
+  verifyResetCode: (payload: { identifier: string; code: string }) =>
+    portalClient
+      .post('/client-portal/verify-reset-code', payload)
+      .then((r) => r.data),
+  // 3) Applique le nouveau mot de passe.
+  resetPassword: (payload: { identifier: string; code: string; newPassword: string }) =>
+    portalClient
+      .post('/client-portal/reset-password', payload)
+      .then((r) => r.data),
+
   // Profile + KYC
   updateProfile: (data: { fullName?: string; phone?: string; email?: string; address?: string }) =>
     portalClient.patch('/client-portal/me', data).then((r) => r.data),

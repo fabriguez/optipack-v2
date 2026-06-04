@@ -405,49 +405,63 @@ export class ClientPortalController {
   }
 
   /**
-   * Verifie le code OTP (phone + code) et applique le nouveau mot de passe.
+   * Etape 2 du reset en deux temps : verifie le couple (identifiant, code OTP)
+   * SANS consommer le jeton ni toucher au mot de passe. Permet a l'UI de
+   * n'afficher l'ecran "nouveau mot de passe" qu'apres un code valide. Le jeton
+   * reste utilisable pour l'appel final resetPassword. Increment des tentatives
+   * sur code errone (via assertValidResetToken). Message generique.
+   */
+  static async verifyResetCode(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { identifier, phone: rawPhone, email: rawEmail, code } = req.body as {
+        identifier?: string;
+        phone?: string;
+        email?: string;
+        code?: string;
+      };
+      const rawId = identifier ?? rawEmail ?? rawPhone;
+      if (!rawId || !code) {
+        throw new BusinessError('Identifiant et code requis');
+      }
+
+      const client = await findClientByIdentifier(String(rawId));
+      // Message generique : pas de distinction compte inconnu / code faux.
+      if (!client) throw new BusinessError('Code invalide ou expire.');
+
+      await assertValidResetToken(client.id, String(code));
+      res.json({ success: true, data: { ok: true } });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * Etape 3 du reset en deux temps : re-verifie le couple (identifiant, code OTP),
+   * consomme le jeton et applique le nouveau mot de passe.
    * Politique client : min 6 caracteres (alignee sur l'inscription portail).
    */
   static async resetPassword(req: Request, res: Response, next: NextFunction) {
     try {
-      const { phone: rawPhone, code, newPassword } = req.body as {
-        phone?: string;
-        code?: string;
-        newPassword?: string;
-      };
-      if (!rawPhone || !code || !newPassword) {
-        throw new BusinessError('Telephone, code et nouveau mot de passe requis');
+      const { identifier, phone: rawPhone, email: rawEmail, code, newPassword } =
+        req.body as {
+          identifier?: string;
+          phone?: string;
+          email?: string;
+          code?: string;
+          newPassword?: string;
+        };
+      const rawId = identifier ?? rawEmail ?? rawPhone;
+      if (!rawId || !code || !newPassword) {
+        throw new BusinessError('Identifiant, code et nouveau mot de passe requis');
       }
       if (newPassword.length < 6) {
         throw new BusinessError('Le mot de passe doit contenir au moins 6 caracteres');
       }
-      const phone = normalizePhone(String(rawPhone));
 
-      const client = await prisma.client.findUnique({ where: { phone } });
+      const client = await findClientByIdentifier(String(rawId));
       if (!client) throw new BusinessError('Code invalide ou expire.');
 
-      const item = await prisma.clientPasswordResetToken.findFirst({
-        where: { clientId: client.id, usedAt: null },
-        orderBy: { createdAt: 'desc' },
-      });
-      if (!item) throw new BusinessError('Code invalide ou expire.');
-      if (item.expiresAt < new Date()) {
-        await prisma.clientPasswordResetToken.delete({ where: { id: item.id } });
-        throw new BusinessError('Code expire. Demandez-en un nouveau.');
-      }
-      if (item.attempts >= CLIENT_OTP_MAX_ATTEMPTS) {
-        await prisma.clientPasswordResetToken.delete({ where: { id: item.id } });
-        throw new BusinessError('Trop de tentatives. Demandez un nouveau code.');
-      }
-
-      const ok = await bcrypt.compare(String(code), item.token);
-      if (!ok) {
-        await prisma.clientPasswordResetToken.update({
-          where: { id: item.id },
-          data: { attempts: { increment: 1 } },
-        });
-        throw new BusinessError('Code invalide ou expire.');
-      }
+      const item = await assertValidResetToken(client.id, String(code));
 
       const passwordHash = await bcrypt.hash(newPassword, 10);
       await prisma.$transaction([

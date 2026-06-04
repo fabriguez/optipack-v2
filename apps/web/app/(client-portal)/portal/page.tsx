@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppInput } from '@/components/ui/AppInput';
 import { AppPhoneInput } from '@/components/ui/AppPhoneInput';
@@ -10,6 +11,12 @@ import { useTenantMeta } from '@/lib/providers/TenantProvider';
 
 export default function ClientPortalLoginPage() {
   const router = useRouter();
+  // Banniere de succes apres reset : lue cote client pour eviter d'imposer une
+  // Suspense boundary (contrainte de useSearchParams en App Router).
+  const [justReset, setJustReset] = useState(false);
+  useEffect(() => {
+    setJustReset(new URLSearchParams(window.location.search).get('reset') === '1');
+  }, []);
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -58,6 +65,12 @@ export default function ClientPortalLoginPage() {
             Connexion
           </h2>
 
+          {justReset && (
+            <div className="mb-5 rounded-xl bg-primary-50 px-4 py-3 text-sm text-primary-700">
+              Mot de passe reinitialise. Connectez-vous avec votre nouveau mot de passe.
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-5">
             <AppPhoneInput
               label="Numero de telephone"
@@ -88,6 +101,13 @@ export default function ClientPortalLoginPage() {
             >
               Se connecter
             </AppButton>
+
+            <Link
+              href="/portal/forgot-password"
+              className="block text-center text-sm font-medium text-primary-600"
+            >
+              Mot de passe oublie ?
+            </Link>
           </form>
         </div>
 

@@ -27,6 +27,8 @@ const kycUpload = multer({
 router.post('/login', ClientPortalController.login);
 router.post('/register', ClientPortalController.register);
 router.post('/forgot-password', forgotPasswordLimiter, ClientPortalController.forgotPassword);
+// Etape intermediaire : valide le code OTP sans le consommer (reset en deux temps).
+router.post('/verify-reset-code', resetPasswordLimiter, ClientPortalController.verifyResetCode);
 router.post('/reset-password', resetPasswordLimiter, ClientPortalController.resetPassword);
 
 // Authenticated routes

@@ -20,6 +20,18 @@ export const portalApi = {
     apiClient.post('/client-portal/register', data).then((r) => r.data),
   me: () => apiClient.get('/client-portal/me').then((r) => r.data),
 
+  // Reset mot de passe en deux temps (email OU telephone comme identifiant).
+  // 1) Demande du code OTP (envoye par email + SMS + WhatsApp). Reponse toujours
+  //    ok=true cote API (anti-enumeration).
+  forgotPassword: (identifier: string) =>
+    apiClient.post('/client-portal/forgot-password', { identifier }).then((r) => r.data),
+  // 2) Verifie le code sans le consommer (debloque l'ecran nouveau mot de passe).
+  verifyResetCode: (payload: { identifier: string; code: string }) =>
+    apiClient.post('/client-portal/verify-reset-code', payload).then((r) => r.data),
+  // 3) Applique le nouveau mot de passe.
+  resetPassword: (payload: { identifier: string; code: string; newPassword: string }) =>
+    apiClient.post('/client-portal/reset-password', payload).then((r) => r.data),
+
   // Dashboard
   dashboard: () => apiClient.get('/client-portal/dashboard').then((r) => r.data),
 
