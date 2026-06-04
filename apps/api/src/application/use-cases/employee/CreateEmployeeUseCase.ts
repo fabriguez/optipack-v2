@@ -187,7 +187,7 @@ export class CreateEmployeeUseCase {
         // Envoi email best-effort des identifiants (le mot de passe reste aussi
         // affiche a l'admin via initialPassword pour fallback).
         emailService
-          .sendEmployeePortalCredentials(input.email, input.fullName, input.email, initialPassword, organizationId ?? null)
+          .sendEmployeePortalCredentials(input.email, input.fullName, input.email, initialPassword, organizationId ?? null, input.phone ?? null)
           .catch(() => {});
       }
     }
@@ -242,7 +242,7 @@ export class CreateEmployeeUseCase {
           clientId: client.id,
           fullName: client.fullName,
           phone: client.phone,
-          email: client.email ?? input.email ?? null,
+          email: client.email,
           isPortalActive: (client as { isPortalActive?: boolean }).isPortalActive ?? false,
           organizationId,
         });

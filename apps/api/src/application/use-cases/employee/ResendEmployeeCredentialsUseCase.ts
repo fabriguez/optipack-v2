@@ -103,6 +103,7 @@ export class ResendEmployeeCredentialsUseCase {
       email,
       plainPassword,
       organizationId,
+      employee.phone ?? null,
     );
 
     return { ok: true, email, passwordReset: true };

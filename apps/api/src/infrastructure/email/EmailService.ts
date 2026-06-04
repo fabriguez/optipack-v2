@@ -416,7 +416,12 @@ class EmailService {
     email: string,
     password: string,
     organizationId?: string | null,
+    phone?: string | null,
   ) {
+    const idLines: string[] = [];
+    if (email) idLines.push(`Email : <strong>${email}</strong>`);
+    if (phone) idLines.push(`Telephone : <strong>${phone}</strong>`);
+    idLines.push(`Mot de passe : <strong>${password}</strong>`);
     const content = [
       heading('Votre compte portail TransitSoftServices'),
       paragraph(
@@ -424,7 +429,10 @@ class EmailService {
         'Vous pouvez desormais vous connecter au portail pour consulter votre profil, ' +
         'demander des conges et voir vos bulletins.',
       ),
-      highlightBlock('Identifiants', `${email}<br/><strong>Mot de passe : ${password}</strong>`),
+      highlightBlock(
+        'Identifiants',
+        `${idLines.join('<br/>')}<br/><span style="color:#666">Connectez-vous avec votre email <em>ou</em> votre telephone.</span>`,
+      ),
       divider(),
       paragraph(
         'Pour des raisons de securite, changez votre mot de passe apres votre premiere ' +
@@ -446,7 +454,12 @@ class EmailService {
     loginPhone: string,
     password: string,
     organizationId?: string | null,
+    email?: string | null,
   ) {
+    const idLines: string[] = [];
+    if (loginPhone) idLines.push(`Telephone : <strong>${loginPhone}</strong>`);
+    if (email) idLines.push(`Email : <strong>${email}</strong>`);
+    idLines.push(`Mot de passe : <strong>${password}</strong>`);
     const content = [
       heading('Votre espace client'),
       paragraph(
@@ -456,7 +469,7 @@ class EmailService {
       ),
       highlightBlock(
         'Identifiants de connexion',
-        `Telephone : <strong>${loginPhone}</strong><br/>Mot de passe : <strong>${password}</strong>`,
+        `${idLines.join('<br/>')}<br/><span style="color:#666">Connectez-vous avec votre telephone <em>ou</em> votre email.</span>`,
       ),
       divider(),
       paragraph(

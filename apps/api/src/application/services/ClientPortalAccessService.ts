@@ -52,7 +52,7 @@ export async function provisionClientPortalAccess(params: {
       data: { passwordHash, isPortalActive: true },
     });
     emailService
-      .sendClientPortalCredentials(email, params.fullName, params.phone, password, params.organizationId ?? null)
+      .sendClientPortalCredentials(email, params.fullName, params.phone, password, params.organizationId ?? null, email)
       .catch((err) => {
         // eslint-disable-next-line no-console
         console.warn('[ClientPortalAccess] envoi mail identifiants echoue:', (err as Error).message);
