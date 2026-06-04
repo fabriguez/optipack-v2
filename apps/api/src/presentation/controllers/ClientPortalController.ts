@@ -587,6 +587,9 @@ export class ClientPortalController {
               phone: true,
             },
           },
+          // Statut partenaire : un client est partenaire s'il dispose d'au moins
+          // une tarification partenaire dediee (override des prix TransitRoute).
+          _count: { select: { partnerPricings: true } },
         },
       });
 
@@ -594,7 +597,11 @@ export class ClientPortalController {
         throw new NotFoundError('Client', clientId);
       }
 
-      res.json({ success: true, data: client });
+      const { _count, ...rest } = client;
+      res.json({
+        success: true,
+        data: { ...rest, isPartner: _count.partnerPricings > 0 },
+      });
     } catch (err) {
       next(err);
     }

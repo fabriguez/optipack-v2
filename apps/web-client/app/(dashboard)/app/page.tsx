@@ -11,6 +11,9 @@ import {
   Wallet,
   ArrowRight,
   Bell,
+  FileWarning,
+  HandCoins,
+  Gift,
 } from 'lucide-react';
 import { formatAmount } from '@transitsoftservices/shared';
 import { portalApi } from '@/lib/api/client';
@@ -26,6 +29,7 @@ interface DashboardData {
   };
   invoices: { unpaidCount: number; unpaidBalance: number };
   debts: { remaining: number };
+  loyalty: { points: number; tier: string };
   balanceDue: number;
   inbox: { unreadNotifications: number; openConversations: number };
   recentParcels?: Array<{
@@ -50,6 +54,7 @@ const FALLBACK: DashboardData = {
   parcels: { total: 0, inTransit: 0, arrived: 0, inStorage: 0, delivered: 0 },
   invoices: { unpaidCount: 0, unpaidBalance: 0 },
   debts: { remaining: 0 },
+  loyalty: { points: 0, tier: 'STANDARD' },
   balanceDue: 0,
   inbox: { unreadNotifications: 0, openConversations: 0 },
   recentParcels: [],
@@ -79,6 +84,21 @@ export default function DashboardHome() {
       value: formatAmount(Number(data.balanceDue), defaultCurrency),
       Icon: Wallet,
     },
+    {
+      label: 'Factures impayees',
+      value: data.invoices.unpaidCount,
+      Icon: FileWarning,
+    },
+    {
+      label: 'Dettes actives',
+      value: formatAmount(Number(data.debts.remaining), defaultCurrency),
+      Icon: HandCoins,
+    },
+    {
+      label: 'Points de fidelite',
+      value: data.loyalty.points,
+      Icon: Gift,
+    },
   ];
 
   return (
@@ -107,7 +127,7 @@ export default function DashboardHome() {
         </div>
       </motion.div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {cards.map((card, i) => (
           <motion.div
             key={card.label}

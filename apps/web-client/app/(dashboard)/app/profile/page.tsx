@@ -1,10 +1,14 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { motion } from 'framer-motion';
 import {
   Bell,
   Camera,
+  ChevronRight,
+  Gift,
+  Handshake,
   Loader2,
   Lock,
   LogOut,
@@ -68,6 +72,7 @@ export default function ProfilePage() {
       ) : (
         <>
           <InfoCard me={me} />
+          <LoyaltyCard me={me} />
           <NotificationsCard me={me} />
           <SecurityCard />
 
@@ -255,6 +260,75 @@ function InfoCard({ me }: { me: ClientProfile }) {
           </button>
         </div>
       )}
+    </Card>
+  );
+}
+
+// ── Fidelite + statut partenaire ───────────────────────────
+
+const TIER_LABEL: Record<string, string> = {
+  STANDARD: 'Standard',
+  SILVER: 'Argent',
+  GOLD: 'Or',
+  VIP: 'VIP',
+};
+
+function LoyaltyCard({ me }: { me: ClientProfile }) {
+  const tierLabel = TIER_LABEL[me.loyaltyTier ?? 'STANDARD'] ?? me.loyaltyTier;
+
+  return (
+    <Card title="Fidelite" Icon={Gift}>
+      <div className="flex flex-wrap items-center gap-3 pb-1">
+        <div
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold skin-radius-sm"
+          style={{
+            background: 'color-mix(in oklab, var(--skin-primary) 12%, transparent)',
+            color: 'var(--skin-primary)',
+          }}
+        >
+          Palier {tierLabel}
+        </div>
+        <div
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold skin-radius-sm"
+          style={{
+            background: me.isPartner
+              ? 'color-mix(in oklab, var(--skin-primary) 12%, transparent)'
+              : 'color-mix(in oklab, var(--skin-muted) 12%, transparent)',
+            color: me.isPartner ? 'var(--skin-primary)' : 'var(--skin-muted)',
+          }}
+        >
+          <Handshake className="h-3.5 w-3.5" />
+          {me.isPartner ? 'Partenaire' : 'Non partenaire'}
+        </div>
+      </div>
+
+      <div className="flex items-end justify-between pt-1">
+        <div>
+          <p
+            className="text-3xl font-bold tracking-tight skin-font-heading"
+            style={{ color: 'var(--skin-foreground)' }}
+          >
+            {me.loyaltyPoints}
+          </p>
+          <p className="text-xs" style={{ color: 'var(--skin-muted)' }}>
+            Points de fidelite cumules
+          </p>
+        </div>
+      </div>
+
+      <Link
+        href="/app/loyalty"
+        className="mt-2 flex items-center justify-between gap-3 px-4 py-3 skin-radius transition-colors hover:bg-black/2"
+        style={{ border: '1px solid var(--skin-border)' }}
+      >
+        <span
+          className="text-sm font-semibold"
+          style={{ color: 'var(--skin-foreground)' }}
+        >
+          Convertir mes points
+        </span>
+        <ChevronRight className="h-4 w-4" style={{ color: 'var(--skin-muted)' }} />
+      </Link>
     </Card>
   );
 }

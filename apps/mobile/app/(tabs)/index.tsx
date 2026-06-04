@@ -112,26 +112,29 @@ export default function HomeScreen() {
             color={colors.error}
             small
           />
-
-          {(stats?.recentNotifications ?? []).length > 0 && (
-            <Card>
-              <CardHeader title="Notifications recentes" />
-              {(stats?.recentNotifications ?? []).slice(0, 5).map((n: any) => (
-                <View
-                  key={n.id}
-                  style={{ flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.gray[100] }}
-                >
-                  <View style={{ width: 28, height: 28, borderRadius: 9, backgroundColor: n.readAt ? colors.gray[100] : colors.primary[50], alignItems: 'center', justifyContent: 'center', marginTop: 2 }}>
-                    <Ionicons name="notifications-outline" size={15} color={n.readAt ? colors.gray[400] : colors.primary[600]} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 13, fontWeight: '700', color: colors.gray[900] }} numberOfLines={1}>{n.title}</Text>
-                    <Text style={{ fontSize: 12, color: colors.gray[600] }} numberOfLines={2}>{n.message}</Text>
-                  </View>
-                </View>
-              ))}
-            </Card>
-          )}
+          <View style={{ flexDirection: 'row', gap: spacing.md }}>
+            <KpiTile
+              label="Factures impayees"
+              value={stats?.invoices?.unpaidCount ?? 0}
+              icon="document-text-outline"
+              color="#E53935"
+            />
+            <KpiTile
+              label="Dettes actives"
+              value={formatAmount(Number(stats?.debts?.remaining ?? 0))}
+              icon="cash-outline"
+              color="#F4511E"
+              small
+            />
+          </View>
+          <Pressable onPress={() => router.push('/loyalty' as never)}>
+            <KpiTile
+              label="Points de fidelite"
+              value={stats?.loyalty?.points ?? 0}
+              icon="gift-outline"
+              color={colors.primary[600]}
+            />
+          </Pressable>
 
           {(stats?.recentParcels ?? []).length > 0 && (
             <Card>

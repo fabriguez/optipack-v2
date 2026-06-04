@@ -25,7 +25,17 @@ interface ProfileMe {
   idVerificationStatus?: 'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED' | null;
   idExpiryDate?: string | null;
   idRejectionReason?: string | null;
+  loyaltyTier?: 'STANDARD' | 'SILVER' | 'GOLD' | 'VIP' | null;
+  loyaltyPoints?: number;
+  isPartner?: boolean;
 }
+
+const TIER_LABEL: Record<string, string> = {
+  STANDARD: 'Standard',
+  SILVER: 'Argent',
+  GOLD: 'Or',
+  VIP: 'VIP',
+};
 
 async function pickImage(): Promise<ImagePicker.ImagePickerAsset | null> {
   try {
@@ -143,6 +153,38 @@ export default function ProfileTab() {
             {me?.phone && <Text style={{ fontSize: 12, color: colors.gray[400] }}>{me.phone}</Text>}
           </View>
         </View>
+      </Card>
+
+      <Card>
+        <CardHeader
+          title="Fidelite"
+          right={
+            <Badge variant={me?.isPartner ? 'success' : 'default'}>
+              {me?.isPartner ? 'Partenaire' : 'Non partenaire'}
+            </Badge>
+          }
+        />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm }}>
+          <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: colors.primary[50], alignItems: 'center', justifyContent: 'center' }}>
+            <Ionicons name="gift-outline" size={22} color={colors.primary[600]} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 20, fontWeight: '700', color: colors.gray[900] }}>
+              {me?.loyaltyPoints ?? 0} <Text style={{ fontSize: 13, color: colors.gray[500] }}>points</Text>
+            </Text>
+            <Text style={{ fontSize: 12, color: colors.gray[500] }}>
+              Palier {TIER_LABEL[me?.loyaltyTier ?? 'STANDARD'] ?? me?.loyaltyTier}
+            </Text>
+          </View>
+        </View>
+        <Pressable
+          onPress={() => router.push('/loyalty' as never)}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: spacing.sm, borderTopWidth: 1, borderTopColor: colors.gray[100] }}
+        >
+          <Ionicons name="swap-horizontal-outline" size={20} color={colors.gray[700]} />
+          <Text style={{ fontSize: 14, color: colors.gray[900], flex: 1 }}>Convertir mes points</Text>
+          <Ionicons name="chevron-forward" size={16} color={colors.gray[300]} />
+        </Pressable>
       </Card>
 
       <Card>

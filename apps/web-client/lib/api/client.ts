@@ -73,6 +73,9 @@ export interface ClientProfile {
   idExpiryDate: string | null;
   loyaltyTier: string | null;
   loyaltyPoints: number;
+  totalSpent?: number | string | null;
+  /** True si le client dispose d'une tarification partenaire dediee. */
+  isPartner?: boolean;
   notificationPrefs: NotificationPrefs | null;
   agency: { id: string; name: string; city: string; phone: string } | null;
 }

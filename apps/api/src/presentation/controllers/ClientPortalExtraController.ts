@@ -37,6 +37,7 @@ export class ClientPortalExtraController {
         openConversations,
         recentParcels,
         recentNotifications,
+        loyaltyClient,
       ] = await Promise.all([
         prisma.parcel.count({ where: baseParcels }),
         prisma.parcel.count({
@@ -104,6 +105,11 @@ export class ClientPortalExtraController {
             createdAt: true,
           },
         }),
+        // Points de fidelite + palier courant pour la carte stats dashboard.
+        prisma.client.findUnique({
+          where: { id: clientId },
+          select: { loyaltyPoints: true, loyaltyTier: true },
+        }),
       ]);
 
       const unpaidBalance = Number(unpaidAgg._sum.balance ?? 0);
@@ -125,6 +131,10 @@ export class ClientPortalExtraController {
           },
           debts: {
             remaining: debtsRemaining,
+          },
+          loyalty: {
+            points: loyaltyClient?.loyaltyPoints ?? 0,
+            tier: loyaltyClient?.loyaltyTier ?? 'STANDARD',
           },
           // Solde a payer consolide : factures impayees + dettes actives.
           balanceDue: unpaidBalance + debtsRemaining,
