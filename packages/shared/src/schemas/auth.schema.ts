@@ -1,7 +1,13 @@
 import { z } from 'zod';
 
+/**
+ * Login backoffice : accepte email OU telephone dans le champ `email`
+ * (legacy nommage). Validation lache : on accepte tout string non vide.
+ * La resolution email/telephone se fait cote API (LoginUseCase ->
+ * userRepo.findByIdentifier).
+ */
 export const loginSchema = z.object({
-  email: z.string().email('Email invalide'),
+  email: z.string().min(4, 'Telephone ou email requis'),
   password: z.string().min(8, 'Le mot de passe doit contenir au moins 8 caracteres'),
 });
 

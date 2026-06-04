@@ -13,6 +13,18 @@ export class PrismaUserRepository implements IUserRepository {
     return prisma.user.findUnique({ where: { email } });
   }
 
+  async findByIdentifier(identifier: string): Promise<User | null> {
+    const trimmed = identifier.trim();
+    if (trimmed.includes('@')) {
+      return prisma.user.findUnique({ where: { email: trimmed.toLowerCase() } });
+    }
+    // Recherche par telephone : champ non unique, on prend le plus recent actif.
+    return prisma.user.findFirst({
+      where: { phone: trimmed, isActive: true },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   async findByIdWithAgencies(id: string) {
     return prisma.user.findUnique({
       where: { id },

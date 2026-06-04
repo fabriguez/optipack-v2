@@ -129,9 +129,10 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
             <AppInput
-              label="Email"
-              type="email"
-              placeholder="votre@email.com"
+              label="Email ou telephone"
+              type="text"
+              autoComplete="username"
+              placeholder="votre@email.com  ou  +237 6XX XXX XXX"
               {...register('email')}
               error={errors.email?.message}
               disabled={loginMutation.isPending}

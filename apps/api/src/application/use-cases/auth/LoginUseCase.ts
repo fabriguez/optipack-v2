@@ -36,12 +36,14 @@ export class LoginUseCase {
   ) {}
 
   async execute(input: LoginInput): Promise<LoginResult> {
-    const user = await this.userRepo.findByIdWithAgencies(
-      (await this.userRepo.findByEmail(input.email))?.id ?? '',
-    );
+    // Accepte email OU telephone via findByIdentifier. Le champ legacy
+    // `email` du LoginInput contient l'identifiant brut, on garde la compat.
+    const identifier = (input as { email?: string; identifier?: string }).identifier ?? input.email ?? '';
+    const baseUser = await this.userRepo.findByIdentifier(identifier);
+    const user = baseUser ? await this.userRepo.findByIdWithAgencies(baseUser.id) : null;
 
     if (!user) {
-      throw new AuthenticationError('Email ou mot de passe incorrect');
+      throw new AuthenticationError('Identifiant ou mot de passe incorrect');
     }
 
     if (!user.isActive) {
@@ -50,7 +52,7 @@ export class LoginUseCase {
 
     const passwordValid = await bcrypt.compare(input.password, user.passwordHash);
     if (!passwordValid) {
-      throw new AuthenticationError('Email ou mot de passe incorrect');
+      throw new AuthenticationError('Identifiant ou mot de passe incorrect');
     }
 
     // Check 2FA
