@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { randomInt } from 'crypto';
+import type { Prisma } from '@prisma/client';
 import { config } from '../../config';
 import { prisma } from '../../config/database';
 import {
@@ -12,12 +13,82 @@ import {
 import { notificationService } from '../../application/services/notifications/NotificationService';
 import type { NotificationChannel } from '../../application/services/notifications/types';
 
+// Selection conteneur partagee : agences depart/arrivee + ETA, necessaires pour
+// le texte contextuel de statut cote portail mobile ("en transit de X vers Y",
+// "arrive a <agence>", "arrivee prevue : ...").
+const PORTAL_CONTAINER_SELECT = {
+  select: {
+    id: true,
+    designation: true,
+    estimatedArrivalDate: true,
+    departureAgency: { select: { id: true, name: true, city: true } },
+    arrivalAgency: { select: { id: true, name: true, city: true } },
+  },
+};
+
+// Vignette / galerie : images triees (primaire d'abord). Extrait pour reutiliser
+// avec `take: 1` cote liste (carte 30x30).
+const PORTAL_IMAGES_ARGS: Prisma.Parcel$imagesArgs = {
+  orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }],
+  select: { id: true, url: true, caption: true, isPrimary: true, sortOrder: true },
+};
+
+// Include detail colis portail : tout ce dont le mobile a besoin pour la galerie
+// d'images et le statut contextuel (magasin + agence, conteneur + agences,
+// route, agence destination, dates scalaires renvoyees d'office).
+const PORTAL_PARCEL_INCLUDE: Prisma.ParcelInclude = {
+  recipient: { select: { id: true, fullName: true, phone: true } },
+  warehouse: {
+    select: { id: true, name: true, agency: { select: { id: true, name: true } } },
+  },
+  container: PORTAL_CONTAINER_SELECT,
+  lastContainer: PORTAL_CONTAINER_SELECT,
+  transitRoute: {
+    select: { id: true, name: true, type: true, departureCity: true, arrivalCity: true },
+  },
+  destinationAgency: { select: { id: true, name: true, city: true } },
+  images: PORTAL_IMAGES_ARGS,
+};
+
 // OTP reset portail client : 10 min de validite, 5 tentatives max.
 const CLIENT_OTP_TTL_MS = 10 * 60 * 1000;
 const CLIENT_OTP_MAX_ATTEMPTS = 5;
 // Diffusion du code OTP : email + SMS + WhatsApp (jamais PUSH : l'utilisateur
 // n'est pas connecte et n'a pas forcement un appareil enregistre).
 const CLIENT_RESET_CHANNELS: NotificationChannel[] = ['EMAIL', 'SMS', 'WHATSAPP'];
+// Confirmation apres changement/reinitialisation du mot de passe client. Email +
+// SMS (l'user peut ne pas etre connecte). Best-effort, ne bloque jamais l'action.
+const CLIENT_PASSWORD_CHANGED_CHANNELS: NotificationChannel[] = ['EMAIL', 'SMS'];
+const CLIENT_PASSWORD_CHANGED_MESSAGE =
+  'Votre mot de passe vient d\'etre modifie avec succes. ' +
+  "Si vous n'etes pas a l'origine de cette action, contactez immediatement le support.";
+
+/** Notifie un client qu'un mot de passe a ete change. Best-effort. */
+async function notifyClientPasswordChanged(client: {
+  id: string;
+  email: string | null;
+  phone: string;
+  organizationId: string;
+}) {
+  try {
+    await notificationService.notify(
+      {
+        clientId: client.id,
+        email: client.email,
+        phone: client.phone,
+        organizationId: client.organizationId,
+      },
+      {
+        title: 'Mot de passe modifie',
+        message: CLIENT_PASSWORD_CHANGED_MESSAGE,
+        channels: CLIENT_PASSWORD_CHANGED_CHANNELS,
+        metadata: { kind: 'PASSWORD_CHANGED' },
+      },
+    );
+  } catch {
+    // best-effort : un echec d'envoi ne casse pas le changement de mot de passe.
+  }
+}
 
 /**
  * Normalise un numero de telephone pour le stockage / la comparaison.
@@ -474,6 +545,7 @@ export class ClientPortalController {
           data: { usedAt: new Date() },
         }),
       ]);
+      await notifyClientPasswordChanged(client);
       res.json({ success: true, data: { ok: true } });
     } catch (err) {
       next(err);
@@ -505,6 +577,7 @@ export class ClientPortalController {
           loyaltyPoints: true,
           totalSpent: true,
           isActive: true,
+          notificationPrefs: true,
           createdAt: true,
           agency: {
             select: {
@@ -522,6 +595,43 @@ export class ClientPortalController {
       }
 
       res.json({ success: true, data: client });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * POST /client-portal/me/password
+   * Change le mot de passe du client connecte. Verifie le mot de passe actuel
+   * avant de poser le nouveau (bcrypt). Min 6 caracteres.
+   */
+  static async changePassword(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { clientId } = req.clientPortal!;
+      const currentPassword = String(req.body?.currentPassword ?? '');
+      const newPassword = String(req.body?.newPassword ?? '');
+
+      if (newPassword.length < 6) {
+        throw new BusinessError('Le nouveau mot de passe doit faire au moins 6 caracteres');
+      }
+
+      const client = await prisma.client.findUnique({
+        where: { id: clientId },
+        select: { id: true, passwordHash: true, email: true, phone: true, organizationId: true },
+      });
+      if (!client?.passwordHash) {
+        throw new BusinessError('Aucun mot de passe defini sur ce compte');
+      }
+
+      const valid = await bcrypt.compare(currentPassword, client.passwordHash);
+      if (!valid) {
+        throw new BusinessError('Mot de passe actuel incorrect');
+      }
+
+      const passwordHash = await bcrypt.hash(newPassword, 10);
+      await prisma.client.update({ where: { id: clientId }, data: { passwordHash } });
+      await notifyClientPasswordChanged(client);
+      res.json({ success: true });
     } catch (err) {
       next(err);
     }
@@ -558,9 +668,9 @@ export class ClientPortalController {
           skip,
           take: limit,
           include: {
-            recipient: { select: { fullName: true, phone: true } },
-            warehouse: { select: { name: true } },
-            container: { select: { designation: true } },
+            ...PORTAL_PARCEL_INCLUDE,
+            // Liste : une seule image (vignette primaire) suffit pour la carte 30x30.
+            images: { ...PORTAL_IMAGES_ARGS, take: 1 },
           },
         }),
         prisma.parcel.count({ where }),
@@ -587,11 +697,7 @@ export class ClientPortalController {
 
       const parcel = await prisma.parcel.findUnique({
         where: { trackingNumber },
-        include: {
-          recipient: { select: { fullName: true, phone: true } },
-          warehouse: { select: { name: true } },
-          container: { select: { designation: true } },
-        },
+        include: PORTAL_PARCEL_INCLUDE,
       });
 
       if (!parcel || parcel.clientId !== clientId || parcel.isDeleted) {

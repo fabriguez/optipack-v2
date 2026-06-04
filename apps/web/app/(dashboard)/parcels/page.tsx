@@ -13,6 +13,7 @@ import { AppCard } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppDataTable } from '@/components/ui/AppDataTable';
 import { StatusBadge } from '@/components/shared/StatusBadge';
+import { ParcelStatusContext } from '@/components/shared/ParcelStatusContext';
 import { SearchBar } from '@/components/shared/SearchBar';
 import { FilterDialog } from '@/components/shared/FilterDialog';
 import { XlsxExportButton } from '@/components/shared/XlsxExportButton';
@@ -310,7 +311,12 @@ function ParcelsContent() {
     {
       key: 'status',
       label: 'Statut',
-      render: (row: any) => <StatusBadge status={row.status} type="parcel" />,
+      render: (row: any) => (
+        <div className="flex flex-col gap-1" onClick={(e) => e.stopPropagation()}>
+          <StatusBadge status={row.status} type="parcel" />
+          <ParcelStatusContext parcel={row} />
+        </div>
+      ),
     },
     {
       key: 'invoice',

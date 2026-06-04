@@ -5,6 +5,8 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { portalApi } from '@/lib/api/portal';
 import { Badge } from '@/components/ui/Badge';
+import { AuthedImage } from '@/components/ui/AuthedImage';
+import { ParcelStatusContext } from '@/components/parcel/ParcelStatusContext';
 import { parcelStatusLabel } from '@/lib/labels';
 import { colors, radius, spacing } from '@/lib/theme/colors';
 import { formatAmount } from '@transitsoftservices/shared';
@@ -86,12 +88,23 @@ export default function ParcelsTab() {
                 gap: 12,
               })}
             >
-              <View style={{ width: 42, height: 42, borderRadius: 12, backgroundColor: colors.primary[50], alignItems: 'center', justifyContent: 'center' }}>
-                <Ionicons name="cube-outline" size={20} color={colors.primary[600]} />
-              </View>
+              {p.images?.[0]?.url ? (
+                <AuthedImage
+                  uri={p.images[0].url}
+                  style={{ width: 30, height: 30, borderRadius: 8, backgroundColor: colors.gray[100] }}
+                  placeholderBg={colors.primary[50]}
+                />
+              ) : (
+                <View style={{ width: 30, height: 30, borderRadius: 8, backgroundColor: colors.primary[50], alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="cube-outline" size={16} color={colors.primary[600]} />
+                </View>
+              )}
               <View style={{ flex: 1 }}>
                 <Text style={{ fontSize: 13, fontWeight: '700', fontFamily: 'monospace', color: colors.primary[700] }}>{p.trackingNumber}</Text>
                 <Text style={{ fontSize: 13, color: colors.gray[700] }} numberOfLines={1}>{p.designation}</Text>
+                <View style={{ marginTop: 2 }}>
+                  <ParcelStatusContext parcel={p} compact />
+                </View>
                 {p.price != null && <Text style={{ fontSize: 11, color: colors.gray[500], marginTop: 2 }}>{formatAmount(Number(p.price))}</Text>}
               </View>
               <View style={{ alignItems: 'flex-end', gap: 4 }}>

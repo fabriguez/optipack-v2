@@ -12,6 +12,35 @@ const OTP_MAX_ATTEMPTS = 5; // au-dela, le code est invalide
 // Canaux par defaut pour un reset staff : email uniquement (pas d'IN_APP, l'user
 // n'est pas connecte). L'appelant peut surcharger (ex: ['EMAIL','SMS']).
 const DEFAULT_RESET_CHANNELS: NotificationChannel[] = ['EMAIL'];
+// Confirmation de changement/reinitialisation de mot de passe : envoyee a l'user
+// apres coup, par email (+ in-app si connecte). Best-effort, ne bloque jamais.
+const PASSWORD_CHANGED_CHANNELS: NotificationChannel[] = ['EMAIL'];
+const PASSWORD_CHANGED_TITLE = 'Mot de passe modifie';
+const PASSWORD_CHANGED_MESSAGE =
+  'Votre mot de passe vient d\'etre modifie avec succes. ' +
+  "Si vous n'etes pas a l'origine de cette action, contactez immediatement le support.";
+
+/** Notifie l'utilisateur qu'un mot de passe a ete change. Best-effort. */
+async function notifyPasswordChanged(user: {
+  id: string;
+  email: string;
+  phone: string | null;
+  organizationId: string;
+}) {
+  try {
+    await notificationService.notify(
+      { userId: user.id, email: user.email, phone: user.phone, organizationId: user.organizationId },
+      {
+        title: PASSWORD_CHANGED_TITLE,
+        message: PASSWORD_CHANGED_MESSAGE,
+        channels: PASSWORD_CHANGED_CHANNELS,
+        metadata: { kind: 'PASSWORD_CHANGED' },
+      },
+    );
+  } catch {
+    // best-effort : un echec d'envoi ne doit pas casser le changement de mot de passe.
+  }
+}
 
 /** Politique mot de passe alignee sur l'inscription : min 8, 1 majuscule, 1 chiffre. */
 function assertPasswordPolicy(pwd: string) {
@@ -46,6 +75,7 @@ export class ChangePasswordUseCase {
       // Invalider tous les refresh tokens : l'utilisateur sera deconnecte sur les autres appareils
       prisma.refreshToken.deleteMany({ where: { userId } }),
     ]);
+    await notifyPasswordChanged(user);
     return { ok: true };
   }
 }
@@ -145,6 +175,7 @@ export class ResetPasswordUseCase {
       }),
       prisma.refreshToken.deleteMany({ where: { userId: user.id } }),
     ]);
+    await notifyPasswordChanged(user);
     return { ok: true };
   }
 }

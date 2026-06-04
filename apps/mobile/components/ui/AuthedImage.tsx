@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Image, View, ActivityIndicator, type ImageStyle, type StyleProp } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import { storage, STORAGE_KEYS } from '@/lib/storage/storage';
+import { mediaUri } from '@/lib/media';
 import { colors } from '@/lib/theme/colors';
 
 /**
@@ -24,7 +25,9 @@ function pathToFilename(url: string): string {
   return url.replace(/[^a-zA-Z0-9.]/g, '_').slice(-180);
 }
 
-export function AuthedImage({ uri, style, placeholderBg }: Props) {
+export function AuthedImage({ uri: rawUri, style, placeholderBg }: Props) {
+  // Resout les URLs relatives (`/uploads/object/...`) en absolu avant fetch.
+  const uri = mediaUri(rawUri) ?? rawUri;
   const [localUri, setLocalUri] = useState<string | null>(() => cache.get(uri) ?? null);
   const [loading, setLoading] = useState(!cache.has(uri));
 
@@ -43,12 +46,20 @@ export function AuthedImage({ uri, style, placeholderBg }: Props) {
         const target = `${FileSystem.cacheDirectory}img_${pathToFilename(uri)}`;
         const headers: Record<string, string> = {};
         if (token) headers.Authorization = `Bearer ${token}`;
+        console.log('[AuthedImage] download start', {
+          rawUri,
+          uri,
+          hasToken: !!token,
+          target,
+        });
         const res = await FileSystem.downloadAsync(uri, target, { headers });
         if (cancelled) return;
+        console.log('[AuthedImage] download done', { uri, status: res.status, localUri: res.uri });
         if (res.status >= 400) throw new Error(`HTTP ${res.status}`);
         cache.set(uri, res.uri);
         setLocalUri(res.uri);
-      } catch {
+      } catch (err) {
+        console.warn('[AuthedImage] download FAIL', { rawUri, uri, error: String(err) });
         if (!cancelled) setLocalUri(null);
       } finally {
         if (!cancelled) setLoading(false);

@@ -101,3 +101,16 @@ export function parcelActionLabel(action?: string | null): string {
   }
   return PARCEL_ACTION_LABEL[action] ?? action.replace(/_/g, ' ').toLowerCase();
 }
+
+// Mouvements financiers d'un colis : type + libelle/icone/couleur.
+export const FINANCIAL_MOVEMENT_LABEL: Record<string, string> = {
+  TRANSPORT: 'Frais de transport',
+  STORAGE: 'Frais de magasinage',
+  PAYMENT: 'Paiement',
+  DISCOUNT: 'Remise',
+};
+
+export function financialMovementLabel(type?: string | null): string {
+  if (!type) return '—';
+  return FINANCIAL_MOVEMENT_LABEL[type] ?? type;
+}

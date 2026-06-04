@@ -112,6 +112,51 @@ export default function InvoiceDetail() {
             />
           </Card>
 
+          {Array.isArray(i.storageLines) && i.storageLines.length > 0 && (
+            <Card>
+              <CardHeader title="Frais de magasinage" subtitle={formatAmount(Number(i.fees?.storage ?? 0))} />
+              {i.storageLines.map((l: any) => (
+                <View key={l.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.gray[100] }}>
+                  <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: colors.primary[50], alignItems: 'center', justifyContent: 'center' }}>
+                    <Ionicons name="business-outline" size={16} color={colors.primary[600]} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: colors.gray[900] }} numberOfLines={1}>
+                      {l.warehouseName ?? 'Magasin'}
+                    </Text>
+                    <Text style={{ fontSize: 11, color: colors.gray[500] }} numberOfLines={1}>
+                      {l.parcelLabel ? `${l.parcelLabel} · ` : ''}{Number(l.chargedDays ?? 0)} j × {formatAmount(Number(l.dailyRate ?? 0))}
+                    </Text>
+                  </View>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: colors.gray[900] }}>{formatAmount(Number(l.feeAmount ?? 0))}</Text>
+                </View>
+              ))}
+            </Card>
+          )}
+
+          {Array.isArray(i.discounts) && i.discounts.length > 0 && (
+            <Card>
+              <CardHeader title="Remises sur facture" subtitle={`${i.discounts.length} remise${i.discounts.length > 1 ? 's' : ''}`} />
+              {i.discounts.map((d: any) => (
+                <View key={d.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.gray[100] }}>
+                  <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: colors.primary[50], alignItems: 'center', justifyContent: 'center' }}>
+                    <Ionicons name="pricetag-outline" size={16} color={colors.primary[600]} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: colors.gray[900] }} numberOfLines={2}>
+                      {d.reason ?? 'Remise'}
+                    </Text>
+                    <Text style={{ fontSize: 11, color: colors.gray[500] }}>
+                      {d.source === 'INVOICE' ? 'Facture' : 'Au paiement'}
+                      {d.date ? ` · ${String(d.date).slice(0, 16)}` : ''}
+                    </Text>
+                  </View>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: colors.primary[600] }}>- {formatAmount(Number(d.amount ?? 0))}</Text>
+                </View>
+              ))}
+            </Card>
+          )}
+
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <View style={{ flex: 1 }}>
               <Button variant="secondary" onPress={handleDownload}>

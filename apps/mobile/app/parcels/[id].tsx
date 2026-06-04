@@ -19,7 +19,8 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { StatusStepper } from '@/components/parcel/StatusStepper';
 import { ImageGallery } from '@/components/parcel/ImageGallery';
-import { parcelStatusLabel, invoiceStatusLabel, parcelActionLabel, paymentMethodLabel } from '@/lib/labels';
+import { ParcelStatusContext } from '@/components/parcel/ParcelStatusContext';
+import { parcelStatusLabel, invoiceStatusLabel, parcelActionLabel, paymentMethodLabel, financialMovementLabel } from '@/lib/labels';
 import { portalApi } from '@/lib/api/portal';
 import { apiClient } from '@/lib/api/client';
 import { downloadAndShare } from '@/lib/downloads';
@@ -75,6 +76,8 @@ export default function ParcelDetail() {
   const p = data?.data;
   const invoice = p?.invoice;
   const payments = p?.payments ?? [];
+  const fees = p?.fees;
+  const movements = p?.financialMovements ?? [];
   const remaining = invoice ? Number(invoice.balance ?? 0) : 0;
 
   const payMutation = useMutation({
@@ -176,6 +179,7 @@ export default function ParcelDetail() {
                 {parcelStatusLabel(p.status)}
               </Badge>
             </View>
+            <ParcelStatusContext parcel={p} />
           </Card>
 
           {/* Images galerie */}
@@ -189,6 +193,9 @@ export default function ParcelDetail() {
           {/* Stepper statut */}
           <Card>
             <CardHeader title="Suivi" subtitle="Etat d'avancement" />
+            <View style={{ marginBottom: 12 }}>
+              <ParcelStatusContext parcel={p} />
+            </View>
             <StatusStepper current={p.status} />
           </Card>
 
@@ -241,6 +248,11 @@ export default function ParcelDetail() {
                 }
               />
               <View style={{ gap: 6 }}>
+                <Row label="Frais de transport" value={fees ? formatAmount(Number(fees.transport ?? 0)) : null} />
+                <Row label="Frais de magasinage" value={fees ? formatAmount(Number(fees.storage ?? 0)) : null} />
+                {Number(fees?.discount ?? 0) > 0 && (
+                  <Row label="Remise sur facture" value={`- ${formatAmount(Number(fees!.discount))}`} />
+                )}
                 <Row label="Total" value={formatAmount(Number(invoice.totalAmount ?? 0))} />
                 <Row label="Paye" value={formatAmount(Number(invoice.paidAmount ?? 0))} />
                 <Row label="Restant" value={formatAmount(remaining)} />
@@ -279,6 +291,42 @@ export default function ParcelDetail() {
                     <Text style={{ fontSize: 14, fontWeight: '700', color: colors.gray[900] }}>{formatAmount(Number(pay.amount ?? 0))}</Text>
                   </View>
                 ))}
+              </View>
+            </Card>
+          )}
+
+          {/* Mouvements financiers du colis */}
+          {movements.length > 0 && (
+            <Card>
+              <CardHeader title="Mouvements financiers" subtitle={`${movements.length} mouvement${movements.length > 1 ? 's' : ''}`} />
+              <View style={{ gap: 10 }}>
+                {movements.map((m: any) => {
+                  const credit = m.direction === 'credit';
+                  const icon =
+                    m.type === 'PAYMENT' ? 'cash-outline'
+                    : m.type === 'DISCOUNT' ? 'pricetag-outline'
+                    : m.type === 'STORAGE' ? 'business-outline'
+                    : 'cube-outline';
+                  return (
+                    <View key={m.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.gray[100] }}>
+                      <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: credit ? colors.primary[50] : colors.gray[100], alignItems: 'center', justifyContent: 'center' }}>
+                        <Ionicons name={icon as any} size={16} color={credit ? colors.primary[600] : colors.gray[500]} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 13, color: colors.gray[900], fontWeight: '600' }}>
+                          {financialMovementLabel(m.type)}
+                        </Text>
+                        <Text style={{ fontSize: 11, color: colors.gray[500] }}>
+                          {(m.type === 'PAYMENT' ? paymentMethodLabel(m.label) : m.label) ?? ''}
+                          {m.date ? ` · ${String(m.date).slice(0, 16)}` : ''}
+                        </Text>
+                      </View>
+                      <Text style={{ fontSize: 14, fontWeight: '700', color: credit ? colors.primary[600] : colors.gray[900] }}>
+                        {credit ? '- ' : '+ '}{formatAmount(Number(m.amount ?? 0))}
+                      </Text>
+                    </View>
+                  );
+                })}
               </View>
             </Card>
           )}

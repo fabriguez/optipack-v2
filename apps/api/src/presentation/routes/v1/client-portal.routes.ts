@@ -35,6 +35,41 @@ router.post('/reset-password', resetPasswordLimiter, ClientPortalController.rese
 router.get('/me', authenticateClient, ClientPortalController.me);
 router.patch('/me', authenticateClient, ClientPortalKycController.updateProfile);
 router.post('/me/upload', authenticateClient, kycUpload, ClientPortalKycController.uploadDocument);
+router.post('/me/password', authenticateClient, ClientPortalController.changePassword);
+
+// Preferences notification du client (memes semantiques que User.notificationPrefs :
+// map { [eventKind]: { channels: [...] } }). Lecture/ecriture du compte connecte.
+router.get('/me/notification-prefs', authenticateClient, async (req, res, next) => {
+  try {
+    const { prisma } = await import('../../../config/database');
+    const { clientId } = req.clientPortal!;
+    const client = await prisma.client.findUnique({
+      where: { id: clientId },
+      select: { notificationPrefs: true },
+    });
+    res.json({ success: true, data: client?.notificationPrefs ?? {} });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put('/me/notification-prefs', authenticateClient, async (req, res, next) => {
+  try {
+    const body = req.body;
+    if (body == null || typeof body !== 'object' || Array.isArray(body)) {
+      return res.status(400).json({ success: false, message: 'Format invalide' });
+    }
+    const { prisma } = await import('../../../config/database');
+    const { clientId } = req.clientPortal!;
+    await prisma.client.update({
+      where: { id: clientId },
+      data: { notificationPrefs: body },
+    });
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
 
 // PDF downloads (client portal): proxy vers PDFService avec verif appartenance.
 router.get('/parcels/:tracking/label', authenticateClient, async (req, res, next) => {
@@ -115,7 +150,15 @@ router.get('/invoices/:id', authenticateClient, async (req, res, next) => {
         },
         payments: {
           where: { isVoided: false },
-          select: { id: true, reference: true, amount: true, paymentMethod: true, createdAt: true },
+          select: {
+            id: true,
+            reference: true,
+            amount: true,
+            discount: true,
+            discountReason: true,
+            paymentMethod: true,
+            createdAt: true,
+          },
           orderBy: { createdAt: 'desc' },
         },
       },
@@ -134,6 +177,9 @@ router.get('/invoices/:id', authenticateClient, async (req, res, next) => {
       (sum, p) => sum + Number(p.price ?? 0),
       0,
     );
+    const parcelLabelById = new Map(
+      invoice.parcels.map((p) => [p.id, p.designation ?? p.trackingNumber]),
+    );
     const parcelsWithFees = invoice.parcels.map((p) => {
       const s = storage.perParcel.get(p.id);
       return {
@@ -145,11 +191,56 @@ router.get('/invoices/:id', authenticateClient, async (req, res, next) => {
       };
     });
 
+    // Section magasinage detaillee : une ligne par (colis / magasin / periode)
+    // facturable. Permet d'expliquer le montant total des frais de stockage.
+    const storageLines = invoice.parcels.flatMap((p) => {
+      const s = storage.perParcel.get(p.id);
+      return (s?.lines ?? [])
+        .filter((l) => l.feeAmount > 0)
+        .map((l) => ({
+          ...l,
+          parcelId: p.id,
+          parcelLabel: parcelLabelById.get(p.id) ?? null,
+        }));
+    });
+
+    // Section remises : remise globale facture + remises ponctuelles saisies
+    // sur chaque paiement (Payment.discount + discountReason).
+    const discounts: Array<{
+      id: string;
+      amount: number;
+      reason: string | null;
+      source: 'INVOICE' | 'PAYMENT';
+      date: Date | null;
+    }> = [];
+    if (Number(invoice.discount ?? 0) > 0) {
+      discounts.push({
+        id: `invoice-${invoice.id}`,
+        amount: Number(invoice.discount),
+        reason: 'Remise sur facture',
+        source: 'INVOICE',
+        date: invoice.createdAt ?? null,
+      });
+    }
+    for (const pay of invoice.payments) {
+      if (Number(pay.discount ?? 0) > 0) {
+        discounts.push({
+          id: `payment-${pay.id}`,
+          amount: Number(pay.discount),
+          reason: pay.discountReason ?? 'Remise au paiement',
+          source: 'PAYMENT',
+          date: pay.createdAt,
+        });
+      }
+    }
+
     res.json({
       success: true,
       data: {
         ...invoice,
         parcels: parcelsWithFees,
+        storageLines,
+        discounts,
         // Recapitulatif des frais et reglements pour la gestion des paiements.
         fees: {
           transport: transportFeesTotal,

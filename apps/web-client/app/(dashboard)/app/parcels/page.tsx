@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { Search, Package, PlusCircle, Loader2 } from 'lucide-react';
+import { Search, Package, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import { portalApi } from '@/lib/api/client';
 
@@ -67,13 +67,6 @@ export default function ParcelsPage() {
             Retrouvez l'historique et l'etat de tous vos envois.
           </p>
         </div>
-        <Link
-          href="/app/new"
-          className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold skin-btn-primary"
-        >
-          <PlusCircle className="h-4 w-4" />
-          Nouvel envoi
-        </Link>
       </motion.div>
 
       <div className="flex flex-wrap items-end gap-3">

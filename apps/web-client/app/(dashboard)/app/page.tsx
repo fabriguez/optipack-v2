@@ -10,7 +10,6 @@ import {
   Warehouse,
   Wallet,
   ArrowRight,
-  PlusCircle,
   Bell,
 } from 'lucide-react';
 import { formatAmount } from '@transitsoftservices/shared';
@@ -101,13 +100,6 @@ export default function DashboardHome() {
             Voici un apercu de vos envois en cours.
           </p>
         </div>
-        <Link
-          href="/app/new"
-          className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold skin-btn-primary"
-        >
-          <PlusCircle className="h-4 w-4" />
-          Nouvel envoi
-        </Link>
       </motion.div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -316,15 +308,8 @@ function EmptyParcels() {
         Aucun colis pour le moment.
       </p>
       <p className="mt-1 text-xs" style={{ color: 'var(--skin-muted)' }}>
-        Declarez votre premier envoi en moins d'une minute.
+        Vos envois apparaitront ici des qu&apos;ils seront enregistres par votre agence.
       </p>
-      <Link
-        href="/app/new"
-        className="mt-4 inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold skin-btn-primary"
-      >
-        <PlusCircle className="h-4 w-4" />
-        Nouvel envoi
-      </Link>
     </div>
   );
 }

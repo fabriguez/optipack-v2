@@ -212,6 +212,9 @@ export class ClientPortalExtraController {
               paidAmount: true,
               balance: true,
               status: true,
+              discount: true,
+              tva: true,
+              netAmount: true,
             },
           },
           payments: {
@@ -220,6 +223,8 @@ export class ClientPortalExtraController {
               id: true,
               reference: true,
               amount: true,
+              discount: true,
+              discountReason: true,
               paymentMethod: true,
               createdAt: true,
             },
@@ -252,7 +257,91 @@ export class ClientPortalExtraController {
         throw new NotFoundError('Colis', trackingNumber);
       }
 
-      res.json({ success: true, data: parcel });
+      // Frais de magasinage live + lignes detaillees (magasin / phase / periode)
+      // pour ce colis. Source de verite : ParcelStorageCharge.
+      const { computeStorageFeesForParcels } = await import(
+        '../routes/v1/invoice.routes'
+      );
+      const storage = await computeStorageFeesForParcels([parcel.id]);
+      const s = storage.perParcel.get(parcel.id);
+      const storageLines = (s?.lines ?? []).filter((l) => l.feeAmount > 0);
+
+      const transportFee = Number(parcel.price ?? 0);
+      const storageFee = Number(s?.fee ?? 0);
+      const invoiceDiscount = Number(parcel.invoice?.discount ?? 0);
+
+      // Mouvements financiers du colis : tous les flux (debits = frais,
+      // credits = paiements / remises) sur une timeline unique triee.
+      type Movement = {
+        id: string;
+        type: 'TRANSPORT' | 'STORAGE' | 'PAYMENT' | 'DISCOUNT';
+        amount: number;
+        direction: 'debit' | 'credit';
+        date: Date;
+        label: string | null;
+        reference: string | null;
+      };
+      const movements: Movement[] = [];
+
+      if (transportFee > 0) {
+        movements.push({
+          id: `transport-${parcel.id}`,
+          type: 'TRANSPORT',
+          amount: transportFee,
+          direction: 'debit',
+          date: parcel.createdAt,
+          label: 'Frais de transport',
+          reference: null,
+        });
+      }
+      for (const l of storageLines) {
+        movements.push({
+          id: `storage-${l.id}`,
+          type: 'STORAGE',
+          amount: Number(l.feeAmount),
+          direction: 'debit',
+          date: l.endedAt ?? l.stoppedAt ?? l.startedAt,
+          label: l.warehouseName ?? 'Magasinage',
+          reference: null,
+        });
+      }
+      for (const pay of parcel.payments) {
+        movements.push({
+          id: pay.id,
+          type: 'PAYMENT',
+          amount: Number(pay.amount ?? 0),
+          direction: 'credit',
+          date: pay.createdAt,
+          label: pay.paymentMethod,
+          reference: pay.reference,
+        });
+        if (Number(pay.discount ?? 0) > 0) {
+          movements.push({
+            id: `discount-${pay.id}`,
+            type: 'DISCOUNT',
+            amount: Number(pay.discount),
+            direction: 'credit',
+            date: pay.createdAt,
+            label: pay.discountReason ?? 'Remise',
+            reference: null,
+          });
+        }
+      }
+      movements.sort((a, b) => a.date.getTime() - b.date.getTime());
+
+      res.json({
+        success: true,
+        data: {
+          ...parcel,
+          fees: {
+            transport: transportFee,
+            storage: storageFee,
+            discount: invoiceDiscount,
+          },
+          storageLines,
+          financialMovements: movements,
+        },
+      });
     } catch (err) {
       next(err);
     }

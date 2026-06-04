@@ -57,6 +57,26 @@ export interface LoginResponse {
   };
 }
 
+export type NotificationChannel = 'IN_APP' | 'EMAIL' | 'SMS' | 'PUSH';
+/** Map { [eventKind]: { channels: [...] } } — meme forme que cote API. */
+export type NotificationPrefs = Record<string, { channels: NotificationChannel[] }>;
+
+export interface ClientProfile {
+  id: string;
+  fullName: string;
+  phone: string;
+  email: string | null;
+  idNumber: string | null;
+  imageUrl: string | null;
+  address: string | null;
+  idVerificationStatus: 'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED' | null;
+  idExpiryDate: string | null;
+  loyaltyTier: string | null;
+  loyaltyPoints: number;
+  notificationPrefs: NotificationPrefs | null;
+  agency: { id: string; name: string; city: string; phone: string } | null;
+}
+
 export interface RegisterPayload {
   fullName: string;
   phone: string;
@@ -117,6 +137,36 @@ export const portalApi = {
     apiClient
       .post('/client-portal/reset-password', payload)
       .then((r) => r.data.data),
+
+  // ---- Profil ----
+  getMe: (): Promise<ClientProfile> =>
+    apiClient.get('/client-portal/me').then((r) => r.data.data),
+
+  // email exclu volontairement : non modifiable cote portail client.
+  updateProfile: (payload: { fullName?: string; phone?: string; address?: string }) =>
+    apiClient.patch('/client-portal/me', payload).then((r) => r.data.data),
+
+  uploadAvatar: (file: File): Promise<{ url: string; key: string; slot: string }> => {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('slot', 'avatar');
+    return apiClient
+      .post('/client-portal/me/upload', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      .then((r) => r.data.data);
+  },
+
+  changePassword: (currentPassword: string, newPassword: string) =>
+    apiClient
+      .post('/client-portal/me/password', { currentPassword, newPassword })
+      .then((r) => r.data),
+
+  getNotificationPrefs: (): Promise<NotificationPrefs> =>
+    apiClient.get('/client-portal/me/notification-prefs').then((r) => r.data.data),
+
+  updateNotificationPrefs: (prefs: NotificationPrefs) =>
+    apiClient.put('/client-portal/me/notification-prefs', prefs).then((r) => r.data),
 
   getDashboard: () =>
     apiClient.get('/client-portal/dashboard').then((r) => r.data.data),
