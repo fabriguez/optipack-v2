@@ -1196,6 +1196,8 @@ export class PDFService {
   static async generateLabelPDF(
     parcel: {
       trackingNumber: string;
+      // Tracking fournisseur externe (AliExpress, DHL, etc.) -- optionnel.
+      trackingFournisseur?: string | null;
       designation: string;
       weight?: number | null;
       volume?: number | null;
@@ -1330,6 +1332,9 @@ export class PDFService {
     let y = topOffset + 162;
     const lines: [string, string][] = [
       ['Designation', parcel.designation],
+      ...(parcel.trackingFournisseur
+        ? ([['Tracking fourn.', parcel.trackingFournisseur]] as [string, string][])
+        : []),
       ['Pesee', pv],
       ['Origine', parcel.origin || parcel.agencyName || '-'],
       ['Destination', parcel.destination],

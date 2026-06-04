@@ -95,6 +95,7 @@ router.get('/parcels/:tracking/label', authenticateClient, async (req, res, next
     const pdf = await PDFService.generateLabelPDF(
       {
         trackingNumber: parcel.trackingNumber,
+        trackingFournisseur: parcel.trackingFournisseur ?? null,
         designation: parcel.designation,
         weight: parcel.weight ? Number(parcel.weight) : null,
         volume: parcel.volume ? Number(parcel.volume) : null,

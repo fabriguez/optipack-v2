@@ -101,6 +101,7 @@ router.get('/:id/label', async (req, res, next) => {
     const labelBuffer = await PDFService.generateLabelPDF(
       {
         trackingNumber: parcel.trackingNumber,
+        trackingFournisseur: parcel.trackingFournisseur ?? null,
         designation: parcel.designation,
         weight: parcel.weight ? Number(parcel.weight) : null,
         volume: parcel.volume ? Number(parcel.volume) : null,
