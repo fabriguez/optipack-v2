@@ -45,6 +45,34 @@ export function authenticate(req: Request, _res: Response, next: NextFunction): 
   }
 }
 
+/**
+ * Authentifie un token STAFF *ou* CLIENT-PORTAL (meme secret JWT). Sert aux
+ * routes en lecture partagees entre le back-office et le portail client mobile,
+ * typiquement la lecture des objets uploades (`GET /uploads/object/*`) : les
+ * deux portails utilisent AuthedImage (fetch + Bearer), mais le token client n'a
+ * ni role ni organizationId. On peuple `req.user` pour un staff, `req.clientPortal`
+ * pour un client. Ne PAS utiliser sur des routes d'ecriture / sensibles.
+ */
+export function authenticateUserOrClient(req: Request, _res: Response, next: NextFunction): void {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
+    return next(new AuthenticationError());
+  }
+  const token = authHeader.substring(7);
+  try {
+    const payload = jwt.verify(token, config.jwt.secret) as JwtPayload & { type?: string };
+    if (payload?.type === 'client') {
+      // Token portail client : pas de role/org, on l'expose via req.clientPortal.
+      (req as { clientPortal?: unknown }).clientPortal = payload;
+    } else {
+      req.user = payload;
+    }
+    next();
+  } catch {
+    next(new AuthenticationError('Token invalide ou expire'));
+  }
+}
+
 export function authorize(...roles: string[]) {
   return (req: Request, _res: Response, next: NextFunction): void => {
     if (!req.user) {

@@ -1,22 +1,21 @@
 import { Router } from 'express';
 import { UploadController } from '../../controllers/UploadController';
-import { authenticate } from '../../middleware/authMiddleware';
+import { authenticate, authenticateUserOrClient } from '../../middleware/authMiddleware';
 import { uploadImageMiddleware, uploadDocumentMiddleware } from '../../middleware/upload';
 
 const router = Router();
 
-// Toutes les routes uploads necessitent un Bearer token. Le frontend utilise
-// AuthedImage / AuthedDownload qui fetch en Authorization: Bearer <token>
-// puis creent un blob URL.
-router.use(authenticate);
-
 // Sert les objets uploades. Le `*` est obligatoire car la cle MinIO contient
 // des slashes : req.params[0] = la cle complete (ex: "uploads/<userId>/<rand>.jpg").
-router.get('/object/*', UploadController.getObject);
+// Lecture accessible au STAFF *et* au portail client (le mobile affiche les
+// photos de colis via AuthedImage avec son token client). Le prefixe `uploads/`
+// reste verifie dans le controller pour borner l'acces au bucket.
+router.get('/object/*', authenticateUserOrClient, UploadController.getObject);
 
+// Ecritures : staff uniquement (Bearer token back-office).
 // Upload generique (recus, justificatifs, preuves de paiement, photos colis, ...)
-router.post('/image', uploadImageMiddleware, UploadController.uploadImage);
+router.post('/image', authenticate, uploadImageMiddleware, UploadController.uploadImage);
 // Upload generique de fichier (PDF, XLSX, Word, ...)
-router.post('/file', uploadDocumentMiddleware, UploadController.uploadFile);
+router.post('/file', authenticate, uploadDocumentMiddleware, UploadController.uploadFile);
 
 export default router;
