@@ -1,7 +1,52 @@
 import { useState } from 'react';
-import { View, Text } from 'react-native';
+import { View, Text, Image } from 'react-native';
 import PhoneInput, { type ICountry } from 'react-native-international-phone-number';
 import { colors, radius, spacing } from '@/lib/theme/colors';
+
+/**
+ * Drapeau PNG haute resolution depuis flagcdn.com (parite avec web).
+ * Evite les emojis qui ne sont pas rendus uniformement entre OS Android/iOS.
+ */
+function FlagImage({ country, size = 26 }: { country: ICountry; size?: number }) {
+  const code = country.cca2?.toLowerCase();
+  if (!code) return null;
+  return (
+    <Image
+      source={{
+        uri: `https://flagcdn.com/w80/${code}.png`,
+      }}
+      style={{ width: size, height: Math.round(size * 0.73), borderRadius: 2, marginLeft: 4 }}
+      resizeMode="cover"
+    />
+  );
+}
+
+/** Item utilise dans la liste du modal de selection pays : drapeau image
+ *  + indicatif + nom de pays. Remplace le rendu par defaut a base d'emoji. */
+function ModalCountryItem({ country }: { country: ICountry }) {
+  const name =
+    typeof country.name === 'string'
+      ? country.name
+      : (country.name as any)?.common ?? country.cca2 ?? '';
+  const callingCode = `${country.idd?.root ?? ''}${country.idd?.suffixes?.[0] ?? ''}`;
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+      }}
+    >
+      <FlagImage country={country} size={28} />
+      <Text style={{ flex: 1, fontSize: 14, color: colors.gray[900] }}>{name}</Text>
+      {!!callingCode && (
+        <Text style={{ fontSize: 13, color: colors.gray[500] }}>{callingCode}</Text>
+      )}
+    </View>
+  );
+}
 
 interface AppPhoneInputProps {
   label?: string;
@@ -60,6 +105,8 @@ export function AppPhoneInput({
           onChange(buildFull(newCc, national));
         }}
         disabled={disabled}
+        customFlag={(country: ICountry) => <FlagImage country={country} />}
+        modalCountryItemComponent={(country: ICountry) => <ModalCountryItem country={country} />}
         phoneInputStyles={{
           container: {
             height: 48,
