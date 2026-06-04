@@ -194,6 +194,11 @@ export class ClientPortalExtraController {
               id: true,
               designation: true,
               status: true,
+              estimatedArrivalDate: true,
+              // Agences depart/arrivee du conteneur : affichage du contexte
+              // statut ("en transit de X vers Y", "arrive a Y") cote app.
+              departureAgency: { select: { id: true, name: true, city: true } },
+              arrivalAgency: { select: { id: true, name: true, city: true } },
               transitRoute: {
                 select: {
                   id: true,
@@ -203,6 +208,19 @@ export class ClientPortalExtraController {
                   type: true,
                 },
               },
+            },
+          },
+          // Apres arrivee/dechargement, le colis peut etre detache du conteneur
+          // courant -> on garde lastContainer pour conserver le contexte
+          // "arrive a <agence>".
+          lastContainer: {
+            select: {
+              id: true,
+              designation: true,
+              status: true,
+              estimatedArrivalDate: true,
+              departureAgency: { select: { id: true, name: true, city: true } },
+              arrivalAgency: { select: { id: true, name: true, city: true } },
             },
           },
           transitRoute: {
