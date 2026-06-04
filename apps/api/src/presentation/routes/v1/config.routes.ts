@@ -6,22 +6,26 @@ import { DebtBlockConfigService } from '../../../application/services/DebtBlockC
 
 const router = Router();
 
-router.use(authenticate);
-router.use(authorize('SUPER_ADMIN', 'ADMIN'));
+// IMPORTANT : ce router est monte a la RACINE de l'API (`router.use(configRoutes)`),
+// donc tout `router.use(mw)` global ici s'appliquerait AUSSI aux requetes des
+// routers montes apres (uploads, exports, imports) qui le traversent — ce qui
+// renvoyait un 403 admin-only sur GET /uploads/object/* pour les tokens client
+// (portail web/mobile). On applique donc les gardes PAR ROUTE, jamais en global.
+const adminOnly = [authenticate, authorize('SUPER_ADMIN', 'ADMIN')];
 
 // System Config
-router.get('/config', ConfigController.listConfigs);
-router.put('/config/:key', ConfigController.updateConfig);
+router.get('/config', adminOnly, ConfigController.listConfigs);
+router.put('/config/:key', adminOnly, ConfigController.updateConfig);
 
 // Debt block config (handover + shipment) — auto-seed defaults au 1er read.
-router.get('/config/debt-block', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/config/debt-block', adminOnly, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const svc = container.resolve(DebtBlockConfigService);
     const cfg = await svc.get(req.user!.organizationId);
     res.json({ success: true, data: cfg });
   } catch (err) { next(err); }
 });
-router.patch('/config/debt-block', async (req: Request, res: Response, next: NextFunction) => {
+router.patch('/config/debt-block', adminOnly, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const svc = container.resolve(DebtBlockConfigService);
     const patch = req.body as Record<string, unknown>;
@@ -36,9 +40,9 @@ router.patch('/config/debt-block', async (req: Request, res: Response, next: Nex
 });
 
 // Currencies
-router.get('/currencies', ConfigController.listCurrencies);
-router.post('/currencies', ConfigController.createCurrency);
-router.patch('/currencies/:id', ConfigController.updateCurrency);
-router.delete('/currencies/:id', ConfigController.deleteCurrency);
+router.get('/currencies', adminOnly, ConfigController.listCurrencies);
+router.post('/currencies', adminOnly, ConfigController.createCurrency);
+router.patch('/currencies/:id', adminOnly, ConfigController.updateCurrency);
+router.delete('/currencies/:id', adminOnly, ConfigController.deleteCurrency);
 
 export default router;

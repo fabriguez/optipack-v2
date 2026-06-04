@@ -46,20 +46,12 @@ export function AuthedImage({ uri: rawUri, style, placeholderBg }: Props) {
         const target = `${FileSystem.cacheDirectory}img_${pathToFilename(uri)}`;
         const headers: Record<string, string> = {};
         if (token) headers.Authorization = `Bearer ${token}`;
-        console.log('[AuthedImage] download start', {
-          rawUri,
-          uri,
-          hasToken: !!token,
-          target,
-        });
         const res = await FileSystem.downloadAsync(uri, target, { headers });
         if (cancelled) return;
-        console.log('[AuthedImage] download done', { uri, status: res.status, localUri: res.uri });
         if (res.status >= 400) throw new Error(`HTTP ${res.status}`);
         cache.set(uri, res.uri);
         setLocalUri(res.uri);
-      } catch (err) {
-        console.warn('[AuthedImage] download FAIL', { rawUri, uri, error: String(err) });
+      } catch {
         if (!cancelled) setLocalUri(null);
       } finally {
         if (!cancelled) setLoading(false);
