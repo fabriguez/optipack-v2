@@ -32,4 +32,7 @@ export const STORAGE_KEYS = {
   queryCache: 'queryCache.v1',
   offlineQueue: 'offlineQueue.v1',
   pushToken: 'pushToken',
+  // URI du dossier public (SAF) choisi une fois par l'utilisateur sur Android
+  // pour y deposer les telechargements (PDF). Reutilise sans re-demander.
+  downloadDirUri: 'downloadDirUri',
 } as const;

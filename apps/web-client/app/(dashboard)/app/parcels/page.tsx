@@ -156,7 +156,7 @@ export default function ParcelsPage() {
               return (
                 <li key={p.id}>
                   <Link
-                    href={`/track/${p.trackingNumber}`}
+                    href={`/app/parcels/${p.trackingNumber}`}
                     className="flex items-center justify-between px-5 py-4 transition-colors hover:bg-black/[0.02]"
                   >
                     <div className="min-w-0">

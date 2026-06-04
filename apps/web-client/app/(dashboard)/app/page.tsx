@@ -63,6 +63,11 @@ export default function DashboardHome() {
     queryKey: ['portal', 'dashboard'],
     queryFn: () => portalApi.getDashboard(),
   });
+  const { data: me } = useQuery({
+    queryKey: ['portal', 'me'],
+    queryFn: () => portalApi.getMe(),
+  });
+  const firstName = me?.fullName?.trim().split(/\s+/)[0];
 
   const cards = [
     { label: 'Total colis', value: data.parcels.total, Icon: Package },
@@ -94,7 +99,7 @@ export default function DashboardHome() {
             className="mt-1 text-3xl font-bold tracking-tight skin-font-heading"
             style={{ color: 'var(--skin-foreground)' }}
           >
-            Bonjour, content de vous revoir.
+            Bonjour{firstName ? ` ${firstName}` : ''}, content de vous revoir.
           </h1>
           <p className="mt-1 text-sm" style={{ color: 'var(--skin-muted)' }}>
             Voici un apercu de vos envois en cours.
@@ -179,7 +184,11 @@ function RecentParcels({
       {parcels && parcels.length > 0 ? (
         <ul className="mt-4 divide-y" style={{ borderColor: 'var(--skin-border)' }}>
           {parcels.map((p) => (
-            <li key={p.id} className="flex items-center justify-between py-3">
+            <li key={p.id}>
+              <Link
+                href={`/app/parcels/${p.trackingNumber}`}
+                className="flex items-center justify-between py-3 transition-colors hover:bg-black/2"
+              >
               <div className="min-w-0">
                 <p
                   className="truncate text-sm font-semibold"
@@ -201,6 +210,7 @@ function RecentParcels({
               >
                 {p.status}
               </span>
+              </Link>
             </li>
           ))}
         </ul>

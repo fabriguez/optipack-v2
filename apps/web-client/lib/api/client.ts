@@ -204,6 +204,22 @@ export const portalApi = {
       .get(`/client-portal/parcels/${tracking}`)
       .then((r) => r.data.data),
 
+  /** Telecharge le ticket/etiquette d'un colis (ouvre dans un nouvel onglet). */
+  downloadParcelLabel: (tracking: string) =>
+    downloadPdf(
+      `/client-portal/parcels/${encodeURIComponent(tracking)}/label`,
+      `ticket-${tracking}.pdf`,
+    ),
+
+  /** Declare un paiement (l'agence valide ensuite). */
+  declarePayment: (payload: { invoiceId: string; amount: number; paymentMethod?: string }) =>
+    apiClient
+      .post('/client-portal/payments/declare', {
+        paymentMethod: 'MOBILE_MONEY',
+        ...payload,
+      })
+      .then((r) => r.data.data),
+
   registerParcel: (payload: {
     description: string;
     weight: number;
