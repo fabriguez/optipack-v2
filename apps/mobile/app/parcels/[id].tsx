@@ -199,16 +199,24 @@ export default function ParcelDetail() {
             <StatusStepper current={p.status} />
           </Card>
 
-          {/* Agences depart + destination */}
-          {(p.warehouse?.agency || p.destinationAgency) && (
+          {/* Agences depart + destination.
+              En transit / arrive, le colis est detache du magasin (warehouse
+              null) -> on retombe sur les agences du conteneur pour ne pas
+              perdre l'agence de depart. */}
+          {(() => {
+            const ct = p.container ?? p.lastContainer;
+            const departAgency = p.warehouse?.agency ?? ct?.departureAgency ?? null;
+            const destAgency = p.destinationAgency ?? ct?.arrivalAgency ?? null;
+            if (!departAgency && !destAgency) return null;
+            return (
             <Card>
               <CardHeader title="Trajet" />
               <View style={{ gap: 10 }}>
-                <AgencyBlock title="Depart" agency={p.warehouse?.agency} />
+                <AgencyBlock title="Depart" agency={departAgency} />
                 <View style={{ alignItems: 'center', paddingVertical: 2 }}>
                   <Ionicons name="arrow-down" size={18} color={colors.gray[400]} />
                 </View>
-                <AgencyBlock title="Destination" agency={p.destinationAgency} />
+                <AgencyBlock title="Destination" agency={destAgency} />
               </View>
               {p.transitRoute && (
                 <View style={{ marginTop: 10, padding: spacing.md, backgroundColor: colors.primary[50], borderRadius: radius.md }}>
@@ -220,7 +228,8 @@ export default function ParcelDetail() {
                 </View>
               )}
             </Card>
-          )}
+            );
+          })()}
 
           {/* Caracteristiques */}
           <Card>

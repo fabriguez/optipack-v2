@@ -42,7 +42,7 @@ export default function ProfileEditScreen() {
   });
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: 'transparent' }}>
+    <View style={{ flex: 1, backgroundColor: 'transparent' }}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={{ flexDirection: 'row', alignItems: 'center', padding: spacing.lg, gap: 12 }}>
           <Pressable onPress={() => router.back()} hitSlop={10}>
@@ -64,6 +64,6 @@ export default function ProfileEditScreen() {
           </Button>
         </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 }

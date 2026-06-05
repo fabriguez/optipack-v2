@@ -1,7 +1,19 @@
 import { Router } from 'express';
+import { container } from '../../../container';
 import { prisma } from '../../../config/database';
+import { StorageService } from '../../../infrastructure/storage/StorageService';
 
 const router = Router();
+
+/**
+ * Reecrit l'imageUrl agence (qui pointe vers l'endpoint PROTEGE
+ * `/api/v1/agencies/:id/image`) vers l'endpoint PUBLIC equivalent, afin que les
+ * pages vitrine (sans token) puissent afficher l'image via un simple <img>.
+ */
+function toPublicImageUrl(imageUrl: string | null): string | null {
+  if (!imageUrl) return null;
+  return imageUrl.replace('/api/v1/agencies/', '/api/v1/public/agencies/');
+}
 
 /**
  * Endpoints PUBLICS (sans auth) pour le listing des agences sur le site
@@ -35,7 +47,10 @@ router.get('/agencies', async (_req, res, next) => {
       orderBy: [{ city: 'asc' }, { name: 'asc' }],
     });
 
-    res.json({ success: true, data: agencies });
+    res.json({
+      success: true,
+      data: agencies.map((a) => ({ ...a, imageUrl: toPublicImageUrl(a.imageUrl) })),
+    });
   } catch (err) {
     next(err);
   }
@@ -77,7 +92,39 @@ router.get('/agencies/:id', async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Agence introuvable' });
     }
 
-    res.json({ success: true, data: agency });
+    res.json({ success: true, data: { ...agency, imageUrl: toPublicImageUrl(agency.imageUrl) } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/v1/public/agencies/:id/image
+ * Image vitrine d'une agence active, sans auth (consommee par <img> sur le site
+ * public). Stream direct depuis le storage, CORP cross-origin pour autoriser
+ * l'affichage depuis l'origine frontend.
+ */
+router.get('/agencies/:id/image', async (req, res, next) => {
+  try {
+    const agency = await prisma.agency.findFirst({
+      where: { id: req.params.id, isActive: true },
+      select: { imageKey: true },
+    });
+    if (!agency?.imageKey) {
+      return res.status(404).json({ success: false, message: 'Image introuvable' });
+    }
+    const storage = container.resolve(StorageService);
+    const obj = await storage.getObject(agency.imageKey);
+    if (!obj) {
+      return res.status(404).json({ success: false, message: 'Image introuvable' });
+    }
+    res.set({
+      'Content-Type': obj.contentType,
+      'Content-Length': String(obj.size),
+      'Cache-Control': 'public, max-age=3600',
+      'Cross-Origin-Resource-Policy': 'cross-origin',
+    });
+    obj.stream.pipe(res);
   } catch (err) {
     next(err);
   }

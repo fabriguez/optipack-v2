@@ -83,7 +83,18 @@ export class ArriveContainerUseCase {
         try {
           eventBus.emit({
             type: DomainEvents.PARCEL_STATUS_CHANGED,
-            payload: { parcelId: p.id, oldStatus: 'IN_TRANSIT', newStatus: 'ARRIVED', trackingNumber: p.trackingNumber },
+            payload: {
+              parcelId: p.id,
+              oldStatus: 'IN_TRANSIT',
+              newStatus: 'ARRIVED',
+              trackingNumber: p.trackingNumber,
+              // clientId requis : sans lui RealtimeParcelHandler (socket) et
+              // NotificationHandler ignorent l'event -> mobile non rafraichi +
+              // client non notifie.
+              clientId: (p as { clientId?: string }).clientId,
+              designation: p.designation,
+              organizationId: (p as { organizationId?: string }).organizationId ?? null,
+            },
             timestamp: new Date(),
             userId,
           });
