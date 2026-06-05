@@ -22,6 +22,8 @@ interface TenantBranding {
   iconPath?: string;
   splashPath?: string;
   splashColor: string;
+  /** ID projet EAS dedie a cette app tenant (cf. `eas init`). Requis pour le push. */
+  easProjectId?: string;
 }
 
 // Registry des tenants connus. Ajouter une entree ici quand un tenant
@@ -34,6 +36,7 @@ const TENANTS: Record<string, TenantBranding> = {
     iosBundleId: 'com.transitsoftservices.mobile',
     androidPackage: 'com.transitsoftservices.mobile',
     splashColor: '#1B5E20',
+    easProjectId: 'd2adc804-7c97-4c62-a704-af7ca078882f',
   },
   // Exemple — repliquer pour chaque tenant brandé
   // acme: {
@@ -55,6 +58,8 @@ export default (): ExpoConfig => {
   const config: ExpoConfig = {
     name: t.name,
     slug: `${slug}-mobile`,
+    // Compte EAS proprietaire du projet (@brightky/<slug>-mobile).
+    owner: 'brightky',
     version: '0.1.0',
     orientation: 'portrait',
     userInterfaceStyle: 'light',
@@ -68,6 +73,9 @@ export default (): ExpoConfig => {
       package: t.androidPackage,
     },
     plugins: [
+      // Fix monorepo pnpm : patche android/settings.gradle apres le prebuild EAS
+      // (resolution de @react-native/gradle-plugin via react-native).
+      './plugins/withMonorepoSettingsGradle',
       'expo-router',
       'expo-secure-store',
       'expo-notifications',
@@ -83,10 +91,10 @@ export default (): ExpoConfig => {
     ],
     extra: {
       tenantSlug: slug,
-      // projectId EAS requis pour activer le push. Renseigner via EAS_PROJECT_ID
-      // (ou `eas init`). Tant qu'il est absent, le push reste inactif (no-op).
+      // projectId EAS requis pour activer le push + lier le build EAS. Priorite
+      // a l'env (override CI/multi-tenant), sinon valeur du registry tenant.
       eas: {
-        projectId: process.env.EAS_PROJECT_ID ?? undefined,
+        projectId: process.env.EAS_PROJECT_ID ?? t.easProjectId ?? undefined,
       },
     },
   };
