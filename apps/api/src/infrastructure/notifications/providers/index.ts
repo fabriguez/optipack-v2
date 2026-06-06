@@ -3,7 +3,11 @@
  *
  * Activation par env vars :
  *   - SMS_PROVIDER         : 'twilio' | 'africas-talking' | 'vonage' | 'log' (defaut: 'log')
- *   - WHATSAPP_PROVIDER    : 'meta' | 'africas-talking' | 'log' (defaut: 'log')
+ *   - WHATSAPP_PROVIDER    : 'twilio' | 'meta' | 'africas-talking' | 'log' (defaut: 'log')
+ *
+ * Credentials Twilio WhatsApp :
+ *   TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN
+ *   TWILIO_WHATSAPP_FROM (numero expediteur E.164, ex: +14155238886 sandbox)
  *   - PUSH_PROVIDER        : 'expo' | 'fcm' | 'log' (defaut: 'log')
  *     'expo' : push via ExpoPushToken (aucune credential serveur requise).
  *
@@ -246,6 +250,60 @@ function makeMetaWhatsappProvider(): ExternalChannelProvider {
   };
 }
 
+/**
+ * Twilio WhatsApp provider (API REST, sans SDK).
+ * Doc : https://www.twilio.com/docs/whatsapp/api
+ * Env :
+ *   TWILIO_ACCOUNT_SID      identifiant du compte (AC...)
+ *   TWILIO_AUTH_TOKEN       token d'auth
+ *   TWILIO_WHATSAPP_FROM    numero WhatsApp expediteur E.164 (ex: +14155238886
+ *                           pour le sandbox Twilio)
+ *
+ * Twilio attend le prefixe "whatsapp:" sur To et From, et le numero au
+ * format E.164. En sandbox, le destinataire doit avoir rejoint le sandbox.
+ */
+function makeTwilioWhatsappProvider(): ExternalChannelProvider {
+  const accountSid = process.env.TWILIO_ACCOUNT_SID ?? '';
+  const authToken = process.env.TWILIO_AUTH_TOKEN ?? '';
+  const from = process.env.TWILIO_WHATSAPP_FROM ?? '';
+  const enabled = !!accountSid && !!authToken && !!from;
+  if (!enabled) {
+    logger.warn(
+      'Twilio WhatsApp provider non active : TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN ou TWILIO_WHATSAPP_FROM manquant(s)',
+    );
+  }
+  const toWhatsapp = (n: string) => {
+    const e164 = n.startsWith('+') ? n : `+${n.replace(/[^0-9]/g, '')}`;
+    return `whatsapp:${e164}`;
+  };
+  const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
+  const auth = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+  return {
+    name: 'twilio',
+    enabled,
+    async send(to, message) {
+      if (!enabled) throw new Error('Twilio WhatsApp provider non configure');
+      const body = new URLSearchParams({
+        To: toWhatsapp(to),
+        From: toWhatsapp(from),
+        Body: message,
+      });
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${auth}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: body.toString(),
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(`Twilio WhatsApp HTTP ${res.status}: ${txt.slice(0, 300)}`);
+      }
+    },
+  };
+}
+
 function makeFcmPushProvider(): ExternalChannelProvider {
   return {
     name: 'fcm',
@@ -317,7 +375,8 @@ export function registerNotificationProviders(): void {
     : null,
   );
   setWhatsappProvider(
-    waKind === 'meta' ? makeMetaWhatsappProvider()
+    waKind === 'twilio' ? makeTwilioWhatsappProvider()
+    : waKind === 'meta' ? makeMetaWhatsappProvider()
     : waKind === 'africas-talking' ? makeAfricasTalkingWhatsappProvider()
     : waKind === 'log' ? makeLogProvider('WHATSAPP')
     : null,

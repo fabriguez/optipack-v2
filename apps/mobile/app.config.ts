@@ -60,7 +60,7 @@ export default (): ExpoConfig => {
     slug: `${slug}-mobile`,
     // Compte EAS proprietaire du projet (@brightky/<slug>-mobile).
     owner: 'brightky',
-    version: '0.1.0',
+    version: '0.1.1',
     orientation: 'portrait',
     userInterfaceStyle: 'light',
     scheme: t.scheme,
@@ -70,7 +70,7 @@ export default (): ExpoConfig => {
       bundleIdentifier: t.iosBundleId,
     },
     android: {
-      package: t.androidPackage,
+      package: t.androidPackage
     },
     plugins: [
       // Fix monorepo pnpm : patche android/settings.gradle apres le prebuild EAS
