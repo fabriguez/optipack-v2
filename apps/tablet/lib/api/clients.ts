@@ -24,6 +24,19 @@ export const clientsApi = {
   delete: (id: string) =>
     apiClient.delete(`/clients/${id}`).then((r) => r.data),
 
+  outstanding: (id: string) =>
+    apiClient.get(`/clients/${id}/outstanding`).then((r) => r.data),
+  score: (id: string) =>
+    apiClient.get(`/clients/${id}/score`).then((r) => r.data),
+
+  uploadImage: (id: string, slot: string, file: { uri: string; name: string; mimeType: string }) => {
+    const fd = new FormData();
+    fd.append('image', { uri: file.uri, name: file.name, type: file.mimeType } as never);
+    return apiClient.post(`/clients/${id}/image/${slot}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
+  deleteImage: (id: string, slot: string) =>
+    apiClient.delete(`/clients/${id}/image/${slot}`).then((r) => r.data),
+
   // Tarification partenaire
   listPricings: (clientId: string): Promise<{ success: boolean; data: PartnerPricing[] }> =>
     apiClient.get(`/clients/${clientId}/pricings`).then((r) => r.data),

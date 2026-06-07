@@ -2,6 +2,7 @@ import { inject, injectable } from 'tsyringe';
 import { WAREHOUSE_REPOSITORY, type IWarehouseRepository } from '../../interfaces/IWarehouseRepository';
 import { AGENCY_REPOSITORY, type IAgencyRepository } from '../../interfaces/IAgencyRepository';
 import { NotFoundError } from '../../../domain/errors/BusinessError';
+import { realtimeService } from '../../../infrastructure/realtime/RealtimeService';
 
 interface CreateWarehouseInput {
   name: string;
@@ -24,12 +25,15 @@ export class CreateWarehouseUseCase {
       throw new NotFoundError('Agence', input.agencyId);
     }
 
-    return this.warehouseRepo.create({
+    const warehouse = await this.warehouseRepo.create({
       name: input.name,
       location: input.location,
       agency: { connect: { id: input.agencyId } },
       ...(input.storageFreeDays !== undefined && { storageFreeDays: input.storageFreeDays }),
       ...(input.storageDailyRate !== undefined && { storageDailyRate: input.storageDailyRate }),
     });
+
+    realtimeService.emitResourceChange(agency.organizationId, 'warehouses', 'created', warehouse.id);
+    return warehouse;
   }
 }

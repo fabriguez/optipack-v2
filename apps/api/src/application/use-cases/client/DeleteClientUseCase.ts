@@ -1,6 +1,7 @@
 import { inject, injectable } from 'tsyringe';
 import { CLIENT_REPOSITORY, type IClientRepository } from '../../interfaces/IClientRepository';
 import { NotFoundError } from '../../../domain/errors/BusinessError';
+import { realtimeService } from '../../../infrastructure/realtime/RealtimeService';
 
 @injectable()
 export class DeleteClientUseCase {
@@ -14,5 +15,6 @@ export class DeleteClientUseCase {
       throw new NotFoundError('Client', id);
     }
     await this.clientRepo.delete(id);
+    realtimeService.emitResourceChange(client.organizationId, 'clients', 'deleted', id);
   }
 }

@@ -5,6 +5,7 @@ import { AGENCY_REPOSITORY, type IAgencyRepository } from '../../interfaces/IAge
 import { ConflictError, NotFoundError } from '../../../domain/errors/BusinessError';
 import { provisionClientPortalAccess } from '../../services/ClientPortalAccessService';
 import { prisma } from '../../../config/database';
+import { realtimeService } from '../../../infrastructure/realtime/RealtimeService';
 
 @injectable()
 export class CreateClientUseCase {
@@ -65,6 +66,7 @@ export class CreateClientUseCase {
       organizationId,
     });
 
+    realtimeService.emitResourceChange(organizationId, 'clients', 'created', client.id);
     return client;
   }
 }

@@ -60,7 +60,7 @@ export default (): ExpoConfig => {
     slug: `${slug}-mobile`,
     // Compte EAS proprietaire du projet (@brightky/<slug>-mobile).
     owner: 'brightky',
-    version: '0.1.1',
+    version: '0.1.4',
     orientation: 'portrait',
     userInterfaceStyle: 'light',
     scheme: t.scheme,

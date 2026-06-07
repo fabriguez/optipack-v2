@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { View } from 'react-native';
-import { AppTextInput, AppPhoneInput, ResourceFormDialog } from '@/components/forms';
+import { AppTextInput, AppPhoneInput, ImageInput, ResourceFormDialog } from '@/components/forms';
 import { agenciesApi } from '@/lib/api/agencies';
 import { spacing } from '@/lib/theme/spacing';
 
@@ -11,22 +11,72 @@ const schema = z.object({
   address: z.string().optional(),
   phone: z.string().optional(),
   email: z.string().email('Email invalide').optional().or(z.literal('')),
+  googleMapsLink: z.string().optional().or(z.literal('')),
+  image: z.any().optional(),
 });
 
-export function AgencyFormDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+type FormValues = z.infer<typeof schema>;
+
+interface Agency {
+  id: string;
+  name?: string;
+  city?: string | null;
+  country?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  googleMapsLink?: string | null;
+}
+
+export function AgencyFormDialog({
+  open,
+  onClose,
+  agency,
+}: {
+  open: boolean;
+  onClose: () => void;
+  agency?: Agency;
+}) {
+  const isEdit = !!agency;
+
+  const submit = async (v: FormValues) => {
+    const { image, ...rest } = v;
+    const payload = { ...rest, email: rest.email || undefined, googleMapsLink: rest.googleMapsLink || undefined };
+    if (isEdit) {
+      const res = await agenciesApi.update(agency!.id, payload as never);
+      if (image?.uri) await agenciesApi.uploadImage(agency!.id, image);
+      return res;
+    }
+    const created = await agenciesApi.create(payload as never);
+    const newId = created?.data?.id ?? created?.id;
+    if (newId && image?.uri) await agenciesApi.uploadImage(newId, image);
+    return created;
+  };
+
   return (
     <ResourceFormDialog
       open={open}
       onClose={onClose}
-      title="Nouvelle agence"
+      title={isEdit ? "Modifier l'agence" : 'Nouvelle agence'}
       schema={schema}
-      defaultValues={{ name: '', city: '', country: '', address: '', phone: '', email: '' }}
-      submit={(v) => agenciesApi.create(v as never)}
+      defaultValues={{
+        name: agency?.name ?? '',
+        city: agency?.city ?? '',
+        country: agency?.country ?? '',
+        address: agency?.address ?? '',
+        phone: agency?.phone ?? '',
+        email: agency?.email ?? '',
+        googleMapsLink: agency?.googleMapsLink ?? '',
+        image: null,
+      }}
+      submit={submit}
       invalidate={[['agencies']]}
-      successMessage="Agence creee"
+      successMessage={isEdit ? 'Agence mise a jour' : 'Agence creee'}
+      submitLabel={isEdit ? 'Enregistrer' : 'Creer'}
     >
       {(control) => (
         <>
+          <ImageInput control={control} name="image" label="Image de l'agence" />
           <AppTextInput control={control} name="name" label="Nom" required />
           <View style={{ flexDirection: 'row', gap: spacing.lg }}>
             <View style={{ flex: 1 }}>
@@ -45,6 +95,7 @@ export function AgencyFormDialog({ open, onClose }: { open: boolean; onClose: ()
               <AppTextInput control={control} name="email" label="Email" keyboardType="email-address" autoCapitalize="none" />
             </View>
           </View>
+          <AppTextInput control={control} name="googleMapsLink" label="Lien Google Maps" autoCapitalize="none" />
         </>
       )}
     </ResourceFormDialog>

@@ -37,6 +37,17 @@ export const parcelsApi = {
     apiClient.patch(`/parcels/${id}`, data).then((r) => r.data),
   updateStatus: (id: string, status: string) =>
     apiClient.patch(`/parcels/${id}/status`, { status }).then((r) => r.data),
+  /** Place / retire un colis d'un magasin (warehouseId=null pour retirer). */
+  setWarehouse: (id: string, warehouseId: string | null) =>
+    apiClient.patch(`/parcels/${id}/status`, { status: 'IN_STOCK', warehouseId }).then((r) => r.data),
+  remove: (id: string) =>
+    apiClient.delete(`/parcels/${id}`).then((r) => r.data),
+  search: (tracking: string) =>
+    apiClient.get('/parcels', { params: { search: tracking, limit: 5 } }).then((r) => r.data),
+  handover: (id: string, data: { receivedByClientId: string; identityConfirmed: boolean; note?: string }) =>
+    apiClient.post(`/parcels/${id}/handover`, data).then((r) => r.data),
+  handoverUntracked: (data: { agencyId: string; warehouseId: string; receivedByClientId: string; designation: string; observation?: string; identityConfirmed: boolean }) =>
+    apiClient.post('/parcels/handover-untracked', data).then((r) => r.data),
   history: (id: string) =>
     apiClient.get(`/parcels/${id}/history`).then((r) => r.data),
   // Images

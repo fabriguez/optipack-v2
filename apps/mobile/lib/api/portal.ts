@@ -32,6 +32,12 @@ export const portalApi = {
   resetPassword: (payload: { identifier: string; code: string; newPassword: string }) =>
     apiClient.post('/client-portal/reset-password', payload).then((r) => r.data),
 
+  // Support chat (Stream) : token + ids pour init le SDK.
+  supportToken: (): Promise<{
+    success: boolean;
+    data: { apiKey: string; token: string; userId: string; channelId: string };
+  }> => apiClient.post('/client-portal/support/token').then((r) => r.data),
+
   // Dashboard
   dashboard: () => apiClient.get('/client-portal/dashboard').then((r) => r.data),
 

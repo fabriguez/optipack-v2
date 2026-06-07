@@ -16,6 +16,8 @@ import {
 } from '@expo-google-fonts/poppins';
 import { createQueryClient, queryPersister } from '@/lib/queryClient';
 import { AuthProvider } from '@/lib/auth/AuthContext';
+import { TenantProvider } from '@/lib/tenant/TenantContext';
+import { SocketProvider } from '@/lib/realtime/SocketProvider';
 import { AuthGate } from '@/components/auth/AuthGate';
 import { startOfflineDrain } from '@/lib/api/offlineDrain';
 import { colors } from '@/lib/theme/colors';
@@ -65,7 +67,9 @@ export default function RootLayout() {
             buster: 'v1',
           }}
         >
-          <AuthProvider>
+          <TenantProvider>
+            <AuthProvider>
+            <SocketProvider>
             <StatusBar style="light" />
             <AuthGate>
               <LinearGradient
@@ -85,7 +89,9 @@ export default function RootLayout() {
                 </SafeAreaView>
               </LinearGradient>
             </AuthGate>
-          </AuthProvider>
+            </SocketProvider>
+            </AuthProvider>
+          </TenantProvider>
         </PersistQueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

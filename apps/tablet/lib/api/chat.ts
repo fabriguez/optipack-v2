@@ -28,6 +28,12 @@ export interface ChatMessage {
 }
 
 export const chatApi = {
+  // Stream Chat : token agent (role admin) + agencyIds pour filtrer les channels.
+  streamToken: (): Promise<{
+    success: boolean;
+    data: { apiKey: string; token: string; userId: string; agencyIds: string[] };
+  }> => apiClient.post('/chat/stream/token').then((r) => r.data),
+
   listConversations: (params?: Partial<PaginationInput> & { status?: string; clientId?: string }) =>
     apiClient.get('/chat', { params }).then((r) => r.data),
 

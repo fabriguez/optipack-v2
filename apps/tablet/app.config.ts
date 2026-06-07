@@ -61,6 +61,13 @@ export default (): ExpoConfig => {
             "L'application utilise la camera pour prendre une photo de document.",
         },
       ],
+      [
+        'expo-camera',
+        {
+          cameraPermission:
+            "L'application utilise la camera pour scanner les QR codes et codes-barres des colis.",
+        },
+      ],
     ],
     extra: {
       tenantSlug: slug,

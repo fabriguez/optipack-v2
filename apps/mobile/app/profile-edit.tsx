@@ -1,16 +1,15 @@
-import { useState, useEffect } from 'react';
-import { ScrollView, View, Text, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
-import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Ionicons } from '@expo/vector-icons';
-import { Input } from '@/components/ui/Input';
 import { AppPhoneInput } from '@/components/ui/AppPhoneInput';
 import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
 import { apiClient } from '@/lib/api/client';
 import { portalApi } from '@/lib/api/portal';
 import { colors, spacing } from '@/lib/theme/colors';
 import { toast } from '@/lib/toast';
+import { Ionicons } from '@expo/vector-icons';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 
 export default function ProfileEditScreen() {
   const router = useRouter();

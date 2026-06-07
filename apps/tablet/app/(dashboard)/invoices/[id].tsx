@@ -1,9 +1,10 @@
-import { ScrollView, View, Text, ActivityIndicator, Pressable } from 'react-native';
+import { ScrollView, View, Text, ActivityIndicator, Pressable, RefreshControl } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
+import { usePullRefresh } from '@/lib/hooks/usePullRefresh';
 import { apiClient } from '@/lib/api/client';
 import { colors } from '@/lib/theme/colors';
 import { spacing } from '@/lib/theme/spacing';
@@ -22,11 +23,12 @@ function Row({ label, value }: { label: string; value?: string | number | null }
 export default function InvoiceDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, refetch } = useQuery({
     queryKey: ['invoices', id],
     queryFn: () => apiClient.get(`/invoices/${id}`).then((r) => r.data),
     enabled: !!id,
   });
+  const { refreshing, onRefresh } = usePullRefresh(refetch);
   const i = data?.data;
 
   if (isLoading) return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator color={colors.primary[500]} /></View>;
@@ -35,9 +37,13 @@ export default function InvoiceDetailScreen() {
   const remaining = Number(i.total ?? 0) - Number(i.paidAmount ?? 0);
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: 'transparent' }} contentContainerStyle={{ padding: spacing['2xl'], gap: spacing.lg }}>
+    <ScrollView
+      style={{ flex: 1, backgroundColor: 'transparent' }}
+      contentContainerStyle={{ padding: spacing['2xl'], gap: spacing.lg }}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary[500]} />}
+    >
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-        <Pressable onPress={() => router.back()} hitSlop={10}>
+        <Pressable onPress={() => router.navigate('/invoices')} hitSlop={10}>
           <Ionicons name="arrow-back" size={22} color={colors.gray[700]} />
         </Pressable>
         <View style={{ flex: 1 }}>

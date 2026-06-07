@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { View } from 'react-native';
 import { AppTextInput, AppSearchSelect, ResourceFormDialog } from '@/components/forms';
-import { apiClient } from '@/lib/api/client';
+import { warehousesApi } from '@/lib/api/warehouses';
 import { searchers } from '@/lib/api/searchers';
 import { spacing } from '@/lib/theme/spacing';
 
@@ -12,24 +12,48 @@ const schema = z.object({
   capacity: z.string().optional(),
 });
 
-export function WarehouseFormDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+interface Warehouse {
+  id: string;
+  name?: string;
+  location?: string | null;
+  agencyId?: string | null;
+  agency?: { id?: string } | null;
+  capacity?: number | null;
+}
+
+export function WarehouseFormDialog({
+  open,
+  onClose,
+  warehouse,
+  defaultAgencyId,
+}: {
+  open: boolean;
+  onClose: () => void;
+  warehouse?: Warehouse;
+  defaultAgencyId?: string;
+}) {
+  const isEdit = !!warehouse;
   return (
     <ResourceFormDialog
       open={open}
       onClose={onClose}
-      title="Nouveau magasin"
+      title={isEdit ? 'Modifier le magasin' : 'Nouveau magasin'}
       schema={schema}
-      defaultValues={{ name: '', location: '', agencyId: '', capacity: '' }}
-      submit={(v) =>
-        apiClient.post('/warehouses', {
-          name: v.name,
-          location: v.location,
-          agencyId: v.agencyId,
-          capacity: v.capacity ? Number(v.capacity) : undefined,
-        })
-      }
+      defaultValues={{
+        name: warehouse?.name ?? '',
+        location: warehouse?.location ?? '',
+        agencyId: warehouse?.agencyId ?? warehouse?.agency?.id ?? defaultAgencyId ?? '',
+        capacity: warehouse?.capacity != null ? String(warehouse.capacity) : '',
+      }}
+      submit={(v) => {
+        const payload = { name: v.name, location: v.location, capacity: v.capacity ? Number(v.capacity) : undefined };
+        return isEdit
+          ? warehousesApi.update(warehouse!.id, payload)
+          : warehousesApi.create({ ...payload, agencyId: v.agencyId });
+      }}
       invalidate={[['warehouses']]}
-      successMessage="Magasin cree"
+      successMessage={isEdit ? 'Magasin mis a jour' : 'Magasin cree'}
+      submitLabel={isEdit ? 'Enregistrer' : 'Creer'}
     >
       {(control) => (
         <>

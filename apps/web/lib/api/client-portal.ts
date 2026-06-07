@@ -78,6 +78,12 @@ export const clientPortalApi = {
 
   me: () => portalClient.get('/client-portal/me').then((r) => r.data),
 
+  // Support chat (Stream) : token + ids pour init le SDK.
+  supportToken: (): Promise<{
+    success: boolean;
+    data: { apiKey: string; token: string; userId: string; channelId: string };
+  }> => portalClient.post('/client-portal/support/token').then((r) => r.data),
+
   // Reset mot de passe en deux temps (identifiant = email OU telephone).
   // 1) Demande du code OTP (envoye par email + SMS + WhatsApp). Reponse toujours
   //    ok=true cote API (anti-enumeration).

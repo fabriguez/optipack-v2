@@ -40,6 +40,13 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     socketInstance.on('connect', () => setIsConnected(true));
     socketInstance.on('disconnect', () => setIsConnected(false));
 
+    // Mise a jour temps reel des listes/details : l'API emet `resource:changed`
+    // ({ entity, action, id }) vers la room org a chaque mutation. On invalide
+    // la query [entity] pour que toutes les vues ouvertes se rafraichissent.
+    socketInstance.on('resource:changed', (payload: { entity?: string }) => {
+      if (payload?.entity) qc.invalidateQueries({ queryKey: [payload.entity] });
+    });
+
     // Notification temps reel : un nouvel event arrive du serveur.
     // On rafraichit le compteur + on toast le titre (sauf pour les notifs
     // verbeuses ou silencieuses si besoin).

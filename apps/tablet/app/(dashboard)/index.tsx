@@ -4,10 +4,19 @@ import { Ionicons } from '@expo/vector-icons';
 import { KpiCard } from '@/components/ui/KpiCard';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
+import { BarChart, DonutChart } from '@/components/ui/Charts';
 import { useDashboardStats } from '@/lib/hooks/useDashboard';
 import { colors } from '@/lib/theme/colors';
 import { spacing } from '@/lib/theme/spacing';
 import { formatAmount } from '@transitsoftservices/shared';
+
+const STATUS_LABELS: Record<string, string> = {
+  IN_STOCK: 'En stock',
+  IN_TRANSIT: 'En transit',
+  DELIVERED: 'Livres',
+  ARRIVED: 'Arrives',
+  RECEIVED: 'Recus',
+};
 
 export default function DashboardScreen() {
   const { data, refetch } = useDashboardStats();
@@ -19,6 +28,11 @@ export default function DashboardScreen() {
     await refetch();
     setRefreshing(false);
   };
+
+  const pieData = Object.entries(stats?.parcelsByStatus || {}).map(([name, value]) => ({
+    name: STATUS_LABELS[name] ?? name,
+    value: Number(value),
+  }));
 
   return (
     <ScrollView
@@ -61,20 +75,40 @@ export default function DashboardScreen() {
         </View>
         <View style={{ flex: 1 }}>
           <KpiCard
-            label="Clients"
-            value={stats?.totalClients ?? 0}
-            icon={<Ionicons name="people-outline" size={22} color="#1565C0" />}
+            label="En Attente"
+            value={(stats?.parcelsByStatus?.ARRIVED ?? 0) + (stats?.parcelsByStatus?.RECEIVED ?? 0)}
+            icon={<Ionicons name="time-outline" size={22} color="#1565C0" />}
             iconBg="#E3F2FD"
             accentColor="#2196F3"
           />
         </View>
       </View>
 
-      {/* Second Row */}
+      {/* Charts Row */}
       <View style={{ flexDirection: 'row', gap: spacing.lg, marginBottom: spacing['2xl'] }}>
-        {/* Cash in agencies */}
         <View style={{ flex: 2 }}>
           <Card>
+            <CardHeader title="Volume de colis" subtitle="Colis enregistres cette semaine" />
+            <BarChart data={stats?.parcelsChart || []} />
+          </Card>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Card>
+            <CardHeader title="Repartition" subtitle="Par statut" />
+            {pieData.length > 0 ? (
+              <DonutChart data={pieData} />
+            ) : (
+              <Text style={{ textAlign: 'center', fontSize: 13, color: colors.gray[400], paddingVertical: 40 }}>Aucune donnee</Text>
+            )}
+          </Card>
+        </View>
+      </View>
+
+      {/* Bottom Row */}
+      <View style={{ flexDirection: 'row', gap: spacing.lg, marginBottom: spacing['2xl'] }}>
+        {/* Cash in agencies */}
+        <View style={{ flex: 1 }}>
+          <Card style={{ flex: 1 }}>
             <CardHeader title="Solde caisses" right={<Badge variant="success">Temps reel</Badge>} />
             {(stats?.cashInAgencies || []).length > 0 ? (
               (stats?.cashInAgencies || []).map((agency: any) => (
@@ -94,25 +128,30 @@ export default function DashboardScreen() {
           </Card>
         </View>
 
-        {/* Revenue + Debts */}
-        <View style={{ flex: 1, gap: spacing.lg }}>
-          <Card>
+        {/* Revenue */}
+        <View style={{ flex: 1 }}>
+          <Card style={{ flex: 1 }}>
+            <CardHeader title="Chiffre d'affaires" subtitle="Total transfere au siege" />
             <View style={{ alignItems: 'center', paddingVertical: 12 }}>
-              <View style={{ width: 56, height: 56, borderRadius: 16, backgroundColor: colors.primary[50], alignItems: 'center', justifyContent: 'center', marginBottom: 10 }}>
-                <Ionicons name="card-outline" size={26} color={colors.primary[600]} />
+              <View style={{ width: 64, height: 64, borderRadius: 18, backgroundColor: colors.primary[50], alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
+                <Ionicons name="card-outline" size={28} color={colors.primary[600]} />
               </View>
-              <Text style={{ fontSize: 24, fontWeight: '700', color: colors.gray[900] }}>{formatAmount(stats?.totalRevenue ?? 0)}</Text>
-              <Text style={{ fontSize: 12, color: colors.gray[400], marginTop: 2 }}>Chiffre d'affaires</Text>
+              <Text style={{ fontSize: 26, fontWeight: '700', color: colors.gray[900] }}>{formatAmount(stats?.totalRevenue ?? 0)}</Text>
+              <Text style={{ fontSize: 12, color: colors.gray[400], marginTop: 4 }}>Montant confirme</Text>
             </View>
           </Card>
+        </View>
 
-          <Card>
+        {/* Debts */}
+        <View style={{ flex: 1 }}>
+          <Card style={{ flex: 1 }}>
+            <CardHeader title="Dettes clients" right={<Badge variant="warning">A recouvrer</Badge>} />
             <View style={{ alignItems: 'center', paddingVertical: 12 }}>
-              <View style={{ width: 56, height: 56, borderRadius: 16, backgroundColor: '#FFEBEE', alignItems: 'center', justifyContent: 'center', marginBottom: 10 }}>
-                <Ionicons name="alert-circle-outline" size={26} color={colors.error} />
+              <View style={{ width: 64, height: 64, borderRadius: 18, backgroundColor: '#FFEBEE', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
+                <Ionicons name="alert-circle-outline" size={28} color={colors.error} />
               </View>
-              <Text style={{ fontSize: 24, fontWeight: '700', color: colors.error }}>{formatAmount(stats?.outstandingDebts ?? 0)}</Text>
-              <Text style={{ fontSize: 12, color: colors.gray[400], marginTop: 2 }}>Dettes clients</Text>
+              <Text style={{ fontSize: 26, fontWeight: '700', color: colors.error }}>{formatAmount(stats?.outstandingDebts ?? 0)}</Text>
+              <Text style={{ fontSize: 12, color: colors.gray[400], marginTop: 4 }}>Montant en souffrance</Text>
             </View>
           </Card>
         </View>

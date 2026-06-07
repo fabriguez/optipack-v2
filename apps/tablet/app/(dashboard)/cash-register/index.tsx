@@ -1,8 +1,9 @@
-import { ScrollView, View, Text, ActivityIndicator } from 'react-native';
+import { ScrollView, View, Text, ActivityIndicator, RefreshControl } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
+import { usePullRefresh } from '@/lib/hooks/usePullRefresh';
 import { apiClient } from '@/lib/api/client';
 import { colors } from '@/lib/theme/colors';
 import { spacing } from '@/lib/theme/spacing';
@@ -11,15 +12,20 @@ import { formatAmount } from '@transitsoftservices/shared';
 export default function CashRegisterScreen() {
   const { user } = useAuth();
   const agencyId = user?.agencyIds?.[0];
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, refetch } = useQuery({
     queryKey: ['cash-register', agencyId],
     queryFn: () => apiClient.get(`/cash-registers/${agencyId}`).then((r) => r.data),
     enabled: !!agencyId,
   });
+  const { refreshing, onRefresh } = usePullRefresh(refetch);
   const reg = data?.data;
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: 'transparent' }} contentContainerStyle={{ padding: spacing['2xl'] }}>
+    <ScrollView
+      style={{ flex: 1, backgroundColor: 'transparent' }}
+      contentContainerStyle={{ padding: spacing['2xl'] }}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary[500]} />}
+    >
       <View style={{ marginBottom: spacing['2xl'] }}>
         <Text style={{ fontSize: 26, fontWeight: '700', color: colors.gray[900] }}>Caisse</Text>
         <Text style={{ fontSize: 14, color: colors.gray[500], marginTop: 4 }}>Solde et mouvements</Text>

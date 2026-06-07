@@ -13,9 +13,15 @@ export const agenciesApi = {
   delete: (id: string) =>
     apiClient.delete(`/agencies/${id}`).then((r) => r.data),
 
-  uploadImage: (id: string, file: File) => {
+  uploadImage: (id: string, file: File | { uri: string; name: string; mimeType: string }) => {
     const fd = new FormData();
-    fd.append('image', file);
+    if (typeof File !== 'undefined' && file instanceof File) {
+      fd.append('image', file);
+    } else {
+      const asset = file as { uri: string; name: string; mimeType: string };
+      // React Native : FormData accepte un objet { uri, name, type }.
+      fd.append('image', { uri: asset.uri, name: asset.name, type: asset.mimeType } as never);
+    }
     return apiClient
       .post(`/agencies/${id}/image`, fd, {
         headers: { 'Content-Type': 'multipart/form-data' },

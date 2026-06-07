@@ -2,6 +2,7 @@ import { inject, injectable } from 'tsyringe';
 import type { CreateAgencyInput } from '@transitsoftservices/shared';
 import { AGENCY_REPOSITORY, type IAgencyRepository } from '../../interfaces/IAgencyRepository';
 import { ConflictError } from '../../../domain/errors/BusinessError';
+import { realtimeService } from '../../../infrastructure/realtime/RealtimeService';
 
 @injectable()
 export class CreateAgencyUseCase {
@@ -28,7 +29,7 @@ export class CreateAgencyUseCase {
   }
 
   private async createAgency(input: CreateAgencyInput, organizationId: string, code: string) {
-    return this.agencyRepo.create({
+    const agency = await this.agencyRepo.create({
       name: input.name,
       code,
       address: input.address,
@@ -42,5 +43,8 @@ export class CreateAgencyUseCase {
         responsibleUser: { connect: { id: input.responsibleUserId } },
       }),
     });
+
+    realtimeService.emitResourceChange(organizationId, 'agencies', 'created', agency.id);
+    return agency;
   }
 }

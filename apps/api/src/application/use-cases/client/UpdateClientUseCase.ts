@@ -58,6 +58,7 @@ export class UpdateClientUseCase {
       realtimeService.toClient(id, 'client:tariffs:updated', {});
     }
 
+    realtimeService.emitResourceChange(client.organizationId, 'clients', 'updated', id);
     return updated;
   }
 }

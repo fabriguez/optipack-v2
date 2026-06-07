@@ -1,6 +1,7 @@
 import { inject, injectable } from 'tsyringe';
 import { AGENCY_REPOSITORY, type IAgencyRepository } from '../../interfaces/IAgencyRepository';
 import { NotFoundError } from '../../../domain/errors/BusinessError';
+import { realtimeService } from '../../../infrastructure/realtime/RealtimeService';
 
 @injectable()
 export class DeleteAgencyUseCase {
@@ -15,5 +16,6 @@ export class DeleteAgencyUseCase {
     }
 
     await this.agencyRepo.delete(id);
+    realtimeService.emitResourceChange(agency.organizationId, 'agencies', 'deleted', id);
   }
 }

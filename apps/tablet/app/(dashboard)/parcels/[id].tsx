@@ -1,9 +1,11 @@
-import { ScrollView, View, Text, ActivityIndicator, Pressable, Alert } from 'react-native';
+import { ScrollView, View, Text, ActivityIndicator, Pressable, Alert, RefreshControl } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Can } from '@/components/auth/Can';
+import { usePullRefresh } from '@/lib/hooks/usePullRefresh';
 import { useParcel, useParcelHistory, useUpdateParcelStatus } from '@/lib/hooks/useParcels';
 import { colors } from '@/lib/theme/colors';
 import { spacing, radius } from '@/lib/theme/spacing';
@@ -31,6 +33,8 @@ export default function ParcelDetailScreen() {
   const { data, isLoading } = useParcel(id ?? '');
   const { data: hist } = useParcelHistory(id ?? '');
   const updateStatus = useUpdateParcelStatus();
+  const qc = useQueryClient();
+  const { refreshing, onRefresh } = usePullRefresh(() => qc.invalidateQueries({ queryKey: ['parcels'] }));
 
   if (isLoading) {
     return (
@@ -59,9 +63,13 @@ export default function ParcelDetailScreen() {
   };
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: 'transparent' }} contentContainerStyle={{ padding: spacing['2xl'], gap: spacing.lg }}>
+    <ScrollView
+      style={{ flex: 1, backgroundColor: 'transparent' }}
+      contentContainerStyle={{ padding: spacing['2xl'], gap: spacing.lg }}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary[500]} />}
+    >
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-        <Pressable onPress={() => router.back()} hitSlop={10}>
+        <Pressable onPress={() => router.navigate('/parcels')} hitSlop={10}>
           <Ionicons name="arrow-back" size={22} color={colors.gray[700]} />
         </Pressable>
         <View style={{ flex: 1 }}>

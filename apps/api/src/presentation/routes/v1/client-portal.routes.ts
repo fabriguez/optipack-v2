@@ -6,6 +6,7 @@ import {
 } from '../../controllers/ClientPortalController';
 import { ClientPortalExtraController } from '../../controllers/ClientPortalExtraController';
 import { ClientPortalKycController } from '../../controllers/ClientPortalKycController';
+import { StreamChatController } from '../../controllers/StreamChatController';
 import { forgotPasswordLimiter, resetPasswordLimiter } from '../../middleware/rateLimit';
 
 const router = Router();
@@ -37,6 +38,9 @@ router.get('/my-tariffs', authenticateClient, ClientPortalController.myTariffs);
 router.patch('/me', authenticateClient, ClientPortalKycController.updateProfile);
 router.post('/me/upload', authenticateClient, kycUpload, ClientPortalKycController.uploadDocument);
 router.post('/me/password', authenticateClient, ClientPortalController.changePassword);
+
+// Stream Chat : token client + channel support temps reel.
+router.post('/support/token', authenticateClient, StreamChatController.clientToken);
 
 // Preferences notification du client (memes semantiques que User.notificationPrefs :
 // map { [eventKind]: { channels: [...] } }). Lecture/ecriture du compte connecte.

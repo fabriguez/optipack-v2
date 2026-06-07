@@ -1,10 +1,13 @@
 import type { ReactElement } from 'react';
 import { Drawer } from 'expo-router/drawer';
 import { DrawerContent } from '@/components/layout/DrawerContent';
+import { TopBar } from '@/components/layout/TopBar';
 import { allNavScreens } from '@/lib/nav/nav-config';
+import { SidebarProvider, useSidebar } from '@/lib/sidebar/SidebarContext';
 import { colors } from '@/lib/theme/colors';
 
-export default function DashboardLayout() {
+function DrawerShell() {
+  const { collapsed } = useSidebar();
   return (
     <Drawer
       drawerContent={(props) => {
@@ -13,10 +16,12 @@ export default function DashboardLayout() {
       }}
       sceneContainerStyle={{ backgroundColor: 'transparent' }}
       screenOptions={{
-        headerShown: false,
+        headerShown: true,
+        header: () => <TopBar />,
         drawerType: 'permanent',
-        // Sidebar reste opaque (lisibilite + isolation visuelle).
-        drawerStyle: { backgroundColor: colors.sidebar.bg, width: 280 },
+        // Sidebar opaque (lisibilite). Largeur reduite quand repliee (icones
+        // seules), comme le backoffice web.
+        drawerStyle: { backgroundColor: colors.sidebar.bg, width: collapsed ? 76 : 280 },
         sceneStyle: { backgroundColor: 'transparent' },
       }}
     >
@@ -24,5 +29,13 @@ export default function DashboardLayout() {
         <Drawer.Screen key={it.screen} name={it.screen} options={{ title: it.label }} />
       ))}
     </Drawer>
+  );
+}
+
+export default function DashboardLayout() {
+  return (
+    <SidebarProvider>
+      <DrawerShell />
+    </SidebarProvider>
   );
 }

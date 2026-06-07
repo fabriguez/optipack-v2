@@ -2,6 +2,7 @@ import { inject, injectable } from 'tsyringe';
 import type { UpdateAgencyInput } from '@transitsoftservices/shared';
 import { AGENCY_REPOSITORY, type IAgencyRepository } from '../../interfaces/IAgencyRepository';
 import { NotFoundError } from '../../../domain/errors/BusinessError';
+import { realtimeService } from '../../../infrastructure/realtime/RealtimeService';
 
 @injectable()
 export class UpdateAgencyUseCase {
@@ -15,7 +16,7 @@ export class UpdateAgencyUseCase {
       throw new NotFoundError('Agence', id);
     }
 
-    return this.agencyRepo.update(id, {
+    const updated = await this.agencyRepo.update(id, {
       ...(input.name !== undefined && { name: input.name }),
       ...(input.address !== undefined && { address: input.address }),
       ...(input.city !== undefined && { city: input.city }),
@@ -27,5 +28,8 @@ export class UpdateAgencyUseCase {
         responsibleUser: { connect: { id: input.responsibleUserId } },
       }),
     });
+
+    realtimeService.emitResourceChange(agency.organizationId, 'agencies', 'updated', id);
+    return updated;
   }
 }

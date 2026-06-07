@@ -59,4 +59,11 @@ export const config = {
   socket: {
     corsOrigin: process.env.SOCKET_CORS_ORIGIN || 'http://localhost:3000',
   },
+
+  // Stream Chat (getstream.io) : support client temps reel. apiKey est public
+  // (renvoye aux apps), apiSecret reste serveur (mint des tokens + admin).
+  stream: {
+    apiKey: process.env.STREAM_API_KEY || '',
+    apiSecret: process.env.STREAM_API_SECRET || '',
+  },
 } as const;

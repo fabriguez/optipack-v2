@@ -14,58 +14,53 @@ interface DrawerContentComponentProps {
 import { navSections, type NavItem, type NavSection } from '@/lib/nav/nav-config';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { usePermission, useIsTenantAdmin } from '@/lib/hooks/usePermission';
+import { useSidebar } from '@/lib/sidebar/SidebarContext';
 import { colors } from '@/lib/theme/colors';
-import { OfflineBanner } from './OfflineBanner';
+import { ConnectivityBadge } from './ConnectivityBadge';
 
 function SectionBlock({
   section,
   activeRoute,
+  collapsed,
   onNavigate,
 }: {
   section: NavSection;
   activeRoute: string | undefined;
+  collapsed: boolean;
   onNavigate: (screen: string) => void;
 }) {
   const [open, setOpen] = useState(!!section.defaultOpen);
   const isAdmin = useIsTenantAdmin();
 
-  const visible = section.items.filter((it) => {
-    if (it.adminOnly && !isAdmin) return false;
-    return true;
-  });
-
+  const visible = section.items.filter((it) => !(it.adminOnly && !isAdmin));
   if (visible.length === 0) return null;
+
+  // Replie : pas d'en-tete de section, items toujours visibles (icones seules).
+  if (collapsed) {
+    return (
+      <View style={{ marginBottom: 8, gap: 2, paddingHorizontal: 8 }}>
+        {visible.map((item) => (
+          <NavLink key={item.screen} item={item} active={activeRoute === item.screen} collapsed onPress={() => onNavigate(item.screen)} />
+        ))}
+      </View>
+    );
+  }
 
   return (
     <View style={{ marginBottom: 4 }}>
       <Pressable
         onPress={() => setOpen((v) => !v)}
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          paddingHorizontal: 16,
-          paddingVertical: 6,
-        }}
+        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 6 }}
       >
         <Text style={{ fontSize: 11, fontWeight: '600', color: colors.sidebar.muted, letterSpacing: 1.2 }}>
           {section.title.toUpperCase()}
         </Text>
-        <Ionicons
-          name={open ? 'chevron-down' : 'chevron-forward'}
-          size={14}
-          color={colors.sidebar.muted}
-        />
+        <Ionicons name={open ? 'chevron-down' : 'chevron-forward'} size={14} color={colors.sidebar.muted} />
       </Pressable>
       {open && (
         <View style={{ paddingHorizontal: 8, gap: 2 }}>
           {visible.map((item) => (
-            <NavLink
-              key={item.screen}
-              item={item}
-              active={activeRoute === item.screen}
-              onPress={() => onNavigate(item.screen)}
-            />
+            <NavLink key={item.screen} item={item} active={activeRoute === item.screen} collapsed={false} onPress={() => onNavigate(item.screen)} />
           ))}
         </View>
       )}
@@ -73,7 +68,7 @@ function SectionBlock({
   );
 }
 
-function NavLink({ item, active, onPress }: { item: NavItem; active: boolean; onPress: () => void }) {
+function NavLink({ item, active, collapsed, onPress }: { item: NavItem; active: boolean; collapsed: boolean; onPress: () => void }) {
   const allowed = usePermission(item.permissions ?? [], 'any');
   if (item.permissions && item.permissions.length > 0 && !allowed) return null;
   return (
@@ -82,26 +77,27 @@ function NavLink({ item, active, onPress }: { item: NavItem; active: boolean; on
       style={{
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 12,
-        paddingHorizontal: 12,
+        justifyContent: collapsed ? 'center' : 'flex-start',
+        gap: collapsed ? 0 : 12,
+        paddingHorizontal: collapsed ? 0 : 12,
         paddingVertical: 10,
         borderRadius: 10,
         backgroundColor: active ? colors.sidebar.active : 'transparent',
       }}
     >
       <Ionicons name={item.icon} size={20} color={active ? colors.white : colors.sidebar.muted} />
-      <Text
-        style={{ fontSize: 14, fontWeight: '500', color: active ? colors.white : colors.sidebar.muted }}
-        numberOfLines={1}
-      >
-        {item.label}
-      </Text>
+      {!collapsed && (
+        <Text style={{ fontSize: 14, fontWeight: '500', color: active ? colors.white : colors.sidebar.muted }} numberOfLines={1}>
+          {item.label}
+        </Text>
+      )}
     </Pressable>
   );
 }
 
 export function DrawerContent(props: DrawerContentComponentProps) {
   const { user, logout } = useAuth();
+  const { collapsed, toggle } = useSidebar();
   const [loggingOut, setLoggingOut] = useState(false);
   const currentRouteName = props.state.routes[props.state.index]?.name;
 
@@ -119,24 +115,36 @@ export function DrawerContent(props: DrawerContentComponentProps) {
     <View style={{ flex: 1, backgroundColor: colors.sidebar.bg }}>
       <View
         style={{
-          paddingHorizontal: 16,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: collapsed ? 'center' : 'space-between',
+          paddingHorizontal: collapsed ? 8 : 16,
           paddingTop: 24,
           paddingBottom: 16,
           borderBottomWidth: 1,
           borderBottomColor: 'rgba(255,255,255,0.1)',
         }}
       >
-        <Text style={{ fontSize: 18, fontWeight: '700', color: colors.white }}>
-          TransitSoftServices
-        </Text>
-        {user && (
-          <Text style={{ fontSize: 12, color: colors.sidebar.muted, marginTop: 4 }} numberOfLines={1}>
-            {user.email}
-          </Text>
+        {!collapsed && (
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 18, fontWeight: '700', color: colors.white }}>TransitSoftServices</Text>
+            {user && (
+              <Text style={{ fontSize: 12, color: colors.sidebar.muted, marginTop: 4 }} numberOfLines={1}>
+                {user.email}
+              </Text>
+            )}
+          </View>
         )}
+        <Pressable
+          onPress={toggle}
+          hitSlop={8}
+          style={{ width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.08)' }}
+        >
+          <Ionicons name={collapsed ? 'chevron-forward' : 'chevron-back'} size={20} color={colors.white} />
+        </Pressable>
       </View>
 
-      <OfflineBanner />
+      <ConnectivityBadge />
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingVertical: 12 }}>
         {navSections.map((section) => (
@@ -144,6 +152,7 @@ export function DrawerContent(props: DrawerContentComponentProps) {
             key={section.title}
             section={section}
             activeRoute={currentRouteName}
+            collapsed={collapsed}
             onNavigate={(screen) => props.navigation.navigate(screen as never)}
           />
         ))}
@@ -156,8 +165,9 @@ export function DrawerContent(props: DrawerContentComponentProps) {
           style={{
             flexDirection: 'row',
             alignItems: 'center',
-            gap: 12,
-            paddingHorizontal: 12,
+            justifyContent: collapsed ? 'center' : 'flex-start',
+            gap: collapsed ? 0 : 12,
+            paddingHorizontal: collapsed ? 0 : 12,
             paddingVertical: 10,
             borderRadius: 10,
             opacity: loggingOut ? 0.6 : 1,
@@ -168,9 +178,11 @@ export function DrawerContent(props: DrawerContentComponentProps) {
           ) : (
             <Ionicons name="log-out-outline" size={20} color={colors.sidebar.muted} />
           )}
-          <Text style={{ fontSize: 14, fontWeight: '500', color: colors.sidebar.muted }}>
-            {loggingOut ? 'Deconnexion...' : 'Deconnexion'}
-          </Text>
+          {!collapsed && (
+            <Text style={{ fontSize: 14, fontWeight: '500', color: colors.sidebar.muted }}>
+              {loggingOut ? 'Deconnexion...' : 'Deconnexion'}
+            </Text>
+          )}
         </Pressable>
       </View>
     </View>

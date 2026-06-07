@@ -47,6 +47,20 @@ class RealtimeServiceImpl {
     if (!this.io) return;
     this.io.to(`org:${organizationId}`).emit(event, payload);
   }
+
+  /**
+   * Notifie tout le tenant qu'une ressource a change pour que les clients
+   * (web + tablette) rafraichissent leurs listes/details en temps reel.
+   * Les clients ecoutent `resource:changed` et invalident la query [entity].
+   */
+  emitResourceChange(
+    organizationId: string,
+    entity: string,
+    action: 'created' | 'updated' | 'deleted',
+    id?: string,
+  ): void {
+    this.toOrganization(organizationId, 'resource:changed', { entity, action, id });
+  }
 }
 
 export const realtimeService = new RealtimeServiceImpl();

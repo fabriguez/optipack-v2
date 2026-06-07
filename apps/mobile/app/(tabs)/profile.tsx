@@ -41,18 +41,39 @@ const TIER_LABEL: Record<string, string> = {
 
 async function pickImage(): Promise<ImagePicker.ImagePickerAsset | null> {
   try {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) {
-      Alert.alert(
-        'Permission requise',
-        'Acces aux photos necessaire. Active la permission dans Reglages.',
-      );
-      return null;
+    // IMPORTANT (Android) : ne demander la permission que si pas deja accordee.
+    // Appeler requestMediaLibraryPermissionsAsync() a chaque fois declenche une
+    // UI systeme qui met l'activite en PAUSE ; le launchImageLibraryAsync() qui
+    // suit part alors pendant que l'activite n'est pas RESUMED, donc Android
+    // differe l'intent jusqu'au prochain resume (d'ou le picker qui ne s'ouvre
+    // qu'apres verrouillage/deverrouillage). Le photo picker Android 13+ ne
+    // requiert d'ailleurs aucune permission media.
+    const current = await ImagePicker.getMediaLibraryPermissionsAsync();
+    if (!current.granted) {
+      if (!current.canAskAgain) {
+        Alert.alert(
+          'Permission requise',
+          'Acces aux photos necessaire. Active la permission dans Reglages.',
+        );
+        return null;
+      }
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert(
+          'Permission requise',
+          'Acces aux photos necessaire. Active la permission dans Reglages.',
+        );
+        return null;
+      }
     }
+    // allowsEditing lance une 2e activite (crop) qui double la pression memoire :
+    // sur Android (surtout EAS standalone / appareils a faible RAM) cela force la
+    // recreation de la MainActivity pendant le pick, l'app se remonte et le
+    // resultat est re-livre -> le picker se rouvre plusieurs fois. On le desactive.
     const res = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 0.85,
+      allowsEditing: false,
+      quality: 0.7,
       selectionLimit: 1,
     });
     if (res.canceled || !res.assets || res.assets.length === 0) return null;
@@ -250,6 +271,14 @@ export default function ProfileTab() {
         >
           <Ionicons name="create-outline" size={20} color={colors.gray[700]} />
           <Text style={{ fontSize: 14, color: colors.gray[900], flex: 1 }}>Modifier mes informations</Text>
+          <Ionicons name="chevron-forward" size={16} color={colors.gray[300]} />
+        </Pressable>
+        <Pressable
+          onPress={() => router.push('/support' as never)}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: spacing.md, borderTopWidth: 1, borderTopColor: colors.gray[100] }}
+        >
+          <Ionicons name="chatbubbles-outline" size={20} color={colors.gray[700]} />
+          <Text style={{ fontSize: 14, color: colors.gray[900], flex: 1 }}>Contacter le support</Text>
           <Ionicons name="chevron-forward" size={16} color={colors.gray[300]} />
         </Pressable>
         <Pressable
