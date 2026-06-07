@@ -20,6 +20,7 @@ import { toast } from '@/lib/toast';
 import { colors } from '@/lib/theme/colors';
 import { spacing, radius } from '@/lib/theme/spacing';
 import { ParcelFormDialog } from './ParcelFormDialog';
+import { ParcelGroupFormDialog } from './ParcelGroupFormDialog';
 
 const STATUS_VARIANT: Record<string, 'default' | 'success' | 'warning' | 'info' | 'error'> = {
   IN_STOCK: 'default', LOADING: 'info', IN_TRANSIT: 'warning', ARRIVED: 'info', RECEIVED: 'info', DELIVERED: 'success', LOST: 'error',
@@ -42,6 +43,7 @@ export default function ParcelsScreen() {
   const [tab, setTab] = useState<'active' | 'archived'>('active');
   const [statusFilter, setStatusFilter] = useState('');
   const [showCreate, setShowCreate] = useState(false);
+  const [showGroup, setShowGroup] = useState(false);
   const [handoverParcel, setHandoverParcel] = useState<any | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
@@ -106,7 +108,7 @@ export default function ParcelsScreen() {
         <PageHeader
           title="Colis"
           subtitle={`${meta?.total ?? 0} ${view === 'groups' ? 'groupes' : tab === 'archived' ? 'archives' : 'actifs'}`}
-          actions={<Can permission="parcel.create"><HeaderAction label="Nouveau colis" icon="add" onPress={() => setShowCreate(true)} /></Can>}
+          actions={<Can permission="parcel.create"><HeaderAction label="Groupe de colis" icon="albums-outline" variant="outline" onPress={() => setShowGroup(true)} /><HeaderAction label="Nouveau colis" icon="add" onPress={() => setShowCreate(true)} /></Can>}
         />
 
         {/* Toggle colis/groupes */}
