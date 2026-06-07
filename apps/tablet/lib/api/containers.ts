@@ -55,6 +55,30 @@ export const containersApi = {
     apiClient.post(`/containers/${id}/arrive`).then((r) => r.data),
   unload: (id: string, data: { parcelId: string; action: string; warehouseId: string; newWeight?: number; comment?: string }) =>
     apiClient.post(`/containers/${id}/unload`, data).then((r) => r.data),
+
+  // Documents
+  documents: (id: string) =>
+    apiClient.get(`/containers/${id}/documents`).then((r) => r.data),
+  addDocument: (id: string, data: unknown) =>
+    apiClient.post(`/containers/${id}/documents`, data).then((r) => r.data),
+  updateDocument: (id: string, docId: string, caption: string) =>
+    apiClient.patch(`/containers/${id}/documents/${docId}`, { caption }).then((r) => r.data),
+  deleteDocument: (id: string, docId: string) =>
+    apiClient.delete(`/containers/${id}/documents/${docId}`).then((r) => r.data),
+
+  // Depenses
+  expenses: (id: string) =>
+    apiClient.get(`/expenses/container/${id}`).then((r) => r.data),
+  createExpense: (id: string, data: unknown) =>
+    apiClient.post(`/expenses/container/${id}`, data).then((r) => r.data),
+  updateExpense: (expenseId: string, data: unknown) =>
+    apiClient.patch(`/expenses/${expenseId}`, data).then((r) => r.data),
+  deleteExpense: (expenseId: string) =>
+    apiClient.delete(`/expenses/${expenseId}`).then((r) => r.data),
+  payExpense: (expenseId: string, data: unknown) =>
+    apiClient.post(`/expenses/${expenseId}/pay`, data).then((r) => r.data),
+  closeExpenses: (id: string) =>
+    apiClient.post(`/expenses/container/${id}/close`, {}).then((r) => r.data),
 };
 
 export const manifestsApi = {

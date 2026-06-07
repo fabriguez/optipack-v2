@@ -2,6 +2,7 @@ import { inject, injectable } from 'tsyringe';
 import type { UpdateTransitRouteInput } from '@transitsoftservices/shared';
 import { TRANSIT_ROUTE_REPOSITORY, type ITransitRouteRepository } from '../../interfaces/ITransitRouteRepository';
 import { NotFoundError } from '../../../domain/errors/BusinessError';
+import { realtimeService } from '../../../infrastructure/realtime/RealtimeService';
 
 @injectable()
 export class UpdateTransitRouteUseCase {
@@ -14,6 +15,8 @@ export class UpdateTransitRouteUseCase {
     if (!route) {
       throw new NotFoundError('Route de transit', id);
     }
-    return this.transitRepo.update(id, input);
+    const updated = await this.transitRepo.update(id, input);
+    realtimeService.emitResourceChange(route.organizationId, 'transit-routes', 'updated', id);
+    return updated;
   }
 }

@@ -23,6 +23,7 @@ import {
 } from '@/lib/api/client-portal';
 import { cn } from '@/lib/utils';
 import { useTenantMeta } from '@/lib/providers/TenantProvider';
+import { SupportFab } from '@/components/support/SupportFab';
 
 type NavLink = {
   href: string;
@@ -193,6 +194,9 @@ export default function ClientPortalLayout({
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         {children}
       </main>
+
+      {/* Bulle support flottante (cachee sur la page support dediee). */}
+      {!pathname.startsWith('/portal/support') && <SupportFab />}
     </div>
   );
 }

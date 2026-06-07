@@ -13,6 +13,7 @@ import { StorageChargeService } from '../../services/StorageChargeService';
 import { DebtBlockConfigService } from '../../services/DebtBlockConfigService';
 import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 import { prisma } from '../../../config/database';
+import { realtimeService } from '../../../infrastructure/realtime/RealtimeService';
 
 @injectable()
 export class CreateParcelUseCase {
@@ -267,6 +268,7 @@ export class CreateParcelUseCase {
       userId,
     });
 
+    realtimeService.emitResourceChange(client.organizationId, 'parcels', 'created', parcel.id);
     return {
       ...parcel,
       invoice: { id: invoice.id, reference: invoice.reference, status: invoice.status },

@@ -2,6 +2,7 @@ import { inject, injectable } from 'tsyringe';
 import { prisma } from '../../../config/database';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
 import { HistoryService } from '../../services/HistoryService';
+import { realtimeService } from '../../../infrastructure/realtime/RealtimeService';
 
 /**
  * Soft-delete d'un colis : set isDeleted=true + deletedAt. Le colis disparait
@@ -26,6 +27,7 @@ export class DeleteParcelUseCase {
         containerId: true,
         status: true,
         warehouseId: true,
+        client: { select: { organizationId: true } },
       },
     });
     if (!parcel) throw new NotFoundError('Colis', parcelId);
@@ -56,5 +58,9 @@ export class DeleteParcelUseCase {
       parcelDesignationSnapshot: parcel.designation,
       parcelTrackingSnapshot: parcel.trackingNumber,
     });
+
+    if (parcel.client?.organizationId) {
+      realtimeService.emitResourceChange(parcel.client.organizationId, 'parcels', 'deleted', parcelId);
+    }
   }
 }

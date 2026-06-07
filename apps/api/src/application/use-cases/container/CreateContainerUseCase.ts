@@ -5,6 +5,7 @@ import { AGENCY_REPOSITORY, type IAgencyRepository } from '../../interfaces/IAge
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
 import { HistoryService } from '../../services/HistoryService';
 import { prisma } from '../../../config/database';
+import { realtimeService } from '../../../infrastructure/realtime/RealtimeService';
 
 /**
  * Genere une designation automatique unique de la forme :
@@ -229,6 +230,7 @@ export class CreateContainerUseCase {
       },
     });
 
+    realtimeService.emitResourceChange(created.organizationId, 'containers', 'created', created.id);
     return created;
   }
 }

@@ -57,6 +57,7 @@ const mainNav: NavItem[] = [
   { label: 'Agences', href: '/agencies', icon: Building2, module: 'agencies' },
   { label: 'Magasins', href: '/warehouses', icon: Warehouse, module: 'warehouses' },
   { label: 'Clients', href: '/clients', icon: Users, module: 'clients' },
+  { label: 'Validation KYC', href: '/clients/kyc', icon: ShieldCheck, module: 'clients', adminOnly: true },
   { label: 'Colis', href: '/parcels', icon: Package, module: 'parcels' },
   { label: 'Conteneurs', href: '/containers', icon: Container, module: 'containers' },
   { label: 'Transporteurs', href: '/carriers', icon: Truck, module: 'containers' },

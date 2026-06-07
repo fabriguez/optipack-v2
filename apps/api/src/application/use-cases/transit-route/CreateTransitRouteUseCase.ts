@@ -1,6 +1,7 @@
 import { inject, injectable } from 'tsyringe';
 import type { CreateTransitRouteInput } from '@transitsoftservices/shared';
 import { TRANSIT_ROUTE_REPOSITORY, type ITransitRouteRepository } from '../../interfaces/ITransitRouteRepository';
+import { realtimeService } from '../../../infrastructure/realtime/RealtimeService';
 
 @injectable()
 export class CreateTransitRouteUseCase {
@@ -9,7 +10,7 @@ export class CreateTransitRouteUseCase {
   ) {}
 
   async execute(input: CreateTransitRouteInput, organizationId: string) {
-    return this.transitRepo.create({
+    const route = await this.transitRepo.create({
       name: input.name,
       type: input.type,
       departureCity: input.departureCity,
@@ -21,5 +22,7 @@ export class CreateTransitRouteUseCase {
       estimatedDurationDays: input.estimatedDurationDays ?? 0,
       organization: { connect: { id: organizationId } },
     });
+    realtimeService.emitResourceChange(organizationId, 'transit-routes', 'created', route.id);
+    return route;
   }
 }

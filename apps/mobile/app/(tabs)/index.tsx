@@ -37,9 +37,10 @@ export default function HomeScreen() {
   };
 
   return (
+    <View style={{ flex: 1 }}>
     <ScrollView
       style={{ flex: 1, backgroundColor: 'transparent' }}
-      contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg }}
+      contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg, paddingBottom: 96 }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary[500]} />}
     >
       <View>
@@ -179,6 +180,29 @@ export default function HomeScreen() {
         </>
       )}
     </ScrollView>
+      {/* Bulle support flottante : acces direct au chat depuis l'accueil. */}
+      <Pressable
+        onPress={() => router.push('/support' as never)}
+        style={{
+          position: 'absolute',
+          bottom: 20,
+          right: 20,
+          width: 56,
+          height: 56,
+          borderRadius: 28,
+          backgroundColor: colors.primary[600],
+          alignItems: 'center',
+          justifyContent: 'center',
+          shadowColor: '#000',
+          shadowOpacity: 0.2,
+          shadowRadius: 8,
+          shadowOffset: { width: 0, height: 4 },
+          elevation: 6,
+        }}
+      >
+        <Ionicons name="chatbubbles" size={26} color={colors.white} />
+      </Pressable>
+    </View>
   );
 }
 
