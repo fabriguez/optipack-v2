@@ -15,6 +15,7 @@
     "build:ios": "eas build --platform ios",
     "lint": "eslint \"app/**/*.{ts,tsx}\" --fix",
     "type-check": "tsc --noEmit",
+    "eas-build-post-install": "pnpm --filter @transitsoftservices/shared build",
     "clean": "rm -rf .expo dist node_modules/.cache .turbo android/build android/app/build ios/build ios/Pods"
   },
   "dependencies": {

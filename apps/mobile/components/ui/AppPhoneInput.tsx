@@ -87,7 +87,7 @@ export function AppPhoneInput({
 
   const buildFull = (cc: string, nat: string) => {
     const ccTrim = cc.replace(/\s/g, '');
-    const natTrim = nat.replace(/^\+?\d+\s?/, '').trim();
+    const natTrim = nat.trim();
     return ccTrim ? `${ccTrim} ${natTrim}`.trim() : natTrim;
   };
 
