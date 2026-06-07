@@ -30,7 +30,6 @@ export const navSections: NavSection[] = [
       { screen: 'warehouses/index', label: 'Magasins', icon: 'home-outline' },
       { screen: 'clients/index', label: 'Clients', icon: 'people-outline' },
       { screen: 'parcels/index', label: 'Colis', icon: 'cube-outline' },
-      { screen: 'parcel-groups/index', label: 'Groupes de colis', icon: 'albums-outline' },
       { screen: 'containers/index', label: 'Conteneurs', icon: 'archive-outline' },
       { screen: 'carriers/index', label: 'Transporteurs', icon: 'bus-outline' },
       { screen: 'transit-routes/index', label: 'Routes transit', icon: 'navigate-outline' },

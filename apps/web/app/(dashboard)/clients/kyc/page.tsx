@@ -11,6 +11,7 @@ import { AppDialog } from '@/components/ui/AppDialog';
 import { AppInput } from '@/components/ui/AppInput';
 import { apiClient } from '@/lib/api/client';
 import { extractApiError } from '@/lib/api/errorMessage';
+import { AuthedImage, openAuthedFile } from '@/components/shared/AuthedImage';
 
 interface PendingClient {
   id: string;
@@ -65,12 +66,12 @@ export default function ClientsKycPage() {
             <AppCard key={c.id}>
               <div className="flex items-start gap-3">
                 <div className="h-12 w-12 rounded-full bg-primary-50 flex items-center justify-center overflow-hidden shrink-0">
-                  {c.imageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={c.imageUrl} alt="" className="h-full w-full object-cover" />
-                  ) : (
-                    <IdCard className="h-5 w-5 text-primary-600" />
-                  )}
+                  <AuthedImage
+                    src={c.imageUrl}
+                    alt=""
+                    className="h-full w-full object-cover"
+                    fallback={<IdCard className="h-5 w-5 text-primary-600" />}
+                  />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-gray-900 truncate">{c.fullName}</p>
@@ -140,18 +141,25 @@ function DocPreview({ label, uri }: { label: string; uri?: string | null }) {
     );
   }
   return (
-    <a
-      href={uri}
-      target="_blank"
-      rel="noreferrer"
-      className="aspect-[3/2] rounded-lg overflow-hidden bg-gray-100 block group relative"
+    <button
+      type="button"
+      onClick={() => openAuthedFile(uri).catch(() => {})}
+      className="aspect-[3/2] rounded-lg overflow-hidden bg-gray-100 block group relative w-full"
     >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={uri} alt={label} className="h-full w-full object-cover" />
+      <AuthedImage
+        src={uri}
+        alt={label}
+        className="h-full w-full object-cover"
+        fallback={
+          <span className="flex h-full w-full items-center justify-center text-xs text-gray-400">
+            {label}
+          </span>
+        }
+      />
       <span className="absolute bottom-1 left-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded">
         {label}
       </span>
-    </a>
+    </button>
   );
 }
 
