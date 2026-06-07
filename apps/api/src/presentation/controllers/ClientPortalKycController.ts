@@ -92,7 +92,10 @@ export class ClientPortalKycController {
 
       const storage = container.resolve(StorageService);
       const ext = extFromMime(file.mimetype);
-      const key = storage.buildKey(`clients/${clientId}/${slot}`, ext);
+      // Prefixe `uploads/` obligatoire : la route GET /uploads/object/* refuse
+      // (404) toute cle hors de ce prefixe. Sans lui, l'avatar et les documents
+      // KYC sont stockes mais jamais servis (image vide cote mobile).
+      const key = storage.buildKey(`uploads/clients/${clientId}/${slot}`, ext);
       await storage.uploadBuffer(key, file.buffer, file.mimetype);
 
       const url = buildAbsoluteUrl(req, key);
