@@ -171,6 +171,7 @@ export default function ParcelsScreen() {
       </ScrollView>
 
       <ParcelFormDialog open={showCreate} onClose={() => setShowCreate(false)} />
+      <ParcelGroupFormDialog open={showGroup} onClose={() => setShowGroup(false)} />
       <ParcelHandoverDialog open={!!handoverParcel} onClose={() => setHandoverParcel(null)} parcel={handoverParcel} onSuccess={refetch} />
     </View>
   );

@@ -15,7 +15,7 @@ const geist = Geist({ subsets: ['latin'], variable: '--font-sans' });
 export const metadata: Metadata = {
   title: 'Transit Soft Services - Vos colis, suivis en temps reel',
   description:
-    'Plateforme de suivi de colis multi-tenant. Suivez, declarez et recevez vos envois avec une experience pensee pour vous.',
+    'Plateforme de suivi de colis multi-tenant. Suivez, déclarez et recevez vos envois avec une experience pensee pour vous.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
