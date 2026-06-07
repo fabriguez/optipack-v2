@@ -66,7 +66,7 @@ export function HeaderAction({
         borderRadius: radius.md,
         borderWidth: isPrimary ? 0 : 1,
         borderColor: colors.gray[300],
-        backgroundColor: isPrimary ? colors.primary[500] : pressed ? colors.gray[50] : colors.white,
+        backgroundColor: isPrimary ? colors.gray[900] : pressed ? colors.gray[50] : colors.white,
         opacity: disabled ? 0.5 : pressed && isPrimary ? 0.85 : 1,
       })}
     >

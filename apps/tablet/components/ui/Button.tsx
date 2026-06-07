@@ -6,7 +6,7 @@ type Variant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'destructive';
 type Size = 'sm' | 'md' | 'lg';
 
 const variantStyles: Record<Variant, { bg: string; text: string; border?: string }> = {
-  primary: { bg: colors.primary[500], text: colors.white },
+  primary: { bg: colors.gray[900], text: colors.white },
   secondary: { bg: colors.gray[100], text: colors.gray[900] },
   outline: { bg: 'transparent', text: colors.gray[700], border: colors.gray[300] },
   ghost: { bg: 'transparent', text: colors.gray[600] },

@@ -111,7 +111,7 @@ export function ResourceFormDialog<S extends ZodTypeAny>({
               borderRadius: radius.md,
               alignItems: 'center',
               justifyContent: 'center',
-              backgroundColor: colors.primary[500],
+              backgroundColor: colors.gray[900],
               opacity: mutation.isPending ? 0.6 : 1,
             }}
           >

@@ -192,7 +192,7 @@ function CreateButton({
         height: 40,
         paddingHorizontal: spacing.lg,
         borderRadius: radius.md,
-        backgroundColor: colors.primary[500],
+        backgroundColor: colors.gray[900],
         opacity: disabled ? 0.5 : pressed ? 0.85 : 1,
       })}
     >
