@@ -65,6 +65,7 @@ export default function ContainerDetailScreen() {
     { value: 'info', label: 'Informations', icon: ic('cube-outline'), content: <ParcelsSection container={c} /> },
     { value: 'expenses', label: 'Depenses', icon: ic('wallet-outline'), content: <ContainerExpensesTab containerId={containerId} isClosed={c.expensesClosed} parcelCount={c._count?.parcels ?? 0} /> },
     { value: 'documents', label: 'Documents', icon: ic('document-text-outline'), content: <ContainerDocumentsTab containerId={containerId} /> },
+    { value: 'history', label: 'Historique', icon: ic('time-outline'), content: <HistoryTab containerId={containerId} /> },
   ];
 
   return (
@@ -107,6 +108,9 @@ export default function ContainerDetailScreen() {
             </View>
           ))}
         </View>
+
+        {/* Benefice (hors acheminement) */}
+        {!c.isForwarding && <BeneficeCards containerId={containerId} />}
 
         {/* Stats */}
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>
@@ -202,7 +206,9 @@ function ParcelsSection({ container }: { container: any }) {
         {canUnload && <HeaderAction label="Decharger par scan" icon="camera-outline" variant="outline" onPress={() => { setUnloadWh({ id: '', name: '' }); setShowUnloadWh(true); }} />}
       </View>
 
-      <SectionCard title={`Colis (${data?.meta?.total ?? parcels.length})`}>
+      <ManifestsSection containerId={containerId} status={status} />
+
+      <SectionCard title={`Colis dans le conteneur (${data?.meta?.total ?? parcels.length})`}>
         <AppDataTable columns={columns} data={parcels} emptyMessage="Aucun colis" onRowClick={(r) => router.push(`/parcels/${r.id}`)} />
       </SectionCard>
 
@@ -224,4 +230,119 @@ function ParcelsSection({ container }: { container: any }) {
 
 function RowActionsInline({ actions }: { actions: { label: string; icon: keyof typeof Ionicons.glyphMap; onPress: () => void; destructive?: boolean }[] }) {
   return <RowActions actions={actions.map((a) => ({ label: a.label, icon: <Ionicons name={a.icon} size={18} color={a.destructive ? colors.error : colors.gray[700]} />, onPress: a.onPress, variant: a.destructive ? ('destructive' as const) : ('default' as const) }))} />;
+}
+
+function BeneficeCards({ containerId }: { containerId: string }) {
+  const { data: snapData } = useQuery({ queryKey: ['containers', containerId, 'arrival-snapshot'], queryFn: () => apiClient.get(`/containers/${containerId}/arrival-snapshot`).then((r) => r.data), enabled: !!containerId });
+  const { data: expData } = useQuery({ queryKey: ['containers', containerId, 'expenses', 'benefice'], queryFn: () => containersApi.expenses(containerId), enabled: !!containerId });
+  const snapshot: any[] = snapData?.data ?? snapData ?? [];
+  const expenses: any[] = expData?.data ?? expData ?? [];
+  const received = snapshot.filter((p) => p.status !== 'LOST');
+  const lost = snapshot.length - received.length;
+  const value = received.reduce((s, p) => s + Number(p.price ?? 0), 0);
+  const totalExp = expenses.reduce((s, e) => s + Number(e.amount ?? 0), 0);
+  const benefice = value - totalExp;
+  return (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>
+      <StatCard label="Valeur colis recus" value={`+${formatAmount(value)}`} color={colors.primary[600]} hint={`${snapshot.length} envoye(s) · ${received.length} recu(s)${lost > 0 ? ` · ${lost} non recu(s)` : ''}`} />
+      <StatCard label="Total depenses" value={`-${formatAmount(totalExp)}`} color={colors.error} hint={`${expenses.length} depense(s)`} />
+      <StatCard label="Benefice estime" value={formatAmount(benefice)} color={benefice >= 0 ? colors.primary[700] : colors.error} hint="valeur colis - depenses" />
+    </View>
+  );
+}
+
+async function downloadManifest(manifestId: string, fmt: 'pdf' | 'xlsx', name: string) {
+  try {
+    const res = await apiClient.get(`/manifests/${manifestId}/${fmt}`, { responseType: 'arraybuffer' });
+    const bytes = new Uint8Array(res.data as ArrayBuffer);
+    let bin = '';
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    const base64 = global.btoa ? global.btoa(bin) : Buffer.from(bin, 'binary').toString('base64');
+    const uri = `${FileSystem.cacheDirectory}${name}.${fmt}`;
+    await FileSystem.writeAsStringAsync(uri, base64, { encoding: FileSystem.EncodingType.Base64 });
+    if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri);
+  } catch {
+    toast.error('Telechargement impossible');
+  }
+}
+
+function ManifestsSection({ containerId, status }: { containerId: string; status: string }) {
+  const qc = useQueryClient();
+  const { data } = useQuery({ queryKey: ['containers', containerId, 'manifests'], queryFn: () => manifestsApi.list({ containerId, limit: 100 }), enabled: !!containerId });
+  const manifests: any[] = data?.data ?? [];
+  const [busy, setBusy] = useState(false);
+
+  const gen = async (kind: 'dispatch' | 'reception') => {
+    setBusy(true);
+    try {
+      if (kind === 'dispatch') await manifestsApi.createDispatch(containerId);
+      else await manifestsApi.createReception(containerId);
+      qc.invalidateQueries({ queryKey: ['containers', containerId, 'manifests'] });
+      toast.success('Bordereau genere');
+    } catch (e: any) { toast.error(e?.response?.data?.message ?? 'Erreur'); } finally { setBusy(false); }
+  };
+
+  const columns: Column<any>[] = [
+    { key: 'type', label: 'Type', width: 110, render: (m) => <Badge variant={m.type === 'RECEPTION' ? 'success' : 'info'}>{m.type === 'RECEPTION' ? 'Reception' : 'Envoi'}</Badge> },
+    { key: 'number', label: 'Numero', width: 160, render: (m) => <Text style={{ fontFamily: 'monospace', fontSize: 11 }} numberOfLines={1}>{m.number}</Text> },
+    { key: 'createdAt', label: 'Date', width: 140, render: (m) => <Text style={{ fontSize: 12 }}>{m.createdAt ? formatDateTime(m.createdAt) : '-'}</Text> },
+    { key: 'lineCount', label: 'Lignes', width: 80, align: 'center', render: (m) => <Text style={{ fontSize: 13 }}>{m.lineCount ?? m._count?.lines ?? 0}</Text> },
+    { key: 'status', label: 'Statut', width: 100, render: (m) => <Badge variant={m.status === 'ACTIVE' ? 'success' : m.status === 'CANCELLED' ? 'error' : 'default'}>{m.status}</Badge> },
+    {
+      key: 'actions', label: '', width: 110, align: 'center',
+      render: (m) => (
+        <View style={{ flexDirection: 'row', gap: 6 }}>
+          <Pressable onPress={() => downloadManifest(m.id, 'pdf', m.number ?? 'bordereau')} hitSlop={6}><Ionicons name="document-outline" size={18} color={colors.error} /></Pressable>
+          <Pressable onPress={() => downloadManifest(m.id, 'xlsx', m.number ?? 'bordereau')} hitSlop={6}><Ionicons name="grid-outline" size={18} color={colors.primary[600]} /></Pressable>
+        </View>
+      ),
+    },
+  ];
+
+  return (
+    <SectionCard
+      title="Bordereaux"
+      subtitle={`Generation PDF/XLSX (statut: ${status})`}
+      action={
+        <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+          <Button size="sm" variant="outline" loading={busy} disabled={status === 'EMPTY'} onPress={() => gen('dispatch')}>Envoi</Button>
+          <Button size="sm" variant="outline" loading={busy} disabled={status !== 'UNLOADED' && status !== 'RECEIVED'} onPress={() => gen('reception')}>Reception</Button>
+        </View>
+      }
+    >
+      <AppDataTable columns={columns} data={manifests} emptyMessage="Aucun bordereau" />
+    </SectionCard>
+  );
+}
+
+function HistoryTab({ containerId }: { containerId: string }) {
+  const { data } = useQuery({ queryKey: ['containers', containerId, 'history'], queryFn: () => containersApi.history(containerId), enabled: !!containerId });
+  const history: any[] = data?.data ?? [];
+  return (
+    <SectionCard title={`Historique (${history.length})`}>
+      {history.length === 0 ? (
+        <Text style={{ fontSize: 13, color: colors.gray[400], textAlign: 'center', paddingVertical: 24 }}>Aucun evenement</Text>
+      ) : (
+        <View style={{ gap: spacing.md }}>
+          {history.map((h, i) => (
+            <View key={h.id ?? i} style={{ flexDirection: 'row', gap: spacing.md }}>
+              <View style={{ alignItems: 'center' }}>
+                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: i === 0 ? colors.primary[500] : colors.gray[300], marginTop: 4 }} />
+                {i < history.length - 1 && <View style={{ width: 2, flex: 1, backgroundColor: colors.gray[200] }} />}
+              </View>
+              <View style={{ flex: 1, paddingBottom: spacing.md }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text style={{ fontSize: 14, fontWeight: '600', color: colors.gray[900] }}>{h.action}</Text>
+                  <Text style={{ fontSize: 11, color: colors.gray[400] }}>{h.createdAt ? formatDateTime(h.createdAt) : ''}</Text>
+                </View>
+                {(h.statusBefore || h.statusAfter) && <Text style={{ fontSize: 12, color: colors.gray[500] }}>{h.statusBefore ?? '?'} → {h.statusAfter ?? '?'}</Text>}
+                {!!h.user && <Text style={{ fontSize: 12, color: colors.gray[400] }}>par {h.user.firstName} {h.user.lastName}</Text>}
+                {!!h.comment && <Text style={{ fontSize: 12, fontStyle: 'italic', color: colors.gray[500], marginTop: 2 }}>{h.comment}</Text>}
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+    </SectionCard>
+  );
 }

@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { View } from 'react-native';
-import { AppTextInput, AppPhoneInput, ImageInput, ResourceFormDialog } from '@/components/forms';
+import { AppTextInput, AppPhoneInput, AppSearchSelect, ImageInput, ResourceFormDialog } from '@/components/forms';
 import { agenciesApi } from '@/lib/api/agencies';
+import { COUNTRIES } from '@/lib/data/countries';
 import { spacing } from '@/lib/theme/spacing';
 
 const schema = z.object({
@@ -76,14 +77,13 @@ export function AgencyFormDialog({
     >
       {(control) => (
         <>
-          <ImageInput control={control} name="image" label="Image de l'agence" />
           <AppTextInput control={control} name="name" label="Nom" required />
           <View style={{ flexDirection: 'row', gap: spacing.lg }}>
             <View style={{ flex: 1 }}>
               <AppTextInput control={control} name="city" label="Ville" required />
             </View>
             <View style={{ flex: 1 }}>
-              <AppTextInput control={control} name="country" label="Pays" />
+              <AppSearchSelect control={control} name="country" label="Pays" items={COUNTRIES} />
             </View>
           </View>
           <AppTextInput control={control} name="address" label="Adresse" />
@@ -96,6 +96,7 @@ export function AgencyFormDialog({
             </View>
           </View>
           <AppTextInput control={control} name="googleMapsLink" label="Lien Google Maps" autoCapitalize="none" />
+          <ImageInput control={control} name="image" label="Image de l'agence" />
         </>
       )}
     </ResourceFormDialog>

@@ -324,6 +324,18 @@ export const portalApi = {
   getAgencies: () =>
     apiClient.get('/client-portal/agencies').then((r) => r.data.data),
 
+  // ---- Support (Stream Chat) ----
+  /** Jeton Stream pour init le SDK chat cote client (channel support unique). */
+  supportToken: (): Promise<{
+    apiKey: string;
+    token: string;
+    userId: string;
+    channelId: string;
+  }> =>
+    apiClient
+      .post('/client-portal/support/token')
+      .then((r) => r.data.data),
+
   // ---- Simulateur de prix (public ; le token client, s'il existe, est ajoute
   // par l'intercepteur et permet d'appliquer le tarif partenaire) ----
   getPublicTransitRoutes: (): Promise<PublicTransitRoute[]> =>

@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { View } from 'react-native';
-import { AppTextInput, AppSelect, AppSwitch, ResourceFormDialog } from '@/components/forms';
+import { AppTextInput, AppSelect, AppSwitch, AppSearchSelect, ResourceFormDialog } from '@/components/forms';
 import { transitRoutesApi } from '@/lib/api/transitRoutes';
+import { COUNTRIES } from '@/lib/data/countries';
 import { spacing } from '@/lib/theme/spacing';
 
 const schema = z.object({
@@ -83,11 +84,11 @@ export function TransitRouteFormDialog({ open, onClose, route }: { open: boolean
           </View>
           <View style={{ flexDirection: 'row', gap: spacing.lg }}>
             <View style={{ flex: 1 }}><AppTextInput control={control} name="departureCity" label="Ville depart" required /></View>
-            <View style={{ flex: 1 }}><AppTextInput control={control} name="departureCountry" label="Pays depart" required /></View>
+            <View style={{ flex: 1 }}><AppSearchSelect control={control} name="departureCountry" label="Pays depart" required items={COUNTRIES} /></View>
           </View>
           <View style={{ flexDirection: 'row', gap: spacing.lg }}>
             <View style={{ flex: 1 }}><AppTextInput control={control} name="arrivalCity" label="Ville arrivee" required /></View>
-            <View style={{ flex: 1 }}><AppTextInput control={control} name="arrivalCountry" label="Pays arrivee" required /></View>
+            <View style={{ flex: 1 }}><AppSearchSelect control={control} name="arrivalCountry" label="Pays arrivee" required items={COUNTRIES} /></View>
           </View>
           <View style={{ flexDirection: 'row', gap: spacing.lg }}>
             <View style={{ flex: 1 }}><AppTextInput control={control} name="pricePerKg" label="Prix /kg (Aerien/Terrestre)" keyboardType="decimal-pad" /></View>

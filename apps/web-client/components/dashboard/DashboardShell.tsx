@@ -19,6 +19,7 @@ import { Tag } from 'lucide-react';
 import { isAuthenticated, portalApi, type ClientProfile } from '@/lib/api/client';
 import { useLogout } from '@/lib/hooks/useAuth';
 import { cn } from '@/lib/utils';
+import { SupportFab } from '@/components/support/SupportFab';
 
 const BASE_NAV = [
   { href: '/app', label: 'Accueil', icon: Home },
@@ -161,6 +162,9 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       </header>
 
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">{children}</main>
+
+      {/* Bulle support flottante, presente sur tout l'espace client. */}
+      <SupportFab />
     </div>
   );
 }
