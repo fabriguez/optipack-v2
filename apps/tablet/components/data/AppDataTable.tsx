@@ -35,7 +35,7 @@ const DEFAULT_WIDTH = 160;
  */
 export function AppDataTable<T extends Record<string, any>>({
   columns,
-  data,
+  data: dataProp,
   isLoading,
   page = 1,
   totalPages = 1,
@@ -46,6 +46,8 @@ export function AppDataTable<T extends Record<string, any>>({
   emptyMessage = 'Aucune donnee trouvee',
   keyExtractor,
 }: AppDataTableProps<T>) {
+  // Defensif : l'API peut renvoyer une forme inattendue ; on garantit un tableau.
+  const data = Array.isArray(dataProp) ? dataProp : [];
   const effectiveTotal = total ?? data.length;
   const startItem = effectiveTotal === 0 ? 0 : (page - 1) * limit + 1;
   const endItem = Math.min(page * limit, effectiveTotal);

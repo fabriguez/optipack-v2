@@ -1,5 +1,6 @@
 import { ScrollView, View, Text, Pressable, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { useOfflineQueue } from '@/lib/hooks/useOfflineQueue';
@@ -30,6 +31,7 @@ export default function SettingsScreen() {
   const { user, logout } = useAuth();
   const { pending } = useOfflineQueue();
   const qc = useQueryClient();
+  const router = useRouter();
 
   const confirmClearQueue = () => {
     Alert.alert('Vider la file', `Supprimer ${pending} actions en attente ?`, [
@@ -54,6 +56,15 @@ export default function SettingsScreen() {
 
       <Card>
         <Row icon="person-outline" label={user?.email ?? '-'} value={`Role: ${user?.role ?? '-'}`} />
+      </Card>
+
+      <Text style={{ fontSize: 13, fontWeight: '600', color: colors.gray[500], marginTop: spacing.sm }}>Configuration</Text>
+      <Card>
+        <Row icon="ribbon-outline" label="Programme de fidelite" value="Paliers, reductions, avantages" onPress={() => router.push('/settings/loyalty')} />
+        <View style={{ height: 1, backgroundColor: colors.gray[100] }} />
+        <Row icon="card-outline" label="Methodes de paiement" value="Especes, MoMo, virement..." onPress={() => router.push('/settings/payment-methods')} />
+        <View style={{ height: 1, backgroundColor: colors.gray[100] }} />
+        <Row icon="shield-outline" label="Blocage sur dettes" value="Seuils de blocage remise/creation" onPress={() => router.push('/settings/debt-block')} />
       </Card>
 
       <Card>

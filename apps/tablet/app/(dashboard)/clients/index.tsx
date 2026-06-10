@@ -136,6 +136,7 @@ export default function ClientsScreen() {
           subtitle={`${meta?.total ?? clients.length} clients`}
           actions={
             <Can permission="client.create">
+              <HeaderAction label="KYC" icon="shield-checkmark-outline" variant="outline" onPress={() => router.push('/clients/kyc')} />
               <HeaderAction label="Importer" icon="cloud-upload-outline" variant="outline" onPress={() => setShowImport(true)} />
               <HeaderAction label="Nouveau client" icon="add" onPress={() => setShowCreate(true)} />
             </Can>
