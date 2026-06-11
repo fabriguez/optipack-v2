@@ -1,0 +1,88 @@
+name: Desktop — build installers (Win + Mac)
+
+# Build les installeurs Tauri du backoffice desktop (apps/web-desktop) pour
+# macOS (.dmg/.app, universel Intel+Apple Silicon) et Windows (.exe NSIS + .msi),
+# puis les attache a une Release GitHub.
+#
+# Declencheurs :
+#   - push d'un tag "desktop-v*" (ex: desktop-v0.1.0) -> release publiee
+#   - manuel (workflow_dispatch) -> release brouillon, pour tester
+#
+# SIGNATURE : les hooks sont prets mais INACTIFS tant que les secrets ne sont
+# pas fournis (build non signe -> contournement Gatekeeper/SmartScreen cote
+# destinataire). Voir le bloc `env` de l'etape build pour les secrets a remplir.
+
+on:
+  push:
+    tags:
+      - 'desktop-v*'
+  workflow_dispatch:
+
+# Le tauri-action a besoin de pouvoir creer la release.
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: '--target universal-apple-darwin'
+            rust_targets: 'aarch64-apple-darwin,x86_64-apple-darwin'
+          - platform: windows-latest
+            args: ''
+            rust_targets: ''
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/web-desktop/src-tauri
+
+      - name: Install workspace deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Build + bundle (tauri)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          # --- Frontend (Vite) : pointe l'app installee sur l'API en ligne.
+          #     .env etant gitignore, on injecte ici (variables de repo possibles).
+          VITE_API_URL: ${{ vars.VITE_API_URL || 'https://api.transitsoftservices.com/api/v1' }}
+          VITE_SOCKET_URL: ${{ vars.VITE_SOCKET_URL || 'https://api.transitsoftservices.com' }}
+          # --- Signature macOS (laisser vide = build non signe). A remplir :
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          projectPath: apps/web-desktop
+          args: ${{ matrix.args }}
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || 'desktop-dev' }}
+          releaseName: 'TransitSoft Desktop ${{ github.ref_type == ''tag'' && github.ref_name || ''(dev build)'' }}'
+          releaseBody: 'Installeurs desktop generes par CI. Win: .exe (NSIS) / .msi · Mac: .dmg (universel).'
+          releaseDraft: ${{ github.ref_type != 'tag' }}
+          prerelease: false

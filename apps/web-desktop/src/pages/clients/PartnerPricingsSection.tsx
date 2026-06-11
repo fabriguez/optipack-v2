@@ -1,0 +1,241 @@
+
+import { useState } from 'react';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { Plus, Trash2, Tag } from 'lucide-react';
+import { AppCard, AppCardHeader } from '@/components/ui/AppCard';
+import { AppButton } from '@/components/ui/AppButton';
+import { AppInput } from '@/components/ui/AppInput';
+import { AppSearchSelect } from '@/components/ui/AppSearchSelect';
+import { AppDialog } from '@/components/ui/AppDialog';
+import { AppBadge } from '@/components/ui/AppBadge';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { clientsApi, type PartnerPricing } from '@/lib/api/clients';
+import { searchers } from '@/lib/api/searchers';
+import { apiClient } from '@/lib/api/client';
+import { toast } from 'sonner';
+import { formatAmount, checkPricingForType } from '@transitsoftservices/shared';
+
+type RouteType = 'AIR' | 'SEA' | 'LAND';
+
+interface Props {
+  clientId: string;
+  isPartner: boolean;
+}
+
+export function PartnerPricingsSection({ clientId, isPartner }: Props) {
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [routeId, setRouteId] = useState<string | null>(null);
+  const [pricePerKg, setPricePerKg] = useState('');
+  const [pricePerVolume, setPricePerVolume] = useState('');
+  const [toDelete, setToDelete] = useState<string | null>(null);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['clients', clientId, 'pricings'],
+    queryFn: () => clientsApi.listPricings(clientId),
+    enabled: !!clientId,
+  });
+
+  // Type de la route selectionnee : pilote le champ requis (kg si AIR, m3 si
+  // SEA, les deux si LAND). On le recupere via le detail de la route.
+  const { data: routeDetail } = useQuery({
+    queryKey: ['transit-routes', routeId],
+    queryFn: () => apiClient.get(`/transit-routes/${routeId}`).then((r) => r.data),
+    enabled: !!routeId,
+  });
+  const routeType: RouteType | undefined = routeDetail?.data?.type;
+  const showKg = routeType === 'AIR' || routeType === 'LAND';
+  const showVol = routeType === 'SEA' || routeType === 'LAND';
+
+  const createMut = useMutation({
+    mutationFn: (payload: { transitRouteId?: string | null; pricePerKg?: number; pricePerVolume?: number }) =>
+      clientsApi.createPricing(clientId, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['clients', clientId, 'pricings'] });
+      toast.success('Tarification enregistree');
+      setOpen(false);
+      setRouteId(null);
+      setPricePerKg('');
+      setPricePerVolume('');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Erreur lors de la creation'),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => clientsApi.deletePricing(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['clients', clientId, 'pricings'] });
+      toast.success('Tarification supprimee');
+    },
+    onError: () => toast.error('Erreur lors de la suppression'),
+  });
+
+  const promoteMut = useMutation({
+    mutationFn: () => clientsApi.update(clientId, { clientType: 'PARTNER' } as any),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['clients', clientId] });
+      toast.success('Client promu Partenaire');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Erreur lors de la promotion'),
+  });
+
+  const items: PartnerPricing[] = data?.data || [];
+
+  if (!isPartner) {
+    return (
+      <AppCard>
+        <AppCardHeader title="Tarification partenaire" />
+        <div className="flex items-center gap-3 rounded-xl bg-gray-50 p-3 text-sm text-gray-600">
+          <Tag className="h-4 w-4 shrink-0 text-gray-400" />
+          <span className="flex-1">Pour activer la tarification dediee, marquez le client comme <strong>Partenaire</strong>.</span>
+          <AppButton size="sm" onClick={() => promoteMut.mutate()} disabled={promoteMut.isPending}>
+            {promoteMut.isPending ? 'En cours...' : 'Marquer comme Partenaire'}
+          </AppButton>
+        </div>
+      </AppCard>
+    );
+  }
+
+  return (
+    <AppCard>
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <h3 className="text-base font-semibold text-gray-900">Tarification partenaire</h3>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Prix specifiques pour ce partenaire. Une regle par route ou globale (sans route).
+          </p>
+        </div>
+        <AppButton size="sm" onClick={() => setOpen(true)}>
+          <Plus className="h-3.5 w-3.5" />
+          Ajouter
+        </AppButton>
+      </div>
+
+      {isLoading ? (
+        <p className="text-sm text-gray-400">Chargement...</p>
+      ) : items.length === 0 ? (
+        <p className="text-sm text-gray-400 py-4 text-center">Aucune tarification dediee. La tarification standard sera utilisee.</p>
+      ) : (
+        <div className="space-y-2">
+          {items.map((p) => (
+            <div key={p.id} className="flex items-center justify-between rounded-xl bg-gray-50 p-3">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-50">
+                  <Tag className="h-4 w-4 text-primary-600" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">
+                    {p.transitRoute?.name ?? 'Toutes routes'}
+                    {!p.isActive && <AppBadge variant="default" className="ml-2 text-[10px]">Inactif</AppBadge>}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {p.transitRoute?.type === 'SEA'
+                      ? `${formatAmount(Number(p.pricePerVolume))}/m3`
+                      : p.transitRoute?.type === 'AIR'
+                        ? `${formatAmount(Number(p.pricePerKg))}/kg`
+                        : `${formatAmount(Number(p.pricePerKg))}/kg${Number(p.pricePerVolume) > 0 ? ` - ${formatAmount(Number(p.pricePerVolume))}/m3` : ''}`}
+                    {p.transitRoute?.type && ` - ${p.transitRoute.type}`}
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setToDelete(p.id)} className="rounded-lg p-1.5 hover:bg-red-50" aria-label="Supprimer">
+                <Trash2 className="h-4 w-4 text-red-600" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <AppDialog
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Nouvelle tarification"
+        size="md"
+        footer={
+          <>
+            <AppButton variant="ghost" onClick={() => setOpen(false)}>Annuler</AppButton>
+            <AppButton
+              onClick={() => {
+                if (!routeId) {
+                  toast.error('Selectionnez une route de transit');
+                  return;
+                }
+                const kg = pricePerKg ? Number(pricePerKg) : null;
+                const vol = pricePerVolume ? Number(pricePerVolume) : null;
+                const err = checkPricingForType(routeType, kg, vol);
+                if (err) {
+                  toast.error(err);
+                  return;
+                }
+                createMut.mutate({
+                  transitRouteId: routeId,
+                  pricePerKg: kg ?? undefined,
+                  pricePerVolume: vol ?? undefined,
+                });
+              }}
+              loading={createMut.isPending}
+            >
+              Enregistrer
+            </AppButton>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <AppSearchSelect
+            label="Route de transit"
+            value={routeId}
+            onChange={(v) => {
+              setRouteId(v);
+              // Reset des prix : le champ pertinent depend du nouveau type.
+              setPricePerKg('');
+              setPricePerVolume('');
+            }}
+            search={searchers.transitRoutes}
+            placeholder="Selectionnez une route"
+          />
+          <p className="text-xs text-gray-500">
+            Le type de la route determine le tarif : <strong>aerienne</strong> = prix au kg,{' '}
+            <strong>maritime</strong> = prix au m3, <strong>terrestre</strong> = au moins l&apos;un des deux.
+          </p>
+
+          {!routeId ? null : (
+            <div className="grid grid-cols-2 gap-3">
+              {showKg && (
+                <AppInput
+                  label={`Prix / kg (XAF)${routeType === 'AIR' ? ' *' : ''}`}
+                  type="number"
+                  step="0.01"
+                  value={pricePerKg}
+                  onChange={(e) => setPricePerKg(e.target.value)}
+                />
+              )}
+              {showVol && (
+                <AppInput
+                  label={`Prix / m3 (XAF)${routeType === 'SEA' ? ' *' : ''}`}
+                  type="number"
+                  step="0.01"
+                  value={pricePerVolume}
+                  onChange={(e) => setPricePerVolume(e.target.value)}
+                />
+              )}
+            </div>
+          )}
+
+        </div>
+      </AppDialog>
+
+      <ConfirmDialog
+        open={!!toDelete}
+        onClose={() => setToDelete(null)}
+        onConfirm={() => {
+          if (toDelete) deleteMut.mutate(toDelete);
+          setToDelete(null);
+        }}
+        title="Supprimer la tarification"
+        message="Cette tarification dediee sera retiree. Le prix standard sera utilise par defaut."
+        confirmLabel="Supprimer"
+        variant="destructive"
+      />
+    </AppCard>
+  );
+}
