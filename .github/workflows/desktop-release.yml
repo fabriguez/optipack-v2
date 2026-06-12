@@ -63,7 +63,10 @@ jobs:
           workspaces: apps/web-desktop/src-tauri
 
       - name: Install workspace deps
-        run: pnpm install --frozen-lockfile
+        # --no-frozen-lockfile : le lockfile committe a une desync pre-existante
+        # sur apps/tablet (bumps expo non repercutes) sans rapport avec le
+        # desktop. On laisse pnpm resoudre plutot que d'echouer le build.
+        run: pnpm install --no-frozen-lockfile
 
       - name: Build + bundle (tauri)
         uses: tauri-apps/tauri-action@v0

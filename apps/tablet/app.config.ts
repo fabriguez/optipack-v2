@@ -50,6 +50,9 @@ export default (): ExpoConfig => {
       package: t.androidPackage,
     },
     plugins: [
+      // Fix monorepo pnpm : patche android/settings.gradle apres le prebuild EAS
+      // (resolution de @react-native/gradle-plugin via react-native).
+      './plugins/withMonorepoSettingsGradle',
       'expo-router',
       'expo-secure-store',
       [
@@ -57,8 +60,7 @@ export default (): ExpoConfig => {
         {
           photosPermission:
             "L'application accede a vos photos pour vous permettre d'ajouter une photo de profil ou un justificatif.",
-          cameraPermission:
-            "L'application utilise la camera pour prendre une photo de document.",
+          cameraPermission: "L'application utilise la camera pour prendre une photo de document.",
         },
       ],
       [
@@ -71,11 +73,17 @@ export default (): ExpoConfig => {
     ],
     extra: {
       tenantSlug: slug,
+      eas: {
+        projectId: '156d1bd1-3e44-4672-91db-65cd2dd51d38',
+      },
     },
   };
   if (t.iconPath) {
     config.icon = t.iconPath;
-    config.android = { ...config.android, adaptiveIcon: { foregroundImage: t.iconPath, backgroundColor: t.splashColor } };
+    config.android = {
+      ...config.android,
+      adaptiveIcon: { foregroundImage: t.iconPath, backgroundColor: t.splashColor },
+    };
   }
   if (t.splashPath) {
     (config.plugins as unknown[]).push([

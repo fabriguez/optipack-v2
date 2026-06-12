@@ -1,0 +1,17 @@
+Ok on a la gestion de permission, deja chaque personnel peut se connecter au backoffice avec des acces backoffice qui lui on ete envoye et chaque personnel est aussi un client et a donc des acces au site web client aussi, acces qui lui ont aussi ete envoyes par mail. (rassure toi de ca, que les deux greoupes de cred sont bien envoyes par mail)
+
+Seul l'administrateur du tenant peut gerer les permissions et c'est donc lui qui gere aussi le module rh, 
+
+les permissions doivent etre plus granulaires et mieux gerees (abac)
+
+au niveau de la vue client, et il faut des permissions  sur tout,
+
+agences, magasins, clients, validation de kyc, colis, conteneur, transporteurs, routes de transit, facture, paiements, caisse, decaissements, transferts, comptabilite, depenses, dettes, historique financier, personnel, fidelite, penalite, notifications, support, rapports, personalisation, studio site, parametres, audit, politique de fidelite 
+
+autre chose, chaque personnel ne peut voir et gerer des choses qui ont un rapport avec son agence, si un colis est entre une agence A et B et que un personnel est de l'agence C il ne voit rien voir concernant ce colis,
+
+Donc la gestion des permission doit se gere dans la tab permission de la apge administration rh,
+
+je veux que ce soit tip top, analyse chaque pages, chaques vues, concoit un systeme solide de permissions, front et back, pour que tout ca soit correctement appliqué et optimal, surtout bien solide, je ne veux pas que une vue ou un composant soit juste masquée par ce que le user n'a pas la permission, ca doit meme pas etre monté, donc si tu n'as pas le role qu'il faut, ca doit etre un 404 que tu recoit ou une erreur, je sais pas mais meme avec le lien d'une vue le user ne doit pas voir ce qui ne lui est pass autorisé,
+
+rassure toi par exemple que si un user a la possibilite de voir les colis mais pas les clients alors qu'il ne voit pas les infos du client dans le colis, ni meme dans les tickets du colis ou dans les factures, ca doit etre extrmement profond, fait un plan detaillé avec des instructions claires pour chaques etapes sur comment bien handle chaque process, il te faut surement une carte de connection des ressources pour tu ai unr vue complete et que tu puisse bien handle ce chantier

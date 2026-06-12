@@ -1,0 +1,31 @@
+# EAS upload ignore. Quand ce fichier existe, EAS l'utilise A LA PLACE de
+# .gitignore : il faut donc y reporter les exclusions essentielles, sinon des
+# dossiers volumineux (node_modules) seraient envoyes.
+
+# Dependances : EAS reinstalle via pnpm sur le serveur
+node_modules/
+
+# Sortie du prebuild Expo : regeneree sur EAS (CNG)
+ios/
+android/
+
+# Caches Expo / Metro / build
+.expo/
+.expo-shared/
+dist/
+web-build/
+.metro-health-check*
+
+# Secrets / signing (jamais uploades)
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+
+# Divers
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+.DS_Store
