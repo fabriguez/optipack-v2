@@ -15,6 +15,7 @@ import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { fetchPdfAuthed } from '@/lib/api/pdfDownload';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
+import { MaskedValue, isMasked } from '@/components/ui/MaskedValue';
 
 function InvoicesContent() {
   const navigate = useNavigate();
@@ -91,8 +92,8 @@ function InvoicesContent() {
       label: 'Client',
       render: (row: any) => (
         <div>
-          <p className="font-medium text-gray-900">{row.client?.fullName || '-'}</p>
-          <p className="text-xs text-gray-400">{row.client?.phone || ''}</p>
+          <p className="font-medium text-gray-900">{isMasked(row.client) ? <MaskedValue value={row.client} /> : row.client?.fullName || '-'}</p>
+          <p className="text-xs text-gray-400">{isMasked(row.client) ? '' : row.client?.phone || ''}</p>
         </div>
       ),
     },

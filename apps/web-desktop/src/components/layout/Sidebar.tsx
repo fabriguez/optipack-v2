@@ -35,7 +35,7 @@ import {
 import { cn } from '@/lib/utils/cn';
 import { useTenantMeta } from '@/lib/providers/TenantProvider';
 import { AuthedImage } from '@/components/shared/AuthedImage';
-import { usePermission, useIsTenantAdmin } from '@/lib/hooks/usePermission';
+import { useIsTenantAdmin, usePermissions } from '@/lib/hooks/usePermission';
 
 interface NavItem {
   label: string;
@@ -51,26 +51,26 @@ interface NavItem {
 
 const mainNav: NavItem[] = [
   { label: 'Tableau de bord', href: '/', icon: LayoutDashboard },
-  { label: 'Agences', href: '/agencies', icon: Building2, module: 'agencies' },
-  { label: 'Magasins', href: '/warehouses', icon: Warehouse, module: 'warehouses' },
-  { label: 'Clients', href: '/clients', icon: Users, module: 'clients' },
+  { label: 'Agences', href: '/agencies', icon: Building2, module: 'agencies', permissions: ['agency.read'] },
+  { label: 'Magasins', href: '/warehouses', icon: Warehouse, module: 'warehouses', permissions: ['warehouse.read'] },
+  { label: 'Clients', href: '/clients', icon: Users, module: 'clients', permissions: ['client.read'] },
   { label: 'Validation KYC', href: '/clients/kyc', icon: ShieldCheck, module: 'clients', adminOnly: true },
-  { label: 'Colis', href: '/parcels', icon: Package, module: 'parcels' },
-  { label: 'Conteneurs', href: '/containers', icon: Container, module: 'containers' },
-  { label: 'Transporteurs', href: '/carriers', icon: Truck, module: 'containers' },
-  { label: 'Routes transit', href: '/transit-routes', icon: Route, module: 'transit-routes' },
+  { label: 'Colis', href: '/parcels', icon: Package, module: 'parcels', permissions: ['parcel.read'] },
+  { label: 'Conteneurs', href: '/containers', icon: Container, module: 'containers', permissions: ['container.read'] },
+  { label: 'Transporteurs', href: '/carriers', icon: Truck, module: 'containers', permissions: ['carrier.read'] },
+  { label: 'Routes transit', href: '/transit-routes', icon: Route, module: 'transit-routes', permissions: ['transitroute.read'] },
 ];
 
 const financeNav: NavItem[] = [
-  { label: 'Factures', href: '/invoices', icon: FileText, module: 'invoices' },
-  { label: 'Paiements', href: '/payments', icon: CreditCard, module: 'payments' },
-  { label: 'Caisse', href: '/cash-register', icon: Vault, module: 'payments' },
-  { label: 'Decaissements', href: '/disbursements', icon: Receipt, module: 'disbursements' },
-  { label: 'Transferts', href: '/fund-transfers', icon: ArrowRightLeft, module: 'fund-transfers' },
-  { label: 'Comptabilite', href: '/accounting', icon: BookOpen, module: 'accounting' },
-  { label: 'Depenses', href: '/expenses', icon: HandCoins, module: 'expenses' },
-  { label: 'Dettes', href: '/debts', icon: AlertTriangle, module: 'debts' },
-  { label: 'Historique financier', href: '/finance-history', icon: History },
+  { label: 'Factures', href: '/invoices', icon: FileText, module: 'invoices', permissions: ['invoice.read'] },
+  { label: 'Paiements', href: '/payments', icon: CreditCard, module: 'payments', permissions: ['payment.read'] },
+  { label: 'Caisse', href: '/cash-register', icon: Vault, module: 'payments', permissions: ['cashregister.read'] },
+  { label: 'Decaissements', href: '/disbursements', icon: Receipt, module: 'disbursements', permissions: ['disbursement.read'] },
+  { label: 'Transferts', href: '/fund-transfers', icon: ArrowRightLeft, module: 'fund-transfers', permissions: ['transfer.read'] },
+  { label: 'Comptabilite', href: '/accounting', icon: BookOpen, module: 'accounting', permissions: ['accounting.read'] },
+  { label: 'Depenses', href: '/expenses', icon: HandCoins, module: 'expenses', permissions: ['expense.read'] },
+  { label: 'Dettes', href: '/debts', icon: AlertTriangle, module: 'debts', permissions: ['debt.read'] },
+  { label: 'Historique financier', href: '/finance-history', icon: History, permissions: ['finance.history.read', 'finance.dashboard.read'] },
 ];
 
 const adminNav: NavItem[] = [
@@ -89,16 +89,16 @@ const adminNav: NavItem[] = [
 ];
 
 const systemNav: NavItem[] = [
-  { label: 'Personnel', href: '/employees', icon: UserCog, module: 'employees' },
-  { label: 'Fidelite', href: '/loyalty', icon: Star, module: 'loyalty' },
-  { label: 'Penalites', href: '/penalties', icon: AlertTriangle, module: 'penalties' },
+  { label: 'Personnel', href: '/employees', icon: UserCog, module: 'employees', permissions: ['personnel.read'] },
+  { label: 'Fidelite', href: '/loyalty', icon: Star, module: 'loyalty', permissions: ['loyalty.read'] },
+  { label: 'Penalites', href: '/penalties', icon: AlertTriangle, module: 'penalties', permissions: ['penalty.read'] },
   { label: 'Notifications', href: '/notifications', icon: Bell },
-  { label: 'Support', href: '/chat', icon: MessageSquare, module: 'chat' },
-  { label: 'Rapports', href: '/reports', icon: BarChart3, module: 'reports' },
+  { label: 'Support', href: '/chat', icon: MessageSquare, module: 'chat', permissions: ['support.read'] },
+  { label: 'Rapports', href: '/reports', icon: BarChart3, module: 'reports', permissions: ['report.read'] },
   { label: 'Personnalisation', href: '/settings/branding', icon: Settings },
   { label: 'Studio site', href: '/settings/site', icon: Settings, adminOnly: true },
   { label: 'Parametres', href: '/settings', icon: Settings },
-  { label: 'Audit', href: '/audit-log', icon: Shield },
+  { label: 'Audit', href: '/audit-log', icon: Shield, permissions: ['audit.read'] },
 ];
 
 function NavSection({
@@ -113,15 +113,14 @@ function NavSection({
   defaultOpen?: boolean;
 }) {
   const pathname = useLocation().pathname;
-  // Permissions effectives de la session : utilisees pour filtrer les items
-  // dont l'attribut `permissions` n'est pas satisfait par l'utilisateur.
-  const allPerms = items.flatMap((it) => it.permissions ?? []);
-  const hasAnyPerm = usePermission(allPerms.length > 0 ? allPerms : ['*'], 'any');
+  const userPerms = usePermissions();
   const isAdmin = useIsTenantAdmin();
+  const hasWildcard = isAdmin || userPerms.includes('*');
   const visibleItems = items.filter((it) => {
     if (it.adminOnly && !isAdmin) return false;
     if (!it.permissions || it.permissions.length === 0) return true;
-    return hasAnyPerm; // grossier mais suffisant tant qu'il n'y a qu'un item avec perms par section
+    if (hasWildcard) return true;
+    return it.permissions.some((k) => userPerms.includes(k));
   });
 
   const hasActiveItem = visibleItems.some(

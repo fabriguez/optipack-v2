@@ -13,6 +13,7 @@ import { apiClient } from '@/lib/api/client';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
 import { AttachmentsCard } from '@/components/shared/AttachmentsCard';
 import { toast } from 'sonner';
+import { MaskedValue, isMasked } from '@/components/ui/MaskedValue';
 
 export default function DisbursementsDetailPage() {
   const { id = '' } = useParams();
@@ -140,7 +141,7 @@ export default function DisbursementsDetailPage() {
               <div>
                 <p className="text-xs text-gray-400">Emis par</p>
                 <p className="text-sm font-medium text-gray-900">
-                  {voucher.issuedBy?.firstName ? `${voucher.issuedBy.firstName} ${voucher.issuedBy.lastName}` : voucher.issuedByUserId}
+                  {isMasked(voucher.issuedBy) ? <MaskedValue value={voucher.issuedBy} /> : voucher.issuedBy?.firstName ? `${voucher.issuedBy.firstName} ${voucher.issuedBy.lastName}` : voucher.issuedByUserId}
                 </p>
               </div>
             </div>

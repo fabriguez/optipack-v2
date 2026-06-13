@@ -13,6 +13,7 @@ import { RowActions } from '@/components/shared/RowActions';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { formatAmount } from '@transitsoftservices/shared';
+import { MaskedValue, isMasked } from '@/components/ui/MaskedValue';
 import { toast } from 'sonner';
 
 export default function PenaltiesPage() {
@@ -65,7 +66,7 @@ export default function PenaltiesPage() {
 
   const columns = [
     { key: 'parcel', label: 'Colis', render: (row: any) => <Link to={`/penalties/${row.id}`} className="text-primary-700 font-medium hover:underline" onClick={(e) => e.stopPropagation()}>{row.parcel?.trackingNumber || '-'}</Link> },
-    { key: 'client', label: 'Client', render: (row: any) => row.client?.fullName || '-' },
+    { key: 'client', label: 'Client', render: (row: any) => isMasked(row.client) ? <MaskedValue value={row.client} /> : row.client?.fullName || '-' },
     { key: 'daysAccumulated', label: 'Jours' },
     { key: 'dailyRate', label: 'Taux/jour', render: (row: any) => formatAmount(Number(row.dailyRate)) },
     { key: 'totalAmount', label: 'Total', render: (row: any) => <span className="font-semibold text-red-600">{formatAmount(Number(row.totalAmount))}</span> },

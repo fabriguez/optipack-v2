@@ -10,6 +10,7 @@ import { AppButton } from '@/components/ui/AppButton';
 import { AppDataTable } from '@/components/ui/AppDataTable';
 import { AppBadge } from '@/components/ui/AppBadge';
 import { StatusBadge } from '@/components/shared/StatusBadge';
+import { MaskedValue, isMasked } from '@/components/ui/MaskedValue';
 import { RowActions } from '@/components/shared/RowActions';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 import { useQuery } from '@tanstack/react-query';
@@ -237,15 +238,17 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               <div>
                 <p className="text-xs text-gray-400">Client</p>
                 {invoice.client ? (
-                  <Link href={`/clients/${invoice.client.id}`} className="text-sm font-medium text-primary-700 hover:underline">
-                    {invoice.client.fullName}
-                  </Link>
+                  isMasked(invoice.client) ? <MaskedValue value={invoice.client} /> : (
+                    <Link href={`/clients/${invoice.client.id}`} className="text-sm font-medium text-primary-700 hover:underline">
+                      {invoice.client.fullName}
+                    </Link>
+                  )
                 ) : (
                   <p className="text-sm font-medium text-gray-900">-</p>
                 )}
               </div>
             </div>
-            {invoice.client?.phone && <p className="text-xs text-gray-500">{invoice.client.phone}</p>}
+            {invoice.client?.phone && <p className="text-xs text-gray-500">{isMasked(invoice.client) ? <MaskedValue value={invoice.client} /> : invoice.client.phone}</p>}
           </AppCard>
 
           {/* Parcels card */}
@@ -346,12 +349,12 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                         <p className="text-[10px] uppercase tracking-wider text-gray-400">Destinataire</p>
                         {p.recipient ? (
                           <div className="mt-0.5">
-                            <p className="text-sm font-medium text-gray-900">{p.recipient.fullName}</p>
+                            <p className="text-sm font-medium text-gray-900">{isMasked(p.recipient) ? <MaskedValue value={p.recipient} /> : p.recipient.fullName}</p>
                             {p.recipient.phone && (
-                              <p className="text-[11px] text-gray-500">{p.recipient.phone}</p>
+                              <p className="text-[11px] text-gray-500">{isMasked(p.recipient) ? <MaskedValue value={p.recipient} /> : p.recipient.phone}</p>
                             )}
                             {p.recipient.email && (
-                              <p className="text-[11px] text-gray-500 truncate">{p.recipient.email}</p>
+                              <p className="text-[11px] text-gray-500 truncate">{isMasked(p.recipient) ? <MaskedValue value={p.recipient} /> : p.recipient.email}</p>
                             )}
                           </div>
                         ) : (

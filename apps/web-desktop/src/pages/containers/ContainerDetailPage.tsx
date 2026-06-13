@@ -37,6 +37,7 @@ import { ParcelFormDialog } from '@/pages/parcels/ParcelFormDialog';
 import { QRScannerDialog } from '@/components/shared/QRScannerDialog';
 import { LiveScanCollector } from '@/components/shared/LiveScanCollector';
 import { ParcelPickerList } from '@/components/shared/ParcelPickerList';
+import { MaskedValue, isMasked } from '@/components/ui/MaskedValue';
 import { AgencyAvatar } from '@/components/shared/AgencyAvatar';
 import { ContainerExpensesTab } from './ContainerExpensesTab';
 import { ContainerDocumentsTab } from './ContainerDocumentsTab';
@@ -481,7 +482,7 @@ export default function ContainerDetailPage() {
       ),
     },
     { key: 'destination', label: 'Destination' },
-    { key: 'client', label: 'Client', render: (row: any) => row.client?.fullName || '-' },
+    { key: 'client', label: 'Client', render: (row: any) => isMasked(row.client) ? <MaskedValue value={row.client} /> : row.client?.fullName || '-' },
     { key: 'status', label: 'Statut', render: (row: any) => <StatusBadge status={row.status} type="parcel" /> },
     {
       key: 'actions',

@@ -30,6 +30,7 @@ import { WarehouseFormDialog } from './WarehouseFormDialog';
 import { AgencyAvatar } from '@/components/shared/AgencyAvatar';
 import { SpacesSection } from './SpacesSection';
 import { MoveToSpaceDialog } from './MoveToSpaceDialog';
+import { MaskedValue, isMasked } from '@/components/ui/MaskedValue';
 
 export default function WarehouseDetailPage() {
   const { id = '' } = useParams();
@@ -476,7 +477,7 @@ export default function WarehouseDetailPage() {
       ),
     },
     { key: 'designation', label: 'Designation' },
-    { key: 'client', label: 'Client', render: (row: any) => row.client?.fullName || '-' },
+    { key: 'client', label: 'Client', render: (row: any) => isMasked(row.client) ? <MaskedValue value={row.client} /> : row.client?.fullName || '-' },
     {
       key: 'weight',
       label: 'Masse / Volume',
@@ -566,7 +567,7 @@ export default function WarehouseDetailPage() {
       render: (row: any) => <span className="font-mono text-xs font-bold text-primary-700">{row.reference}</span>,
     },
     { key: 'label', label: 'Libelle', render: (row: any) => row.label || '-' },
-    { key: 'client', label: 'Client', render: (row: any) => row.client?.fullName || '-' },
+    { key: 'client', label: 'Client', render: (row: any) => isMasked(row.client) ? <MaskedValue value={row.client} /> : row.client?.fullName || '-' },
     {
       key: 'parcels',
       label: 'Colis',

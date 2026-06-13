@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
 import { AttachmentsCard } from '@/components/shared/AttachmentsCard';
+import { MaskedValue, isMasked } from '@/components/ui/MaskedValue';
 
 export default function ExpenseDetailPage() {
   const { id = '' } = useParams();
@@ -76,9 +77,11 @@ export default function ExpenseDetailPage() {
               <div>
                 <p className="text-xs text-gray-400">Approuve par</p>
                 <p className="text-sm font-medium text-gray-900">
-                  {expense.approvedBy?.firstName
-                    ? `${expense.approvedBy.firstName} ${expense.approvedBy.lastName}`
-                    : expense.approvedByUserId || 'Non approuve'}
+                  {isMasked(expense.approvedBy)
+                    ? <MaskedValue value={expense.approvedBy} />
+                    : expense.approvedBy?.firstName
+                      ? `${expense.approvedBy.firstName} ${expense.approvedBy.lastName}`
+                      : expense.approvedByUserId || 'Non approuve'}
                 </p>
               </div>
             </div>

@@ -14,6 +14,7 @@ import { AppInput } from '@/components/ui/AppInput';
 import { AppTextarea } from '@/components/ui/AppTextarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
+import { MaskedValue, isMasked } from '@/components/ui/MaskedValue';
 import { toast } from 'sonner';
 
 interface Expense {
@@ -406,8 +407,8 @@ function ExpenseCard({ expense: e, currentContainerId, onPay, onEdit, onDelete, 
           )}
 
           <p className="mt-1 text-[11px] text-gray-400">
-            Cree le {formatDate(e.createdAt)}{e.approvedBy && ` par ${e.approvedBy.firstName} ${e.approvedBy.lastName}`}
-            {e.paidAt && e.paidBy && ` - paye le ${formatDate(e.paidAt)} par ${e.paidBy.firstName} ${e.paidBy.lastName}`}
+            Cree le {formatDate(e.createdAt)}{isMasked(e.approvedBy) ? <> par <MaskedValue value={e.approvedBy} /></> : e.approvedBy && ` par ${e.approvedBy.firstName} ${e.approvedBy.lastName}`}
+            {e.paidAt && (isMasked(e.paidBy) ? <> - paye le {formatDate(e.paidAt)} par <MaskedValue value={e.paidBy} /></> : e.paidBy && ` - paye le ${formatDate(e.paidAt)} par ${e.paidBy.firstName} ${e.paidBy.lastName}`)}
           </p>
         </div>
         <div className="text-right">

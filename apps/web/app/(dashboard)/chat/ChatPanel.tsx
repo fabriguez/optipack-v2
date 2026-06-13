@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Send, X, MessageSquare, Loader2 } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 import { AppCard } from '@/components/ui/AppCard';
+import { MaskedValue, isMasked } from '@/components/ui/MaskedValue';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppBadge } from '@/components/ui/AppBadge';
 import { formatDateTime } from '@transitsoftservices/shared';
@@ -135,7 +136,7 @@ export function ChatPanel({ conversationId, onConversationClosed }: ChatPanelPro
               </AppBadge>
             </div>
             <p className="text-xs text-gray-500 mt-0.5">
-              {conversation.agency.name} -- {conversation.client.phone}
+              {conversation.agency.name} -- {isMasked(conversation.client) ? <MaskedValue value={conversation.client} /> : conversation.client.phone}
             </p>
           </div>
           {conversation.status === 'OPEN' && (

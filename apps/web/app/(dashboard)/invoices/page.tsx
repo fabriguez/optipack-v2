@@ -8,6 +8,7 @@ import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppDataTable } from '@/components/ui/AppDataTable';
 import { StatusBadge } from '@/components/shared/StatusBadge';
+import { MaskedValue, isMasked } from '@/components/ui/MaskedValue';
 import { SearchBar } from '@/components/shared/SearchBar';
 import { FilterDialog } from '@/components/shared/FilterDialog';
 import { ExportButton } from '@/components/shared/ExportButton';
@@ -94,8 +95,8 @@ function InvoicesContent() {
       label: 'Client',
       render: (row: any) => (
         <div>
-          <p className="font-medium text-gray-900">{row.client?.fullName || '-'}</p>
-          <p className="text-xs text-gray-400">{row.client?.phone || ''}</p>
+          <p className="font-medium text-gray-900">{isMasked(row.client) ? <MaskedValue value={row.client} /> : row.client?.fullName || '-'}</p>
+          <p className="text-xs text-gray-400">{isMasked(row.client) ? <MaskedValue value={row.client} /> : row.client?.phone || ''}</p>
         </div>
       ),
     },

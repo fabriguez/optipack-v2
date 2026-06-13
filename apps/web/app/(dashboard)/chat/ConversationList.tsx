@@ -2,6 +2,7 @@
 
 import { MessageSquare, Plus, Search } from 'lucide-react';
 import { AppCard } from '@/components/ui/AppCard';
+import { MaskedValue, isMasked } from '@/components/ui/MaskedValue';
 import { AppBadge } from '@/components/ui/AppBadge';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppInput } from '@/components/ui/AppInput';
@@ -74,7 +75,7 @@ export function ConversationList({
             >
               <div className="flex items-center justify-between">
                 <p className="text-sm font-medium text-gray-900 truncate">
-                  {conv.client.fullName}
+                  {isMasked(conv.client) ? <MaskedValue value={conv.client} /> : conv.client.fullName}
                 </p>
                 <AppBadge variant={conv.status === 'OPEN' ? 'success' : 'default'}>
                   {conv.status === 'OPEN' ? 'Ouvert' : 'Ferme'}

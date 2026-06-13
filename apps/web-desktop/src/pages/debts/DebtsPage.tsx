@@ -13,6 +13,7 @@ import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
 import { cn } from '@/lib/utils/cn';
+import { MaskedValue, isMasked } from '@/components/ui/MaskedValue';
 import { DebtFormDialog } from './DebtFormDialog';
 
 // Couleur badge selon statut. PARTIALLY_PAID = orange (en cours), CLEARED =
@@ -112,12 +113,15 @@ export default function DebtsPage() {
     key: 'tier',
     label: tab === 'client' ? 'Client' : 'Tiers',
     render: (row: any) => {
-      const label = row.client?.fullName
-        || row.employee?.fullName
-        || row.carrier?.name
-        || row.agencyCharge?.label
-        || row.creditor
-        || '-';
+      const maskedEntity = isMasked(row.client) ? row.client : isMasked(row.employee) ? row.employee : null;
+      const label = maskedEntity
+        ? null
+        : row.client?.fullName
+          || row.employee?.fullName
+          || row.carrier?.name
+          || row.agencyCharge?.label
+          || row.creditor
+          || '-';
       const sub = TYPE_LABEL[row.type] || row.type;
       return (
         <Link
@@ -125,7 +129,7 @@ export default function DebtsPage() {
           className="text-primary-700 font-medium hover:underline"
           onClick={(e) => e.stopPropagation()}
         >
-          <div>{label}</div>
+          <div>{maskedEntity ? <MaskedValue value={maskedEntity} /> : label}</div>
           <div className="text-[10px] text-gray-400">{sub}</div>
         </Link>
       );

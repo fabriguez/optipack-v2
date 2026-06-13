@@ -25,6 +25,7 @@ import { apiClient } from '@/lib/api/client';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
 import { ParcelFormDialog } from './ParcelFormDialog';
+import { MaskedValue, isMasked } from '@/components/ui/MaskedValue';
 
 function ParcelsContent() {
   const navigate = useNavigate();
@@ -210,8 +211,8 @@ function ParcelsContent() {
       label: 'Client',
       render: (row: any) => (
         <div>
-          <p className="text-sm text-gray-900">{row.client?.fullName || '-'}</p>
-          <p className="text-xs text-gray-400">{row.client?.phone || ''}</p>
+          <p className="text-sm text-gray-900">{isMasked(row.client) ? <MaskedValue value={row.client} /> : row.client?.fullName || '-'}</p>
+          <p className="text-xs text-gray-400">{isMasked(row.client) ? '' : row.client?.phone || ''}</p>
         </div>
       ),
     },
@@ -347,7 +348,7 @@ function ParcelsContent() {
       render: (row: any) => <span className="font-mono text-xs font-bold text-primary-700">{row.reference}</span>,
     },
     { key: 'label', label: 'Libelle', render: (row: any) => row.label || '-' },
-    { key: 'client', label: 'Client', render: (row: any) => row.client?.fullName || '-' },
+    { key: 'client', label: 'Client', render: (row: any) => isMasked(row.client) ? <MaskedValue value={row.client} /> : row.client?.fullName || '-' },
     { key: 'agency', label: 'Agence', render: (row: any) => row.agency?.name || '-' },
     {
       key: 'parcels',

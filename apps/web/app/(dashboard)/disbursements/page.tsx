@@ -13,6 +13,7 @@ import { SearchBar } from '@/components/shared/SearchBar';
 import { FilterDialog } from '@/components/shared/FilterDialog';
 import { ExportButton } from '@/components/shared/ExportButton';
 import { RowActions } from '@/components/shared/RowActions';
+import { MaskedValue, isMasked } from '@/components/ui/MaskedValue';
 import { useQuery } from '@tanstack/react-query';
 import { disbursementsApi } from '@/lib/api/finance';
 import { searchers } from '@/lib/api/searchers';
@@ -82,7 +83,7 @@ export default function DisbursementsPage() {
       const items: React.ReactNode[] = [];
       if (row.container) items.push(<Link key="c" href={`/containers/${row.container.id}`} className="text-primary-700 hover:underline" onClick={(e) => e.stopPropagation()}>{row.container.designation}</Link>);
       if (row.parcel) items.push(<Link key="p" href={`/parcels/${row.parcel.id}`} className="text-primary-700 hover:underline" onClick={(e) => e.stopPropagation()}>{row.parcel.trackingNumber}</Link>);
-      if (row.client) items.push(<Link key="cl" href={`/clients/${row.client.id}`} className="text-primary-700 hover:underline" onClick={(e) => e.stopPropagation()}>{row.client.fullName}</Link>);
+      if (row.client) items.push(isMasked(row.client) ? <MaskedValue key="cl" value={row.client} /> : <Link key="cl" href={`/clients/${row.client.id}`} className="text-primary-700 hover:underline" onClick={(e) => e.stopPropagation()}>{row.client.fullName}</Link>);
       if (!items.length) return <span className="text-gray-400 text-xs">-</span>;
       return <div className="flex flex-col gap-0.5 text-xs">{items}</div>;
     } },

@@ -13,6 +13,7 @@ import { AppCard } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppDataTable } from '@/components/ui/AppDataTable';
 import { StatusBadge } from '@/components/shared/StatusBadge';
+import { MaskedValue, isMasked } from '@/components/ui/MaskedValue';
 import { SearchBar } from '@/components/shared/SearchBar';
 import { FilterDialog } from '@/components/shared/FilterDialog';
 import { XlsxExportButton } from '@/components/shared/XlsxExportButton';
@@ -213,8 +214,8 @@ function ParcelsContent() {
       label: 'Client',
       render: (row: any) => (
         <div>
-          <p className="text-sm text-gray-900">{row.client?.fullName || '-'}</p>
-          <p className="text-xs text-gray-400">{row.client?.phone || ''}</p>
+          <p className="text-sm text-gray-900">{isMasked(row.client) ? <MaskedValue value={row.client} /> : row.client?.fullName || '-'}</p>
+          <p className="text-xs text-gray-400">{isMasked(row.client) ? <MaskedValue value={row.client} /> : row.client?.phone || ''}</p>
         </div>
       ),
     },

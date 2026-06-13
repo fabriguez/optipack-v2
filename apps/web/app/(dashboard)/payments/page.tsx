@@ -13,6 +13,7 @@ import { SearchBar } from '@/components/shared/SearchBar';
 import { FilterDialog } from '@/components/shared/FilterDialog';
 import { ExportButton } from '@/components/shared/ExportButton';
 import { RowActions } from '@/components/shared/RowActions';
+import { MaskedValue, isMasked } from '@/components/ui/MaskedValue';
 import { useServerPagination } from '@/lib/hooks/useServerPagination';
 import { usePayments } from '@/lib/hooks/usePayments';
 import { searchers } from '@/lib/api/searchers';
@@ -141,7 +142,7 @@ function PaymentsContent() {
     {
       key: 'receivedBy',
       label: 'Recu par',
-      render: (row: any) => <span className="text-sm">{row.receivedBy ? `${row.receivedBy.firstName} ${row.receivedBy.lastName}` : '-'}</span>,
+      render: (row: any) => <span className="text-sm">{isMasked(row.receivedBy) ? <MaskedValue value={row.receivedBy} /> : row.receivedBy ? `${row.receivedBy.firstName} ${row.receivedBy.lastName}` : '-'}</span>,
     },
     {
       key: 'isVoided',

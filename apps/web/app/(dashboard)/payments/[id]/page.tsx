@@ -13,6 +13,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useVoidPayment } from '@/lib/hooks/usePayments';
 import { apiClient } from '@/lib/api/client';
 import { formatAmount, formatDateTime } from '@transitsoftservices/shared';
+import { MaskedValue, isMasked } from '@/components/ui/MaskedValue';
 import { useState } from 'react';
 
 const METHOD_LABELS: Record<string, string> = {
@@ -71,7 +72,9 @@ export default function PaymentDetailPage({ params }: { params: Promise<{ id: st
               <DetailRow label="Montant" value={formatAmount(Number(payment.amount))} bold />
               <DetailRow label="Mode de paiement" value={METHOD_LABELS[payment.paymentMethod] || payment.paymentMethod} />
               <DetailRow label="Agence encaisseuse" value={payment.agency?.name || '-'} />
-              <DetailRow label="Recu par" value={payment.receivedBy ? `${payment.receivedBy.firstName} ${payment.receivedBy.lastName}` : '-'} />
+              {isMasked(payment.receivedBy)
+                ? <div className="flex justify-between py-1"><span className="text-sm text-gray-500">Recu par</span><MaskedValue value={payment.receivedBy} /></div>
+                : <DetailRow label="Recu par" value={payment.receivedBy ? `${payment.receivedBy.firstName} ${payment.receivedBy.lastName}` : '-'} />}
               {payment.discount > 0 && <DetailRow label="Remise" value={formatAmount(Number(payment.discount))} />}
               {payment.transactionReference && <DetailRow label="Ref. transaction" value={payment.transactionReference} mono />}
             </div>
