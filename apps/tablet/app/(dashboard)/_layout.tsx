@@ -1,7 +1,9 @@
 import type { ReactElement } from 'react';
+import { View } from 'react-native';
 import { Drawer } from 'expo-router/drawer';
 import { DrawerContent } from '@/components/layout/DrawerContent';
 import { TopBar } from '@/components/layout/TopBar';
+import { PermissionGate } from '@/components/layout/PermissionGate';
 import { allNavScreens } from '@/lib/nav/nav-config';
 import { SidebarProvider, useSidebar } from '@/lib/sidebar/SidebarContext';
 import { colors } from '@/lib/theme/colors';
@@ -35,7 +37,10 @@ function DrawerShell() {
 export default function DashboardLayout() {
   return (
     <SidebarProvider>
-      <DrawerShell />
+      <View style={{ flex: 1 }}>
+        <DrawerShell />
+        <PermissionGate />
+      </View>
     </SidebarProvider>
   );
 }

@@ -82,6 +82,22 @@ export interface JwtPayload {
   exp?: number;
 }
 
+// Étape 3 ABAC : reference masquee retournee par le backend quand le caller
+// n'a pas la permission requise (redact: 'ref'). Le front utilise isMasked()
+// pour afficher "Acces restreint" via le composant MaskedValue.
+export interface MaskedRef {
+  id?: string | null;
+  masked: true;
+}
+
+export function isMasked(value: unknown): value is MaskedRef {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as MaskedRef).masked === true
+  );
+}
+
 // Socket events
 export interface SocketEvents {
   'parcel:statusChanged': { parcelId: string; oldStatus: string; newStatus: string };
