@@ -24,6 +24,7 @@ export class PrismaChatRepository implements IChatRepository {
       clientId?: string;
       status?: string;
       assignedUserId?: string;
+      scopeWhere?: object | null;
     },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<ChatConversation>> {
@@ -37,6 +38,8 @@ export class PrismaChatRepository implements IChatRepository {
       ...(filters.assignedUserId && {
         assignedUserId: filters.assignedUserId,
       }),
+      // Scope agence (etape 2) : merge en AND par-dessus le filtre agencyIds existant.
+      ...(filters.scopeWhere && { AND: [filters.scopeWhere as Prisma.ChatConversationWhereInput] }),
       ...(search && {
         client: {
           OR: [

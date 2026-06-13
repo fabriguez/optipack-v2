@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { DebtController } from '../../controllers/DebtController';
-import { authenticate, authorize } from '../../middleware/authMiddleware';
+import { authenticate, authorize, requirePermission } from '../../middleware/authMiddleware';
 import { validate } from '../../middleware/validate';
 import {
   paginationSchema,
@@ -15,15 +15,16 @@ const router = Router();
 
 router.use(authenticate);
 
-router.get('/', validate(paginationSchema, 'query'), DebtController.list);
-router.get('/:id', DebtController.getById);
-router.get('/client/:clientId', DebtController.getByClient);
-router.post('/', validate(createDebtSchema), DebtController.create);
+router.get('/', requirePermission('debt.read'), validate(paginationSchema, 'query'), DebtController.list);
+router.get('/:id', requirePermission('debt.read'), DebtController.getById);
+router.get('/client/:clientId', requirePermission('debt.read'), DebtController.getByClient);
+router.post('/', requirePermission('debt.create'), validate(createDebtSchema), DebtController.create);
 
 // Paiement d'une dette : permission cassiere / agent / admin.
 router.post(
   '/:id/payments',
   authorize('SUPER_ADMIN', 'ADMIN', 'AGENT'),
+  requirePermission('debt.pay'),
   validate(recordDebtPaymentSchema),
   DebtController.recordPayment,
 );
@@ -32,6 +33,7 @@ router.post(
 router.post(
   '/:id/void',
   authorize('SUPER_ADMIN', 'ADMIN'),
+  requirePermission('debt.void'),
   validate(voidDebtSchema),
   DebtController.voidDebt,
 );
@@ -40,6 +42,7 @@ router.post(
 router.post(
   '/:id/adjust',
   authorize('SUPER_ADMIN', 'ADMIN'),
+  requirePermission('debt.update'),
   validate(adjustDebtSchema),
   DebtController.adjust,
 );
@@ -48,6 +51,7 @@ router.post(
 router.post(
   '/:id/litigated',
   authorize('SUPER_ADMIN', 'ADMIN'),
+  requirePermission('debt.update'),
   validate(markDebtLitigatedSchema),
   DebtController.markLitigated,
 );

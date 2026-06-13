@@ -16,6 +16,8 @@ export class ListContainersUseCase {
       isForwarding?: boolean;
       agencyIds?: string[];
       carrierId?: string;
+      /** Scope agence (fragment Prisma) merge en AND par le repo. */
+      scopeWhere?: object | null;
     },
     pagination: PaginationInput,
   ) {

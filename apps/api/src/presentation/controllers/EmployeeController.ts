@@ -59,6 +59,7 @@ import { AgencyHRStatsUseCase } from '../../application/use-cases/employee/Agenc
 import { AgencyHRReportXlsxUseCase } from '../../application/use-cases/employee/AgencyHRReportXlsxUseCase';
 import { EMPLOYEE_REPOSITORY } from '../../application/interfaces/IEmployeeRepository';
 import { NotFoundError } from '../../domain/errors/BusinessError';
+import { employeeScope, scopeCtx } from '../../application/services/scope/agencyScope';
 
 function monthStart(): Date {
   const d = new Date();
@@ -130,6 +131,8 @@ export class EmployeeController {
 
   static async getById(req: Request, res: Response, next: NextFunction) {
     try {
+      // Scope agence (etape 2) : l'employe doit appartenir aux agences du user.
+      await employeeScope.assert(req.params.id, scopeCtx(req));
       const repo = container.resolve<any>(EMPLOYEE_REPOSITORY);
       const employee = await repo.findById(req.params.id);
       if (!employee) throw new NotFoundError('Employe', req.params.id);
@@ -141,6 +144,7 @@ export class EmployeeController {
 
   static async update(req: Request, res: Response, next: NextFunction) {
     try {
+      await employeeScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(UpdateEmployeeUseCase);
       const employee = await useCase.execute(req.params.id, req.body);
       res.json({ success: true, data: employee });
@@ -151,6 +155,7 @@ export class EmployeeController {
 
   static async delete(req: Request, res: Response, next: NextFunction) {
     try {
+      await employeeScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(DeleteEmployeeUseCase);
       await useCase.execute(req.params.id);
       res.json({ success: true, message: 'Employe desactive' });
@@ -171,6 +176,7 @@ export class EmployeeController {
       if (!file) {
         return res.status(400).json({ success: false, message: 'Aucun fichier fourni' });
       }
+      await employeeScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(UploadEmployeeImageUseCase);
       const result = await useCase.execute(req.params.id, slot, file);
       res.json({ success: true, data: result });
@@ -185,6 +191,7 @@ export class EmployeeController {
       if (!['selfie', 'locationPlan', 'idDocument', 'idDocumentBack'].includes(slot)) {
         throw new NotFoundError('Slot photo employe', slot);
       }
+      await employeeScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(DeleteEmployeeImageUseCase);
       const result = await useCase.execute(req.params.id, slot);
       res.json({ success: true, data: result });
@@ -195,6 +202,7 @@ export class EmployeeController {
 
   static async pay(req: Request, res: Response, next: NextFunction) {
     try {
+      await employeeScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(PayEmployeeFromCashRegisterUseCase);
       const result = await useCase.execute(req.params.id, req.body, req.user!.userId);
       res.status(201).json({ success: true, data: result });
@@ -205,6 +213,7 @@ export class EmployeeController {
 
   static async resendCredentials(req: Request, res: Response, next: NextFunction) {
     try {
+      await employeeScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(ResendEmployeeCredentialsUseCase);
       const result = await useCase.execute(
         req.params.id,
@@ -218,6 +227,7 @@ export class EmployeeController {
 
   static async listPayslips(req: Request, res: Response, next: NextFunction) {
     try {
+      await employeeScope.assert(req.params.id, scopeCtx(req));
       const items = await (await import('../../config/database')).prisma.payslip.findMany({
         where: { employeeId: req.params.id },
         orderBy: { generatedAt: 'desc' },
@@ -352,6 +362,7 @@ export class EmployeeController {
 
   static async listDeductions(req: Request, res: Response, next: NextFunction) {
     try {
+      await employeeScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(ListSalaryDeductionsUseCase);
       const items = await useCase.execute(req.params.id);
       res.json({ success: true, data: items });
@@ -362,6 +373,7 @@ export class EmployeeController {
 
   static async createDeduction(req: Request, res: Response, next: NextFunction) {
     try {
+      await employeeScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(CreateSalaryDeductionUseCase);
       const item = await useCase.execute(
         { employeeId: req.params.id, ...req.body },
@@ -391,6 +403,7 @@ export class EmployeeController {
 
   static async listDocuments(req: Request, res: Response, next: NextFunction) {
     try {
+      await employeeScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(ListEmployeeDocumentsUseCase);
       const items = await useCase.execute(req.params.id);
       res.json({ success: true, data: items });
@@ -401,6 +414,7 @@ export class EmployeeController {
 
   static async addDocument(req: Request, res: Response, next: NextFunction) {
     try {
+      await employeeScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(AddEmployeeDocumentUseCase);
       const doc = await useCase.execute(
         { employeeId: req.params.id, ...req.body },
@@ -426,6 +440,7 @@ export class EmployeeController {
 
   static async setManagerFlag(req: Request, res: Response, next: NextFunction) {
     try {
+      await employeeScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(SetEmployeeManagerFlagUseCase);
       const isManager = !!req.body?.isAgencyManager;
       const item = await useCase.execute(req.params.id, isManager);
@@ -439,6 +454,7 @@ export class EmployeeController {
 
   static async getShifts(req: Request, res: Response, next: NextFunction) {
     try {
+      await employeeScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(GetEmployeeShiftsUseCase);
       const items = await useCase.execute(req.params.id);
       res.json({ success: true, data: items });
@@ -449,6 +465,7 @@ export class EmployeeController {
 
   static async setShifts(req: Request, res: Response, next: NextFunction) {
     try {
+      await employeeScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(SetEmployeeShiftsUseCase);
       const items = await useCase.execute(req.params.id, Array.isArray(req.body?.shifts) ? req.body.shifts : []);
       res.json({ success: true, data: items });
@@ -461,6 +478,7 @@ export class EmployeeController {
 
   static async markAttendance(req: Request, res: Response, next: NextFunction) {
     try {
+      await employeeScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(MarkAttendanceUseCase);
       const item = await useCase.execute(
         { employeeId: req.params.id, ...req.body },
@@ -474,6 +492,7 @@ export class EmployeeController {
 
   static async listAttendance(req: Request, res: Response, next: NextFunction) {
     try {
+      await employeeScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(ListEmployeeAttendanceUseCase);
       const from = req.query.from ? new Date(req.query.from as string) : undefined;
       const to = req.query.to ? new Date(req.query.to as string) : undefined;
@@ -499,6 +518,7 @@ export class EmployeeController {
 
   static async requestLeave(req: Request, res: Response, next: NextFunction) {
     try {
+      await employeeScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(RequestEmployeeLeaveUseCase);
       const item = await useCase.execute({ employeeId: req.params.id, ...req.body }, req.user!.userId);
       res.status(201).json({ success: true, data: item });
@@ -509,6 +529,7 @@ export class EmployeeController {
 
   static async listEmployeeLeaves(req: Request, res: Response, next: NextFunction) {
     try {
+      await employeeScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(ListEmployeeLeavesUseCase);
       const items = await useCase.execute(req.params.id);
       res.json({ success: true, data: items });
@@ -571,6 +592,7 @@ export class EmployeeController {
 
   static async checkOut(req: Request, res: Response, next: NextFunction) {
     try {
+      await employeeScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(CheckOutAttendanceUseCase);
       const item = await useCase.execute(
         req.params.id,
@@ -624,6 +646,7 @@ export class EmployeeController {
 
   static async attendanceStats(req: Request, res: Response, next: NextFunction) {
     try {
+      await employeeScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(EmployeeAttendanceStatsUseCase);
       const from = req.query.from ? new Date(req.query.from as string) : monthStart();
       const to = req.query.to ? new Date(req.query.to as string) : new Date();
@@ -638,6 +661,7 @@ export class EmployeeController {
 
   static async createSanction(req: Request, res: Response, next: NextFunction) {
     try {
+      await employeeScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(CreateEmployeeSanctionUseCase);
       const item = await useCase.execute({ employeeId: req.params.id, ...req.body }, req.user!.userId);
       res.status(201).json({ success: true, data: item });
@@ -648,6 +672,7 @@ export class EmployeeController {
 
   static async listSanctions(req: Request, res: Response, next: NextFunction) {
     try {
+      await employeeScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(ListEmployeeSanctionsUseCase);
       const items = await useCase.execute(req.params.id);
       res.json({ success: true, data: items });
@@ -658,6 +683,7 @@ export class EmployeeController {
 
   static async terminateContract(req: Request, res: Response, next: NextFunction) {
     try {
+      await employeeScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(TerminateEmployeeContractUseCase);
       const item = await useCase.execute({ employeeId: req.params.id, ...req.body }, req.user!.userId);
       res.json({ success: true, data: item });
@@ -670,6 +696,7 @@ export class EmployeeController {
 
   static async createReview(req: Request, res: Response, next: NextFunction) {
     try {
+      await employeeScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(CreateEmployeeReviewUseCase);
       const item = await useCase.execute({ employeeId: req.params.id, ...req.body }, req.user!.userId);
       res.status(201).json({ success: true, data: item });
@@ -680,6 +707,7 @@ export class EmployeeController {
 
   static async listReviews(req: Request, res: Response, next: NextFunction) {
     try {
+      await employeeScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(ListEmployeeReviewsUseCase);
       const items = await useCase.execute(req.params.id);
       res.json({ success: true, data: items });
@@ -751,6 +779,7 @@ export class EmployeeController {
       if (!['selfie', 'locationPlan', 'idDocument', 'idDocumentBack'].includes(slot)) {
         throw new NotFoundError('Slot photo employe', slot);
       }
+      await employeeScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(GetEmployeeImageUseCase);
       const obj = await useCase.execute(req.params.id, slot);
       if (!obj) return res.status(404).end();

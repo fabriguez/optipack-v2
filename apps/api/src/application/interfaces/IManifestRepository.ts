@@ -36,7 +36,7 @@ export interface IManifestRepository {
   findById(id: string): Promise<ManifestWithLines | null>;
   findByContainer(containerId: string): Promise<ManifestWithLines[]>;
   findAll(
-    filters: { containerId?: string; type?: string; status?: string },
+    filters: { containerId?: string; type?: string; status?: string; scopeWhere?: object | null },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<ManifestWithLines>>;
   createDispatchManifest(containerId: string, userId: string): Promise<ManifestWithLines>;

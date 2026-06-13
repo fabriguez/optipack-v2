@@ -1,5 +1,5 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
-import { authenticate, authorize } from '../../middleware/authMiddleware';
+import { authenticate, authorize, requirePermission } from '../../middleware/authMiddleware';
 import { validate } from '../../middleware/validate';
 import {
   paginationSchema,
@@ -12,7 +12,7 @@ const router = Router();
 
 router.use(authenticate);
 
-router.get('/', validate(paginationSchema, 'query'), async (req: Request, res: Response, next: NextFunction) => {
+router.get('/', validate(paginationSchema, 'query'), requirePermission('carrier.read'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { page = 1, limit = 20, search } = req.query as any;
     const skip = (Number(page) - 1) * Number(limit);
@@ -33,7 +33,7 @@ router.get('/', validate(paginationSchema, 'query'), async (req: Request, res: R
   } catch (err) { next(err); }
 });
 
-router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/:id', requirePermission('carrier.read'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const c = await prisma.carrier.findUnique({ where: { id: req.params.id } });
     if (!c) return res.status(404).json({ success: false, message: 'Transporteur introuvable' });
@@ -44,6 +44,7 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
 router.post(
   '/',
   authorize('SUPER_ADMIN', 'ADMIN'),
+  requirePermission('carrier.manage'),
   validate(createCarrierSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -91,6 +92,7 @@ router.post(
 router.patch(
   '/:id',
   authorize('SUPER_ADMIN', 'ADMIN'),
+  requirePermission('carrier.manage'),
   validate(updateCarrierSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -107,6 +109,7 @@ router.patch(
 router.delete(
   '/:id',
   authorize('SUPER_ADMIN', 'ADMIN'),
+  requirePermission('carrier.manage'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       // Soft delete : on desactive plutot que supprimer pour preserver les

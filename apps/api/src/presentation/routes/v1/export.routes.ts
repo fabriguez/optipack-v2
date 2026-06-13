@@ -5,29 +5,33 @@ import { ImportClientsXlsxUseCase } from '../../../application/use-cases/client/
 import { container } from '../../../container';
 import { getOrgId } from '../../middleware/tenantGuard';
 import { BusinessError } from '../../../domain/errors/BusinessError';
-import { authenticate, authorize } from '../../middleware/authMiddleware';
+import { authenticate, authorize, requirePermission } from '../../middleware/authMiddleware';
 
 const router = Router();
 
 router.use(authenticate);
 
 // Exports XLSX (avec images embarquees pour les colonnes contenant des URL d'image)
-router.get('/parcels', ExportController.parcels);
-router.get('/employees', ExportController.employees);
-router.get('/clients', ExportController.clients);
-router.get('/agencies', ExportController.agencies);
+router.get('/parcels', requirePermission('report.export'), ExportController.parcels);
+router.get('/employees', requirePermission('report.export'), ExportController.employees);
+router.get('/clients', requirePermission('report.export'), ExportController.clients);
+router.get('/agencies', requirePermission('report.export'), ExportController.agencies);
 
 // Imports XLSX (avec images embarquees -> upload + URL stockee sur l'entite)
+// Import employes : pas de cle d'import dediee listee, on retombe sur report.export.
 router.post(
   '/employees',
   authorize('SUPER_ADMIN', 'ADMIN'),
+  requirePermission('report.export'),
   xlsxImportMiddleware,
   ImportController.employees,
 );
 // Variante scopee a une agence (UI: depuis la page agence)
+// Import employes : pas de cle d'import dediee listee, on retombe sur report.export.
 router.post(
   '/agencies/:agencyId/employees',
   authorize('SUPER_ADMIN', 'ADMIN'),
+  requirePermission('report.export'),
   xlsxImportMiddleware,
   ImportController.employees,
 );
@@ -36,6 +40,7 @@ router.post(
 router.post(
   '/clients',
   authorize('SUPER_ADMIN', 'ADMIN'),
+  requirePermission('client.create'),
   xlsxImportMiddleware,
   async (req, res, next) => {
     try {

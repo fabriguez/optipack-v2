@@ -86,6 +86,9 @@ export class LoginUseCase {
         agencyIds,
         organizationId: user.organizationId,
         permissions,
+        // Étape 7 : version des permissions — le middleware rejette un token
+        // dont le pv ne correspond plus a la valeur DB (override ou poste change).
+        pv: user.permissionVersion,
       },
       config.jwt.secret as jwt.Secret,
       { expiresIn: config.jwt.accessExpiry } as jwt.SignOptions,

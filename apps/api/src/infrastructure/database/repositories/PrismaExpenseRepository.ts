@@ -17,7 +17,7 @@ export class PrismaExpenseRepository implements IExpenseRepository {
   }
 
   async findAll(
-    filters: { agencyId?: string; agencyIds?: string[] },
+    filters: { agencyId?: string; agencyIds?: string[]; scopeWhere?: object | null },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<Expense>> {
     const { page, limit, search } = pagination;
@@ -26,6 +26,8 @@ export class PrismaExpenseRepository implements IExpenseRepository {
     const where: Prisma.ExpenseWhereInput = {
       ...(filters.agencyId && { agencyId: filters.agencyId }),
       ...(filters.agencyIds?.length && { agencyId: { in: filters.agencyIds } }),
+      // Scope agence (etape 2) : merge en AND, ne touche pas au OR de recherche.
+      ...(filters.scopeWhere && { AND: [filters.scopeWhere as Prisma.ExpenseWhereInput] }),
       ...(search && {
         OR: [
           { title: { contains: search, mode: 'insensitive' } },

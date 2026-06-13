@@ -34,6 +34,7 @@ export class PrismaFundTransferRepository implements IFundTransferRepository {
       destinationPaymentMethod?: string;
       minAmount?: number;
       maxAmount?: number;
+      scopeWhere?: object | null;
     },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<FundTransfer>> {
@@ -62,6 +63,8 @@ export class PrismaFundTransferRepository implements IFundTransferRepository {
       }),
       ...(Object.keys(createdAt).length && { createdAt }),
       ...(Object.keys(amount).length && { amount }),
+      // Scope agence (source OU destination) : en AND pour ne rien ecraser.
+      ...(filters.scopeWhere && { AND: [filters.scopeWhere as Prisma.FundTransferWhereInput] }),
     };
 
     const [data, total] = await Promise.all([

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { FundTransferController } from '../../controllers/FundTransferController';
-import { authenticate, authorize } from '../../middleware/authMiddleware';
+import { authenticate, authorize, requirePermission } from '../../middleware/authMiddleware';
 import { validate } from '../../middleware/validate';
 import { createFundTransferSchema, paginationSchema } from '@transitsoftservices/shared';
 
@@ -8,10 +8,13 @@ const router = Router();
 
 router.use(authenticate);
 
-router.get('/', validate(paginationSchema, 'query'), FundTransferController.list);
-router.get('/:id', FundTransferController.getById);
-router.post('/', authorize('SUPER_ADMIN', 'ADMIN'), validate(createFundTransferSchema), FundTransferController.create);
-router.post('/:id/confirm', authorize('SUPER_ADMIN', 'ADMIN'), FundTransferController.confirm);
-router.post('/:id/void', authorize('SUPER_ADMIN', 'ADMIN'), FundTransferController.void);
+// Lecture des transferts de fonds
+router.get('/', validate(paginationSchema, 'query'), requirePermission('transfer.read'), FundTransferController.list);
+router.get('/:id', requirePermission('transfer.read'), FundTransferController.getById);
+// Initiation d'un transfert
+router.post('/', authorize('SUPER_ADMIN', 'ADMIN'), requirePermission('transfer.initiate'), validate(createFundTransferSchema), FundTransferController.create);
+// Confirmation / annulation d'un transfert
+router.post('/:id/confirm', authorize('SUPER_ADMIN', 'ADMIN'), requirePermission('transfer.confirm'), FundTransferController.confirm);
+router.post('/:id/void', authorize('SUPER_ADMIN', 'ADMIN'), requirePermission('transfer.void'), FundTransferController.void);
 
 export default router;

@@ -43,7 +43,7 @@ export class PrismaManifestRepository implements IManifestRepository {
   }
 
   async findAll(
-    filters: { containerId?: string; type?: string; status?: string },
+    filters: { containerId?: string; type?: string; status?: string; scopeWhere?: object | null },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<ManifestWithLines>> {
     const { page, limit, sortBy, sortOrder, search } = pagination;
@@ -56,6 +56,8 @@ export class PrismaManifestRepository implements IManifestRepository {
       ...(search && {
         OR: [{ number: { contains: search, mode: 'insensitive' } }],
       }),
+      // Scope agence : merge en AND pour ne pas ecraser l'OR de recherche.
+      ...(filters.scopeWhere && { AND: [filters.scopeWhere as Prisma.ShippingManifestWhereInput] }),
     };
 
     const [data, total] = await Promise.all([

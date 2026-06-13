@@ -3,6 +3,8 @@ import jwt from 'jsonwebtoken';
 import { config } from '../../config';
 import { AuthenticationError, AuthorizationError } from '../../domain/errors/BusinessError';
 import type { JwtPayload } from '@transitsoftservices/shared';
+import { getPolicy } from './policyContext';
+import { fetchPermissionVersion } from '../../application/services/pvCache';
 
 declare global {
   namespace Express {
@@ -12,7 +14,7 @@ declare global {
   }
 }
 
-export function authenticate(req: Request, _res: Response, next: NextFunction): void {
+export async function authenticate(req: Request, _res: Response, next: NextFunction): Promise<void> {
   const authHeader = req.headers.authorization;
 
   if (!authHeader?.startsWith('Bearer ')) {
@@ -24,6 +26,17 @@ export function authenticate(req: Request, _res: Response, next: NextFunction): 
   try {
     const payload = jwt.verify(token, config.jwt.secret) as JwtPayload;
     req.user = payload;
+
+    // Étape 7 : rejette les tokens dont la version des permissions est perimee.
+    // Un override ou un changement de poste incremente permissionVersion en DB,
+    // ce qui invalide tous les JWT anterieurs de cet utilisateur.
+    if (typeof payload.pv === 'number') {
+      const currentPv = await fetchPermissionVersion(payload.userId);
+      if (currentPv === null || currentPv !== payload.pv) {
+        return next(new AuthenticationError('Permissions mises a jour, reconnexion requise'));
+      }
+    }
+
     next();
   } catch (err) {
     // Log detaille pour diagnostiquer "Token invalide ou expire" cote serveur.
@@ -74,7 +87,8 @@ export function authenticateUserOrClient(req: Request, _res: Response, next: Nex
 }
 
 export function authorize(...roles: string[]) {
-  return (req: Request, _res: Response, next: NextFunction): void => {
+  // Nomme pour etre detectable par le test garde-fou (route-permission-guard).
+  const authorizeMiddleware = (req: Request, _res: Response, next: NextFunction): void => {
     if (!req.user) {
       return next(new AuthenticationError());
     }
@@ -85,27 +99,42 @@ export function authorize(...roles: string[]) {
 
     next();
   };
+  return authorizeMiddleware;
 }
 
 /**
- * Phase 1 ABAC : verifie que l'utilisateur dispose d'au moins une des permissions
- * demandees. SUPER_ADMIN bypass. Les permissions sont posees dans le JWT au login.
+ * ABAC : verifie que l'utilisateur dispose d'au moins une des permissions
+ * demandees. ADMIN/SUPER_ADMIN bypass. Les permissions sont posees dans le JWT
+ * au login/refresh.
+ *
+ * Mode shadow (PERMISSIONS_ENFORCE=log, defaut) : les refus sont logges
+ * `[PERM-DENY]` mais laissent passer — permet de deployer l'enforcement sur
+ * toutes les routes et d'ajuster les presets de postes avant la bascule en
+ * `enforce`. Cf. PERMISSIONS-PLAN.md etape 8.
  *
  * Co-existe avec authorize() (legacy role-based) le temps de la migration des
  * routes vers ABAC.
  */
 export function requirePermission(...keys: string[]) {
-  return (req: Request, _res: Response, next: NextFunction): void => {
-    if (!req.user) return next(new AuthenticationError());
-    if (req.user.role === 'SUPER_ADMIN') return next();
+  // Nomme pour etre detectable par le test garde-fou (route-permission-guard).
+  const requirePermissionMiddleware = (req: Request, _res: Response, next: NextFunction): void => {
+    const policy = getPolicy(req);
+    if (!policy) return next(new AuthenticationError());
+    if (policy.canAny(keys)) return next();
 
-    const perms = req.user.permissions ?? [];
-    if (perms.includes('*')) return next();
-    if (keys.length === 0) return next();
-    if (keys.some((k) => perms.includes(k))) return next();
+    if (config.permissions.enforce === 'log') {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[PERM-DENY] user=${policy.userId} role=${policy.role} missing=[${keys.join('|')}] ` +
+          `${req.method} ${req.originalUrl}`,
+      );
+      return next();
+    }
 
     return next(new AuthorizationError('Permission insuffisante pour cette action'));
   };
+  (requirePermissionMiddleware as { requiredPermissions?: string[] }).requiredPermissions = keys;
+  return requirePermissionMiddleware;
 }
 
 export function requireAgency(req: Request, _res: Response, next: NextFunction): void {

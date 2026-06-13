@@ -4,7 +4,7 @@ import type { PaginationInput, PaginatedResponse } from '@transitsoftservices/sh
 export interface IExpenseRepository {
   findById(id: string): Promise<Expense | null>;
   findAll(
-    filters: { agencyId?: string; agencyIds?: string[] },
+    filters: { agencyId?: string; agencyIds?: string[]; scopeWhere?: object | null },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<Expense>>;
   create(data: Prisma.ExpenseCreateInput): Promise<Expense>;

@@ -98,6 +98,9 @@ async function reconstructForwardingLinksFromHistory(forwardingId: string): Prom
 import { EXPENSE_REPOSITORY } from '../../application/interfaces/IExpenseRepository';
 import { NotFoundError } from '../../domain/errors/BusinessError';
 import { prisma } from '../../config/database';
+import { containerScope, expenseScope, scopeCtx } from '../../application/services/scope/agencyScope';
+import { applyFieldPolicy, EXPENSE_FIELD_POLICY } from '../serializers/fieldPolicy';
+import { getPolicy } from '../middleware/policyContext';
 
 export class ExpenseController {
   static async create(req: Request, res: Response, next: NextFunction) {
@@ -113,11 +116,15 @@ export class ExpenseController {
   static async list(req: Request, res: Response, next: NextFunction) {
     try {
       const repo = container.resolve<any>(EXPENSE_REPOSITORY);
+      // Scope agence (etape 2) : fragment merge en AND dans le where du repo.
+      const scopeWhere = expenseScope.where(scopeCtx(req)) ?? null;
       const result = await repo.findAll(
-        { agencyIds: req.user!.agencyIds },
+        { agencyIds: req.user!.agencyIds, scopeWhere },
         req.query,
       );
-      res.json({ success: true, ...result });
+      const policy = getPolicy(req);
+      const masked = policy ? { ...result, data: applyFieldPolicy(result.data, EXPENSE_FIELD_POLICY, policy) } : result;
+      res.json({ success: true, ...masked });
     } catch (err) {
       next(err);
     }
@@ -125,10 +132,12 @@ export class ExpenseController {
 
   static async getById(req: Request, res: Response, next: NextFunction) {
     try {
+      await expenseScope.assert(req.params.id, scopeCtx(req));
       const repo = container.resolve<any>(EXPENSE_REPOSITORY);
       const item = await repo.findById(req.params.id);
       if (!item) throw new NotFoundError('Depense', req.params.id);
-      res.json({ success: true, data: item });
+      const policy = getPolicy(req);
+      res.json({ success: true, data: policy ? applyFieldPolicy(item, EXPENSE_FIELD_POLICY, policy) : item });
     } catch (err) {
       next(err);
     }
@@ -139,6 +148,7 @@ export class ExpenseController {
   static async listForContainer(req: Request, res: Response, next: NextFunction) {
     try {
       const containerId = req.params.containerId;
+      await containerScope.assert(containerId, scopeCtx(req));
       const containerInfo = await prisma.container.findUnique({
         where: { id: containerId },
         select: { id: true, isForwarding: true },
@@ -241,6 +251,7 @@ export class ExpenseController {
 
   static async createForContainer(req: Request, res: Response, next: NextFunction) {
     try {
+      await containerScope.assert(req.params.containerId, scopeCtx(req));
       const useCase = container.resolve(CreateContainerExpenseUseCase);
       const result = await useCase.execute(
         { ...req.body, containerId: req.params.containerId },
@@ -262,6 +273,7 @@ export class ExpenseController {
   static async update(req: Request, res: Response, next: NextFunction) {
     try {
       const expenseId = req.params.id;
+      await expenseScope.assert(expenseId, scopeCtx(req));
       const expense = await prisma.expense.findUnique({
         where: { id: expenseId },
         include: {
@@ -325,6 +337,7 @@ export class ExpenseController {
   static async delete(req: Request, res: Response, next: NextFunction) {
     try {
       const expenseId = req.params.id;
+      await expenseScope.assert(expenseId, scopeCtx(req));
       const expense = await prisma.expense.findUnique({
         where: { id: expenseId },
         include: {
@@ -362,6 +375,7 @@ export class ExpenseController {
   static async propagateForwardingExpenses(req: Request, res: Response, next: NextFunction) {
     try {
       const containerId = req.params.containerId;
+      await containerScope.assert(containerId, scopeCtx(req));
       const containerInfo = await prisma.container.findUnique({
         where: { id: containerId },
         select: { id: true, isForwarding: true, designation: true },
@@ -427,6 +441,7 @@ export class ExpenseController {
 
   static async closeContainerExpenses(req: Request, res: Response, next: NextFunction) {
     try {
+      await containerScope.assert(req.params.containerId, scopeCtx(req));
       const useCase = container.resolve(CloseContainerExpensesUseCase);
       const result = await useCase.execute(req.params.containerId, req.user!.userId);
       res.json({ success: true, data: result });
@@ -437,6 +452,7 @@ export class ExpenseController {
 
   static async pay(req: Request, res: Response, next: NextFunction) {
     try {
+      await expenseScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(PayExpenseFromCashRegisterUseCase);
       const result = await useCase.execute(
         {

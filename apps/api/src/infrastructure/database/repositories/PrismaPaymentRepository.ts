@@ -60,7 +60,7 @@ export class PrismaPaymentRepository implements IPaymentRepository {
   }
 
   async findAll(
-    filters: { agencyId?: string; agencyIds?: string[] },
+    filters: { agencyId?: string; agencyIds?: string[]; scopeWhere?: object | null },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<PaymentWithRelations>> {
     const { page, limit, search } = pagination;
@@ -73,6 +73,8 @@ export class PrismaPaymentRepository implements IPaymentRepository {
     const where: Prisma.PaymentWhereInput = {
       ...(filters.agencyId && { agencyId: filters.agencyId }),
       ...(filters.agencyIds?.length && { agencyId: { in: filters.agencyIds } }),
+      // Scope agence : en AND pour ne pas ecraser le OR de recherche.
+      ...(filters.scopeWhere && { AND: [filters.scopeWhere as Prisma.PaymentWhereInput] }),
       ...(search && {
         OR: [
           { reference: { contains: search, mode: 'insensitive' } },

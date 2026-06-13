@@ -3,11 +3,14 @@ import { checkPricingForType } from '@transitsoftservices/shared';
 import { prisma } from '../../config/database';
 import { NotFoundError, BusinessError } from '../../domain/errors/BusinessError';
 import { realtimeService } from '../../infrastructure/realtime/RealtimeService';
+import { clientScope, scopeCtx } from '../../application/services/scope/agencyScope';
 
 export class PartnerPricingController {
   static async list(req: Request, res: Response, next: NextFunction) {
     try {
       const { clientId } = req.params;
+      // Scope agence : la tarification est rattachee au client.
+      await clientScope.assert(clientId, scopeCtx(req));
       const items = await prisma.partnerPricing.findMany({
         where: { clientId },
         orderBy: [{ isActive: 'desc' }, { createdAt: 'desc' }],
@@ -22,6 +25,7 @@ export class PartnerPricingController {
   static async create(req: Request, res: Response, next: NextFunction) {
     try {
       const { clientId } = req.params;
+      await clientScope.assert(clientId, scopeCtx(req));
       const { transitRouteId, pricePerKg, pricePerVolume, isActive } = req.body as {
         transitRouteId: string;
         pricePerKg?: number | null;

@@ -15,7 +15,7 @@ router.use(authenticate);
 
 // Photos employes protegees par token (frontend utilise AuthedImage). Tout
 // utilisateur authentifie avec une permission de lecture personnel y a acces.
-router.get('/:id/image/:slot', EmployeeController.getImage);
+router.get('/:id/image/:slot', requirePermission('personnel.read'), EmployeeController.getImage);
 
 // CRUD personnel : ABAC
 router.get(

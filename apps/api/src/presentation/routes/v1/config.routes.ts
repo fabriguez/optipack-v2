@@ -1,6 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { ConfigController } from '../../controllers/ConfigController';
-import { authenticate, authorize } from '../../middleware/authMiddleware';
+import { authenticate, authorize, requirePermission } from '../../middleware/authMiddleware';
 import { container } from '../../../container';
 import { DebtBlockConfigService } from '../../../application/services/DebtBlockConfigService';
 
@@ -14,18 +14,19 @@ const router = Router();
 const adminOnly = [authenticate, authorize('SUPER_ADMIN', 'ADMIN')];
 
 // System Config
-router.get('/config', adminOnly, ConfigController.listConfigs);
-router.put('/config/:key', adminOnly, ConfigController.updateConfig);
+// ABAC : lecture = settings.read, mutation = system.config (authorize conserve en garde dure).
+router.get('/config', adminOnly, requirePermission('settings.read'), ConfigController.listConfigs);
+router.put('/config/:key', adminOnly, requirePermission('system.config'), ConfigController.updateConfig);
 
 // Debt block config (handover + shipment) — auto-seed defaults au 1er read.
-router.get('/config/debt-block', adminOnly, async (req: Request, res: Response, next: NextFunction) => {
+router.get('/config/debt-block', adminOnly, requirePermission('settings.read'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const svc = container.resolve(DebtBlockConfigService);
     const cfg = await svc.get(req.user!.organizationId);
     res.json({ success: true, data: cfg });
   } catch (err) { next(err); }
 });
-router.patch('/config/debt-block', adminOnly, async (req: Request, res: Response, next: NextFunction) => {
+router.patch('/config/debt-block', adminOnly, requirePermission('system.config'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const svc = container.resolve(DebtBlockConfigService);
     const patch = req.body as Record<string, unknown>;
@@ -40,9 +41,9 @@ router.patch('/config/debt-block', adminOnly, async (req: Request, res: Response
 });
 
 // Currencies
-router.get('/currencies', adminOnly, ConfigController.listCurrencies);
-router.post('/currencies', adminOnly, ConfigController.createCurrency);
-router.patch('/currencies/:id', adminOnly, ConfigController.updateCurrency);
-router.delete('/currencies/:id', adminOnly, ConfigController.deleteCurrency);
+router.get('/currencies', adminOnly, requirePermission('settings.read'), ConfigController.listCurrencies);
+router.post('/currencies', adminOnly, requirePermission('system.config'), ConfigController.createCurrency);
+router.patch('/currencies/:id', adminOnly, requirePermission('system.config'), ConfigController.updateCurrency);
+router.delete('/currencies/:id', adminOnly, requirePermission('system.config'), ConfigController.deleteCurrency);
 
 export default router;

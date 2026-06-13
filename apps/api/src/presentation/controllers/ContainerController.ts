@@ -15,6 +15,7 @@ import { CONTAINER_REPOSITORY } from '../../application/interfaces/IContainerRep
 import { PARCEL_REPOSITORY } from '../../application/interfaces/IParcelRepository';
 import { NotFoundError } from '../../domain/errors/BusinessError';
 import { HistoryService } from '../../application/services/HistoryService';
+import { containerScope, scopeCtx } from '../../application/services/scope/agencyScope';
 
 export class ContainerController {
   static async create(req: Request, res: Response, next: NextFunction) {
@@ -29,6 +30,7 @@ export class ContainerController {
 
   static async update(req: Request, res: Response, next: NextFunction) {
     try {
+      await containerScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(UpdateContainerUseCase);
       const result = await useCase.execute(req.params.id, req.body, req.user!.userId);
       res.json({ success: true, data: result });
@@ -39,6 +41,7 @@ export class ContainerController {
 
   static async getHistory(req: Request, res: Response, next: NextFunction) {
     try {
+      await containerScope.assert(req.params.id, scopeCtx(req));
       const history = container.resolve(HistoryService);
       const items = await history.listContainerHistory(req.params.id);
       res.json({ success: true, data: items });
@@ -59,6 +62,8 @@ export class ContainerController {
       // de creation de conteneur d'acheminement (parentContainer empty).
       const agencyIds =
         req.user!.role === 'SUPER_ADMIN' ? undefined : req.user!.agencyIds;
+      // Scope agence (etape 2) : fragment AND additionnel, actif en enforce.
+      const scopeWhere = containerScope.where(scopeCtx(req)) ?? null;
       const result = await useCase.execute(
         {
           departureAgencyId: departureAgencyId as string,
@@ -67,6 +72,7 @@ export class ContainerController {
           isForwarding: isForwardingFlag,
           agencyIds,
           carrierId: carrierId as string | undefined,
+          scopeWhere,
         },
         req.query as any,
       );
@@ -78,6 +84,7 @@ export class ContainerController {
 
   static async getById(req: Request, res: Response, next: NextFunction) {
     try {
+      await containerScope.assert(req.params.id, scopeCtx(req));
       const repo = container.resolve<any>(CONTAINER_REPOSITORY);
       const cont = await repo.findById(req.params.id);
       if (!cont) throw new NotFoundError('Conteneur', req.params.id);
@@ -89,6 +96,7 @@ export class ContainerController {
 
   static async getParcels(req: Request, res: Response, next: NextFunction) {
     try {
+      await containerScope.assert(req.params.id, scopeCtx(req));
       const repo = container.resolve<any>(PARCEL_REPOSITORY);
       const parcels = await repo.findByContainer(req.params.id);
       res.json({ success: true, data: parcels });
@@ -108,6 +116,7 @@ export class ContainerController {
    */
   static async getArrivalSnapshot(req: Request, res: Response, next: NextFunction) {
     try {
+      await containerScope.assert(req.params.id, scopeCtx(req));
       const containerRepo = container.resolve<any>(CONTAINER_REPOSITORY);
       const parcelRepo = container.resolve<any>(PARCEL_REPOSITORY);
       const cont = await containerRepo.findById(req.params.id);
@@ -124,6 +133,7 @@ export class ContainerController {
 
   static async loadParcels(req: Request, res: Response, next: NextFunction) {
     try {
+      await containerScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(LoadParcelsUseCase);
       const result = await useCase.execute(req.params.id, req.body.parcelIds, req.user!.userId);
       res.json({ success: true, data: result });
@@ -134,6 +144,7 @@ export class ContainerController {
 
   static async getLoadableParcels(req: Request, res: Response, next: NextFunction) {
     try {
+      await containerScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(ListLoadableParcelsUseCase);
       const { search, page, limit, warehouseId } = req.query;
       const result = await useCase.execute(req.params.id, {
@@ -150,6 +161,7 @@ export class ContainerController {
 
   static async loadByQr(req: Request, res: Response, next: NextFunction) {
     try {
+      await containerScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(LoadByQRCodeUseCase);
       const result = await useCase.execute(
         req.params.id,
@@ -164,6 +176,7 @@ export class ContainerController {
 
   static async removeParcel(req: Request, res: Response, next: NextFunction) {
     try {
+      await containerScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(RemoveParcelFromContainerUseCase);
       const result = await useCase.execute(
         req.params.id,
@@ -179,6 +192,7 @@ export class ContainerController {
 
   static async depart(req: Request, res: Response, next: NextFunction) {
     try {
+      await containerScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(DepartContainerUseCase);
       const result = await useCase.execute(req.params.id, req.user!.userId);
       res.json({ success: true, data: result });
@@ -189,6 +203,7 @@ export class ContainerController {
 
   static async arrive(req: Request, res: Response, next: NextFunction) {
     try {
+      await containerScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(ArriveContainerUseCase);
       const result = await useCase.execute(req.params.id, req.user!.userId);
       res.json({ success: true, data: result });
@@ -199,6 +214,7 @@ export class ContainerController {
 
   static async unloadParcel(req: Request, res: Response, next: NextFunction) {
     try {
+      await containerScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(UnloadParcelUseCase);
       const { parcelId, action, warehouseId, newWeight, comment } = req.body;
       const result = await useCase.execute(
@@ -221,6 +237,7 @@ export class ContainerController {
 
   static async listDocuments(req: Request, res: Response, next: NextFunction) {
     try {
+      await containerScope.assert(req.params.id, scopeCtx(req));
       const docs = await prisma.containerDocument.findMany({
         where: { containerId: req.params.id },
         include: { uploader: { select: { id: true, firstName: true, lastName: true } } },
@@ -234,6 +251,7 @@ export class ContainerController {
 
   static async addDocument(req: Request, res: Response, next: NextFunction) {
     try {
+      await containerScope.assert(req.params.id, scopeCtx(req));
       const containerId = req.params.id;
       const { url, storageKey, fileName, contentType, size, caption, isImage } = req.body as {
         url: string;
@@ -275,6 +293,7 @@ export class ContainerController {
 
   static async updateDocument(req: Request, res: Response, next: NextFunction) {
     try {
+      await containerScope.assert(req.params.id, scopeCtx(req));
       const doc = await prisma.containerDocument.findUnique({ where: { id: req.params.documentId } });
       if (!doc || doc.containerId !== req.params.id) {
         return res.status(404).json({ success: false, message: 'Document introuvable' });
@@ -292,6 +311,7 @@ export class ContainerController {
 
   static async deleteDocument(req: Request, res: Response, next: NextFunction) {
     try {
+      await containerScope.assert(req.params.id, scopeCtx(req));
       const doc = await prisma.containerDocument.findUnique({ where: { id: req.params.documentId } });
       if (!doc || doc.containerId !== req.params.id) {
         return res.status(404).json({ success: false, message: 'Document introuvable' });

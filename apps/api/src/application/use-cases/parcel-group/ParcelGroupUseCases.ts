@@ -420,12 +420,14 @@ export class SendGroupInvoiceUseCase {
 
 @injectable()
 export class ListParcelGroupsUseCase {
-  async execute(filters: { clientId?: string; agencyId?: string; status?: string }) {
+  async execute(filters: { clientId?: string; agencyId?: string; status?: string; scopeWhere?: object | null }) {
+    const scopeAnd = filters.scopeWhere ? [filters.scopeWhere] : [];
     return prisma.parcelGroup.findMany({
       where: {
         ...(filters.clientId && { clientId: filters.clientId }),
         ...(filters.agencyId && { agencyId: filters.agencyId }),
         ...(filters.status && { status: filters.status as any }),
+        ...(scopeAnd.length > 0 && { AND: scopeAnd }),
       },
       include: {
         client: { select: { id: true, fullName: true, phone: true } },

@@ -73,6 +73,7 @@ export class PrismaContainerRepository implements IContainerRepository {
       isForwarding?: boolean;
       agencyIds?: string[];
       carrierId?: string;
+      scopeWhere?: object | null;
     },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<ContainerWithRelations>> {
@@ -104,6 +105,8 @@ export class PrismaContainerRepository implements IContainerRepository {
           { designation: { contains: search, mode: 'insensitive' } },
         ],
       }),
+      // Scope agence : merge en AND pour ne pas ecraser les OR existants.
+      ...(filters.scopeWhere && { AND: [filters.scopeWhere as Prisma.ContainerWhereInput] }),
     };
 
     const [data, total] = await Promise.all([

@@ -5,6 +5,7 @@ import { ConfirmFundTransferUseCase } from '../../application/use-cases/fund-tra
 import { VoidFundTransferUseCase } from '../../application/use-cases/fund-transfer/VoidFundTransferUseCase';
 import { FUND_TRANSFER_REPOSITORY } from '../../application/interfaces/IFundTransferRepository';
 import { NotFoundError } from '../../domain/errors/BusinessError';
+import { fundTransferScope, scopeCtx } from '../../application/services/scope/agencyScope';
 
 export class FundTransferController {
   static async create(req: Request, res: Response, next: NextFunction) {
@@ -21,9 +22,11 @@ export class FundTransferController {
     try {
       const repo = container.resolve<any>(FUND_TRANSFER_REPOSITORY);
       const q = req.query as Record<string, string | undefined>;
+      const scopeWhere = fundTransferScope.where(scopeCtx(req)) ?? null;
       const result = await repo.findAll(
         {
           agencyIds: req.user!.agencyIds,
+          scopeWhere,
           sourceAgencyId: q.sourceAgencyId,
           destinationAgencyId: q.destinationAgencyId,
           reference: q.reference,
@@ -45,6 +48,7 @@ export class FundTransferController {
 
   static async getById(req: Request, res: Response, next: NextFunction) {
     try {
+      await fundTransferScope.assert(req.params.id, scopeCtx(req));
       const repo = container.resolve<any>(FUND_TRANSFER_REPOSITORY);
       const item = await repo.findById(req.params.id);
       if (!item) throw new NotFoundError('Transfert de fonds', req.params.id);
@@ -56,6 +60,7 @@ export class FundTransferController {
 
   static async confirm(req: Request, res: Response, next: NextFunction) {
     try {
+      await fundTransferScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(ConfirmFundTransferUseCase);
       // Option bypassFourEyes : SUPER_ADMIN peut confirmer un transfert qu'il
       // a lui-meme initie (utile pour les agences a 1 admin).
@@ -71,6 +76,7 @@ export class FundTransferController {
 
   static async void(req: Request, res: Response, next: NextFunction) {
     try {
+      await fundTransferScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(VoidFundTransferUseCase);
       const reason = (req.body?.reason as string) || 'Annulation manuelle';
       const result = await useCase.execute(req.params.id, reason, req.user!.userId);

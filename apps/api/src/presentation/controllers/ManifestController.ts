@@ -8,6 +8,9 @@ import { ExcelService } from '../../infrastructure/excel/ExcelService';
 import { HistoryService } from '../../application/services/HistoryService';
 import { RegisterExtraManifestParcelUseCase } from '../../application/use-cases/manifest/RegisterExtraManifestParcelUseCase';
 import { MarkParcelMissingUseCase } from '../../application/use-cases/manifest/MarkParcelMissingUseCase';
+import { containerScope, manifestScope, scopeCtx } from '../../application/services/scope/agencyScope';
+import { applyFieldPolicy, MANIFEST_LINE_FIELD_POLICY } from '../serializers/fieldPolicy';
+import { getPolicy } from '../middleware/policyContext';
 
 function getRepo(): IManifestRepository {
   return container.resolve<IManifestRepository>(MANIFEST_REPOSITORY);
@@ -23,6 +26,8 @@ export class ManifestController {
           containerId: containerId as string,
           type: type as string,
           status: status as string,
+          // Scope agence : fragment merge en AND par le repo.
+          scopeWhere: manifestScope.where(scopeCtx(req)) ?? null,
         },
         req.query as never,
       );
@@ -34,10 +39,15 @@ export class ManifestController {
 
   static async getById(req: Request, res: Response, next: NextFunction) {
     try {
+      await manifestScope.assert(req.params.id, scopeCtx(req));
       const repo = getRepo();
       const manifest = await repo.findById(req.params.id);
       if (!manifest) throw new NotFoundError('Bordereau', req.params.id);
-      res.json({ success: true, data: manifest });
+      const policy = getPolicy(req);
+      const masked = policy && manifest.lines
+        ? { ...manifest, lines: applyFieldPolicy(manifest.lines, MANIFEST_LINE_FIELD_POLICY, policy) }
+        : manifest;
+      res.json({ success: true, data: masked });
     } catch (err) {
       next(err);
     }
@@ -45,6 +55,7 @@ export class ManifestController {
 
   static async createDispatch(req: Request, res: Response, next: NextFunction) {
     try {
+      await containerScope.assert(req.params.containerId, scopeCtx(req));
       const repo = getRepo();
       const manifest = await repo.createDispatchManifest(req.params.containerId, req.user!.userId);
       const history = container.resolve(HistoryService);
@@ -63,6 +74,7 @@ export class ManifestController {
 
   static async createReception(req: Request, res: Response, next: NextFunction) {
     try {
+      await containerScope.assert(req.params.containerId, scopeCtx(req));
       const repo = getRepo();
       const manifest = await repo.createReceptionManifest(req.params.containerId, req.user!.userId);
       const history = container.resolve(HistoryService);
@@ -81,6 +93,7 @@ export class ManifestController {
 
   static async getComparison(req: Request, res: Response, next: NextFunction) {
     try {
+      await containerScope.assert(req.params.containerId, scopeCtx(req));
       const repo = getRepo();
       const comparison = await repo.getComparison(req.params.containerId);
       res.json({ success: true, data: comparison });
@@ -95,6 +108,7 @@ export class ManifestController {
 
   static async listDiscrepancies(req: Request, res: Response, next: NextFunction) {
     try {
+      await containerScope.assert(req.params.containerId, scopeCtx(req));
       const repo = getRepo();
       const items = await repo.listDiscrepancies(req.params.containerId);
       res.json({ success: true, data: items });
@@ -105,6 +119,7 @@ export class ManifestController {
 
   static async addDiscrepancy(req: Request, res: Response, next: NextFunction) {
     try {
+      await containerScope.assert(req.params.containerId, scopeCtx(req));
       const repo = getRepo();
       const { type, parcelId, designation, trackingNumber, weight, comment } = req.body as {
         type: 'MISSING_PHYSICAL' | 'EXTRA_PHYSICAL';
@@ -143,6 +158,7 @@ export class ManifestController {
 
   static async removeDiscrepancy(req: Request, res: Response, next: NextFunction) {
     try {
+      await containerScope.assert(req.params.containerId, scopeCtx(req));
       const repo = getRepo();
       await repo.removeDiscrepancy(req.params.discrepancyId);
       res.json({ success: true });
@@ -159,6 +175,7 @@ export class ManifestController {
    */
   static async registerExtraParcel(req: Request, res: Response, next: NextFunction) {
     try {
+      await containerScope.assert(req.params.containerId, scopeCtx(req));
       const useCase = container.resolve(RegisterExtraManifestParcelUseCase);
       const parcel = await useCase.execute(req.params.containerId, req.body, req.user!.userId);
       res.status(201).json({ success: true, data: parcel });
@@ -169,6 +186,7 @@ export class ManifestController {
 
   static async markParcelMissing(req: Request, res: Response, next: NextFunction) {
     try {
+      await containerScope.assert(req.params.containerId, scopeCtx(req));
       const useCase = container.resolve(MarkParcelMissingUseCase);
       const result = await useCase.execute(
         req.params.containerId,
@@ -188,6 +206,7 @@ export class ManifestController {
 
   static async getPDF(req: Request, res: Response, next: NextFunction) {
     try {
+      await manifestScope.assert(req.params.id, scopeCtx(req));
       const manifest = await prisma.shippingManifest.findUnique({
         where: { id: req.params.id },
         include: {
@@ -256,6 +275,7 @@ export class ManifestController {
    */
   static async getXLSX(req: Request, res: Response, next: NextFunction) {
     try {
+      await manifestScope.assert(req.params.id, scopeCtx(req));
       const manifest = await prisma.shippingManifest.findUnique({
         where: { id: req.params.id },
         include: {
@@ -325,6 +345,7 @@ export class ManifestController {
 
   static async getComparisonPDF(req: Request, res: Response, next: NextFunction) {
     try {
+      await containerScope.assert(req.params.containerId, scopeCtx(req));
       const repo = getRepo();
       const comparison = await repo.getComparison(req.params.containerId);
       const containerData = await prisma.container.findUnique({

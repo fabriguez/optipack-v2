@@ -1,5 +1,16 @@
 import type { Request, Response, NextFunction } from 'express';
 import { prisma } from '../../config/database';
+import {
+  andWhere,
+  debtScope,
+  disbursementScope,
+  expenseScope,
+  fundTransferScope,
+  parcelScope,
+  paymentScope,
+  penaltyScope,
+  scopeCtx,
+} from '../../application/services/scope/agencyScope';
 
 export class ReportController {
   /**
@@ -19,10 +30,14 @@ export class ReportController {
         'createdAt',
       );
 
-      const where: any = {
-        ...dateFilter,
-        warehouse: { agencyId: { in: agencyIds } },
-      };
+      // Scoping agence en AND par-dessus le filtre existant.
+      const where: any = andWhere(
+        {
+          ...dateFilter,
+          warehouse: { agencyId: { in: agencyIds } },
+        },
+        parcelScope.where(scopeCtx(req)),
+      );
       if (status) where.status = status as string;
 
       const [totalCount, statusBreakdown, parcels] = await Promise.all([
@@ -93,11 +108,11 @@ export class ReportController {
         'createdAt',
       );
 
-      const where: any = {
-        ...dateFilter,
-        agencyId: { in: agencyIds },
-        isVoided: false,
-      };
+      // Scoping agence en AND par-dessus le filtre existant.
+      const where: any = andWhere(
+        { ...dateFilter, agencyId: { in: agencyIds }, isVoided: false },
+        paymentScope.where(scopeCtx(req)),
+      );
 
       const [totalAgg, byMethod, payments] = await Promise.all([
         prisma.payment.aggregate({
@@ -161,11 +176,11 @@ export class ReportController {
         'createdAt',
       );
 
-      const where: any = {
-        ...dateFilter,
-        agencyId: { in: agencyIds },
-        isVoided: false,
-      };
+      // Scoping agence en AND par-dessus le filtre existant.
+      const where: any = andWhere(
+        { ...dateFilter, agencyId: { in: agencyIds }, isVoided: false },
+        paymentScope.where(scopeCtx(req)),
+      );
 
       const byAgency = await prisma.payment.groupBy({
         by: ['agencyId'],
@@ -230,12 +245,16 @@ export class ReportController {
       // explicitement aux dettes CLIENT pour ce rapport.
       const byClient = await prisma.debt.groupBy({
         by: ['clientId'],
-        where: {
-          isCleared: false,
-          type: 'CLIENT',
-          clientId: { not: null },
-          invoice: invoiceWhere,
-        },
+        // Scoping agence en AND par-dessus le filtre facture existant.
+        where: andWhere(
+          {
+            isCleared: false,
+            type: 'CLIENT' as const,
+            clientId: { not: null },
+            invoice: invoiceWhere,
+          },
+          debtScope.where(scopeCtx(req)),
+        ),
         _sum: { totalAmount: true, remainingAmount: true },
         _count: { id: true },
       });
@@ -297,29 +316,43 @@ export class ReportController {
 
       const agencyFilter = { agencyId: { in: agencyIds } };
       const dateRange = { gte: start, lte: end };
+      // Scoping agence par ressource, en AND des filtres existants.
+      const ctx = scopeCtx(req);
 
       const [payments, disbursements, expenses, transfers] = await Promise.all([
         prisma.payment.aggregate({
-          where: { ...agencyFilter, isVoided: false, createdAt: dateRange },
+          where: andWhere(
+            { ...agencyFilter, isVoided: false, createdAt: dateRange },
+            paymentScope.where(ctx),
+          ),
           _sum: { amount: true },
           _count: { id: true },
         }),
         prisma.disbursementVoucher.aggregate({
-          where: { ...agencyFilter, isVoided: false, createdAt: dateRange },
+          where: andWhere(
+            { ...agencyFilter, isVoided: false, createdAt: dateRange },
+            disbursementScope.where(ctx),
+          ),
           _sum: { amount: true },
           _count: { id: true },
         }),
         prisma.expense.aggregate({
-          where: { ...agencyFilter, createdAt: dateRange },
+          where: andWhere(
+            { ...agencyFilter, createdAt: dateRange },
+            expenseScope.where(ctx),
+          ),
           _sum: { amount: true },
           _count: { id: true },
         }),
         prisma.fundTransfer.aggregate({
-          where: {
-            sourceAgencyId: { in: agencyIds },
-            isVoided: false,
-            createdAt: dateRange,
-          },
+          where: andWhere(
+            {
+              sourceAgencyId: { in: agencyIds },
+              isVoided: false,
+              createdAt: dateRange,
+            },
+            fundTransferScope.where(ctx),
+          ),
           _sum: { amount: true },
           _count: { id: true },
         }),
@@ -373,10 +406,11 @@ export class ReportController {
         'createdAt',
       );
 
-      const where: any = {
-        ...dateFilter,
-        agencyId: { in: agencyIds },
-      };
+      // Scoping agence en AND par-dessus le filtre existant.
+      const where: any = andWhere(
+        { ...dateFilter, agencyId: { in: agencyIds } },
+        penaltyScope.where(scopeCtx(req)),
+      );
 
       const [totalAgg, paidAgg, unpaidAgg, penalties] = await Promise.all([
         prisma.penalty.aggregate({

@@ -1,6 +1,8 @@
 import type { Request, Response, NextFunction } from 'express';
 import { prisma } from '../../config/database';
 import { BusinessError, NotFoundError } from '../../domain/errors/BusinessError';
+import { ADMIN_ONLY_PERMISSION_KEYS } from '../../domain/constants/permissions';
+import { bumpPermissionVersion } from '../../application/services/pvCache';
 
 export class PermissionController {
   /** Catalogue complet des permissions, groupe par categorie. */
@@ -18,8 +20,9 @@ export class PermissionController {
   /** Permissions effectives d'un user (poste + overrides). */
   static async listForUser(req: Request, res: Response, next: NextFunction) {
     try {
-      const user = await prisma.user.findUnique({
-        where: { id: req.params.userId },
+      const user = await prisma.user.findFirst({
+        // Scope tenant : un admin ne peut inspecter que les users de son organisation.
+        where: { id: req.params.userId, organizationId: req.user!.organizationId },
         include: {
           employee: {
             include: {
@@ -60,6 +63,16 @@ export class PermissionController {
         granted: boolean;
         reason?: string;
       };
+      if (ADMIN_ONLY_PERMISSION_KEYS.includes(permissionKey)) {
+        throw new BusinessError(`La permission ${permissionKey} est reservee au role administrateur`);
+      }
+      // Scope tenant : la cible doit appartenir a l'organisation de l'admin.
+      const target = await prisma.user.findFirst({
+        where: { id: userId, organizationId: req.user!.organizationId },
+        select: { id: true },
+      });
+      if (!target) throw new NotFoundError('User', userId);
+
       const perm = await prisma.permission.findUnique({ where: { key: permissionKey } });
       if (!perm) throw new BusinessError(`Permission inconnue: ${permissionKey}`);
 
@@ -68,6 +81,8 @@ export class PermissionController {
         create: { userId, permissionId: perm.id, granted, reason: reason ?? null },
         update: { granted, reason: reason ?? null },
       });
+      // Invalide le JWT en cours de l'utilisateur cible.
+      await bumpPermissionVersion(userId);
       res.json({ success: true, data: item });
     } catch (err) {
       next(err);
@@ -77,11 +92,19 @@ export class PermissionController {
   static async removeOverride(req: Request, res: Response, next: NextFunction) {
     try {
       const { userId, permissionKey } = req.params;
+      // Scope tenant : la cible doit appartenir a l'organisation de l'admin.
+      const target = await prisma.user.findFirst({
+        where: { id: userId, organizationId: req.user!.organizationId },
+        select: { id: true },
+      });
+      if (!target) throw new NotFoundError('User', userId);
       const perm = await prisma.permission.findUnique({ where: { key: permissionKey } });
       if (!perm) throw new BusinessError(`Permission inconnue: ${permissionKey}`);
       await prisma.userPermissionOverride
         .delete({ where: { userId_permissionId: { userId, permissionId: perm.id } } })
         .catch(() => {});
+      // Invalide le JWT en cours de l'utilisateur cible.
+      await bumpPermissionVersion(userId);
       res.json({ success: true });
     } catch (err) {
       next(err);

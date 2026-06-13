@@ -1,5 +1,5 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
-import { authenticate } from '../../middleware/authMiddleware';
+import { authenticate, requirePermission } from '../../middleware/authMiddleware';
 import { prisma } from '../../../config/database';
 import { BusinessError, NotFoundError } from '../../../domain/errors/BusinessError';
 
@@ -96,24 +96,26 @@ function buildHandlers(type: AttachmentType) {
   };
 }
 
+// Lecture : authenticate seul pour l'instant (scoping objet a venir).
 const expenseHandlers = buildHandlers('expense');
 router.get('/expenses/:id/attachments', expenseHandlers.list);
-router.post('/expenses/:id/attachments', expenseHandlers.add);
-router.delete('/expenses/:id/attachments/:attId', expenseHandlers.remove);
+router.post('/expenses/:id/attachments', requirePermission('expense.create'), expenseHandlers.add);
+router.delete('/expenses/:id/attachments/:attId', requirePermission('expense.create'), expenseHandlers.remove);
 
 const disbursementHandlers = buildHandlers('disbursement');
 router.get('/disbursements/:id/attachments', disbursementHandlers.list);
-router.post('/disbursements/:id/attachments', disbursementHandlers.add);
-router.delete('/disbursements/:id/attachments/:attId', disbursementHandlers.remove);
+router.post('/disbursements/:id/attachments', requirePermission('disbursement.create'), disbursementHandlers.add);
+router.delete('/disbursements/:id/attachments/:attId', requirePermission('disbursement.create'), disbursementHandlers.remove);
 
 const debtHandlers = buildHandlers('debt');
 router.get('/debts/:id/attachments', debtHandlers.list);
-router.post('/debts/:id/attachments', debtHandlers.add);
-router.delete('/debts/:id/attachments/:attId', debtHandlers.remove);
+router.post('/debts/:id/attachments', requirePermission('debt.update'), debtHandlers.add);
+router.delete('/debts/:id/attachments/:attId', requirePermission('debt.update'), debtHandlers.remove);
 
+// Transferts de fonds : justificatifs portes par la permission d'initiation.
 const fundTransferHandlers = buildHandlers('fund-transfer');
 router.get('/fund-transfers/:id/attachments', fundTransferHandlers.list);
-router.post('/fund-transfers/:id/attachments', fundTransferHandlers.add);
-router.delete('/fund-transfers/:id/attachments/:attId', fundTransferHandlers.remove);
+router.post('/fund-transfers/:id/attachments', requirePermission('transfer.initiate'), fundTransferHandlers.add);
+router.delete('/fund-transfers/:id/attachments/:attId', requirePermission('transfer.initiate'), fundTransferHandlers.remove);
 
 export default router;

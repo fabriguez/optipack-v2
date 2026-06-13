@@ -13,6 +13,7 @@ export interface IDisbursementRepository {
       containerId?: string;
       parcelId?: string;
       clientId?: string;
+      scopeWhere?: object | null;
     },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<DisbursementVoucher>>;

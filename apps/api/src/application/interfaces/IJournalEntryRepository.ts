@@ -15,7 +15,7 @@ export interface JournalEntryWithLines extends JournalEntry {
 export interface IJournalEntryRepository {
   findById(id: string): Promise<JournalEntryWithLines | null>;
   findAll(
-    filters: { agencyId?: string; sourceType?: string },
+    filters: { agencyId?: string; sourceType?: string; scopeWhere?: object | null },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<JournalEntryWithLines>>;
   create(data: Prisma.JournalEntryCreateInput): Promise<JournalEntry>;

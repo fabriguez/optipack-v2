@@ -1,6 +1,8 @@
 import type { Request, Response, NextFunction } from 'express';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { BusinessError, NotFoundError } from '../../domain/errors/BusinessError';
+import { clientScope, scopeCtx } from '../../application/services/scope/agencyScope';
 
 export class ClientKycAdminController {
   /**
@@ -11,9 +13,16 @@ export class ClientKycAdminController {
     try {
       const limit = Math.min(Number(req.query.limit ?? 50), 200);
       const skip = Number(req.query.skip ?? 0);
+      // Scope agence (etape 2) : merge en AND, filtres existants conserves.
+      const scopeWhere = clientScope.where(scopeCtx(req));
+      const where: Prisma.ClientWhereInput = {
+        idVerificationStatus: 'PENDING',
+        isDeleted: false,
+        ...(scopeWhere && { AND: [scopeWhere] }),
+      };
       const [items, total] = await Promise.all([
         prisma.client.findMany({
-          where: { idVerificationStatus: 'PENDING', isDeleted: false },
+          where,
           select: {
             id: true,
             fullName: true,
@@ -30,7 +39,7 @@ export class ClientKycAdminController {
           take: limit,
           skip,
         }),
-        prisma.client.count({ where: { idVerificationStatus: 'PENDING', isDeleted: false } }),
+        prisma.client.count({ where }),
       ]);
       res.json({ success: true, data: items, total });
     } catch (err) {
@@ -45,6 +54,7 @@ export class ClientKycAdminController {
    */
   static async verify(req: Request, res: Response, next: NextFunction) {
     try {
+      await clientScope.assert(req.params.id, scopeCtx(req));
       const { id } = req.params;
       const { decision, expiryDate, reason } = req.body ?? {};
 

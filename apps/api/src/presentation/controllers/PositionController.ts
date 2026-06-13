@@ -1,6 +1,15 @@
 import type { Request, Response, NextFunction } from 'express';
 import { prisma } from '../../config/database';
 import { BusinessError, NotFoundError } from '../../domain/errors/BusinessError';
+import { ADMIN_ONLY_PERMISSION_KEYS } from '../../domain/constants/permissions';
+import { bumpPermissionVersionForPosition } from '../../application/services/pvCache';
+
+/** Scope tenant : 404 si le poste n'appartient pas a l'organisation du caller. */
+async function getPositionInOrgOr404(id: string, organizationId: string) {
+  const pos = await prisma.position.findFirst({ where: { id, organizationId } });
+  if (!pos) throw new NotFoundError('Position', id);
+  return pos;
+}
 
 export class PositionController {
   static async list(req: Request, res: Response, next: NextFunction) {
@@ -26,8 +35,8 @@ export class PositionController {
 
   static async getById(req: Request, res: Response, next: NextFunction) {
     try {
-      const item = await prisma.position.findUnique({
-        where: { id: req.params.id },
+      const item = await prisma.position.findFirst({
+        where: { id: req.params.id, organizationId: req.user!.organizationId },
         include: {
           permissions: { include: { permission: true } },
           _count: { select: { employees: true } },
@@ -79,6 +88,7 @@ export class PositionController {
 
   static async update(req: Request, res: Response, next: NextFunction) {
     try {
+      await getPositionInOrgOr404(req.params.id, req.user!.organizationId);
       const { name, description, hierarchyLevel, isActive } = req.body;
       const item = await prisma.position.update({
         where: { id: req.params.id },
@@ -97,8 +107,7 @@ export class PositionController {
 
   static async delete(req: Request, res: Response, next: NextFunction) {
     try {
-      const pos = await prisma.position.findUnique({ where: { id: req.params.id } });
-      if (!pos) throw new NotFoundError('Position', req.params.id);
+      const pos = await getPositionInOrgOr404(req.params.id, req.user!.organizationId);
       if (pos.isSystem) throw new BusinessError('Impossible de supprimer un poste systeme');
       const usage = await prisma.employee.count({ where: { positionId: req.params.id } });
       if (usage > 0) throw new BusinessError(`${usage} employe(s) sont rattaches a ce poste`);
@@ -112,8 +121,11 @@ export class PositionController {
   /** Remplace integralement la matrice de permissions du poste. */
   static async setPermissions(req: Request, res: Response, next: NextFunction) {
     try {
+      await getPositionInOrgOr404(req.params.id, req.user!.organizationId);
       const keys = (req.body.permissionKeys as string[]) ?? [];
       await assignPermissionKeys(req.params.id, keys);
+      // Invalide les JWT de tous les employes ayant ce poste.
+      await bumpPermissionVersionForPosition(req.params.id);
       const full = await prisma.position.findUnique({
         where: { id: req.params.id },
         include: { permissions: { include: { permission: true } } },
@@ -126,6 +138,12 @@ export class PositionController {
 }
 
 async function assignPermissionKeys(positionId: string, keys: string[]) {
+  const reserved = keys.filter((k) => ADMIN_ONLY_PERMISSION_KEYS.includes(k));
+  if (reserved.length > 0) {
+    throw new BusinessError(
+      `Permission(s) reservee(s) au role administrateur, non assignables a un poste: ${reserved.join(', ')}`,
+    );
+  }
   const perms = await prisma.permission.findMany({
     where: { key: { in: keys } },
     select: { id: true, key: true },

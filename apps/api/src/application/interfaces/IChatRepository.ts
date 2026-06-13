@@ -9,6 +9,7 @@ export interface IChatRepository {
       clientId?: string;
       status?: string;
       assignedUserId?: string;
+      scopeWhere?: object | null;
     },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<ChatConversation>>;

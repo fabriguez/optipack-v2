@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { container } from '../../../container';
-import { authenticate, authorize } from '../../middleware/authMiddleware';
+import { authenticate, authorize, requirePermission } from '../../middleware/authMiddleware';
 import { tenantGuard, getOrgId } from '../../middleware/tenantGuard';
 import { LoyaltyConfigService } from '../../../application/services/LoyaltyConfigService';
 
@@ -38,7 +38,8 @@ router.get('/updates', async (req, res, next) => {
   }
 });
 
-router.post('/updates/apply', async (req, res, next) => {
+// ABAC : mutations systeme = system.config (authorize global ci-dessus reste la garde dure).
+router.post('/updates/apply', requirePermission('system.config'), async (req, res, next) => {
   try {
     const orgId = getOrgId(req);
     const { toVersion, scheduledFor } = req.body as { toVersion?: string; scheduledFor?: string };
@@ -62,7 +63,7 @@ router.post('/updates/apply', async (req, res, next) => {
   }
 });
 
-router.post('/updates/:jobId/rollback', async (req, res, next) => {
+router.post('/updates/:jobId/rollback', requirePermission('system.config'), async (req, res, next) => {
   try {
     const orgId = getOrgId(req);
     const url = `${ORCHESTRATOR_URL}/ops/tenants/${orgId}/updates/${req.params.jobId}/rollback`;
@@ -102,7 +103,8 @@ router.get('/studio', async (req, res, next) => {
   }
 });
 
-router.patch('/studio', async (req, res, next) => {
+// ABAC : config vitrine / studio = sitestudio.manage.
+router.patch('/studio', requirePermission('sitestudio.manage'), async (req, res, next) => {
   try {
     const orgId = getOrgId(req);
     const r = await fetch(
@@ -143,7 +145,7 @@ router.get('/mail', async (req, res, next) => {
   }
 });
 
-router.post('/mail/provision', async (req, res, next) => {
+router.post('/mail/provision', requirePermission('system.config'), async (req, res, next) => {
   try {
     const orgId = getOrgId(req);
     const r = await fetch(`${ORCHESTRATOR_URL}/ops/tenant-self/mail/provision?tenantId=${encodeURIComponent(orgId)}`, {
@@ -161,7 +163,7 @@ router.post('/mail/provision', async (req, res, next) => {
   }
 });
 
-router.post('/mail/verify', async (req, res, next) => {
+router.post('/mail/verify', requirePermission('system.config'), async (req, res, next) => {
   try {
     const orgId = getOrgId(req);
     const r = await fetch(`${ORCHESTRATOR_URL}/ops/tenant-self/mail/verify?tenantId=${encodeURIComponent(orgId)}`, {
@@ -175,7 +177,7 @@ router.post('/mail/verify', async (req, res, next) => {
   }
 });
 
-router.post('/mail/refresh', async (req, res, next) => {
+router.post('/mail/refresh', requirePermission('system.config'), async (req, res, next) => {
   try {
     const orgId = getOrgId(req);
     const r = await fetch(`${ORCHESTRATOR_URL}/ops/tenant-self/mail/refresh?tenantId=${encodeURIComponent(orgId)}`, {
@@ -203,7 +205,7 @@ router.get('/loyalty-config', async (req, res, next) => {
   }
 });
 
-router.put('/loyalty-config', async (req, res, next) => {
+router.put('/loyalty-config', requirePermission('system.config'), async (req, res, next) => {
   try {
     const svc = container.resolve(LoyaltyConfigService);
     const cfg = await svc.update(getOrgId(req), req.body ?? {});

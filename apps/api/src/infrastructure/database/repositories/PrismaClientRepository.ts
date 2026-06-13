@@ -29,7 +29,7 @@ export class PrismaClientRepository implements IClientRepository {
   }
 
   async findAll(
-    filters: { organizationId?: string; agencyId?: string },
+    filters: { organizationId?: string; agencyId?: string; scopeWhere?: object | null },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<Client>> {
     const { page, limit, sortBy, sortOrder, search } = pagination;
@@ -40,6 +40,8 @@ export class PrismaClientRepository implements IClientRepository {
       isDeleted: false,
       ...(filters.organizationId && { organizationId: filters.organizationId }),
       ...(filters.agencyId && { agencyId: filters.agencyId }),
+      // Scope agence (etape 2) : merge en AND pour ne pas ecraser le OR de recherche.
+      ...(filters.scopeWhere && { AND: [filters.scopeWhere as Prisma.ClientWhereInput] }),
       ...(search && {
         OR: [
           { fullName: { contains: search, mode: 'insensitive' } },

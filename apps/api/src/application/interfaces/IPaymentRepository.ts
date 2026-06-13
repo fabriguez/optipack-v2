@@ -11,7 +11,7 @@ export interface IPaymentRepository {
   findById(id: string): Promise<PaymentWithRelations | null>;
   findByInvoice(invoiceId: string): Promise<Payment[]>;
   findAll(
-    filters: { agencyId?: string; agencyIds?: string[] },
+    filters: { agencyId?: string; agencyIds?: string[]; scopeWhere?: object | null },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<PaymentWithRelations>>;
   create(data: Prisma.PaymentCreateInput): Promise<Payment>;

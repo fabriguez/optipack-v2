@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { LoyaltyController } from '../../controllers/LoyaltyController';
-import { authenticate, authorize } from '../../middleware/authMiddleware';
+import { authenticate, authorize, requirePermission } from '../../middleware/authMiddleware';
 import { validate } from '../../middleware/validate';
 import { paginationSchema } from '@transitsoftservices/shared';
 
@@ -8,12 +8,13 @@ const router = Router();
 
 router.use(authenticate);
 
-router.get('/client/:clientId', validate(paginationSchema, 'query'), LoyaltyController.getByClient);
-router.get('/client/:clientId/points', LoyaltyController.getPoints);
+// Lecture fidelite (points et historique du client)
+router.get('/client/:clientId', validate(paginationSchema, 'query'), requirePermission('loyalty.read'), LoyaltyController.getByClient);
+router.get('/client/:clientId/points', requirePermission('loyalty.read'), LoyaltyController.getPoints);
 
 // Configuration des tiers (admin) : seuils de points + reductions + avantages
-router.get('/tiers', LoyaltyController.listTiers);
-router.put('/tiers', authorize('SUPER_ADMIN', 'ADMIN'), LoyaltyController.upsertTiers);
-router.delete('/tiers/:id', authorize('SUPER_ADMIN', 'ADMIN'), LoyaltyController.deleteTier);
+router.get('/tiers', requirePermission('loyalty.read'), LoyaltyController.listTiers);
+router.put('/tiers', authorize('SUPER_ADMIN', 'ADMIN'), requirePermission('loyalty.policy.manage'), LoyaltyController.upsertTiers);
+router.delete('/tiers/:id', authorize('SUPER_ADMIN', 'ADMIN'), requirePermission('loyalty.policy.manage'), LoyaltyController.deleteTier);
 
 export default router;

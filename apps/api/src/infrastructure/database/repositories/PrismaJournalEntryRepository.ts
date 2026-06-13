@@ -26,7 +26,7 @@ export class PrismaJournalEntryRepository implements IJournalEntryRepository {
   }
 
   async findAll(
-    filters: { agencyId?: string; sourceType?: string },
+    filters: { agencyId?: string; sourceType?: string; scopeWhere?: object | null },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<JournalEntryWithLines>> {
     const { page, limit, search } = pagination;
@@ -35,6 +35,8 @@ export class PrismaJournalEntryRepository implements IJournalEntryRepository {
     const where: Prisma.JournalEntryWhereInput = {
       ...(filters.agencyId && { agencyId: filters.agencyId }),
       ...(filters.sourceType && { sourceType: filters.sourceType as any }),
+      // Scope agence (etape 2) : merge en AND, ne touche pas au OR de recherche.
+      ...(filters.scopeWhere && { AND: [filters.scopeWhere as Prisma.JournalEntryWhereInput] }),
       ...(search && {
         OR: [
           { reference: { contains: search, mode: 'insensitive' } },

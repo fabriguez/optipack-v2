@@ -20,6 +20,8 @@ export class ListParcelsUseCase {
       status?: string;
       transitType?: string;
       agencyIds?: string[] | null;
+      /** Fragment Prisma de scope agence (etape 2), merge en AND par le repo. */
+      scopeWhere?: object | null;
       onlyPresent?: boolean;
       archived?: 'true' | 'all' | 'false';
     },

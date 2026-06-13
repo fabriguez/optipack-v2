@@ -70,6 +70,8 @@ export class PrismaDebtRepository implements IDebtRepository {
       timeFilter?: 'overdue' | 'due_today' | 'open' | undefined;
       // 'company' : raccourci pour types EMPLOYEE+AGENCY+CARRIER (dette entreprise).
       bucket?: 'client' | 'company' | undefined;
+      // Scope agence (etape 2) : fragment merge en AND.
+      scopeWhere?: object | null;
     },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<Debt>> {
@@ -102,6 +104,7 @@ export class PrismaDebtRepository implements IDebtRepository {
       ...(filters.bucket === 'company' && {
         type: { in: ['EMPLOYEE', 'AGENCY', 'CARRIER'] as const },
       }),
+      ...(filters.scopeWhere && { AND: [filters.scopeWhere as Prisma.DebtWhereInput] }),
       ...(search && {
         OR: [
           { reference: { contains: search, mode: 'insensitive' as const } },

@@ -1,15 +1,16 @@
 import { Router } from 'express';
-import { authenticate, authorize } from '../../middleware/authMiddleware';
+import { authenticate, authorize, requirePermission } from '../../middleware/authMiddleware';
 import { validate } from '../../middleware/validate';
 import { paginationSchema } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
+import { auditLogScope, scopeCtx } from '../../../application/services/scope/agencyScope';
 
 const router = Router();
 
 router.use(authenticate);
 router.use(authorize('SUPER_ADMIN', 'ADMIN'));
 
-router.get('/', validate(paginationSchema, 'query'), async (req, res, next) => {
+router.get('/', requirePermission('audit.read'), validate(paginationSchema, 'query'), async (req, res, next) => {
   try {
     const { page = 1, limit = 30, search } = req.query as any;
     const skip = (Number(page) - 1) * Number(limit);
@@ -17,6 +18,8 @@ router.get('/', validate(paginationSchema, 'query'), async (req, res, next) => {
     const entityType = req.query.entityType as string | undefined;
     const userId = req.query.userId as string | undefined;
 
+    // Scope agence (etape 2) : merge en AND, sans toucher au OR de recherche.
+    const scopeWhere = auditLogScope.where(scopeCtx(req));
     const where: any = {
       ...(action && { action }),
       ...(entityType && { entityType }),
@@ -27,6 +30,7 @@ router.get('/', validate(paginationSchema, 'query'), async (req, res, next) => {
           { action: { contains: search, mode: 'insensitive' } },
         ],
       }),
+      ...(scopeWhere && { AND: [scopeWhere] }),
     };
 
     const [data, total] = await Promise.all([

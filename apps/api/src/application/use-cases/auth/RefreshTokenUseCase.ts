@@ -55,6 +55,8 @@ export class RefreshTokenUseCase {
         agencyIds,
         organizationId: user.organizationId,
         permissions,
+        // Étape 7 : version des permissions — synchronise a chaque refresh.
+        pv: user.permissionVersion,
       },
       config.jwt.secret as jwt.Secret,
       { expiresIn: config.jwt.accessExpiry } as jwt.SignOptions,

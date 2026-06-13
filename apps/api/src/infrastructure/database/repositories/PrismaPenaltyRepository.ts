@@ -47,7 +47,7 @@ export class PrismaPenaltyRepository implements IPenaltyRepository {
   }
 
   async findAll(
-    filters: { agencyId?: string; clientId?: string; isPaid?: boolean },
+    filters: { agencyId?: string; clientId?: string; isPaid?: boolean; scopeWhere?: object | null },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<Penalty>> {
     const { page, limit } = pagination;
@@ -57,6 +57,8 @@ export class PrismaPenaltyRepository implements IPenaltyRepository {
       ...(filters.agencyId && { agencyId: filters.agencyId }),
       ...(filters.clientId && { clientId: filters.clientId }),
       ...(filters.isPaid !== undefined && { isPaid: filters.isPaid }),
+      // Scope agence (etape 2) : merge en AND.
+      ...(filters.scopeWhere && { AND: [filters.scopeWhere as Prisma.PenaltyWhereInput] }),
     };
 
     const [data, total] = await Promise.all([

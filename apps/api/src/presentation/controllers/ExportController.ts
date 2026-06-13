@@ -3,6 +3,13 @@ import { container } from '../../container';
 import { prisma } from '../../config/database';
 import { ExcelService, type ExcelColumnDef } from '../../infrastructure/excel/ExcelService';
 import { NotFoundError } from '../../domain/errors/BusinessError';
+import {
+  andWhere,
+  clientScope,
+  employeeScope,
+  parcelScope,
+  scopeCtx,
+} from '../../application/services/scope/agencyScope';
 
 /**
  * Exports XLSX globaux. Chaque endpoint fournit l'integralite des champs metiers
@@ -13,10 +20,14 @@ export class ExportController {
     try {
       const scope = req.user!.role === 'SUPER_ADMIN' ? null : req.user!.agencyIds;
       const parcels = await prisma.parcel.findMany({
-        where: {
-          isDeleted: false,
-          ...(scope && { warehouse: { agencyId: { in: scope } } }),
-        },
+        // Scoping agence en AND par-dessus la restriction de role existante.
+        where: andWhere(
+          {
+            isDeleted: false,
+            ...(scope && { warehouse: { agencyId: { in: scope } } }),
+          },
+          parcelScope.where(scopeCtx(req)),
+        ),
         include: {
           client: { select: { fullName: true, phone: true } },
           recipient: { select: { fullName: true, phone: true } },
@@ -69,9 +80,11 @@ export class ExportController {
     try {
       const agencyId = req.query.agencyId as string | undefined;
       const employees = await prisma.employee.findMany({
-        where: {
-          ...(agencyId && { agencyId }),
-        },
+        // Scoping agence en AND du filtre query existant.
+        where: andWhere(
+          { ...(agencyId && { agencyId }) },
+          employeeScope.where(scopeCtx(req)),
+        ),
         include: { agency: { select: { name: true } } },
         orderBy: { fullName: 'asc' },
       });
@@ -104,7 +117,11 @@ export class ExportController {
     try {
       const agencyId = req.query.agencyId as string | undefined;
       const clients = await prisma.client.findMany({
-        where: { ...(agencyId && { agencyId }) },
+        // Scoping agence en AND du filtre query existant.
+        where: andWhere(
+          { ...(agencyId && { agencyId }) },
+          clientScope.where(scopeCtx(req)),
+        ),
         include: { agency: { select: { name: true } } },
         orderBy: { fullName: 'asc' },
         take: 5000,

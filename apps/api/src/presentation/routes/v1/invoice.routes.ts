@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticate } from '../../middleware/authMiddleware';
+import { authenticate, requirePermission } from '../../middleware/authMiddleware';
 import { validate } from '../../middleware/validate';
 import { paginationSchema, applyInvoiceDiscountSchema, type ApplyInvoiceDiscountInput } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
@@ -9,6 +9,9 @@ import { ExcelService } from '../../../infrastructure/excel/ExcelService';
 import { container } from '../../../container';
 import { StorageService } from '../../../infrastructure/storage/StorageService';
 import { StorageChargeService } from '../../../application/services/StorageChargeService';
+import { invoiceScope, scopeCtx } from '../../../application/services/scope/agencyScope';
+import { applyFieldPolicy, INVOICE_FIELD_POLICY } from '../../serializers/fieldPolicy';
+import { getPolicy } from '../../middleware/policyContext';
 import sharp from 'sharp';
 
 /**
@@ -325,7 +328,8 @@ const router = Router();
 
 router.use(authenticate);
 
-router.get('/', validate(paginationSchema, 'query'), async (req, res, next) => {
+// Lecture des factures (liste)
+router.get('/', validate(paginationSchema, 'query'), requirePermission('invoice.read'), async (req, res, next) => {
   try {
     const { page = 1, limit = 20, search, sortOrder = 'desc' } = req.query as any;
     const skip = (Number(page) - 1) * Number(limit);
@@ -337,8 +341,11 @@ router.get('/', validate(paginationSchema, 'query'), async (req, res, next) => {
     // tracking number d'un colis lie. Permet a la barre de recherche du
     // form paiement de trouver vite la facture via le bordereau papier
     // (tracking) ou un appel client (telephone).
+    // Scope agence : merge en AND pour ne pas ecraser le OR de recherche.
+    const scopeWhere = invoiceScope.where(scopeCtx(req)) ?? null;
     const where: any = {
       isActive: true,
+      ...(scopeWhere && { AND: [scopeWhere] }),
       ...(status && { status }),
       ...(clientId && { clientId }),
       ...(agencyId && { agencyId }),
@@ -366,16 +373,20 @@ router.get('/', validate(paginationSchema, 'query'), async (req, res, next) => {
       prisma.invoice.count({ where }),
     ]);
 
+    const policy = getPolicy(req);
+    const maskedData = policy ? applyFieldPolicy(data, INVOICE_FIELD_POLICY, policy) : data;
     res.json({
       success: true,
-      data,
+      data: maskedData,
       meta: { total, page: Number(page), limit: Number(limit), totalPages: Math.ceil(total / Number(limit)) },
     });
   } catch (err) { next(err); }
 });
 
-router.get('/:id', async (req, res, next) => {
+// Lecture du detail d'une facture
+router.get('/:id', requirePermission('invoice.read'), async (req, res, next) => {
   try {
+    await invoiceScope.assert(req.params.id, scopeCtx(req));
     const invoice = await prisma.invoice.findUnique({
       where: { id: req.params.id },
       include: {
@@ -438,7 +449,8 @@ router.get('/:id', async (req, res, next) => {
       groupId: scope.groupId,
       discountHistory: discountAudit,
     };
-    res.json({ success: true, data: enriched });
+    const policy = getPolicy(req);
+    res.json({ success: true, data: policy ? applyFieldPolicy(enriched, INVOICE_FIELD_POLICY, policy) : enriched });
   } catch (err) { next(err); }
 });
 
@@ -654,8 +666,10 @@ async function __buildPdfFromInvoice(invoice: any): Promise<Buffer> {
     return PDFService.generateInvoicePDF(invoiceData);
 }
 
-router.get('/:id/pdf', async (req, res, next) => {
+// Export PDF de la facture
+router.get('/:id/pdf', requirePermission('invoice.export'), async (req, res, next) => {
   try {
+    await invoiceScope.assert(req.params.id, scopeCtx(req));
     const out = await buildInvoicePdfBuffer(req.params.id);
     if (!out) return res.status(404).json({ success: false, message: 'Facture introuvable' });
     res.set({
@@ -674,8 +688,9 @@ router.get('/:id/pdf', async (req, res, next) => {
  * magasinage + part allouee de l'avance/solde. Utile pour la compta / export
  * comptable client.
  */
-router.get('/:id/xlsx', async (req, res, next) => {
+router.get('/:id/xlsx', requirePermission('invoice.export'), async (req, res, next) => {
   try {
+    await invoiceScope.assert(req.params.id, scopeCtx(req));
     const invoice = await prisma.invoice.findUnique({
       where: { id: req.params.id },
       include: {
@@ -745,8 +760,9 @@ router.get('/:id/xlsx', async (req, res, next) => {
  * DISCOUNT_APPLIED) avec l'ancien/nouveau montant + raison + userId.
  * Body : { amount: number >= 0, reason: string (min 3 chars) }
  */
-router.post('/:id/discount', validate(applyInvoiceDiscountSchema), async (req, res, next) => {
+router.post('/:id/discount', validate(applyInvoiceDiscountSchema), requirePermission('invoice.discount'), async (req, res, next) => {
   try {
+    await invoiceScope.assert(req.params.id, scopeCtx(req));
     const { amount, reason } = req.body as ApplyInvoiceDiscountInput;
 
     const invoice = await prisma.invoice.findUnique({ where: { id: req.params.id } });

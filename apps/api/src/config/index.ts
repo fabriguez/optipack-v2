@@ -35,6 +35,12 @@ export const config = {
     refreshExpiry: process.env.JWT_REFRESH_EXPIRY || '30d',
   },
 
+  permissions: {
+    // 'log' (shadow) : les refus de permission sont logges mais laissent passer.
+    // 'enforce' : les refus bloquent (403). Cf. PERMISSIONS-PLAN.md etape 8.
+    enforce: (process.env.PERMISSIONS_ENFORCE || 'log') as 'log' | 'enforce',
+  },
+
   smtp: {
     host: process.env.SMTP_HOST || 'smtp.gmail.com',
     port: parseInt(process.env.SMTP_PORT || '587', 10),

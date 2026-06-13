@@ -75,6 +75,9 @@ export interface JwtPayload {
   // SUPER_ADMIN (qui contourne le check). Les middlewares utilisent
   // requirePermission() pour valider.
   permissions?: string[];
+  // Étape 7 ABAC : version des permissions au moment de l'emission du token.
+  // Le middleware rejette le token si la valeur DB a change (-> 401 -> refresh).
+  pv?: number;
   iat?: number;
   exp?: number;
 }

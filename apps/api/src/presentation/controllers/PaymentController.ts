@@ -7,10 +7,16 @@ import { NotFoundError } from '../../domain/errors/BusinessError';
 import type { PaginationInput } from '@transitsoftservices/shared';
 import { realtimeService } from '../../infrastructure/realtime/RealtimeService';
 import { prisma } from '../../config/database';
+import { invoiceScope, paymentScope, scopeCtx } from '../../application/services/scope/agencyScope';
+import { applyFieldPolicy, PAYMENT_FIELD_POLICY } from '../serializers/fieldPolicy';
+import { getPolicy } from '../middleware/policyContext';
 
 export class PaymentController {
   static async record(req: Request, res: Response, next: NextFunction) {
     try {
+      // Scope agence : la facture cible doit etre dans le scope du caissier.
+      const bodyInvoiceId = (req.body as { invoiceId?: string })?.invoiceId;
+      if (bodyInvoiceId) await invoiceScope.assert(bodyInvoiceId, scopeCtx(req));
       const useCase = container.resolve(RecordPaymentUseCase);
       const result = await useCase.execute(req.body, req.user!.userId);
       // Realtime : notifie le client proprietaire de la facture
@@ -42,11 +48,16 @@ export class PaymentController {
     try {
       const repo = container.resolve<any>(PAYMENT_REPOSITORY);
       const { agencyId } = req.query;
+      const scopeWhere = paymentScope.where(scopeCtx(req)) ?? null;
       const result = await repo.findAll(
-        { agencyId: agencyId as string, agencyIds: req.user!.agencyIds },
+        { agencyId: agencyId as string, agencyIds: req.user!.agencyIds, scopeWhere },
         req.query as unknown as PaginationInput,
       );
-      res.json({ success: true, ...result });
+      const policy = getPolicy(req);
+      const data = policy
+        ? { ...result, data: applyFieldPolicy(result.data, PAYMENT_FIELD_POLICY, policy) }
+        : result;
+      res.json({ success: true, ...data });
     } catch (err) {
       next(err);
     }
@@ -54,10 +65,12 @@ export class PaymentController {
 
   static async getById(req: Request, res: Response, next: NextFunction) {
     try {
+      await paymentScope.assert(req.params.id, scopeCtx(req));
       const repo = container.resolve<any>(PAYMENT_REPOSITORY);
       const payment = await repo.findById(req.params.id);
       if (!payment) throw new NotFoundError('Paiement', req.params.id);
-      res.json({ success: true, data: payment });
+      const policy = getPolicy(req);
+      res.json({ success: true, data: policy ? applyFieldPolicy(payment, PAYMENT_FIELD_POLICY, policy) : payment });
     } catch (err) {
       next(err);
     }
@@ -65,9 +78,11 @@ export class PaymentController {
 
   static async getByInvoice(req: Request, res: Response, next: NextFunction) {
     try {
+      await invoiceScope.assert(req.params.invoiceId, scopeCtx(req));
       const repo = container.resolve<any>(PAYMENT_REPOSITORY);
       const payments = await repo.findByInvoice(req.params.invoiceId);
-      res.json({ success: true, data: payments });
+      const policy = getPolicy(req);
+      res.json({ success: true, data: policy ? applyFieldPolicy(payments, PAYMENT_FIELD_POLICY, policy) : payments });
     } catch (err) {
       next(err);
     }
@@ -75,6 +90,7 @@ export class PaymentController {
 
   static async void(req: Request, res: Response, next: NextFunction) {
     try {
+      await paymentScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(VoidPaymentUseCase);
       const result = await useCase.execute(req.params.id, req.body.reason, req.user!.userId);
       res.json({ success: true, data: result });

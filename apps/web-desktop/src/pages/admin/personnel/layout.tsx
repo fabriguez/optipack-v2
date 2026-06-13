@@ -5,6 +5,7 @@ import { usePermission } from '@/lib/hooks/usePermission';
 const TABS = [
   { href: '/admin/personnel/postes', label: 'Postes', perm: ['position.manage', 'personnel.read'] },
   { href: '/admin/personnel/permissions', label: 'Permissions', perm: ['permission.manage'] },
+  { href: '/admin/personnel/exceptions', label: 'Exceptions', perm: ['permission.manage'] },
   { href: '/admin/personnel/plannings', label: 'Plannings', perm: ['schedule.manage'] },
   { href: '/admin/personnel/jours-non-ouvres', label: 'Jours non ouvres', perm: ['holiday.manage'] },
 ];

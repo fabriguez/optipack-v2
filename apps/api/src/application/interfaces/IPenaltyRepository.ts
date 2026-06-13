@@ -5,7 +5,7 @@ export interface IPenaltyRepository {
   findById(id: string): Promise<Penalty | null>;
   findByParcel(parcelId: string): Promise<Penalty | null>;
   findAll(
-    filters: { agencyId?: string; clientId?: string; isPaid?: boolean },
+    filters: { agencyId?: string; clientId?: string; isPaid?: boolean; scopeWhere?: object | null },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<Penalty>>;
   findParcelsEligibleForPenalty(graceDays: number): Promise<{ parcelId: string; clientId: string; agencyId: string; arrivalDate: Date }[]>;

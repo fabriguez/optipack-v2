@@ -39,7 +39,9 @@ export class PermissionService {
     });
 
     if (!user) return [];
-    if (user.role === 'SUPER_ADMIN') return ['*'];
+    // SUPER_ADMIN = plateforme (cross-tenant). ADMIN = administrateur du tenant :
+    // il gere tout son organisation, y compris la matrice des permissions.
+    if (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN') return ['*'];
 
     const set = new Set<string>();
     const positionPerms = user.employee?.positionRef?.permissions ?? [];

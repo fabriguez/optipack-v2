@@ -86,6 +86,9 @@ export class PrismaParcelRepository implements IParcelRepository {
       status?: string;
       transitType?: string;
       agencyIds?: string[] | null;
+      // Fragment Prisma de scope agence (etape 2) : merge en AND pour ne pas
+      // ecraser le OR de recherche.
+      scopeWhere?: object | null;
       onlyPresent?: boolean;
       // Archive : par defaut les archives sont exclues. archived='true' filtre
       // pour ne retourner QUE les archives ; archived='all' inclut tout.
@@ -131,6 +134,7 @@ export class PrismaParcelRepository implements IParcelRepository {
           { client: { fullName: { contains: search, mode: 'insensitive' } } },
         ],
       }),
+      ...(filters.scopeWhere && { AND: [filters.scopeWhere as Prisma.ParcelWhereInput] }),
     };
 
     const [data, total] = await Promise.all([

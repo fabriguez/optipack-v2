@@ -13,6 +13,7 @@ export interface IDebtRepository {
       type?: string;
       status?: string;
       bucket?: 'client' | 'company';
+      scopeWhere?: object | null;
     },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<Debt>>;

@@ -1,5 +1,5 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
-import { authenticate, authorize } from '../../middleware/authMiddleware';
+import { authenticate, authorize, requirePermission } from '../../middleware/authMiddleware';
 import { prisma } from '../../../config/database';
 import { BusinessError, NotFoundError } from '../../../domain/errors/BusinessError';
 
@@ -48,9 +48,11 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
   } catch (err) { next(err); }
 });
 
+// Mutation du referentiel des methodes de paiement = configuration systeme
 router.post(
   '/',
   authorize('SUPER_ADMIN', 'ADMIN'),
+  requirePermission('system.config'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const organizationId = req.user!.organizationId;
@@ -86,6 +88,7 @@ router.post(
 router.patch(
   '/:id',
   authorize('SUPER_ADMIN', 'ADMIN'),
+  requirePermission('system.config'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { label, color, icon, isActive, sortOrder } = req.body as Record<string, unknown>;
@@ -109,6 +112,7 @@ router.patch(
 router.delete(
   '/:id',
   authorize('SUPER_ADMIN', 'ADMIN'),
+  requirePermission('system.config'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const existing = await prisma.paymentMethodConfig.findUnique({ where: { id: req.params.id } });

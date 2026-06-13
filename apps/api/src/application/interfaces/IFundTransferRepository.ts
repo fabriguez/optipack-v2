@@ -18,6 +18,7 @@ export interface IFundTransferRepository {
       destinationPaymentMethod?: string;
       minAmount?: number;
       maxAmount?: number;
+      scopeWhere?: object | null;
     },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<FundTransfer>>;

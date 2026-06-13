@@ -9,7 +9,7 @@ export class ListClientsUseCase {
   ) {}
 
   async execute(
-    filters: { organizationId?: string; agencyId?: string },
+    filters: { organizationId?: string; agencyId?: string; scopeWhere?: object | null },
     pagination: PaginationInput,
   ) {
     return this.clientRepo.findAll(filters, pagination);

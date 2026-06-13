@@ -27,6 +27,7 @@ export class PrismaDisbursementRepository implements IDisbursementRepository {
       containerId?: string;
       parcelId?: string;
       clientId?: string;
+      scopeWhere?: object | null;
     },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<DisbursementVoucher>> {
@@ -46,6 +47,8 @@ export class PrismaDisbursementRepository implements IDisbursementRepository {
       ...(filters.clientId && { clientId: filters.clientId }),
       ...(search && { reference: { contains: search, mode: 'insensitive' } }),
       ...(Object.keys(createdAt).length && { createdAt }),
+      // Scope agence : en AND pour ne pas ecraser les autres filtres.
+      ...(filters.scopeWhere && { AND: [filters.scopeWhere as Prisma.DisbursementVoucherWhereInput] }),
     };
 
     const [data, total] = await Promise.all([

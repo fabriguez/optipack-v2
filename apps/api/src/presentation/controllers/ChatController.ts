@@ -2,22 +2,30 @@ import type { Request, Response, NextFunction } from 'express';
 import { container } from '../../container';
 import { CHAT_REPOSITORY } from '../../application/interfaces/IChatRepository';
 import { NotFoundError } from '../../domain/errors/BusinessError';
+import { chatConversationScope, scopeCtx } from '../../application/services/scope/agencyScope';
+import { applyFieldPolicy, CHAT_FIELD_POLICY } from '../serializers/fieldPolicy';
+import { getPolicy } from '../middleware/policyContext';
 
 export class ChatController {
   static async listConversations(req: Request, res: Response, next: NextFunction) {
     try {
       const repo = container.resolve<any>(CHAT_REPOSITORY);
       const { clientId, status, assignedUserId } = req.query;
+      // Scope agence (etape 2) : merge en AND, filtre agencyIds existant conserve.
+      const scopeWhere = chatConversationScope.where(scopeCtx(req)) ?? null;
       const result = await repo.findConversations(
         {
           agencyIds: req.user!.agencyIds,
           clientId: clientId as string | undefined,
           status: status as string | undefined,
           assignedUserId: assignedUserId as string | undefined,
+          scopeWhere,
         },
         req.query,
       );
-      res.json({ success: true, ...result });
+      const policy = getPolicy(req);
+      const masked = policy ? { ...result, data: applyFieldPolicy(result.data, CHAT_FIELD_POLICY, policy) } : result;
+      res.json({ success: true, ...masked });
     } catch (err) {
       next(err);
     }
@@ -25,10 +33,12 @@ export class ChatController {
 
   static async getConversation(req: Request, res: Response, next: NextFunction) {
     try {
+      await chatConversationScope.assert(req.params.id, scopeCtx(req));
       const repo = container.resolve<any>(CHAT_REPOSITORY);
       const conversation = await repo.findConversationById(req.params.id);
       if (!conversation) throw new NotFoundError('Conversation', req.params.id);
-      res.json({ success: true, data: conversation });
+      const policy = getPolicy(req);
+      res.json({ success: true, data: policy ? applyFieldPolicy(conversation, CHAT_FIELD_POLICY, policy) : conversation });
     } catch (err) {
       next(err);
     }
@@ -51,6 +61,7 @@ export class ChatController {
 
   static async closeConversation(req: Request, res: Response, next: NextFunction) {
     try {
+      await chatConversationScope.assert(req.params.id, scopeCtx(req));
       const repo = container.resolve<any>(CHAT_REPOSITORY);
       const existing = await repo.findConversationById(req.params.id);
       if (!existing) throw new NotFoundError('Conversation', req.params.id);
@@ -63,6 +74,7 @@ export class ChatController {
 
   static async listMessages(req: Request, res: Response, next: NextFunction) {
     try {
+      await chatConversationScope.assert(req.params.id, scopeCtx(req));
       const repo = container.resolve<any>(CHAT_REPOSITORY);
       const existing = await repo.findConversationById(req.params.id);
       if (!existing) throw new NotFoundError('Conversation', req.params.id);
@@ -75,6 +87,7 @@ export class ChatController {
 
   static async sendMessage(req: Request, res: Response, next: NextFunction) {
     try {
+      await chatConversationScope.assert(req.params.id, scopeCtx(req));
       const repo = container.resolve<any>(CHAT_REPOSITORY);
       const existing = await repo.findConversationById(req.params.id);
       if (!existing) throw new NotFoundError('Conversation', req.params.id);
@@ -92,6 +105,7 @@ export class ChatController {
 
   static async markRead(req: Request, res: Response, next: NextFunction) {
     try {
+      await chatConversationScope.assert(req.params.id, scopeCtx(req));
       const repo = container.resolve<any>(CHAT_REPOSITORY);
       const existing = await repo.findConversationById(req.params.id);
       if (!existing) throw new NotFoundError('Conversation', req.params.id);

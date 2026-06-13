@@ -1,4 +1,5 @@
 import { injectable } from 'tsyringe';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../../../config/database';
 
 export type FinanceEventType =
@@ -30,6 +31,13 @@ interface Input {
   from?: string;
   to?: string;
   limit?: number;
+  // Scope agence (etape 2) : fragments merges en AND par table (undefined = admin/shadow).
+  scope?: {
+    expense?: object;
+    fundTransfer?: object;
+    debt?: object;
+    debtPayment?: object;
+  };
 }
 
 /**
@@ -119,6 +127,7 @@ export class FinanceTimelineUseCase {
               agencyId: { in: scopedAgencies },
               agencyChargeId: { not: null },
               ...(hasDate && { createdAt: dateFilter }),
+              ...(input.scope?.expense && { AND: [input.scope.expense as Prisma.ExpenseWhereInput] }),
             },
             orderBy: { createdAt: 'desc' },
             take: limit,
@@ -168,6 +177,7 @@ export class FinanceTimelineUseCase {
                 { destinationAgencyId: { in: scopedAgencies } },
               ],
               ...(hasDate && { createdAt: dateFilter }),
+              ...(input.scope?.fundTransfer && { AND: [input.scope.fundTransfer as Prisma.FundTransferWhereInput] }),
             },
             orderBy: { createdAt: 'desc' },
             take: limit,
@@ -216,6 +226,7 @@ export class FinanceTimelineUseCase {
             where: {
               agencyId: { in: scopedAgencies },
               ...(hasDate && { createdAt: dateFilter }),
+              ...(input.scope?.debt && { AND: [input.scope.debt as Prisma.DebtWhereInput] }),
             },
             orderBy: { createdAt: 'desc' },
             take: limit,
@@ -265,6 +276,7 @@ export class FinanceTimelineUseCase {
             where: {
               agencyId: { in: scopedAgencies },
               ...(hasDate && { createdAt: dateFilter }),
+              ...(input.scope?.debtPayment && { AND: [input.scope.debtPayment as Prisma.DebtPaymentWhereInput] }),
             },
             orderBy: { createdAt: 'desc' },
             take: limit,

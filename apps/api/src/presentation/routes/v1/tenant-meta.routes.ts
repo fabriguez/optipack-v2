@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { prisma } from '../../../config/database';
-import { authenticate, authorize } from '../../middleware/authMiddleware';
+import { authenticate, authorize, requirePermission } from '../../middleware/authMiddleware';
 import { tenantGuard, getOrgId } from '../../middleware/tenantGuard';
 import { isKnownSkinId, listSkins, isKnownThemeId, listThemes } from '@transitsoftservices/skins';
 import {
@@ -264,6 +264,8 @@ router.patch(
   authenticate,
   tenantGuard,
   authorize('SUPER_ADMIN', 'ADMIN'),
+  // ABAC : personnalisation branding (authorize conserve en garde dure).
+  requirePermission('branding.manage'),
   async (req, res, next) => {
     try {
       const orgId = getOrgId(req);
@@ -340,6 +342,8 @@ router.get(
   authenticate,
   tenantGuard,
   authorize('SUPER_ADMIN', 'ADMIN'),
+  // ABAC : lecture des reglages = settings.read.
+  requirePermission('settings.read'),
   async (_req, res, next) => {
     try {
       const { listPaymentProviders } = await import('../../../infrastructure/payments/registry');
@@ -360,6 +364,8 @@ router.get(
   authenticate,
   tenantGuard,
   authorize('SUPER_ADMIN', 'ADMIN'),
+  // ABAC : lecture credentials paiement = settings.read.
+  requirePermission('settings.read'),
   async (req, res, next) => {
     try {
       const orgId = getOrgId(req);
@@ -383,6 +389,8 @@ router.patch(
   authenticate,
   tenantGuard,
   authorize('SUPER_ADMIN', 'ADMIN'),
+  // ABAC : mutation config paiement = system.config.
+  requirePermission('system.config'),
   async (req, res, next) => {
     try {
       const orgId = getOrgId(req);
@@ -430,6 +438,8 @@ router.patch(
   authenticate,
   tenantGuard,
   authorize('SUPER_ADMIN', 'ADMIN'),
+  // ABAC : skin/theme du site vitrine = sitestudio.manage.
+  requirePermission('sitestudio.manage'),
   async (req, res, next) => {
     try {
       const orgId = getOrgId(req);
@@ -496,6 +506,8 @@ router.patch(
   authenticate,
   tenantGuard,
   authorize('SUPER_ADMIN', 'ADMIN'),
+  // ABAC : config email (credentials) = system.config.
+  requirePermission('system.config'),
   async (req, res, next) => {
     try {
       const orgId = getOrgId(req);
@@ -551,6 +563,7 @@ router.post(
   authenticate,
   tenantGuard,
   authorize('SUPER_ADMIN', 'ADMIN'),
+  requirePermission('system.config'),
   async (req, res, next) => {
     try {
       const orgId = getOrgId(req);
@@ -609,6 +622,8 @@ router.patch(
   authenticate,
   tenantGuard,
   authorize('SUPER_ADMIN', 'ADMIN'),
+  // ABAC : white-label app mobile = branding.manage.
+  requirePermission('branding.manage'),
   async (req, res, next) => {
     try {
       const orgId = getOrgId(req);

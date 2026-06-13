@@ -3,10 +3,32 @@ import { container } from '../../container';
 import { GetCashRegisterUseCase } from '../../application/use-cases/cash-register/GetCashRegisterUseCase';
 import { CloseCashRegisterUseCase } from '../../application/use-cases/cash-register/CloseCashRegisterUseCase';
 import { GetCashRegisterMovementsUseCase } from '../../application/use-cases/cash-register/GetCashRegisterMovementsUseCase';
+import { scopeCtx, scopeEnforced } from '../../application/services/scope/agencyScope';
+import { NotFoundError } from '../../domain/errors/BusinessError';
+
+/**
+ * Scope agence : les routes caisse sont indexees par agencyId (pas d'id
+ * d'enregistrement) -> on verifie directement l'appartenance de l'agence.
+ * Enforce : 404, shadow : log [SCOPE-DENY] et laisse passer.
+ */
+function assertAgencyInScope(req: Request): void {
+  const ctx = scopeCtx(req);
+  const agencyId = req.params.agencyId;
+  if (ctx.unrestricted || ctx.agencyIds.includes(agencyId)) return;
+  if (!scopeEnforced()) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[SCOPE-DENY] user=${ctx.userId} resource=AgencyCashRegister id=${agencyId} agencies=[${ctx.agencyIds.join(',')}]`,
+    );
+    return;
+  }
+  throw new NotFoundError('AgencyCashRegister', agencyId);
+}
 
 export class CashRegisterController {
   static async get(req: Request, res: Response, next: NextFunction) {
     try {
+      assertAgencyInScope(req);
       const { agencyId } = req.params;
       const date = req.query.date as string | undefined;
       const useCase = container.resolve(GetCashRegisterUseCase);
@@ -19,6 +41,7 @@ export class CashRegisterController {
 
   static async movements(req: Request, res: Response, next: NextFunction) {
     try {
+      assertAgencyInScope(req);
       const { agencyId } = req.params;
       const cashRegisterId = req.query.cashRegisterId as string | undefined;
       const date = req.query.date as string | undefined;
@@ -35,6 +58,7 @@ export class CashRegisterController {
 
   static async close(req: Request, res: Response, next: NextFunction) {
     try {
+      assertAgencyInScope(req);
       const { agencyId } = req.params;
       const useCase = container.resolve(CloseCashRegisterUseCase);
       const register = await useCase.execute(agencyId, req.user!.userId, req.body.notes);

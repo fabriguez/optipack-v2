@@ -544,6 +544,10 @@ model User {
   // ex: { "PARCEL_ARRIVED": { "channels": ["IN_APP","SMS"] } }.
   // Si null/manquant : defauts globaux (tous canaux non-spam).
   notificationPrefs Json?
+  // Incremente a chaque changement de matrice de poste ou d'override individuel.
+  // Embed comme `pv` dans le JWT ; le middleware rejette les tokens dont le `pv`
+  // ne correspond plus (401), forcant un refresh qui embarque les nouvelles perms.
+  permissionVersion Int       @default(0)
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 

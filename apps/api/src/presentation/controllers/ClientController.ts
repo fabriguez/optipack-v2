@@ -16,6 +16,7 @@ import {
 } from '../../application/use-cases/client/ClientXlsxUseCases';
 import { BusinessError, NotFoundError } from '../../domain/errors/BusinessError';
 import { getOrgId } from '../middleware/tenantGuard';
+import { clientScope, scopeCtx } from '../../application/services/scope/agencyScope';
 
 export class ClientController {
   static async create(req: Request, res: Response, next: NextFunction) {
@@ -32,8 +33,10 @@ export class ClientController {
     try {
       const useCase = container.resolve(ListClientsUseCase);
       const agencyId = req.query.agencyId as string | undefined;
+      // Scope agence (etape 2) : fragment merge en AND dans le repo.
+      const scopeWhere = clientScope.where(scopeCtx(req)) ?? null;
       const result = await useCase.execute(
-        { organizationId: getOrgId(req), agencyId },
+        { organizationId: getOrgId(req), agencyId, scopeWhere },
         req.query as never,
       );
       res.json({ success: true, ...result });
@@ -44,6 +47,7 @@ export class ClientController {
 
   static async getById(req: Request, res: Response, next: NextFunction) {
     try {
+      await clientScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(GetClientUseCase);
       const client = await useCase.execute(req.params.id);
       res.json({ success: true, data: client });
@@ -62,6 +66,7 @@ export class ClientController {
    */
   static async getScore(req: Request, res: Response, next: NextFunction) {
     try {
+      await clientScope.assert(req.params.id, scopeCtx(req));
       const { prisma } = await import('../../config/database');
       const clientId = req.params.id;
       const [overdueCount, activeDebts, clearedDebts] = await Promise.all([
@@ -130,6 +135,7 @@ export class ClientController {
    */
   static async getOutstanding(req: Request, res: Response, next: NextFunction) {
     try {
+      await clientScope.assert(req.params.id, scopeCtx(req));
       const { prisma } = await import('../../config/database');
       const clientId = req.params.id;
       const [invoiceAgg, debtAgg, unpaidInvoiceCount, activeDebtCount] = await Promise.all([
@@ -171,6 +177,7 @@ export class ClientController {
 
   static async update(req: Request, res: Response, next: NextFunction) {
     try {
+      await clientScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(UpdateClientUseCase);
       const client = await useCase.execute(req.params.id, req.body);
       res.json({ success: true, data: client });
@@ -181,6 +188,7 @@ export class ClientController {
 
   static async delete(req: Request, res: Response, next: NextFunction) {
     try {
+      await clientScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(DeleteClientUseCase);
       await useCase.execute(req.params.id);
       res.json({ success: true, message: 'Client desactive' });
@@ -199,6 +207,7 @@ export class ClientController {
       }
       const file = (req as any).file as Express.Multer.File | undefined;
       if (!file) return res.status(400).json({ success: false, message: 'Aucun fichier fourni' });
+      await clientScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(UploadClientImageUseCase);
       const result = await useCase.execute(req.params.id, slot, file);
       res.json({ success: true, data: result });
@@ -213,6 +222,7 @@ export class ClientController {
       if (!['profile', 'idDocument', 'idDocumentBack'].includes(slot)) {
         throw new NotFoundError('Slot photo client', slot);
       }
+      await clientScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(DeleteClientImageUseCase);
       const result = await useCase.execute(req.params.id, slot);
       res.json({ success: true, data: result });
@@ -227,6 +237,7 @@ export class ClientController {
       if (!['profile', 'idDocument', 'idDocumentBack'].includes(slot)) {
         throw new NotFoundError('Slot photo client', slot);
       }
+      await clientScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(GetClientImageUseCase);
       const obj = await useCase.execute(req.params.id, slot);
       if (!obj) return res.status(404).end();

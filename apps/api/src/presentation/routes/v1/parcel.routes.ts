@@ -1,19 +1,21 @@
 import { Router } from 'express';
 import { ParcelController } from '../../controllers/ParcelController';
-import { authenticate } from '../../middleware/authMiddleware';
+import { authenticate, requirePermission } from '../../middleware/authMiddleware';
 import { validate } from '../../middleware/validate';
 import { createParcelSchema, createBatchParcelsSchema, paginationSchema } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
 import { QRCodeService } from '../../../application/services/QRCodeService';
 import { PDFService } from '../../../application/services/PDFService';
+import { parcelScope, scopeCtx } from '../../../application/services/scope/agencyScope';
 
 const router = Router();
 
 router.use(authenticate);
 
 // QR code (rendu via AuthedImage cote front-end : fetch + blob URL)
-router.get('/:id/qrcode', async (req, res, next) => {
+router.get('/:id/qrcode', requirePermission('parcel.read'), async (req, res, next) => {
   try {
+    await parcelScope.assert(req.params.id, scopeCtx(req));
     const parcel = await prisma.parcel.findUnique({
       where: { id: req.params.id },
       select: { id: true, trackingNumber: true },
@@ -37,36 +39,37 @@ router.get('/:id/qrcode', async (req, res, next) => {
   }
 });
 
-router.get('/', validate(paginationSchema, 'query'), ParcelController.list);
-router.get('/tracking/:tracking', ParcelController.getByTracking);
-router.get('/:id', ParcelController.getById);
-router.post('/', validate(createParcelSchema), ParcelController.create);
-router.post('/batch', validate(createBatchParcelsSchema), ParcelController.createBatch);
-router.patch('/:id', ParcelController.update);
-router.patch('/:id/status', ParcelController.updateStatus);
-router.delete('/:id', ParcelController.delete);
+router.get('/', requirePermission('parcel.read'), validate(paginationSchema, 'query'), ParcelController.list);
+router.get('/tracking/:tracking', requirePermission('parcel.read'), ParcelController.getByTracking);
+router.get('/:id', requirePermission('parcel.read'), ParcelController.getById);
+router.post('/', requirePermission('parcel.create'), validate(createParcelSchema), ParcelController.create);
+router.post('/batch', requirePermission('parcel.create'), validate(createBatchParcelsSchema), ParcelController.createBatch);
+router.patch('/:id', requirePermission('parcel.update'), ParcelController.update);
+router.patch('/:id/status', requirePermission('parcel.update'), ParcelController.updateStatus);
+router.delete('/:id', requirePermission('parcel.delete'), ParcelController.delete);
 
 // Archivage en lot. Les colis archives disparaissent de tous les listings
 // par defaut. Le filtre ?archived=true / ?archived=all ouvre l'acces.
-router.post('/archive', ParcelController.archive);
-router.post('/unarchive', ParcelController.unarchive);
+router.post('/archive', requirePermission('parcel.archive'), ParcelController.archive);
+router.post('/unarchive', requirePermission('parcel.archive'), ParcelController.unarchive);
 
 // Galerie d'images
-router.get('/:id/images', ParcelController.listImages);
-router.post('/:id/images', ParcelController.addImage);
-router.delete('/:id/images/:imageId', ParcelController.deleteImage);
+router.get('/:id/images', requirePermission('parcel.read'), ParcelController.listImages);
+router.post('/:id/images', requirePermission('parcel.update'), ParcelController.addImage);
+router.delete('/:id/images/:imageId', requirePermission('parcel.update'), ParcelController.deleteImage);
 
 // Frais de magasinage (calcul a la volee)
-router.get('/:id/storage-fee', ParcelController.storageFee);
+router.get('/:id/storage-fee', requirePermission('parcel.read'), ParcelController.storageFee);
 
 // Remise du colis au client (handover) avec confirmation d'identite par photo
-router.post('/:id/handover', ParcelController.handover);
+router.post('/:id/handover', requirePermission('parcel.deliver'), ParcelController.handover);
 // Remise d'un colis trouve physiquement, non enregistre dans le systeme
-router.post('/handover-untracked', ParcelController.handoverUntracked);
+router.post('/handover-untracked', requirePermission('parcel.deliver'), ParcelController.handoverUntracked);
 
 // Etiquette enrichie
-router.get('/:id/label', async (req, res, next) => {
+router.get('/:id/label', requirePermission('parcel.read'), async (req, res, next) => {
   try {
+    await parcelScope.assert(req.params.id, scopeCtx(req));
     const parcel = await prisma.parcel.findUnique({
       where: { id: req.params.id },
       include: {
@@ -142,9 +145,10 @@ router.get('/:id/label', async (req, res, next) => {
 // + actions financieres (creation facture, paiements, annulations, debts).
 // On fusionne tout dans une timeline triee desc par date pour que la page
 // detail montre l'historique complet, op + finance, en un seul flux.
-router.get('/:id/history', async (req, res, next) => {
+router.get('/:id/history', requirePermission('parcel.read'), async (req, res, next) => {
   try {
     const parcelId = req.params.id;
+    await parcelScope.assert(parcelId, scopeCtx(req));
     const [history, parcel] = await Promise.all([
       prisma.parcelHistory.findMany({
         where: { parcelId },

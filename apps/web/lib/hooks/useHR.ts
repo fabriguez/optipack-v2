@@ -82,6 +82,40 @@ export function usePermissionsCatalog() {
   });
 }
 
+export function useUserPermissions(userId: string | undefined) {
+  return useQuery({
+    queryKey: ['hr', 'permissions', 'user', userId],
+    queryFn: () => permissionsApi.forUser(userId!),
+    enabled: !!userId,
+  });
+}
+
+export function useSetOverride() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, permissionKey, granted, reason }: { userId: string; permissionKey: string; granted: boolean; reason?: string }) =>
+      permissionsApi.setOverride(userId, permissionKey, granted, reason),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ['hr', 'permissions', 'user', vars.userId] });
+      toast.success('Exception enregistree');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Erreur'),
+  });
+}
+
+export function useRemoveOverride() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, permissionKey }: { userId: string; permissionKey: string }) =>
+      permissionsApi.removeOverride(userId, permissionKey),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ['hr', 'permissions', 'user', vars.userId] });
+      toast.success('Exception supprimee');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Erreur'),
+  });
+}
+
 // ----- Work Schedules -----
 export function useWorkSchedules() {
   return useQuery({

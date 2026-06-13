@@ -1,3 +1,4 @@
+// TODO ABAC : le scoping au niveau objet (qui peut lire/ecrire quelle cle) arrive dans une etape ulterieure.
 import { Router } from 'express';
 import { UploadController } from '../../controllers/UploadController';
 import { authenticate, authenticateUserOrClient } from '../../middleware/authMiddleware';
