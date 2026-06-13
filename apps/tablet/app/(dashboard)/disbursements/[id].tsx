@@ -14,6 +14,7 @@ import { AppDialog } from '@/components/forms/AppDialog';
 import { Card } from '@/components/ui/Card';
 import { usePullRefresh } from '@/lib/hooks/usePullRefresh';
 import { disbursementsApi } from '@/lib/api/finance';
+import { MaskedValue, isMasked } from '@/components/ui/MaskedValue';
 import { toast } from '@/lib/toast';
 import { extractApiError } from '@/lib/api/errorMessage';
 import { colors } from '@/lib/theme/colors';
@@ -87,7 +88,20 @@ export default function DisbursementDetailScreen() {
 
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>
           <InfoCard icon="business-outline" label="Agence" value={d.agency?.name ?? '-'} />
-          <InfoCard icon="person-circle-outline" label="Emis par" value={d.createdBy ? `${d.createdBy.firstName ?? ''} ${d.createdBy.lastName ?? ''}`.trim() : (d.userId ?? '-')} />
+          {isMasked(d.createdBy)
+            ? <View style={{ flex: 1, minWidth: 150 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', borderRadius: 12, padding: 12 }}>
+                  <View style={{ width: 40, height: 40, borderRadius: 8, backgroundColor: '#f0fdf4', alignItems: 'center', justifyContent: 'center' }}>
+                    <Ionicons name="person-circle-outline" size={20} color={colors.primary[600]} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, color: colors.gray[400] }}>Emis par</Text>
+                    <MaskedValue value={d.createdBy} />
+                  </View>
+                </View>
+              </View>
+            : <InfoCard icon="person-circle-outline" label="Emis par" value={d.createdBy ? `${d.createdBy.firstName ?? ''} ${d.createdBy.lastName ?? ''}`.trim() : (d.userId ?? '-')} />
+          }
           <InfoCard icon="person-outline" label="Ordonnateur" value={d.orderer ?? '-'} />
         </View>
 

@@ -13,6 +13,7 @@ import { SectionCard, EmptyState } from '@/components/data/DetailCards';
 import { AppDialog } from '@/components/forms/AppDialog';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { positionsApi, permissionsApi, workSchedulesApi, holidaysApi } from '@/lib/api/hr';
+import { employeesApi } from '@/lib/api/employees';
 import { toast } from '@/lib/toast';
 import { extractApiError } from '@/lib/api/errorMessage';
 import { colors } from '@/lib/theme/colors';
@@ -144,12 +145,134 @@ function HolidaysTab() {
   );
 }
 
+function ExceptionsTab() {
+  const qc = useQueryClient();
+  const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState<any | null>(null);
+  const [addKey, setAddKey] = useState('');
+  const [addGranted, setAddGranted] = useState(true);
+  const [addReason, setAddReason] = useState('');
+  const [showAdd, setShowAdd] = useState(false);
+  const [toRemove, setToRemove] = useState<{ userId: string; key: string } | null>(null);
+
+  const { data: empData } = useQuery({ queryKey: ['employees', 'exceptions'], queryFn: () => employeesApi.list({ limit: 200 } as never) });
+  const { data: permCatalog } = useQuery({ queryKey: ['permissions'], queryFn: () => permissionsApi.list() });
+  const { data: userPerms } = useQuery({ queryKey: ['hr', 'permissions', 'user', selected?.id], queryFn: () => permissionsApi.forUser(selected!.id), enabled: !!selected?.id });
+
+  const allEmployees: any[] = empData?.data?.data ?? empData?.data ?? [];
+  const employees = search.trim()
+    ? allEmployees.filter((e: any) => (e.fullName ?? '').toLowerCase().includes(search.toLowerCase()) || (e.idNumber ?? '').toLowerCase().includes(search.toLowerCase()))
+    : allEmployees;
+  const allPerms: any[] = permCatalog?.data ?? permCatalog ?? [];
+  const overrides: any[] = userPerms?.data?.overrides ?? [];
+  const effectiveKeys: string[] = userPerms?.data?.keys ?? [];
+
+  const allPermKeys: string[] = allPerms.flatMap((g: any) => g.permissions ? g.permissions.map((p: any) => p.key) : (g.key ? [g.key] : []));
+
+  const setOverride = useMutation({
+    mutationFn: () => permissionsApi.setOverride(selected.id, addKey, addGranted, addReason || undefined),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['hr', 'permissions', 'user', selected?.id] }); setShowAdd(false); setAddKey(''); setAddReason(''); toast.success('Exception enregistree'); },
+    onError: (e: any) => toast.error(extractApiError(e, 'Erreur')),
+  });
+  const removeOverride = useMutation({
+    mutationFn: () => permissionsApi.removeOverride(toRemove!.userId, toRemove!.key),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['hr', 'permissions', 'user', selected?.id] }); setToRemove(null); toast.success('Exception supprimee'); },
+    onError: (e: any) => toast.error(extractApiError(e, 'Erreur')),
+  });
+
+  return (
+    <View style={{ gap: spacing.xl }}>
+      <SectionCard title="Rechercher un employe">
+        <Input label="Nom ou matricule" value={search} onChangeText={(t) => { setSearch(t); setSelected(null); }} placeholder="Tapez pour rechercher..." />
+        {employees.length > 0 && !selected && (
+          <View style={{ marginTop: spacing.sm, gap: 2 }}>
+            {employees.slice(0, 8).map((emp) => (
+              <Pressable key={emp.id} onPress={() => setSelected(emp)} style={({ pressed }) => ({ paddingVertical: 10, paddingHorizontal: spacing.sm, borderRadius: 8, backgroundColor: pressed ? colors.gray[50] : 'transparent', borderBottomWidth: 1, borderBottomColor: colors.gray[50] })}>
+                <Text style={{ fontSize: 14, fontWeight: '500', color: colors.gray[900] }}>{emp.fullName}</Text>
+                <Text style={{ fontSize: 12, color: colors.gray[400] }}>{emp.position ?? ''}</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
+      </SectionCard>
+
+      {!!selected && (
+        <SectionCard
+          title={`Exceptions — ${selected.fullName}`}
+          subtitle={selected.position ?? ''}
+          action={<Button size="sm" onPress={() => { setAddKey(''); setAddReason(''); setAddGranted(true); setShowAdd(true); }}>Ajouter</Button>}
+        >
+          {overrides.length === 0
+            ? <EmptyState text="Aucune exception pour cet employe" />
+            : overrides.map((ov: any) => (
+              <View key={ov.permissionKey} style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.gray[50] }}>
+                <Ionicons name={ov.granted ? 'add-circle-outline' : 'remove-circle-outline'} size={18} color={ov.granted ? colors.primary[600] : colors.error} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 13, fontWeight: '500', color: colors.gray[900] }}>{ov.permissionKey}</Text>
+                  {!!ov.reason && <Text style={{ fontSize: 12, color: colors.gray[400] }}>{ov.reason}</Text>}
+                </View>
+                <Badge variant={ov.granted ? 'success' : 'error'}>{ov.granted ? 'Accorde' : 'Refuse'}</Badge>
+                <Pressable onPress={() => setToRemove({ userId: selected.id, key: ov.permissionKey })} hitSlop={6}>
+                  <Ionicons name="trash-outline" size={18} color={colors.error} />
+                </Pressable>
+              </View>
+            ))
+          }
+
+          {effectiveKeys.length > 0 && (
+            <View style={{ marginTop: spacing.lg }}>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: colors.gray[500], textTransform: 'uppercase', marginBottom: spacing.sm }}>Permissions effectives</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs ?? 4 }}>
+                {effectiveKeys.map((k) => <Badge key={k} variant="info">{k}</Badge>)}
+              </View>
+            </View>
+          )}
+        </SectionCard>
+      )}
+
+      <AppDialog open={showAdd} onClose={() => setShowAdd(false)} title="Ajouter une exception" width={480}
+        footer={<><Button variant="ghost" onPress={() => setShowAdd(false)}>Annuler</Button><Button loading={setOverride.isPending} disabled={!addKey} onPress={() => setOverride.mutate()}>Enregistrer</Button></>}>
+        <View style={{ gap: spacing.md }}>
+          <Text style={{ fontSize: 13, color: colors.gray[600] }}>Choisissez une permission et si elle est accordee ou refusee pour {selected?.fullName}.</Text>
+          <View>
+            <Text style={{ fontSize: 12, color: colors.gray[500], marginBottom: 4 }}>Permission</Text>
+            <View style={{ borderWidth: 1, borderColor: colors.gray[300], borderRadius: 8, maxHeight: 200 }}>
+              <ScrollView>
+                {allPermKeys.map((k) => (
+                  <Pressable key={k} onPress={() => setAddKey(k)} style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 10, paddingHorizontal: spacing.sm, backgroundColor: addKey === k ? colors.primary[50] : pressed ? colors.gray[50] : 'transparent', borderBottomWidth: 1, borderBottomColor: colors.gray[50] })}>
+                    <Ionicons name={addKey === k ? 'radio-button-on' : 'radio-button-off'} size={16} color={addKey === k ? colors.primary[600] : colors.gray[400]} />
+                    <Text style={{ fontSize: 13, color: colors.gray[900] }}>{k}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+          </View>
+          <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+            <Pressable onPress={() => setAddGranted(true)} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.sm, borderRadius: 8, borderWidth: 1, borderColor: addGranted ? colors.primary[500] : colors.gray[200], backgroundColor: addGranted ? colors.primary[50] : 'transparent' }}>
+              <Ionicons name={addGranted ? 'checkbox' : 'square-outline'} size={18} color={addGranted ? colors.primary[600] : colors.gray[400]} />
+              <Text style={{ fontSize: 13, color: addGranted ? colors.primary[700] : colors.gray[600] }}>Accorder</Text>
+            </Pressable>
+            <Pressable onPress={() => setAddGranted(false)} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.sm, borderRadius: 8, borderWidth: 1, borderColor: !addGranted ? colors.error : colors.gray[200], backgroundColor: !addGranted ? '#FFEBEE' : 'transparent' }}>
+              <Ionicons name={!addGranted ? 'checkbox' : 'square-outline'} size={18} color={!addGranted ? colors.error : colors.gray[400]} />
+              <Text style={{ fontSize: 13, color: !addGranted ? colors.error : colors.gray[600] }}>Refuser</Text>
+            </Pressable>
+          </View>
+          <Input label="Raison (optionnel)" value={addReason} onChangeText={setAddReason} multiline />
+        </View>
+      </AppDialog>
+
+      <ConfirmDialog open={!!toRemove} onClose={() => setToRemove(null)} onConfirm={() => removeOverride.mutate()} title="Supprimer l'exception" message={`Supprimer l'exception "${toRemove?.key}" pour cet employe ?`} confirmLabel="Supprimer" variant="destructive" loading={removeOverride.isPending} />
+    </View>
+  );
+}
+
 export default function AdminPersonnelScreen() {
   const router = useRouter();
   const tabs: TabItem[] = [
     { value: 'positions', label: 'Postes', icon: ic('briefcase-outline'), content: <PositionsTab /> },
     { value: 'schedules', label: 'Plannings', icon: ic('calendar-outline'), content: <SchedulesTab /> },
     { value: 'holidays', label: 'Jours non ouvres', icon: ic('close-circle-outline'), content: <HolidaysTab /> },
+    { value: 'exceptions', label: 'Exceptions', icon: ic('key-outline'), content: <ExceptionsTab /> },
   ];
   return (
     <View style={{ flex: 1, backgroundColor: 'transparent' }}>

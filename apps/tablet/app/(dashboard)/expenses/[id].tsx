@@ -9,6 +9,7 @@ import { SectionCard, InfoCard } from '@/components/data/DetailCards';
 import { AttachmentsSection } from '@/components/data/AttachmentsSection';
 import { usePullRefresh } from '@/lib/hooks/usePullRefresh';
 import { expensesApi } from '@/lib/api/finance';
+import { MaskedValue, isMasked } from '@/components/ui/MaskedValue';
 import { colors } from '@/lib/theme/colors';
 import { spacing } from '@/lib/theme/spacing';
 
@@ -59,7 +60,20 @@ export default function ExpenseDetailScreen() {
 
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>
           <InfoCard icon="business-outline" label="Agence" value={e.agency?.name ?? '-'} />
-          <InfoCard icon="person-circle-outline" label="Approuve par" value={e.approvedBy ? `${e.approvedBy.firstName ?? ''} ${e.approvedBy.lastName ?? ''}`.trim() : 'Non approuve'} />
+          {isMasked(e.approvedBy)
+            ? <View style={{ flex: 1, minWidth: 150 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', borderRadius: 12, padding: 12 }}>
+                  <View style={{ width: 40, height: 40, borderRadius: 8, backgroundColor: '#f0fdf4', alignItems: 'center', justifyContent: 'center' }}>
+                    <Ionicons name="person-circle-outline" size={20} color={colors.primary[600]} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, color: colors.gray[400] }}>Approuve par</Text>
+                    <MaskedValue value={e.approvedBy} />
+                  </View>
+                </View>
+              </View>
+            : <InfoCard icon="person-circle-outline" label="Approuve par" value={e.approvedBy ? `${e.approvedBy.firstName ?? ''} ${e.approvedBy.lastName ?? ''}`.trim() : 'Non approuve'} />
+          }
           <InfoCard icon="calendar-outline" label="Date" value={e.createdAt ? formatDate(e.createdAt) : '-'} />
         </View>
 

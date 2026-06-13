@@ -13,6 +13,7 @@ import { AppDialog } from '@/components/forms/AppDialog';
 import { usePullRefresh } from '@/lib/hooks/usePullRefresh';
 import { useVoidPayment } from '@/lib/hooks/usePayments';
 import { paymentsApi } from '@/lib/api/payments';
+import { MaskedValue, isMasked } from '@/components/ui/MaskedValue';
 import { colors } from '@/lib/theme/colors';
 import { spacing, radius } from '@/lib/theme/spacing';
 
@@ -80,7 +81,13 @@ export default function PaymentDetailScreen() {
               <DetailRow label="Montant" value={formatAmount(Number(p.amount ?? 0))} bold />
               <DetailRow label="Mode de paiement" value={METHOD_LABELS[p.paymentMethod] ?? p.paymentMethod ?? '-'} />
               <DetailRow label="Agence encaisseuse" value={p.agency?.name ?? '-'} />
-              <DetailRow label="Recu par" value={p.receivedBy ? `${p.receivedBy.firstName ?? ''} ${p.receivedBy.lastName ?? ''}`.trim() : '-'} />
+              {isMasked(p.receivedBy)
+                ? <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.gray[50] }}>
+                    <Text style={{ fontSize: 13, color: colors.gray[500] }}>Recu par</Text>
+                    <MaskedValue value={p.receivedBy} />
+                  </View>
+                : <DetailRow label="Recu par" value={p.receivedBy ? `${p.receivedBy.firstName ?? ''} ${p.receivedBy.lastName ?? ''}`.trim() : '-'} />
+              }
               {Number(p.discount ?? 0) > 0 && <DetailRow label="Remise" value={formatAmount(Number(p.discount))} />}
               {!!p.transactionReference && <DetailRow label="Ref. transaction" value={p.transactionReference} mono />}
             </SectionCard>
