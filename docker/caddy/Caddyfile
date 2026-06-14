@@ -1,8 +1,13 @@
 {
 	email admin@transitsoftservices.com
+
+	# Bind admin API on all interfaces so the orchestrator container can reach it
+	# via host.docker.internal:2019. Firewall this port (ufw deny 2019 from 0.0.0.0,
+	# allow only from Docker bridge CIDR e.g. 172.17.0.0/16).
+	admin 0.0.0.0:2019
 }
 
-# API
+# ---------- API (Express + Socket.io) ----------
 api.transitsoftservices.com {
 	reverse_proxy localhost:3009
 	encode gzip
@@ -14,7 +19,7 @@ api.transitsoftservices.com {
 	}
 }
 
-# Dashboard Web
+# ---------- Staff dashboard (Next.js) ----------
 app.transitsoftservices.com {
 	reverse_proxy localhost:3008
 	encode gzip
@@ -26,7 +31,63 @@ app.transitsoftservices.com {
 	}
 }
 
-# MinIO Console (admin only)
+# ---------- Orchestrator API (ops control-plane) ----------
+ops.transitsoftservices.com {
+	reverse_proxy localhost:4020
+	encode gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+}
+
+# ---------- Ops-admin frontend (Next.js) ----------
+ops-admin.transitsoftservices.com {
+	reverse_proxy localhost:3020
+	encode gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options SAMEORIGIN
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+}
+
+# ---------- MinIO S3 API (uploads depuis API + clients mobiles) ----------
+s3.transitsoftservices.com {
+	reverse_proxy localhost:9005
+
+	header {
+		X-Content-Type-Options nosniff
+	}
+}
+
+# ---------- MinIO Console (admin seulement) ----------
 storage.transitsoftservices.com {
 	reverse_proxy localhost:9006
+}
+
+# ---------- Tenant client portals (catch-all statique) ----------
+# Les routes www.<slug>.transitsoftservices.com et custom domains
+# sont injectées dynamiquement par l'orchestrator via l'Admin API (port 2019).
+# Ce bloc wildcard sert de fallback pour les tenants non encore provisionnés.
+# Nécessite un cert wildcard via DNS-01 challenge :
+#   1. Installer le module caddy-dns/<ton-provider> (ex: cloudflare, ovh, gandi)
+#   2. Ajouter les credentials DNS dans le bloc tls ci-dessous
+#   3. Rebuild Caddy avec xcaddy build --with github.com/caddy-dns/<provider>
+*.transitsoftservices.com {
+	# tls {
+	# 	dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	# }
+
+	reverse_proxy localhost:3010
+	encode gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options SAMEORIGIN
+		Referrer-Policy strict-origin-when-cross-origin
+	}
 }

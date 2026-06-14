@@ -13,6 +13,7 @@ COPY packages/config/package.json ./packages/config/
 COPY packages/config/tsconfig/package.json ./packages/config/tsconfig/
 COPY packages/config/eslint/package.json ./packages/config/eslint/
 COPY packages/config/tailwind/package.json ./packages/config/tailwind/
+COPY patches/ ./patches/
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile || pnpm install
