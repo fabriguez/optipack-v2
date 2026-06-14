@@ -62,7 +62,7 @@ export default function SupportScreen() {
   }, []);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.white }} edges={['top']}>
+    <View style={{ flex: 1, backgroundColor: "transparent" }} edges={['top']}>
       <View
         style={{
           flexDirection: 'row',
@@ -70,7 +70,6 @@ export default function SupportScreen() {
           gap: 12,
           paddingHorizontal: spacing.lg,
           paddingVertical: spacing.md,
-          borderBottomWidth: 1,
           borderBottomColor: colors.gray[100],
         }}
       >
@@ -103,6 +102,6 @@ export default function SupportScreen() {
           </Chat>
         </OverlayProvider>
       )}
-    </SafeAreaView>
+    </View>
   );
 }

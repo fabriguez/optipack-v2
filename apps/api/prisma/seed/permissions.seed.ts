@@ -336,8 +336,7 @@ export const POSITION_CATALOG: Array<{
   },
 ];
 
-export { ADMIN_ONLY_PERMISSION_KEYS } from '../../src/domain/constants/permissions';
-import { ADMIN_ONLY_PERMISSION_KEYS } from '../../src/domain/constants/permissions';
+const ADMIN_ONLY_PERMISSION_KEYS: readonly string[] = ['permission.manage'];
 
 // Migration douce RBAC -> ABAC : role legacy -> poste systeme correspondant.
 const LEGACY_ROLE_TO_POSITION: Record<string, string> = {

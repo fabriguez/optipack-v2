@@ -62,10 +62,6 @@ export const config = {
     webhookSecret: process.env.STRIPE_WEBHOOK_SECRET || '',
   },
 
-  socket: {
-    corsOrigin: process.env.SOCKET_CORS_ORIGIN || 'http://localhost:3000',
-  },
-
   // Stream Chat (getstream.io) : support client temps reel. apiKey est public
   // (renvoye aux apps), apiSecret reste serveur (mint des tokens + admin).
   stream: {
