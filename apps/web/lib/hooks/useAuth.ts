@@ -54,9 +54,7 @@ export function useLogin() {
     },
     onSuccess: async () => {
       toast.success('Connexion reussie');
-      // Personnel et chef d'agence -> portail self-service. Autres -> dashboard.
       const session = await getSession();
-      const role = (session as any)?.role;
       const accessToken = (session as any)?.accessToken as string | undefined;
 
       // Decode JWT exp pour visibilite console : ttl reel + date.
@@ -79,11 +77,7 @@ export function useLogin() {
         // ignore
       }
 
-      if (role === 'PERSONNEL' || role === 'CHEF_AGENCE') {
-        router.push('/me');
-      } else {
-        router.push('/');
-      }
+      router.push('/');
     },
     onError: (err: Error) => {
       if (err.message === '2FA_REQUIRED') {

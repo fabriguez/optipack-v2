@@ -87,15 +87,18 @@ export class StreamChatService {
     const clientUid = StreamChatService.clientUserId(params.clientId);
     const channelId = StreamChatService.supportChannelId(params.clientId);
     const channel = client.channel('messaging', channelId, {
+      name: params.clientName,
       members: [clientUid],
       created_by_id: clientUid,
-      // Donnees custom : le backoffice filtre les channels support par agence.
       agency_id: params.agencyId ?? undefined,
       client_id: params.clientId,
       client_name: params.clientName,
       is_support: true,
     } as Record<string, unknown>);
     await channel.create();
+    // Met a jour le nom meme si le channel existait deja (create est idempotent
+    // mais ne patche pas les champs existants).
+    await channel.update({ name: params.clientName } as Record<string, unknown>);
     return channelId;
   }
 

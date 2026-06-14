@@ -51,13 +51,7 @@ export function useLogin() {
     },
     onSuccess: (user) => {
       toast.success('Connexion reussie');
-      // Personnel et chef d'agence -> portail self-service. Autres -> dashboard.
-      const role = user?.role;
-      if (role === 'PERSONNEL' || role === 'CHEF_AGENCE') {
-        navigate('/me', { replace: true });
-      } else {
-        navigate('/', { replace: true });
-      }
+      navigate('/', { replace: true });
     },
     onError: (err: Error) => {
       if (err.message === '2FA_REQUIRED') {
