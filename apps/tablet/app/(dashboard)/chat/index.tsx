@@ -46,13 +46,10 @@ export default function ChatScreen() {
         }
         if (!active) return;
         setClient(chatClient);
-        // Channels support des agences de l'agent. agency_id absent -> on
-        // retombe sur tous les channels support (admin) pour ne rien masquer.
-        setFilters(
-          data.agencyIds?.length
-            ? { is_support: true, agency_id: { $in: data.agencyIds } }
-            : { is_support: true },
-        );
+        // Filtre type:'messaging' uniquement. Les champs custom is_support/agency_id
+        // ne sont pas indexes par defaut sur Stream -> retournent rien. Le role admin
+        // Stream permet de voir tous les channels messaging.
+        setFilters({ type: 'messaging' });
       } catch (e: unknown) {
         const msg =
           (e as { response?: { data?: { message?: string } } })?.response?.data?.message ??
