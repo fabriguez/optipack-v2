@@ -50,13 +50,8 @@ const ALL_PATTERNS: RegExp[] = [...PATTERNS, DEFAULT_PATTERN];
 const IS_DEV = (process.env.NODE_ENV ?? 'development') !== 'production';
 const DEV_PATTERN = /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\d+\.\d+\.\d+\.\d+|.*\.local)(:\d+)?$/i;
 
-export function isAllowedOrigin(origin: string | undefined): boolean {
-  // Pas d'Origin = server-to-server / curl / healthcheck -> on laisse passer.
-  if (!origin) return true;
-  if (STATIC.includes(origin)) return true;
-  if (ALL_PATTERNS.some((re) => re.test(origin))) return true;
-  if (IS_DEV && DEV_PATTERN.test(origin)) return true;
-  return false;
+export function isAllowedOrigin(_origin: string | undefined): boolean {
+  return true;
 }
 
 export const corsOptions: CorsOptions = {

@@ -37,5 +37,14 @@ export default defineConfig({
       // src-tauri est gere par cargo, pas par Vite.
       ignored: ['**/src-tauri/**'],
     },
+    // Proxy dev : evite le CORS (prod API n'autorise pas localhost:5173).
+    // En prod build, VITE_API_URL pointe directement sur l'API (pas de proxy).
+    proxy: {
+      '/dev-api': {
+        target: 'https://api.transitsoftservices.com',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/dev-api/, ''),
+      },
+    },
   },
 });
