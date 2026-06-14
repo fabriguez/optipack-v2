@@ -13,7 +13,8 @@ import {
   useSetPositionPermissions,
 } from '@/lib/hooks/useHR';
 import type { PermissionDTO, PositionDTO } from '@/lib/api/hr';
-import { Save, Lock } from 'lucide-react';
+import { Save, Lock, Info } from 'lucide-react';
+import { AppTooltip } from '@/components/ui/AppTooltip';
 
 const CATEGORY_LABELS: Record<string, string> = {
   personnel: 'Personnel',
@@ -189,13 +190,17 @@ export default function PermissionsMatrixPage() {
                           className="mt-0.5"
                         />
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium text-gray-900">{p.label}</div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-sm font-medium text-gray-900">{p.label}</span>
+                            {p.description && (
+                              <AppTooltip content={p.description} side="top">
+                                <Info className="h-3.5 w-3.5 text-gray-400 hover:text-gray-600 shrink-0 cursor-help" />
+                              </AppTooltip>
+                            )}
+                          </div>
                           <div className="text-[11px] text-gray-500 font-mono truncate" title={p.key}>
                             {p.key}
                           </div>
-                          {p.description && (
-                            <div className="text-xs text-gray-500 mt-0.5">{p.description}</div>
-                          )}
                         </div>
                       </label>
                     ))}

@@ -112,10 +112,11 @@ AuditLog (userId, agencyId, entityType/entityId)                        │
      ne révèle pas l'existence).
    - Front : les deux cas rendent la page 404 standard. Le composant de page n'est JAMAIS monté
      (guard au-dessus, retour anticipé).
-3. **Admin tenant = seul gestionnaire** : routes `/positions`, `/permissions` et module RH admin
-   gardés par `authorize('ADMIN','SUPER_ADMIN')` EN PLUS de `requirePermission`. La clé
-   `permission.manage` n'est pas assignable aux positions (réservée rôle admin) — refuser côté
-   API toute tentative de l'ajouter à une position.
+3. **Admin tenant = seul gestionnaire** : routes `/positions`, `/permissions`, `audit.routes.ts`,
+   `config.routes.ts` et `branding.routes.ts` gardés par `authorize('ADMIN','SUPER_ADMIN')` EN PLUS
+   de `requirePermission`. Les clés `permission.manage`, `settings.manage`, `settings.read`,
+   `audit.read`, `branding.manage`, `sitestudio.manage` sont réservées rôle admin — refuser côté
+   API toute tentative de les ajouter à une position non-admin.
 4. **ADMIN du tenant bypass** : comme SUPER_ADMIN, le rôle ADMIN reçoit `['*']` dans
    `PermissionService` (l'admin gère tout son tenant). SUPER_ADMIN = cross-tenant (plateforme).
 5. **Scope agence** = intersection non vide entre agences de la ressource et `user.agencyIds`.
@@ -156,7 +157,7 @@ Convention : `<ressource>.<action>` ; catégories = groupes UI.
 | `notification` | `notification.read`, `notification.send`, `notification.settings.manage` |
 | `support` | `support.read`, `support.reply`, `support.assign` |
 | `rapport` | `report.read`, `report.export`, `dashboard.read` |
-| `admin` | `branding.manage`, `sitestudio.manage`, `settings.read`, `settings.manage`, `audit.read`, `position.read`, `position.manage`, `permission.manage` (rôle admin uniquement) |
+| `admin` | `branding.manage`, `sitestudio.manage`, `settings.read`, `settings.manage`, `audit.read`, `position.read`, `position.manage`, `permission.manage` — **toutes réservées rôle ADMIN/SUPER_ADMIN, non assignables à une position normale** |
 
 **Instructions** :
 1. Seed idempotent (`upsert` par `key`), `isSystem: true`.
@@ -203,8 +204,10 @@ avec `authenticate` seul.
      `parcel.read`, clients si `client.read`, etc.) — pas de 403 global.
    - `dashboard.routes.ts`/`report.routes.ts` : `dashboard.read`/`report.read` + les widgets
      financiers exigent `finance.dashboard.read`.
-   - `audit.routes.ts` → `audit.read` ; `config.routes.ts` → `settings.manage` (garder
-     `authorize('ADMIN','SUPER_ADMIN')`).
+   - `audit.routes.ts` → `audit.read` + `authorize('ADMIN','SUPER_ADMIN')` (admin-only).
+   - `config.routes.ts` → `settings.manage` + `authorize('ADMIN','SUPER_ADMIN')` (admin-only).
+   - `branding.routes.ts` (ou équivalent personalisation/site studio) → `branding.manage` +
+     `authorize('ADMIN','SUPER_ADMIN')` (admin-only).
    - Ne PAS toucher : routes publiques (`/public/*`, webhooks, tracking), `/auth`, `/me`,
      `/client-portal` (auth client séparée), `/tenant-meta`.
 4. `/positions`, `/permissions` : ajouter `authorize('ADMIN','SUPER_ADMIN')` en dur (décision 3).
@@ -361,9 +364,11 @@ manifeste, facture, décaissement, recherche, audit.
      { prefix: '/parcels', anyOf: ['parcel.read'] },
      // ... toutes les pages de l'inventaire, du plus spécifique au plus général
      { prefix: '/admin', anyOf: [], adminOnly: true },
-     { prefix: '/settings/site', anyOf: ['sitestudio.manage'] },
-     { prefix: '/settings', anyOf: ['settings.read'] },
-     { prefix: '/audit-log', anyOf: ['audit.read'] },
+     { prefix: '/settings/site', anyOf: ['sitestudio.manage'], adminOnly: true },
+     { prefix: '/settings', anyOf: ['settings.read'], adminOnly: true },
+     { prefix: '/audit-log', anyOf: ['audit.read'], adminOnly: true },
+     { prefix: '/branding', anyOf: ['branding.manage'], adminOnly: true },
+     { prefix: '/personalisation', anyOf: ['branding.manage'], adminOnly: true },
    ];
    ```
    Matching par préfixe le plus long. Une page absente de la carte = accessible (dashboard `/`).
