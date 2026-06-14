@@ -28,6 +28,11 @@ jobs:
           command_timeout: 30m
           script: |
             set -e
+            if [ ! -d ~/optipack-v2/.git ]; then
+              mkdir -p ~/optipack-v2
+              git -C ~/optipack-v2 init -b main
+              git -C ~/optipack-v2 remote add origin https://github.com/${{ github.repository }}.git
+            fi
             cd ~/optipack-v2
 
             # Sync resilient : `git pull` echoue parfois avec
