@@ -71,6 +71,7 @@ jobs:
       - name: Build + bundle (tauri)
         uses: tauri-apps/tauri-action@v0
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # --- Frontend (Vite) : pointe l'app installee sur l'API en ligne.
           #     .env etant gitignore, on injecte ici (variables de repo possibles).
           VITE_API_URL: ${{ vars.VITE_API_URL || 'https://api.transitsoftservices.com/api/v1' }}
