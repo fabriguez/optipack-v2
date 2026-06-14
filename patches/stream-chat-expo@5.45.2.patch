@@ -1,0 +1,13 @@
+diff --git a/src/optionalDependencies/pickImage.ts b/src/optionalDependencies/pickImage.ts
+index fa6b98d034953a993c37ef639870380bb0e6de7b..944fa9a459508c7e5944e80e972cff0cc80330f8 100644
+--- a/src/optionalDependencies/pickImage.ts
++++ b/src/optionalDependencies/pickImage.ts
+@@ -33,7 +33,7 @@ export const pickImage = ImagePicker
+         if (permissionGranted) {
+           const result = await ImagePicker.launchImageLibraryAsync({
+             allowsMultipleSelection: true,
+-            mediaTypes: ImagePicker.MediaTypeOptions.All,
++            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+           });
+ 
+           const canceled = result.canceled;

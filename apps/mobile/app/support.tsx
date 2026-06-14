@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { View, Text, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, Pressable, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StreamChat, type Channel as ChannelType } from 'stream-chat';
 import {
@@ -21,6 +21,7 @@ import { colors, spacing } from '@/lib/theme/colors';
  */
 export default function SupportScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [client, setClient] = useState<StreamChat | null>(null);
   const [channel, setChannel] = useState<ChannelType | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -93,14 +94,22 @@ export default function SupportScreen() {
           <ActivityIndicator size="large" color={colors.primary[500]} />
         </View>
       ) : (
-        <OverlayProvider>
-          <Chat client={client}>
-            <Channel channel={channel}>
-              <MessageList />
-              <MessageInput />
-            </Channel>
-          </Chat>
-        </OverlayProvider>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={insets.top}
+        >
+          <OverlayProvider>
+            <Chat client={client}>
+              <Channel channel={channel}>
+                <MessageList />
+                <View style={{ paddingBottom: insets.bottom -40 }}>
+                  <MessageInput />
+                </View>
+              </Channel>
+            </Chat>
+          </OverlayProvider>
+        </KeyboardAvoidingView>
       )}
     </View>
   );

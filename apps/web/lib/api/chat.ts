@@ -1,6 +1,13 @@
 import { apiClient } from './client';
 import type { PaginationInput } from '@transitsoftservices/shared';
 
+export interface StreamTokenResponse {
+  apiKey: string;
+  token: string;
+  userId: string;
+  agencyIds: string[];
+}
+
 export interface ChatConversation {
   id: string;
   clientId: string;
@@ -28,6 +35,9 @@ export interface ChatMessage {
 }
 
 export const chatApi = {
+  streamToken: (): Promise<{ success: boolean; data: StreamTokenResponse }> =>
+    apiClient.post('/chat/stream/token').then((r) => r.data),
+
   listConversations: (params?: Partial<PaginationInput> & { status?: string; clientId?: string }) =>
     apiClient.get('/chat', { params }).then((r) => r.data),
 

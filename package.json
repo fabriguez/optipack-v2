@@ -32,7 +32,8 @@
       "ioredis": "5.10.1"
     },
     "patchedDependencies": {
-      "expo-device@6.0.2": "patches/expo-device@6.0.2.patch"
+      "expo-device@6.0.2": "patches/expo-device@6.0.2.patch",
+      "stream-chat-expo@5.45.2": "patches/stream-chat-expo@5.45.2.patch"
     }
   }
 }

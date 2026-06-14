@@ -27,7 +27,17 @@ export interface ChatMessage {
   senderUser: { id: string; firstName: string; lastName: string; email: string } | null;
 }
 
+export interface StreamTokenResponse {
+  apiKey: string;
+  token: string;
+  userId: string;
+  agencyIds: string[];
+}
+
 export const chatApi = {
+  streamToken: (): Promise<{ success: boolean; data: StreamTokenResponse }> =>
+    apiClient.post('/chat/stream/token').then((r) => r.data),
+
   listConversations: (params?: Partial<PaginationInput> & { status?: string; clientId?: string }) =>
     apiClient.get('/chat', { params }).then((r) => r.data),
 
