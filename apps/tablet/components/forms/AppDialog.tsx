@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Modal, View, Text, Pressable, ScrollView } from 'react-native';
+import { Modal, View, Text, Pressable, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@/lib/theme/colors';
 import { radius, spacing } from '@/lib/theme/spacing';
@@ -25,6 +25,10 @@ export function AppDialog({
 }: AppDialogProps) {
   return (
     <Modal visible={open} transparent animationType="fade" onRequestClose={onClose}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+      >
       <View
         style={{
           flex: 1,
@@ -87,6 +91,7 @@ export function AppDialog({
           )}
         </View>
       </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

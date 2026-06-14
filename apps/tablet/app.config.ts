@@ -37,7 +37,7 @@ export default (): ExpoConfig => {
     name: t.name,
     slug: `${slug}-tablet`,
     version: '0.1.0',
-    orientation: 'landscape',
+    orientation: 'default',
     userInterfaceStyle: 'light',
     scheme: t.scheme,
     platforms: ['ios', 'android'],
