@@ -47,6 +47,51 @@ export class StreamChatController {
   }
 
   /**
+   * POST /chat/stream/open-with-client  (staff)
+   * Cree ou recupere le channel support du client donne, ajoute le staff comme
+   * membre (le client recoit les messages de ce staff dans son channel unique),
+   * renvoie le channelId pour que le front l'ouvre directement.
+   */
+  static async openWithClient(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { userId: staffId } = req.user!;
+      const { clientId } = req.body as { clientId: string };
+
+      const client = await prisma.client.findUnique({
+        where: { id: clientId },
+        select: { id: true, fullName: true, agencyId: true },
+      });
+      if (!client) throw new NotFoundError('Client', clientId);
+
+      const user = await prisma.user.findUnique({
+        where: { id: staffId },
+        select: { id: true },
+      });
+      if (!user) throw new NotFoundError('User', staffId);
+
+      const stream = container.resolve(StreamChatService);
+
+      // S'assure que le client Stream existe (upsert minimal).
+      const clientStreamId = StreamChatService.clientUserId(client.id);
+      await stream.upsertUser({ id: clientStreamId, name: client.fullName, role: 'user' });
+
+      const channelId = await stream.getOrCreateSupportChannel({
+        clientId: client.id,
+        clientName: client.fullName,
+        agencyId: client.agencyId,
+      });
+
+      // Ajoute le staff au channel pour que le client voit ses messages.
+      const staffStreamId = StreamChatService.staffUserId(user.id);
+      await stream.addStaffToChannel(channelId, staffStreamId);
+
+      res.json({ success: true, data: { channelId, apiKey: stream.apiKey } });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
    * POST /chat/stream/token  (auth staff)
    * Upsert le user Stream de l'agent (role admin -> peut interroger tous les
    * channels support, filtres par agence cote front), renvoie token + agencyIds.

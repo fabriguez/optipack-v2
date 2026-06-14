@@ -12,6 +12,8 @@ router.use(authenticate);
 // Stream Chat : token agent (role admin) pour le support client temps reel.
 // Token donne acces en lecture aux conversations support : cle support.read.
 router.post('/stream/token', requirePermission('support.read'), StreamChatController.staffToken);
+// Ouvre ou cree le channel support d'un client et y ajoute le staff comme membre.
+router.post('/stream/open-with-client', requirePermission('support.reply'), StreamChatController.openWithClient);
 
 router.get('/', validate(paginationSchema, 'query'), requirePermission('support.read'), ChatController.listConversations);
 // Creer une conversation = initier un echange, assimile a une reponse support.

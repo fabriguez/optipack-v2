@@ -5,7 +5,7 @@ import {
   Channel,
   ChannelHeader,
   ChannelList,
-  MessageInput,
+  MessageComposer,
   MessageList,
   Thread,
   Window,
@@ -34,11 +34,7 @@ export default function ChatPage() {
         }
         if (!active) return;
         setClient(chatClient);
-        setFilters(
-          data.agencyIds?.length
-            ? { type: 'messaging', is_support: true, agency_id: { $in: data.agencyIds } }
-            : { type: 'messaging', is_support: true },
-        );
+        setFilters({ type: 'messaging' });
       } catch (e: unknown) {
         const msg =
           (e as { response?: { data?: { message?: string } } })?.response?.data?.message ??
@@ -91,7 +87,7 @@ export default function ChatPage() {
                     <Window>
                       <ChannelHeader />
                       <MessageList />
-                      <MessageInput />
+                      <MessageComposer />
                     </Window>
                     <Thread />
                   </Channel>

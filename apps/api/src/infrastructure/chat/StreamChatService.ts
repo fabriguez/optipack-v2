@@ -99,6 +99,17 @@ export class StreamChatService {
     return channelId;
   }
 
+  /**
+   * Ajoute un agent staff comme membre d'un channel support (permet au client
+   * de voir la conversation initiee par le staff et au staff de recevoir les
+   * futurs messages via appartenance plutot que par role admin uniquement).
+   */
+  async addStaffToChannel(channelId: string, staffUserId: string): Promise<void> {
+    const client = this.getClient();
+    const channel = client.channel('messaging', channelId);
+    await channel.addMembers([staffUserId]);
+  }
+
   /** Poste un message systeme (ex : notification automatique) dans un channel. */
   async postSystemMessage(channelId: string, text: string): Promise<void> {
     try {
