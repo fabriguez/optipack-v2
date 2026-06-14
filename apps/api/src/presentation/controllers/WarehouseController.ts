@@ -55,6 +55,12 @@ async function assertStorageRuleScope(req: Request): Promise<void> {
 export class WarehouseController {
   static async create(req: Request, res: Response, next: NextFunction) {
     try {
+      const user = req.user!;
+      const isAdmin = user.role === 'SUPER_ADMIN' || user.role === 'ADMIN';
+      if (!isAdmin && req.body.agencyId && !user.agencyIds.includes(req.body.agencyId)) {
+        const { AuthorizationError } = await import('../../domain/errors/BusinessError');
+        throw new AuthorizationError('Creation de magasin restreinte a votre agence');
+      }
       const useCase = container.resolve(CreateWarehouseUseCase);
       const warehouse = await useCase.execute(req.body);
       res.status(201).json({ success: true, data: warehouse });

@@ -13,6 +13,7 @@ import { RowActions } from '@/components/shared/RowActions';
 import { useServerPagination } from '@/lib/hooks/useServerPagination';
 import { useCarriers, useDeleteCarrier, type CarrierItem } from '@/lib/hooks/useCarriers';
 import { CarrierFormDialog, type CarrierLike } from './CarrierFormDialog';
+import { Can } from '@/lib/components/Can';
 
 function CarriersContent() {
   const navigate = useNavigate();
@@ -122,10 +123,12 @@ function CarriersContent() {
             <p className="text-sm text-gray-500 mt-1">{data?.meta?.total ?? 0} transporteur(s)</p>
           </div>
           <div className="flex gap-2">
-            <AppButton onClick={() => { setEditTarget(null); setShowForm(true); }}>
-              <Plus className="h-4 w-4" />
-              Nouveau transporteur
-            </AppButton>
+            <Can permission="carrier.manage">
+              <AppButton onClick={() => { setEditTarget(null); setShowForm(true); }}>
+                <Plus className="h-4 w-4" />
+                Nouveau transporteur
+              </AppButton>
+            </Can>
           </div>
         </div>
 

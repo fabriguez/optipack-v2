@@ -19,6 +19,8 @@ import { apiClient } from '@/lib/api/client';
 import { formatDate } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
 import { ContainerFormDialog } from './ContainerFormDialog';
+import { Can } from '@/lib/components/Can';
+import { useAgencyIds, useIsTenantAdmin } from '@/lib/hooks/usePermission';
 
 export default function ContainersPage() {
   const [page, setPage] = useState(1);
@@ -28,6 +30,9 @@ export default function ContainersPage() {
   const [editContainer, setEditContainer] = useState<any | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
+  const isAdmin = useIsTenantAdmin();
+  const agencyIds = useAgencyIds();
+  const singleUserAgencyId = !isAdmin && agencyIds.length >= 1 ? agencyIds[0] : undefined;
 
   const statusFilter = searchParams.get('status') || '';
   const typeFilter = searchParams.get('type') || '';
@@ -167,10 +172,12 @@ export default function ContainersPage() {
               <Upload className="h-4 w-4" />
               Importer
             </AppButton>
-            <AppButton onClick={() => setShowCreate(true)}>
-              <Plus className="h-4 w-4" />
-              Nouveau conteneur
-            </AppButton>
+            <Can permission="container.manage">
+              <AppButton onClick={() => setShowCreate(true)}>
+                <Plus className="h-4 w-4" />
+                Nouveau conteneur
+              </AppButton>
+            </Can>
           </div>
         </div>
 
@@ -198,7 +205,7 @@ export default function ContainersPage() {
           />
         </AppCard>
 
-        <ContainerFormDialog open={showCreate} onClose={() => setShowCreate(false)} />
+        <ContainerFormDialog open={showCreate} onClose={() => setShowCreate(false)} userAgencyId={singleUserAgencyId} />
         <ContainerFormDialog
           open={!!editContainer}
           onClose={() => setEditContainer(null)}

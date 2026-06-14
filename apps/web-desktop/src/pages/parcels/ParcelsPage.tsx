@@ -26,6 +26,7 @@ import { formatAmount, formatDate } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
 import { ParcelFormDialog } from './ParcelFormDialog';
 import { MaskedValue, isMasked } from '@/components/ui/MaskedValue';
+import { Can } from '@/lib/components/Can';
 
 function ParcelsContent() {
   const navigate = useNavigate();
@@ -391,19 +392,21 @@ function ParcelsContent() {
               <Upload className="h-4 w-4" />
               Importer
             </AppButton>
-            <AppDropdownMenu
-              trigger={
-                <AppButton>
-                  <Plus className="h-4 w-4" />
-                  Nouveau
-                  <ChevronDown className="h-3.5 w-3.5" />
-                </AppButton>
-              }
-              items={[
-                { label: 'Un seul colis', icon: <Package className="h-4 w-4" />, onClick: () => setShowCreate(true) },
-                { label: 'Un groupe de colis', icon: <Boxes className="h-4 w-4" />, onClick: () => setShowCreateGroup(true) },
-              ]}
-            />
+            <Can permission="parcel.create">
+              <AppDropdownMenu
+                trigger={
+                  <AppButton>
+                    <Plus className="h-4 w-4" />
+                    Nouveau
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  </AppButton>
+                }
+                items={[
+                  { label: 'Un seul colis', icon: <Package className="h-4 w-4" />, onClick: () => setShowCreate(true) },
+                  { label: 'Un groupe de colis', icon: <Boxes className="h-4 w-4" />, onClick: () => setShowCreateGroup(true) },
+                ]}
+              />
+            </Can>
           </div>
         </div>
 

@@ -11,7 +11,8 @@ import { AppSelect } from '@/components/ui/AppSelect';
 import { AppSearchSelect } from '@/components/ui/AppSearchSelect';
 import { AppSwitch } from '@/components/ui/AppSwitch';
 import { useCreateContainer, useUpdateContainer } from '@/lib/hooks/useContainers';
-import { searchers } from '@/lib/api/searchers';
+import { searchers, toSearchOption } from '@/lib/api/searchers';
+import { useAgency } from '@/lib/hooks/useAgencies';
 import { Plus } from 'lucide-react';
 import { CarrierFormDialog } from './CarrierFormDialog';
 
@@ -38,13 +39,17 @@ interface ContainerFormDialogProps {
   onClose: () => void;
   /** Si fourni : mode edition (PATCH). Possible tant que statut EMPTY/LOADING. */
   container?: ContainerLike | null;
+  /** Agence de l'employe courant. Pre-selectionne et verrouille l'agence de depart. */
+  userAgencyId?: string;
 }
 
-export function ContainerFormDialog({ open, onClose, container: editTarget }: ContainerFormDialogProps) {
+export function ContainerFormDialog({ open, onClose, container: editTarget, userAgencyId }: ContainerFormDialogProps) {
   const createMutation = useCreateContainer();
   const updateMutation = useUpdateContainer();
   const isEdit = !!editTarget;
   const [isForwarding, setIsForwarding] = useState(false);
+  // Resout le nom de l'agence de l'employe pour l'affichage dans le select desactive.
+  const { data: userAgencyResp } = useAgency(userAgencyId ?? '');
   const [showCarrierDialog, setShowCarrierDialog] = useState(false);
 
   const {
@@ -77,7 +82,7 @@ export function ContainerFormDialog({ open, onClose, container: editTarget }: Co
       } as CreateContainerInput);
       setIsForwarding(editTarget.isForwarding);
     } else {
-      reset({ isForwarding: false } as CreateContainerInput);
+      reset({ isForwarding: false, departureAgencyId: userAgencyId ?? '' } as CreateContainerInput);
       setIsForwarding(false);
     }
   }, [open, editTarget, reset]);
@@ -258,17 +263,28 @@ export function ContainerFormDialog({ open, onClose, container: editTarget }: Co
         <Controller
           control={control}
           name="departureAgencyId"
-          render={({ field }) => (
-            <AppSearchSelect
-              label="Agence de depart"
-              value={field.value}
-              onChange={(v) => field.onChange(v ?? '')}
-              search={searchers.agencies}
-              error={errors.departureAgencyId?.message}
-              required
-              placeholder="Selectionner"
-            />
-          )}
+          render={({ field }) => {
+            const userAgencyObj = (userAgencyResp as any)?.data;
+            return (
+              <AppSearchSelect
+                label="Agence de depart"
+                value={field.value}
+                onChange={(v) => field.onChange(v ?? '')}
+                search={searchers.agencies}
+                selectedOption={
+                  !isEdit && userAgencyId && userAgencyObj
+                    ? toSearchOption.agency(userAgencyObj)
+                    : editTarget?.departureAgency
+                      ? toSearchOption.agency(editTarget.departureAgency)
+                      : undefined
+                }
+                error={errors.departureAgencyId?.message}
+                required
+                disabled={!isEdit && !!userAgencyId}
+                placeholder="Selectionner"
+              />
+            );
+          }}
         />
 
         <Controller

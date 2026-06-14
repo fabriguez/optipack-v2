@@ -20,8 +20,14 @@ import { containerScope, scopeCtx } from '../../application/services/scope/agenc
 export class ContainerController {
   static async create(req: Request, res: Response, next: NextFunction) {
     try {
+      const user = req.user!;
+      const isAdmin = user.role === 'SUPER_ADMIN' || user.role === 'ADMIN';
+      if (!isAdmin && req.body.departureAgencyId && !user.agencyIds.includes(req.body.departureAgencyId)) {
+        const { AuthorizationError } = await import('../../domain/errors/BusinessError');
+        throw new AuthorizationError('L\'agence de depart doit correspondre a votre agence');
+      }
       const useCase = container.resolve(CreateContainerUseCase);
-      const result = await useCase.execute(req.body, req.user!.userId);
+      const result = await useCase.execute(req.body, user.userId);
       res.status(201).json({ success: true, data: result });
     } catch (err) {
       next(err);

@@ -38,6 +38,11 @@ export function useIsTenantAdmin(): boolean {
   return role === 'ADMIN' || role === 'SUPER_ADMIN';
 }
 
+/** Retourne les agencyIds du user courant (vide = admin org-wide). */
+export function useAgencyIds(): string[] {
+  return useAuthStore((s) => s.user?.agencyIds ?? []);
+}
+
 /** Retourne la liste brute des permissions extraites du JWT API. */
 export function usePermissions(): string[] {
   const accessToken = useAuthStore((s) => s.accessToken);

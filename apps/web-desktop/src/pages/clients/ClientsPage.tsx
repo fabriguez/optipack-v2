@@ -17,6 +17,7 @@ import { useClients, useDeleteClient } from '@/lib/hooks/useClients';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { searchers } from '@/lib/api/searchers';
 import { ClientFormDialog } from './ClientFormDialog';
+import { Can } from '@/lib/components/Can';
 import { formatAmount } from '@transitsoftservices/shared';
 
 const TIER_VARIANT: Record<string, 'default' | 'info' | 'warning' | 'success'> = {
@@ -138,10 +139,12 @@ export default function ClientsPage() {
               <Upload className="h-4 w-4" />
               Importer
             </AppButton>
-            <AppButton onClick={() => setShowCreate(true)}>
-              <Plus className="h-4 w-4" />
-              Nouveau client
-            </AppButton>
+            <Can permission="client.create">
+              <AppButton onClick={() => setShowCreate(true)}>
+                <Plus className="h-4 w-4" />
+                Nouveau client
+              </AppButton>
+            </Can>
           </div>
         </div>
 

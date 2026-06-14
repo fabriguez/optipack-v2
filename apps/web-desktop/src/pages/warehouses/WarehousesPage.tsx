@@ -16,6 +16,8 @@ import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { toast } from 'sonner';
 import { WarehouseFormDialog } from './WarehouseFormDialog';
+import { Can } from '@/lib/components/Can';
+import { useAgencyIds, useIsTenantAdmin } from '@/lib/hooks/usePermission';
 
 export default function WarehousesPage() {
   const navigate = useNavigate();
@@ -25,6 +27,9 @@ export default function WarehousesPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const agencyIdFilter = searchParams.get('agencyId') || '';
+  const isAdmin = useIsTenantAdmin();
+  const agencyIds = useAgencyIds();
+  const singleUserAgencyId = !isAdmin && agencyIds.length === 1 ? agencyIds[0] : undefined;
 
   const { data, isLoading } = useQuery({
     queryKey: ['warehouses', agencyIdFilter, page, search],
@@ -99,7 +104,9 @@ export default function WarehousesPage() {
               <Upload className="h-4 w-4" />
               Importer
             </AppButton>
-            <AppButton onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" />Nouveau magasin</AppButton>
+            <Can permission="warehouse.manage">
+              <AppButton onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" />Nouveau magasin</AppButton>
+            </Can>
           </div>
         </div>
 
@@ -127,7 +134,7 @@ export default function WarehousesPage() {
           />
         </AppCard>
       </div>
-      <WarehouseFormDialog open={showCreate} onClose={() => setShowCreate(false)} />
+      <WarehouseFormDialog open={showCreate} onClose={() => setShowCreate(false)} defaultAgencyId={singleUserAgencyId} />
       <CsvImportDialog
         open={showImport}
         onClose={() => setShowImport(false)}

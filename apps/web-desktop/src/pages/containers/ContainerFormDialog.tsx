@@ -9,7 +9,8 @@ import { AppSelect } from '@/components/ui/AppSelect';
 import { AppSearchSelect } from '@/components/ui/AppSearchSelect';
 import { AppSwitch } from '@/components/ui/AppSwitch';
 import { useCreateContainer, useUpdateContainer } from '@/lib/hooks/useContainers';
-import { searchers } from '@/lib/api/searchers';
+import { searchers, toSearchOption } from '@/lib/api/searchers';
+import { useAgency } from '@/lib/hooks/useAgencies';
 import { Plus } from 'lucide-react';
 import { CarrierFormDialog } from './CarrierFormDialog';
 
@@ -36,11 +37,15 @@ interface ContainerFormDialogProps {
   onClose: () => void;
   /** Si fourni : mode edition (PATCH). Possible tant que statut EMPTY/LOADING. */
   container?: ContainerLike | null;
+  /** Verrouille l'agence de depart sur l'agence de l'employe (non-admin). */
+  userAgencyId?: string;
 }
 
-export function ContainerFormDialog({ open, onClose, container: editTarget }: ContainerFormDialogProps) {
+export function ContainerFormDialog({ open, onClose, container: editTarget, userAgencyId }: ContainerFormDialogProps) {
   const createMutation = useCreateContainer();
   const updateMutation = useUpdateContainer();
+  const { data: userAgencyResp } = useAgency(userAgencyId ?? '');
+  const userAgencyObj = (userAgencyResp as any)?.data ?? null;
   const isEdit = !!editTarget;
   const [isForwarding, setIsForwarding] = useState(false);
   const [showCarrierDialog, setShowCarrierDialog] = useState(false);
@@ -75,10 +80,10 @@ export function ContainerFormDialog({ open, onClose, container: editTarget }: Co
       } as CreateContainerInput);
       setIsForwarding(editTarget.isForwarding);
     } else {
-      reset({ isForwarding: false } as CreateContainerInput);
+      reset({ isForwarding: false, departureAgencyId: userAgencyId ?? '' } as CreateContainerInput);
       setIsForwarding(false);
     }
-  }, [open, editTarget, reset]);
+  }, [open, editTarget, userAgencyId, reset]);
 
   const onSubmit = async (data: CreateContainerInput) => {
     if (isEdit && editTarget) {
@@ -262,8 +267,16 @@ export function ContainerFormDialog({ open, onClose, container: editTarget }: Co
               value={field.value}
               onChange={(v) => field.onChange(v ?? '')}
               search={searchers.agencies}
+              selectedOption={
+                !isEdit && userAgencyId && userAgencyObj
+                  ? toSearchOption.agency(userAgencyObj)
+                  : editTarget?.departureAgency
+                    ? toSearchOption.agency(editTarget.departureAgency)
+                    : undefined
+              }
               error={errors.departureAgencyId?.message}
               required
+              disabled={!isEdit && !!userAgencyId}
               placeholder="Selectionner"
             />
           )}

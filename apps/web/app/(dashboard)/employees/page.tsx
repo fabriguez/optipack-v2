@@ -7,6 +7,7 @@ import { Plus, Upload, Eye, Edit, Trash2 } from 'lucide-react';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
+import { Can } from '@/lib/components/Can';
 import { AppDataTable } from '@/components/ui/AppDataTable';
 import { AppBadge } from '@/components/ui/AppBadge';
 import { SearchBar } from '@/components/shared/SearchBar';
@@ -130,7 +131,9 @@ export default function EmployeesPage() {
               <Upload className="h-4 w-4" />
               Importer
             </AppButton>
-            <AppButton onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" />Nouvel employe</AppButton>
+            <Can permission="personnel.create">
+              <AppButton onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" />Nouvel employe</AppButton>
+            </Can>
           </div>
         </div>
 

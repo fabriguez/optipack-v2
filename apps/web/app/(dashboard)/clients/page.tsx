@@ -7,6 +7,7 @@ import { Plus, Upload, Users, Eye, Package, CreditCard, Edit, Trash2 } from 'luc
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
+import { Can } from '@/lib/components/Can';
 import { AppBadge } from '@/components/ui/AppBadge';
 import { AppDataTable } from '@/components/ui/AppDataTable';
 import { SearchBar } from '@/components/shared/SearchBar';
@@ -150,10 +151,12 @@ function ClientsContent() {
               <Upload className="h-4 w-4" />
               Importer
             </AppButton>
-            <AppButton onClick={() => setShowCreate(true)}>
-              <Plus className="h-4 w-4" />
-              Nouveau client
-            </AppButton>
+            <Can permission="client.create">
+              <AppButton onClick={() => setShowCreate(true)}>
+                <Plus className="h-4 w-4" />
+                Nouveau client
+              </AppButton>
+            </Can>
           </div>
         </div>
 

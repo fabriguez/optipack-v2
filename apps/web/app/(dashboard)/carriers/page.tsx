@@ -7,6 +7,7 @@ import { Plus, Eye, Edit, Trash2, Truck } from 'lucide-react';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
+import { Can } from '@/lib/components/Can';
 import { AppBadge } from '@/components/ui/AppBadge';
 import { AppDataTable } from '@/components/ui/AppDataTable';
 import { SearchBar } from '@/components/shared/SearchBar';
@@ -124,10 +125,12 @@ function CarriersContent() {
             <p className="text-sm text-gray-500 mt-1">{data?.meta?.total ?? 0} transporteur(s)</p>
           </div>
           <div className="flex gap-2">
-            <AppButton onClick={() => { setEditTarget(null); setShowForm(true); }}>
-              <Plus className="h-4 w-4" />
-              Nouveau transporteur
-            </AppButton>
+            <Can permission="carrier.manage">
+              <AppButton onClick={() => { setEditTarget(null); setShowForm(true); }}>
+                <Plus className="h-4 w-4" />
+                Nouveau transporteur
+              </AppButton>
+            </Can>
           </div>
         </div>
 

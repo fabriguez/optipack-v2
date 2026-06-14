@@ -17,6 +17,7 @@ import { apiClient } from '@/lib/api/client';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
 import { ParcelFormDialog } from '@/pages/parcels/ParcelFormDialog';
 import { PartnerPricingsSection } from './PartnerPricingsSection';
+import { Can } from '@/lib/components/Can';
 
 const TIER_VARIANT: Record<string, 'default' | 'info' | 'warning' | 'success'> = {
   STANDARD: 'default', SILVER: 'info', GOLD: 'warning', VIP: 'success',
@@ -180,10 +181,12 @@ export default function ClientDetailPage() {
           <Link to={`/parcels?clientId=${id}`}>
             <AppButton variant="ghost" size="sm">Voir tout</AppButton>
           </Link>
-          <AppButton size="sm" onClick={() => setShowCreateParcel(true)}>
-            <Plus className="h-3.5 w-3.5" />
-            Nouveau colis
-          </AppButton>
+          <Can permission="parcel.create">
+            <AppButton size="sm" onClick={() => setShowCreateParcel(true)}>
+              <Plus className="h-3.5 w-3.5" />
+              Nouveau colis
+            </AppButton>
+          </Can>
         </div>
       </div>
       <AppDataTable

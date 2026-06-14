@@ -14,6 +14,7 @@ import { AppSearchSelect } from '@/components/ui/AppSearchSelect';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { searchers, toSearchOption } from '@/lib/api/searchers';
+import { useAgency } from '@/lib/hooks/useAgencies';
 import { toast } from 'sonner';
 
 interface WarehouseLike {
@@ -28,12 +29,16 @@ interface Props {
   onClose: () => void;
   /** Pre-selection (lock) de l'agence — utilise depuis la page detail agence */
   defaultAgency?: { id: string; name: string; city?: string | null } | null;
+  /** Verrouille la creation sur l'agence de l'employe (non-admin mono-agence) */
+  defaultAgencyId?: string;
   /** Si fourni : mode edition. agencyId est verrouille (non modifiable apres
       creation pour preserver l'integrite des stats par agence). */
   warehouse?: WarehouseLike | null;
 }
 
-export function WarehouseFormDialog({ open, onClose, defaultAgency, warehouse }: Props) {
+export function WarehouseFormDialog({ open, onClose, defaultAgency, defaultAgencyId, warehouse }: Props) {
+  const { data: resolvedAgencyResp } = useAgency(defaultAgencyId ?? '');
+  const resolvedAgency = defaultAgency ?? (resolvedAgencyResp as any)?.data ?? null;
   const isEdit = !!warehouse;
   const qc = useQueryClient();
 
@@ -80,9 +85,9 @@ export function WarehouseFormDialog({ open, onClose, defaultAgency, warehouse }:
         location: warehouse.location,
       } as CreateWarehouseInput);
     } else {
-      reset(defaultAgency ? ({ agencyId: defaultAgency.id } as CreateWarehouseInput) : ({} as CreateWarehouseInput));
+      reset(resolvedAgency ? ({ agencyId: resolvedAgency.id } as CreateWarehouseInput) : ({} as CreateWarehouseInput));
     }
-  }, [open, defaultAgency, warehouse, reset]);
+  }, [open, resolvedAgency, warehouse, reset]);
 
   const onSubmit = (data: CreateWarehouseInput) => {
     if (isEdit) {
@@ -125,15 +130,15 @@ export function WarehouseFormDialog({ open, onClose, defaultAgency, warehouse }:
               onChange={(v) => field.onChange(v ?? '')}
               search={searchers.agencies}
               selectedOption={
-                defaultAgency
-                  ? toSearchOption.agency(defaultAgency)
+                resolvedAgency
+                  ? toSearchOption.agency(resolvedAgency)
                   : warehouse?.agency
                     ? toSearchOption.agency(warehouse.agency)
                     : undefined
               }
               error={errors.agencyId?.message}
               required
-              disabled={!!defaultAgency || isEdit}
+              disabled={!!resolvedAgency || isEdit}
               placeholder="Selectionner une agence"
             />
           )}

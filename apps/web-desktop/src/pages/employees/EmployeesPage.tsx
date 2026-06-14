@@ -18,6 +18,7 @@ import { searchers } from '@/lib/api/searchers';
 import { formatAmount } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
 import { EmployeeFormDialog } from './EmployeeFormDialog';
+import { Can } from '@/lib/components/Can';
 
 export default function EmployeesPage() {
   const navigate = useNavigate();
@@ -127,7 +128,9 @@ export default function EmployeesPage() {
               <Upload className="h-4 w-4" />
               Importer
             </AppButton>
-            <AppButton onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" />Nouvel employe</AppButton>
+            <Can permission="personnel.create">
+              <AppButton onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" />Nouvel employe</AppButton>
+            </Can>
           </div>
         </div>
 

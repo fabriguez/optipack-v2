@@ -12,6 +12,7 @@ import { AppTabs } from '@/components/ui/AppTabs';
 import { AppDataTable } from '@/components/ui/AppDataTable';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { RowActions } from '@/components/shared/RowActions';
+import { Can } from '@/lib/components/Can';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 import { useClient } from '@/lib/hooks/useClients';
 import { useParcels } from '@/lib/hooks/useParcels';
@@ -183,10 +184,12 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
           <Link href={`/parcels?clientId=${id}`}>
             <AppButton variant="ghost" size="sm">Voir tout</AppButton>
           </Link>
-          <AppButton size="sm" onClick={() => setShowCreateParcel(true)}>
-            <Plus className="h-3.5 w-3.5" />
-            Nouveau colis
-          </AppButton>
+          <Can permission="parcel.create">
+            <AppButton size="sm" onClick={() => setShowCreateParcel(true)}>
+              <Plus className="h-3.5 w-3.5" />
+              Nouveau colis
+            </AppButton>
+          </Can>
         </div>
       </div>
       <AppDataTable
