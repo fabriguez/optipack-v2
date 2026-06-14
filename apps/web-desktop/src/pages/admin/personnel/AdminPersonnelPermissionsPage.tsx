@@ -13,6 +13,7 @@ import {
 import type { PermissionDTO, PositionDTO } from '@/lib/api/hr';
 import { Save, Lock, Info } from 'lucide-react';
 import { AppTooltip } from '@/components/ui/AppTooltip';
+import { PERMISSION_DESCRIPTIONS } from '@transitsoftservices/shared';
 
 const CATEGORY_LABELS: Record<string, string> = {
   personnel: 'Personnel',
@@ -190,8 +191,8 @@ export default function AdminPersonnelPermissionsPage() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1">
                             <span className="text-sm font-medium text-gray-900">{p.label}</span>
-                            {p.description && (
-                              <AppTooltip content={p.description} side="top">
+                            {(p.description || PERMISSION_DESCRIPTIONS[p.key]) && (
+                              <AppTooltip content={(p.description || PERMISSION_DESCRIPTIONS[p.key])!} side="top">
                                 <Info className="h-3.5 w-3.5 text-gray-400 hover:text-gray-600 shrink-0 cursor-help" />
                               </AppTooltip>
                             )}

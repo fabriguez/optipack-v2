@@ -1,4 +1,5 @@
 export * from './enums';
+export * from './permissionDescriptions';
 
 // Transitions de statut valides pour les colis.
 // LOST est cible valide depuis tout statut non-terminal (perte detectee a
