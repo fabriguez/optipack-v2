@@ -1,29 +1,65 @@
 name: Desktop — build installers (Win + Mac)
 
-# Build les installeurs Tauri du backoffice desktop (apps/web-desktop) pour
-# macOS (.dmg/.app, universel Intel+Apple Silicon) et Windows (.exe NSIS + .msi),
-# puis les attache a une Release GitHub.
+# Declenchement : workflow_dispatch uniquement (bouton "Run workflow" sur GitHub).
+# - Laisser "version" vide  -> patch auto (0.1.0 -> 0.1.1)
+# - Remplir "version"       -> utilise la valeur fournie (ex: 0.2.0)
 #
-# Declencheurs :
-#   - push d'un tag "desktop-v*" (ex: desktop-v0.1.0) -> release publiee
-#   - manuel (workflow_dispatch) -> release brouillon, pour tester
-#
-# SIGNATURE : les hooks sont prets mais INACTIFS tant que les secrets ne sont
-# pas fournis (build non signe -> contournement Gatekeeper/SmartScreen cote
-# destinataire). Voir le bloc `env` de l'etape build pour les secrets a remplir.
+# La CI :
+#   1. Bumpe tauri.conf.json + commit [skip ci] sur main
+#   2. Compile Win (.msi / .exe NSIS) + Mac (.dmg universel)
+#   3. Publie une Release GitHub desktop-vX.Y.Z avec les binaires en assets
 
 on:
-  push:
-    tags:
-      - 'desktop-v*'
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version a publier (ex: 0.2.0). Laisser vide = patch auto.'
+        required: false
+        default: ''
 
-# Le tauri-action a besoin de pouvoir creer la release.
 permissions:
   contents: write
 
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.bump.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute version & bump tauri.conf.json
+        id: bump
+        run: |
+          CURRENT=$(node -p "require('./apps/web-desktop/src-tauri/tauri.conf.json').version")
+          INPUT="${{ inputs.version }}"
+          if [ -n "$INPUT" ]; then
+            NEW="$INPUT"
+          else
+            MAJOR=$(echo "$CURRENT" | cut -d. -f1)
+            MINOR=$(echo "$CURRENT" | cut -d. -f2)
+            PATCH=$(echo "$CURRENT" | cut -d. -f3)
+            NEW="$MAJOR.$MINOR.$((PATCH + 1))"
+          fi
+          echo "Version: $CURRENT -> $NEW"
+          echo "version=$NEW" >> "$GITHUB_OUTPUT"
+          node -e "
+            const fs = require('fs');
+            const p = 'apps/web-desktop/src-tauri/tauri.conf.json';
+            const j = JSON.parse(fs.readFileSync(p, 'utf8'));
+            j.version = process.argv[1];
+            fs.writeFileSync(p, JSON.stringify(j, null, 2) + '\n');
+          " "$NEW"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add apps/web-desktop/src-tauri/tauri.conf.json
+          git diff --staged --quiet || git commit -m "chore(release): bump desktop to v$NEW [skip ci]"
+          git push
+
   build:
+    needs: prepare
     strategy:
       fail-fast: false
       matrix:
@@ -39,11 +75,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Setup pnpm
-        # Pas de `version:` ici -> la version vient de `packageManager` du
-        # package.json racine (pnpm@9.15.4). Specifier les deux casse l'action
-        # (ERR_PNPM_BAD_PM_VERSION / "Multiple versions of pnpm specified").
         uses: pnpm/action-setup@v4
 
       - name: Setup Node
@@ -63,27 +98,22 @@ jobs:
           workspaces: apps/web-desktop/src-tauri
 
       - name: Install workspace deps
-        # --no-frozen-lockfile : le lockfile committe a une desync pre-existante
-        # sur apps/tablet (bumps expo non repercutes) sans rapport avec le
-        # desktop. On laisse pnpm resoudre plutot que d'echouer le build.
         run: pnpm install --no-frozen-lockfile
 
       - name: Build + bundle (tauri)
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # --- Frontend (Vite) : pointe l'app installee sur l'API en ligne.
-          #     .env etant gitignore, on injecte ici (variables de repo possibles).
           VITE_API_URL: ${{ vars.VITE_API_URL || 'https://api.transitsoftservices.com/api/v1' }}
           VITE_SOCKET_URL: ${{ vars.VITE_SOCKET_URL || 'https://api.transitsoftservices.com' }}
-          # Signature macOS desactivee (build non signe). Pour activer : ajouter
+          # Signature macOS desactivee. Pour activer : ajouter
           # APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY,
           # APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID dans les secrets du repo.
         with:
           projectPath: apps/web-desktop
           args: ${{ matrix.args }}
-          tagName: ${{ github.ref_type == 'tag' && github.ref_name || 'desktop-dev' }}
-          releaseName: 'TransitSoft Desktop ${{ github.ref_type == ''tag'' && github.ref_name || ''(dev build)'' }}'
-          releaseBody: 'Installeurs desktop generes par CI. Win: .exe (NSIS) / .msi · Mac: .dmg (universel).'
-          releaseDraft: ${{ github.ref_type != 'tag' }}
+          tagName: desktop-v${{ needs.prepare.outputs.version }}
+          releaseName: 'TransitSoft Desktop v${{ needs.prepare.outputs.version }}'
+          releaseBody: 'Installeurs desktop. Win: .exe (NSIS) / .msi · Mac: .dmg (universel).'
+          releaseDraft: false
           prerelease: false
