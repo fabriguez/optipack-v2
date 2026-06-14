@@ -75,13 +75,9 @@ jobs:
           #     .env etant gitignore, on injecte ici (variables de repo possibles).
           VITE_API_URL: ${{ vars.VITE_API_URL || 'https://api.transitsoftservices.com/api/v1' }}
           VITE_SOCKET_URL: ${{ vars.VITE_SOCKET_URL || 'https://api.transitsoftservices.com' }}
-          # --- Signature macOS (laisser vide = build non signe). A remplir :
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Signature macOS desactivee (build non signe). Pour activer : ajouter
+          # APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY,
+          # APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID dans les secrets du repo.
         with:
           projectPath: apps/web-desktop
           args: ${{ matrix.args }}
