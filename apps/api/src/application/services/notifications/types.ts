@@ -21,6 +21,13 @@ export interface NotificationTarget {
   phone?: string | null;
 }
 
+/** Piece jointe envoyee via WhatsApp (URL publique accessible par le provider). */
+export interface NotificationAttachment {
+  url: string;
+  filename: string;
+  caption?: string;
+}
+
 export interface NotificationPayload {
   /** Titre court (utilise pour push, email subject, etc). */
   title: string;
@@ -32,6 +39,8 @@ export interface NotificationPayload {
   channels?: NotificationChannel[];
   /** Optionnel : template d'email pre-defini (sinon body plain text). */
   emailTemplate?: 'plain' | 'parcel-status' | 'payment-receipt' | string;
+  /** Fichiers joints (WhatsApp uniquement). URLs publiques presignees MinIO. */
+  attachments?: NotificationAttachment[];
 }
 
 export interface ChannelDeliveryResult {
@@ -54,4 +63,6 @@ export interface ExternalChannelProvider {
   readonly name: string;
   readonly enabled: boolean;
   send(to: string, message: string, meta?: Record<string, unknown>): Promise<void>;
+  /** Envoi d'un document/fichier (PDF...). Optionnel : si absent, la piece jointe est ignoree. */
+  sendDocument?(to: string, url: string, filename: string, caption?: string): Promise<void>;
 }

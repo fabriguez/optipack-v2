@@ -8,11 +8,17 @@ import { createChildLogger } from '../../../config/logger';
 import { realtimeService } from '../../realtime/RealtimeService';
 import { notificationService } from '../../../application/services/notifications/NotificationService';
 import type {
+  NotificationAttachment,
   NotificationChannel,
   NotificationPayload,
   NotificationTarget,
 } from '../../../application/services/notifications/types';
 import { filterChannelsByPrefs } from '../../../application/services/notifications/preferences';
+import { minioClient } from '../../../config/minio';
+import {
+  buildInvoicePdfBuffer,
+  buildPaymentReceiptPdfBuffer,
+} from '../../../presentation/routes/v1/invoice.routes';
 
 const logger = createChildLogger('NotificationHandler');
 
@@ -49,9 +55,41 @@ async function resolveEventOrg(event: DomainEvent, payload: Record<string, any>)
   );
 }
 
+/**
+ * Upload un buffer PDF dans MinIO (tmp/notif/) et retourne une URL presignee
+ * valide 30 minutes. L'URL utilise MINIO_PUBLIC_BASE_URL si defini (requis
+ * pour que WhatsApp puisse telecharger le fichier depuis internet).
+ * Retourne null sur toute erreur (envoi WhatsApp se fait sans piece jointe).
+ */
+async function uploadPdfForWhatsApp(
+  buffer: Buffer,
+  filename: string,
+): Promise<string | null> {
+  try {
+    const bucket = config.minio.bucket;
+    const key = `tmp/notif/${Date.now()}-${filename}`;
+    await minioClient.putObject(bucket, key, buffer, buffer.length, {
+      'Content-Type': 'application/pdf',
+    });
+    const signed = await (minioClient as any).presignedGetObject(bucket, key, 1800);
+    if (config.minio.publicBaseUrl) {
+      const parsedSigned = new URL(signed);
+      const parsedPublic = new URL(config.minio.publicBaseUrl);
+      parsedSigned.protocol = parsedPublic.protocol;
+      parsedSigned.hostname = parsedPublic.hostname;
+      parsedSigned.port = parsedPublic.port;
+      return parsedSigned.toString();
+    }
+    return signed;
+  } catch (err) {
+    logger.warn({ err, filename }, 'uploadPdfForWhatsApp failed (piece jointe ignoree)');
+    return null;
+  }
+}
+
 async function dispatchExternal(
   target: NotificationTarget,
-  payload: { title: string; message: string; metadata?: Record<string, unknown>; kind?: string },
+  payload: { title: string; message: string; metadata?: Record<string, unknown>; kind?: string; attachments?: NotificationAttachment[] },
 ): Promise<void> {
   const requested: NotificationChannel[] = ['SMS', 'WHATSAPP', 'PUSH'];
   const allowed = await filterChannelsByPrefs(
@@ -66,6 +104,7 @@ async function dispatchExternal(
       message: payload.message,
       metadata: { ...(payload.metadata ?? {}), kind: payload.kind ?? payload.metadata?.kind },
       channels: allowed,
+      attachments: payload.attachments,
     });
   } catch (err) {
     logger.warn({ err, title: payload.title }, 'Echec dispatch externe (non bloquant)');
@@ -376,6 +415,42 @@ function registerHandlers() {
         CASH: 'Especes', MOBILE_MONEY: 'Mobile Money',
         BANK_TRANSFER: 'Virement', CARD: 'Carte bancaire', CHECK: 'Cheque',
       };
+
+      // Generer les pieces jointes PDF (recu + facture) pour WhatsApp.
+      const attachments: NotificationAttachment[] = [];
+      try {
+        const refSlug = (invoiceRef || 'facture').replace(/[^a-zA-Z0-9-]/g, '-');
+
+        // 1. Recu de paiement : trouver le paiement le plus recent pour cette facture.
+        const latestPayment = await prisma.payment.findFirst({
+          where: { invoice: { reference: invoiceRef }, isVoided: false },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true },
+        });
+        if (latestPayment) {
+          const receiptResult = await buildPaymentReceiptPdfBuffer(latestPayment.id);
+          if (receiptResult) {
+            const url = await uploadPdfForWhatsApp(receiptResult.pdf, `recu-${refSlug}.pdf`);
+            if (url) attachments.push({ url, filename: `Recu-${refSlug}.pdf`, caption: `Recu de paiement - ${invoiceRef}` });
+          }
+        }
+
+        // 2. Facture complete.
+        const invoiceRow = await prisma.invoice.findFirst({
+          where: { reference: invoiceRef },
+          select: { id: true },
+        });
+        if (invoiceRow) {
+          const invoiceResult = await buildInvoicePdfBuffer(invoiceRow.id);
+          if (invoiceResult) {
+            const url = await uploadPdfForWhatsApp(invoiceResult.pdf, `facture-${refSlug}.pdf`);
+            if (url) attachments.push({ url, filename: `Facture-${refSlug}.pdf`, caption: `Facture ${invoiceRef}` });
+          }
+        }
+      } catch (err) {
+        logger.warn({ err, invoiceRef }, 'PDF generation for WhatsApp attachment failed (ignored)');
+      }
+
       await dispatchExternal(
         { clientId, agencyId: agencyId || event.agencyId, organizationId },
         {
@@ -387,6 +462,7 @@ function registerHandlers() {
             `Solde restant : ${remainingBalance || '0'} FCFA\n\nMerci pour votre paiement.`,
           metadata: { invoiceRef, amount, paymentMethod },
           kind: 'PAYMENT_RECEIVED',
+          attachments: attachments.length > 0 ? attachments : undefined,
         },
       );
     }
@@ -809,6 +885,25 @@ function registerHandlers() {
       );
     }
 
+    // Piece jointe PDF de la facture reglee pour WhatsApp.
+    const invoicePaidAttachments: NotificationAttachment[] = [];
+    try {
+      const refSlug = (reference || 'facture').replace(/[^a-zA-Z0-9-]/g, '-');
+      const invoiceRow = await prisma.invoice.findFirst({
+        where: { reference },
+        select: { id: true },
+      });
+      if (invoiceRow) {
+        const result = await buildInvoicePdfBuffer(invoiceRow.id);
+        if (result) {
+          const url = await uploadPdfForWhatsApp(result.pdf, `facture-${refSlug}.pdf`);
+          if (url) invoicePaidAttachments.push({ url, filename: `Facture-${refSlug}.pdf`, caption: `Facture ${reference} - reglee` });
+        }
+      }
+    } catch (err) {
+      logger.warn({ err, reference }, 'PDF generation INVOICE_PAID WhatsApp failed (ignored)');
+    }
+
     await dispatchExternal(
       { clientId, agencyId: agencyId || event.agencyId, organizationId },
       {
@@ -819,6 +914,7 @@ function registerHandlers() {
           `Merci pour votre paiement. Consultez votre espace : ${config.webUrl}/invoices`,
         metadata: { reference, totalAmount },
         kind: 'INVOICE_PAID',
+        attachments: invoicePaidAttachments.length > 0 ? invoicePaidAttachments : undefined,
       },
     );
   });

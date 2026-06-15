@@ -5,6 +5,7 @@ import {
   Check,
   CircleAlert,
   Clock,
+  ExternalLink,
   Hourglass,
   Loader2,
   RefreshCw,
@@ -50,6 +51,42 @@ export function PaymentStatusView({
           </p>
         </div>
       </div>
+
+      {latest?.next?.type === 'redirect' && (
+        <div
+          className="mt-4 flex items-start gap-3 p-4 skin-radius-sm"
+          style={{
+            background:
+              'color-mix(in oklab, var(--skin-primary) 8%, transparent)',
+            border: '1px dashed var(--skin-primary)',
+          }}
+        >
+          <ExternalLink
+            className="mt-0.5 h-5 w-5 shrink-0"
+            style={{ color: 'var(--skin-primary)' }}
+          />
+          <div className="min-w-0 flex-1">
+            <p
+              className="text-sm font-semibold"
+              style={{ color: 'var(--skin-foreground)' }}
+            >
+              Finalisation requise sur la page de paiement
+            </p>
+            <p className="mt-1 text-sm" style={{ color: 'var(--skin-muted)' }}>
+              Cliquez sur le bouton ci-dessous pour completer votre paiement en toute securite.
+            </p>
+            <a
+              href={latest.next.url}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-3 inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold skin-btn-primary"
+            >
+              <ExternalLink className="h-4 w-4" />
+              Finaliser sur TaraMoney
+            </a>
+          </div>
+        </div>
+      )}
 
       {latest?.next?.type === 'otp' && (
         <div

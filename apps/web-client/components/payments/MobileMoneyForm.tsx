@@ -43,16 +43,25 @@ export function MobileMoneyForm(props: Props) {
 
   const submit = () => {
     if (!phone) return;
-    createMutation.mutate({
-      kind: 'mobile_money',
-      amount: payAmount,
-      currency: props.currency,
-      phone,
-      preferredProvider: preferred,
-      reference: props.reference,
-      referenceType: props.referenceType,
-      customer: { ...props.customer, phone },
-    });
+    createMutation.mutate(
+      {
+        kind: 'mobile_money',
+        amount: payAmount,
+        currency: props.currency,
+        phone,
+        preferredProvider: preferred,
+        reference: props.reference,
+        referenceType: props.referenceType,
+        customer: { ...props.customer, phone },
+      },
+      {
+        onSuccess: (data: any) => {
+          if (data?.attempt?.next?.type === 'redirect') {
+            window.open(data.attempt.next.url, '_blank');
+          }
+        },
+      },
+    );
   };
 
   if (order) {

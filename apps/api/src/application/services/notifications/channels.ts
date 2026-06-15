@@ -308,6 +308,20 @@ async function deliverExternal(
       }
     }
     if (!sentAny) throw lastErr ?? new Error('Aucun envoi abouti');
+
+    // Pieces jointes WhatsApp (best-effort, echec silencieux par fichier).
+    if (channel === 'WHATSAPP' && payload.attachments && payload.attachments.length > 0 && provider.sendDocument) {
+      for (const att of payload.attachments) {
+        for (const r of recipients) {
+          try {
+            await provider.sendDocument!(r, att.url, att.filename, att.caption);
+          } catch (e) {
+            logger.warn({ err: e, filename: att.filename, to: r }, 'WhatsApp attachment failed (ignored)');
+          }
+        }
+      }
+    }
+
     const row = await prisma.notification.create({
       data: {
         userId: target.userId ?? null,

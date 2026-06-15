@@ -26,6 +26,10 @@ export const config = {
     secretKey: process.env.MINIO_SECRET_KEY || 'transitsoftservices_secret',
     bucket: process.env.MINIO_BUCKET || 'transitsoftservices',
     useSSL: process.env.MINIO_USE_SSL === 'true',
+    // URL publique accessible depuis internet (pour les pieces jointes WhatsApp).
+    // Ex: https://media.transitsoftservices.com  ou  http://vps-ip:9000
+    // Si vide, les URLs presignees utilisent l'endpoint interne (dev local OK).
+    publicBaseUrl: process.env.MINIO_PUBLIC_BASE_URL || '',
   },
 
   jwt: {

@@ -49,6 +49,12 @@ function makeLogProvider(channelName: string): ExternalChannelProvider {
         `[STUB ${channelName}] message qui serait envoye`,
       );
     },
+    async sendDocument(to, url, filename, caption) {
+      logger.info(
+        { channel: channelName, to, url, filename, caption },
+        `[STUB ${channelName}] document qui serait envoye`,
+      );
+    },
   };
 }
 
@@ -187,30 +193,28 @@ function makeAfricasTalkingWhatsappProvider(): ExternalChannelProvider {
   const url = sandbox
     ? 'https://chat.sandbox.africastalking.com/whatsapp/message'
     : 'https://chat.africastalking.com/whatsapp/message';
+  const atSend = async (to: string, body: Record<string, unknown>) => {
+    const recipient = to.startsWith('+') ? to : `+${to.replace(/[^0-9]/g, '')}`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { apiKey, 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ username, waNumber: waFrom, phoneNumber: recipient, body }),
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      throw new Error(`Africa's Talking WhatsApp HTTP ${res.status}: ${txt.slice(0, 300)}`);
+    }
+  };
   return {
     name: 'africas-talking',
     enabled,
     async send(to, message) {
       if (!enabled) throw new Error('Africa\'s Talking WhatsApp provider non configure');
-      const recipient = to.startsWith('+') ? to : `+${to.replace(/[^0-9]/g, '')}`;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          apiKey,
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({
-          username,
-          waNumber: waFrom,
-          phoneNumber: recipient,
-          body: { type: 'PlainText', text: message },
-        }),
-      });
-      if (!res.ok) {
-        const txt = await res.text().catch(() => '');
-        throw new Error(`Africa's Talking WhatsApp HTTP ${res.status}: ${txt.slice(0, 300)}`);
-      }
+      await atSend(to, { type: 'PlainText', text: message });
+    },
+    async sendDocument(to, docUrl, filename, caption) {
+      if (!enabled) throw new Error('Africa\'s Talking WhatsApp provider non configure');
+      await atSend(to, { type: 'document', url: docUrl, filename, caption: caption ?? '' });
     },
   };
 }
@@ -225,32 +229,33 @@ function makeMetaWhatsappProvider(): ExternalChannelProvider {
       'Meta WhatsApp provider non active : WHATSAPP_ACCESS_TOKEN et/ou WHATSAPP_PHONE_NUMBER_ID manquant(s)',
     );
   }
+  const metaSend = async (recipient: string, payload: Record<string, unknown>) => {
+    const apiUrl = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`;
+    const res = await fetch(apiUrl, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messaging_product: 'whatsapp', recipient_type: 'individual', to: recipient, ...payload }),
+    });
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => '');
+      throw new Error(`Meta WhatsApp HTTP ${res.status}: ${errBody.slice(0, 300)}`);
+    }
+  };
   return {
     name: 'meta-cloud-api',
     enabled,
     async send(to, message) {
       if (!enabled) throw new Error('Meta WhatsApp provider non configure');
-      // Meta exige format E.164 sans le +, ex: 237691234567.
       const recipient = to.replace(/[^0-9]/g, '');
-      const url = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          recipient_type: 'individual',
-          to: recipient,
-          type: 'text',
-          text: { preview_url: false, body: message },
-        }),
+      await metaSend(recipient, { type: 'text', text: { preview_url: false, body: message } });
+    },
+    async sendDocument(to, docUrl, filename, caption) {
+      if (!enabled) throw new Error('Meta WhatsApp provider non configure');
+      const recipient = to.replace(/[^0-9]/g, '');
+      await metaSend(recipient, {
+        type: 'document',
+        document: { link: docUrl, filename, caption: caption ?? '' },
       });
-      if (!res.ok) {
-        const errBody = await res.text().catch(() => '');
-        throw new Error(`Meta WhatsApp HTTP ${res.status}: ${errBody.slice(0, 300)}`);
-      }
     },
   };
 }
@@ -283,28 +288,33 @@ function makeTwilioWhatsappProvider(): ExternalChannelProvider {
   };
   const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
   const auth = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+  const twilioSend = async (params: Record<string, string>) => {
+    const body = new URLSearchParams(params);
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      throw new Error(`Twilio WhatsApp HTTP ${res.status}: ${txt.slice(0, 300)}`);
+    }
+  };
   return {
     name: 'twilio',
     enabled,
     async send(to, message) {
       if (!enabled) throw new Error('Twilio WhatsApp provider non configure');
-      const body = new URLSearchParams({
+      await twilioSend({ To: toWhatsapp(to), From: toWhatsapp(from), Body: message });
+    },
+    async sendDocument(to, docUrl, filename, caption) {
+      if (!enabled) throw new Error('Twilio WhatsApp provider non configure');
+      await twilioSend({
         To: toWhatsapp(to),
         From: toWhatsapp(from),
-        Body: message,
+        Body: caption ?? filename,
+        MediaUrl0: docUrl,
       });
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          Authorization: `Basic ${auth}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: body.toString(),
-      });
-      if (!res.ok) {
-        const txt = await res.text().catch(() => '');
-        throw new Error(`Twilio WhatsApp HTTP ${res.status}: ${txt.slice(0, 300)}`);
-      }
     },
   };
 }
@@ -327,25 +337,36 @@ function makeWapinoWhatsappProvider(): ExternalChannelProvider {
       'Wapino WhatsApp provider non active : WAPINO_API_KEY et/ou WAPINO_INSTANCE manquant(s)',
     );
   }
+  const wapinoFetch = async (endpoint: string, body: Record<string, unknown>) => {
+    const res = await fetch(`https://api.wapino.consolidis.com/v1/messages/${endpoint}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      throw new Error(`Wapino WhatsApp HTTP ${res.status}: ${txt.slice(0, 300)}`);
+    }
+  };
   return {
     name: 'wapino',
     enabled,
     async send(to, message) {
       if (!enabled) throw new Error('Wapino WhatsApp provider non configure');
-      // Wapino attend le numero sans le +
       const number = to.replace(/[^0-9]/g, '');
-      const res = await fetch('https://api.wapino.consolidis.com/v1/messages/send-text', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ instance, number, text: message }),
+      await wapinoFetch('send-text', { instance, number, text: message });
+    },
+    async sendDocument(to, docUrl, filename, caption) {
+      if (!enabled) throw new Error('Wapino WhatsApp provider non configure');
+      const number = to.replace(/[^0-9]/g, '');
+      await wapinoFetch('send-media', {
+        instance,
+        number,
+        mediaUrl: docUrl,
+        type: 'document',
+        fileName: filename,
+        ...(caption ? { caption } : {}),
       });
-      if (!res.ok) {
-        const txt = await res.text().catch(() => '');
-        throw new Error(`Wapino WhatsApp HTTP ${res.status}: ${txt.slice(0, 300)}`);
-      }
     },
   };
 }
@@ -379,6 +400,23 @@ function makeProviderChain(
         }
       }
       throw lastErr ?? new Error(`All ${channelLabel} providers in chain failed`);
+    },
+    async sendDocument(to, url, filename, caption) {
+      let lastErr: unknown;
+      for (const p of providers) {
+        if (!p.enabled || !p.sendDocument) continue;
+        try {
+          await p.sendDocument(to, url, filename, caption);
+          return;
+        } catch (err) {
+          lastErr = err;
+          logger.warn(
+            { err, provider: p.name, channel: channelLabel },
+            `Provider ${p.name} sendDocument failed, trying next`,
+          );
+        }
+      }
+      if (lastErr) throw lastErr;
     },
   };
 }

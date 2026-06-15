@@ -5,6 +5,7 @@ import SettingsSystemPage from './SettingsSystemPage';
 import SettingsDebtBlockPage from './SettingsDebtBlockPage';
 import SettingsSitePage from './SettingsSitePage';
 import SettingsPaymentMethodsPage from './SettingsPaymentMethodsPage';
+import SettingsPaymentProvidersPage from './SettingsPaymentProvidersPage';
 import SettingsNotificationsPage from './SettingsNotificationsPage';
 import SettingsEmailPage from './SettingsEmailPage';
 
@@ -16,6 +17,7 @@ export const routes = [
   { path: 'settings/debt-block', element: <SettingsDebtBlockPage /> },
   { path: 'settings/site', element: <SettingsSitePage /> },
   { path: 'settings/payment-methods', element: <SettingsPaymentMethodsPage /> },
+  { path: 'settings/payment-providers', element: <SettingsPaymentProvidersPage /> },
   { path: 'settings/notifications', element: <SettingsNotificationsPage /> },
   { path: 'settings/email', element: <SettingsEmailPage /> },
 ];

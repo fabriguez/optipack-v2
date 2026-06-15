@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Settings, Globe, Trash2, Plus, Save, Award, Palette, Boxes, Layout, Mail, CreditCard, ShieldAlert } from 'lucide-react';
+import { Settings, Globe, Trash2, Plus, Save, Award, Palette, Boxes, Layout, Mail, CreditCard, ShieldAlert, Zap } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -95,6 +95,19 @@ export default function SettingsPage() {
                 <div>
                   <p className="text-sm font-medium">Methodes de paiement</p>
                   <p className="text-xs text-gray-500">Modes acceptes : especes, MoMo, virement, custom...</p>
+                </div>
+              </div>
+            </AppCard>
+          </Link>
+          <Link to="/settings/payment-providers" className="block">
+            <AppCard className="hover:border-primary-300 transition">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50">
+                  <Zap className="h-5 w-5 text-primary-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Providers de paiement</p>
+                  <p className="text-xs text-gray-500">TaraMoney, Campay, Stripe — credentials et fallback</p>
                 </div>
               </div>
             </AppCard>

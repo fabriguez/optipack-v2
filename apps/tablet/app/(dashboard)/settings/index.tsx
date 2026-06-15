@@ -64,6 +64,8 @@ export default function SettingsScreen() {
         <View style={{ height: 1, backgroundColor: colors.gray[100] }} />
         <Row icon="card-outline" label="Methodes de paiement" value="Especes, MoMo, virement..." onPress={() => router.push('/settings/payment-methods')} />
         <View style={{ height: 1, backgroundColor: colors.gray[100] }} />
+        <Row icon="flash-outline" label="Providers de paiement" value="TaraMoney, Campay, Stripe..." onPress={() => router.push('/settings/payment-providers')} />
+        <View style={{ height: 1, backgroundColor: colors.gray[100] }} />
         <Row icon="shield-outline" label="Blocage sur dettes" value="Seuils de blocage remise/creation" onPress={() => router.push('/settings/debt-block')} />
       </Card>
 
