@@ -159,30 +159,101 @@ router.get('/:id', authenticateClient, async (req, res, next) => {
  * IMPORTANT : ne pas wrapper avec authenticateClient -- les providers ne
  * voient pas notre JWT. La protection est cryptographique (signature payload).
  */
+
+type WebhookAttemptWithIntent = Awaited<ReturnType<typeof findAttemptByExternalRef>>;
+
+async function findAttemptByExternalRef(externalRef: string, providerName: string) {
+  return prisma.paymentAttempt.findFirst({
+    where: { externalRef, provider: providerName },
+    include: { intent: { include: { organization: { select: { paymentProvidersConfig: true } } } } },
+  });
+}
+
+async function applyWebhookOutcome(
+  attempt: NonNullable<WebhookAttemptWithIntent>,
+  parsed: { status: 'SUCCEEDED' | 'FAILED' | 'PENDING' | 'EXPIRED'; errorMessage?: string; raw?: unknown },
+  res: any,
+): Promise<void> {
+  if (parsed.status === 'SUCCEEDED') {
+    await prisma.paymentAttempt.update({
+      where: { id: attempt.id },
+      data: { status: 'SUCCEEDED', finishedAt: new Date(), providerPayload: (parsed.raw ?? null) as never },
+    });
+    await prisma.paymentIntent.update({
+      where: { id: attempt.intentId },
+      data: { status: 'SUCCEEDED' },
+    });
+    await settleIntentSafe(attempt.intentId);
+    realtimeService.toClient(attempt.intent.clientId, 'payment-intent:succeeded', {
+      intentId: attempt.intentId,
+    });
+  } else if (parsed.status === 'FAILED') {
+    await prisma.paymentAttempt.update({
+      where: { id: attempt.id },
+      data: { status: 'FAILED', finishedAt: new Date(), errorMessage: parsed.errorMessage, providerPayload: (parsed.raw ?? null) as never },
+    });
+    await prisma.paymentIntent.update({
+      where: { id: attempt.intentId },
+      data: { status: 'FAILED' },
+    });
+  }
+  res.json({ success: true });
+}
+
 const webhookRouter = Router();
+
+/**
+ * POST /webhooks/payment/taramoney/:intentId
+ * Route dediee TaraMoney : l'intentId est encode dans le path du webHookUrl
+ * envoye a l'API TaraMoney lors de l'initiation, car le payload webhook
+ * de l'API mobile payment TaraMoney ne contient pas de productId.
+ */
+webhookRouter.post('/taramoney/:intentId', async (req, res, next) => {
+  try {
+    const intentId = req.params.intentId;
+    const impl = getPaymentProvider('TARAMONEY');
+    if (!impl) return res.status(404).json({ success: false, message: 'Provider inconnu' });
+
+    const rawBody = (req as any).rawBody as Buffer | undefined;
+    if (!rawBody) return res.status(400).json({ success: false, message: 'Raw body manquant' });
+
+    // externalRef = intentId (voir TaraMoneyProvider.initiate)
+    const attempt = await findAttemptByExternalRef(intentId, 'TARAMONEY');
+    if (!attempt) return res.status(404).json({ success: false, message: 'Attempt introuvable' });
+
+    const tenantConfig = attempt.intent.organization.paymentProvidersConfig as TenantPaymentConfig | null;
+    const providerCfg = tenantConfig?.channels
+      ?.flatMap((c) => c.providers)
+      .find((p) => p.name.toUpperCase() === 'TARAMONEY');
+    if (!providerCfg) return res.status(400).json({ success: false, message: 'Config provider absente' });
+
+    if (!impl.verifyWebhook(req.headers, rawBody, providerCfg)) {
+      return res.status(401).json({ success: false, message: 'Signature invalide' });
+    }
+
+    const parsed = impl.parseWebhook(req.body, providerCfg);
+    await applyWebhookOutcome(attempt, parsed, res);
+  } catch (err) {
+    next(err);
+  }
+});
+
 webhookRouter.post('/:provider', async (req, res, next) => {
   try {
     const providerName = req.params.provider.toUpperCase();
     const impl = getPaymentProvider(providerName);
     if (!impl) return res.status(404).json({ success: false, message: 'Provider inconnu' });
 
-    // raw body : doit etre conserve par express.raw avant ce middleware.
     const rawBody = (req as any).rawBody as Buffer | undefined;
     if (!rawBody) {
       return res.status(400).json({ success: false, message: 'Raw body manquant' });
     }
 
-    // Le webhook ne porte pas l'organizationId : on resoud via externalRef -> attempt -> intent -> org -> config.
-    // Pour l'instant on verifie la signature avec une config "any" tirée d'un attempt existant.
-    // En l'absence de mapping, on rejette.
     const parsed = impl.parseWebhook(req.body, { name: providerName, priority: 0 });
     if (!parsed.externalRef) {
       return res.status(400).json({ success: false, message: 'externalRef manquant' });
     }
-    const attempt = await prisma.paymentAttempt.findFirst({
-      where: { externalRef: parsed.externalRef, provider: providerName },
-      include: { intent: { include: { organization: { select: { paymentProvidersConfig: true } } } } },
-    });
+    const attempt = await findAttemptByExternalRef(parsed.externalRef, providerName);
     if (!attempt) {
       return res.status(404).json({ success: false, message: 'Attempt introuvable' });
     }
@@ -197,33 +268,7 @@ webhookRouter.post('/:provider', async (req, res, next) => {
       return res.status(401).json({ success: false, message: 'Signature invalide' });
     }
 
-    // Mise a jour Intent + Attempt
-    if (parsed.status === 'SUCCEEDED') {
-      await prisma.paymentAttempt.update({
-        where: { id: attempt.id },
-        data: { status: 'SUCCEEDED', finishedAt: new Date(), providerPayload: (parsed.raw ?? null) as never },
-      });
-      await prisma.paymentIntent.update({
-        where: { id: attempt.intentId },
-        data: { status: 'SUCCEEDED' },
-      });
-      // Reglement : cree le Payment + solde la facture (idempotent).
-      await settleIntentSafe(attempt.intentId);
-      // Realtime : notifie le client
-      realtimeService.toClient(attempt.intent.clientId, 'payment-intent:succeeded', {
-        intentId: attempt.intentId,
-      });
-    } else if (parsed.status === 'FAILED') {
-      await prisma.paymentAttempt.update({
-        where: { id: attempt.id },
-        data: { status: 'FAILED', finishedAt: new Date(), errorMessage: parsed.errorMessage, providerPayload: (parsed.raw ?? null) as never },
-      });
-      await prisma.paymentIntent.update({
-        where: { id: attempt.intentId },
-        data: { status: 'FAILED' },
-      });
-    }
-    res.json({ success: true });
+    await applyWebhookOutcome(attempt, parsed, res);
   } catch (err) {
     next(err);
   }
