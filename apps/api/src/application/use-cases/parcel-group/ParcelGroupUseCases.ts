@@ -386,7 +386,7 @@ export class SendGroupInvoiceUseCase {
       where: { id: groupId },
       include: {
         invoice: true,
-        client: { select: { fullName: true, email: true } },
+        client: { select: { id: true, fullName: true, email: true } },
         parcels: true,
       },
     });
