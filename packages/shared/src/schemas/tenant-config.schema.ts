@@ -104,3 +104,22 @@ export const mobileAppConfigSchema = z.object({
     .optional(),
 });
 export type MobileAppConfig = z.infer<typeof mobileAppConfigSchema>;
+
+// ---- Notification channel config ----
+
+export const notificationChannelConfigSchema = z.object({
+  /** Canal email (Resend/SMTP). Actif par défaut. */
+  email: z.boolean().default(true),
+  /** Canal WhatsApp (Twilio → Wapino fallback). Actif par défaut. */
+  whatsapp: z.boolean().default(true),
+  /** Canal SMS. Inactif par défaut. */
+  sms: z.boolean().default(false),
+});
+export type NotificationChannelConfig = z.infer<typeof notificationChannelConfigSchema>;
+
+/** Defaults when Organization.notificationConfig is null. */
+export const DEFAULT_NOTIFICATION_CHANNEL_CONFIG: NotificationChannelConfig = {
+  email: true,
+  whatsapp: true,
+  sms: false,
+};

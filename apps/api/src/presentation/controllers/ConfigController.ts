@@ -1,6 +1,10 @@
 import type { Request, Response, NextFunction } from 'express';
 import { prisma } from '../../config/database';
 import { NotFoundError } from '../../domain/errors/BusinessError';
+import {
+  notificationChannelConfigSchema,
+  DEFAULT_NOTIFICATION_CHANNEL_CONFIG,
+} from '@transitsoftservices/shared';
 
 export class ConfigController {
   /**
@@ -162,6 +166,59 @@ export class ConfigController {
       await prisma.currency.delete({ where: { id } });
 
       res.json({ success: true, message: 'Devise supprimee' });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * GET /notification-channels
+   * Retourne la config des canaux de notification du tenant.
+   */
+  static async getNotificationChannels(req: Request, res: Response, next: NextFunction) {
+    try {
+      const organizationId = await ConfigController.getOrganizationId(req);
+      const org = await prisma.organization.findUnique({
+        where: { id: organizationId },
+        select: { notificationConfig: true },
+      });
+      const raw = org?.notificationConfig ?? null;
+      const parsed = notificationChannelConfigSchema.safeParse(raw ?? DEFAULT_NOTIFICATION_CHANNEL_CONFIG);
+      const data = parsed.success ? parsed.data : DEFAULT_NOTIFICATION_CHANNEL_CONFIG;
+      res.json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * PATCH /notification-channels
+   * Active ou desactive des canaux de notification pour le tenant.
+   * Body : { email?: boolean, whatsapp?: boolean, sms?: boolean }
+   */
+  static async updateNotificationChannels(req: Request, res: Response, next: NextFunction) {
+    try {
+      const organizationId = await ConfigController.getOrganizationId(req);
+      const org = await prisma.organization.findUnique({
+        where: { id: organizationId },
+        select: { notificationConfig: true },
+      });
+      const existing = notificationChannelConfigSchema.safeParse(
+        org?.notificationConfig ?? DEFAULT_NOTIFICATION_CHANNEL_CONFIG,
+      );
+      const current = existing.success ? existing.data : DEFAULT_NOTIFICATION_CHANNEL_CONFIG;
+
+      const patch = notificationChannelConfigSchema.partial().safeParse(req.body);
+      if (!patch.success) {
+        return res.status(400).json({ success: false, message: 'Body invalide', errors: patch.error.flatten() });
+      }
+
+      const updated = { ...current, ...patch.data };
+      await prisma.organization.update({
+        where: { id: organizationId },
+        data: { notificationConfig: updated },
+      });
+      res.json({ success: true, data: updated });
     } catch (err) {
       next(err);
     }

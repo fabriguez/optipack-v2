@@ -45,6 +45,10 @@ model Organization {
   //   dkimStatus?: 'pending'|'verified'|'failed' }
   // Si null, on retombe sur le sender partage OptiPack ("via OptiPack").
   emailConfig            Json?
+  // Canaux de notification actifs pour ce tenant.
+  // { email: true, whatsapp: true, sms: false }
+  // L'admin peut activer/désactiver chaque canal via /settings/notifications.
+  notificationConfig     Json?
   // Configuration de l'app mobile (white-label).
   // { appName, iconUrl, splashUrl, primaryColor, packageId?, bundleId?,
   //   mode: 'shared'|'white_label',

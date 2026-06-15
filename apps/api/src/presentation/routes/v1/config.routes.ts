@@ -40,6 +40,10 @@ router.patch('/config/debt-block', adminOnly, requirePermission('system.config')
   } catch (err) { next(err); }
 });
 
+// Notification channels (enable/disable EMAIL, WHATSAPP, SMS per tenant)
+router.get('/notification-channels', adminOnly, requirePermission('settings.read'), ConfigController.getNotificationChannels);
+router.patch('/notification-channels', adminOnly, requirePermission('system.config'), ConfigController.updateNotificationChannels);
+
 // Currencies
 router.get('/currencies', adminOnly, requirePermission('settings.read'), ConfigController.listCurrencies);
 router.post('/currencies', adminOnly, requirePermission('system.config'), ConfigController.createCurrency);

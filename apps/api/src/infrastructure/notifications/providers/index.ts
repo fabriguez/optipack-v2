@@ -2,14 +2,19 @@
  * Initialisation des providers de canaux externes au demarrage de l'API.
  *
  * Activation par env vars :
- *   - SMS_PROVIDER         : 'twilio' | 'africas-talking' | 'vonage' | 'log' (defaut: 'log')
- *   - WHATSAPP_PROVIDER    : 'twilio' | 'meta' | 'africas-talking' | 'log' (defaut: 'log')
+ *   - SMS_PROVIDER              : 'twilio' | 'africas-talking' | 'vonage' | 'log' (defaut: 'log')
+ *   - WHATSAPP_PROVIDER_CHAIN   : liste ordonnee de providers a enchaîner en fallback
+ *                                 ex: 'twilio,wapino' (essaie twilio, puis wapino si echec)
+ *                                 Valeurs : 'twilio' | 'wapino' | 'meta' | 'africas-talking' | 'log'
+ *                                 Defaut : 'twilio,wapino'
+ *   - PUSH_PROVIDER             : 'expo' | 'fcm' | 'log' (defaut: 'log')
  *
  * Credentials Twilio WhatsApp :
- *   TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN
- *   TWILIO_WHATSAPP_FROM (numero expediteur E.164, ex: +14155238886 sandbox)
- *   - PUSH_PROVIDER        : 'expo' | 'fcm' | 'log' (defaut: 'log')
- *     'expo' : push via ExpoPushToken (aucune credential serveur requise).
+ *   TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_FROM (E.164)
+ *
+ * Credentials Wapino WhatsApp :
+ *   WAPINO_API_KEY    (Bearer token, ex: wp_live_...)
+ *   WAPINO_INSTANCE   (nom de l'instance Wapino, ex: "OptiPack")
  *
  * Credentials Africa's Talking (SMS + WhatsApp partagent username/apiKey) :
  *   AT_USERNAME, AT_API_KEY
@@ -304,6 +309,80 @@ function makeTwilioWhatsappProvider(): ExternalChannelProvider {
   };
 }
 
+/**
+ * Wapino WhatsApp provider.
+ * Doc : https://wapino.consolidis.com/docs
+ * Env :
+ *   WAPINO_API_KEY      Bearer token (ex: wp_live_...)
+ *   WAPINO_INSTANCE     Nom de l'instance Wapino (ex: "OptiPack")
+ *
+ * number format : international sans le +, ex 237690000000
+ */
+function makeWapinoWhatsappProvider(): ExternalChannelProvider {
+  const apiKey = process.env.WAPINO_API_KEY ?? '';
+  const instance = process.env.WAPINO_INSTANCE ?? '';
+  const enabled = !!apiKey && !!instance;
+  if (!enabled) {
+    logger.warn(
+      'Wapino WhatsApp provider non active : WAPINO_API_KEY et/ou WAPINO_INSTANCE manquant(s)',
+    );
+  }
+  return {
+    name: 'wapino',
+    enabled,
+    async send(to, message) {
+      if (!enabled) throw new Error('Wapino WhatsApp provider non configure');
+      // Wapino attend le numero sans le +
+      const number = to.replace(/[^0-9]/g, '');
+      const res = await fetch('https://api.wapino.consolidis.com/v1/messages/send-text', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ instance, number, text: message }),
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(`Wapino WhatsApp HTTP ${res.status}: ${txt.slice(0, 300)}`);
+      }
+    },
+  };
+}
+
+/**
+ * Construit une chaine de fallback a partir d'une liste ordonnee de providers.
+ * Essaie chaque provider dans l'ordre ; passe au suivant si le precedent echoue.
+ * Seuls les providers enabled sont tentes.
+ */
+function makeProviderChain(
+  channelLabel: string,
+  providers: ExternalChannelProvider[],
+): ExternalChannelProvider {
+  const enabled = providers.some(p => p.enabled);
+  return {
+    name: providers.map(p => p.name).join('→'),
+    enabled,
+    async send(to, message, meta) {
+      let lastErr: unknown;
+      for (const p of providers) {
+        if (!p.enabled) continue;
+        try {
+          await p.send(to, message, meta);
+          return;
+        } catch (err) {
+          lastErr = err;
+          logger.warn(
+            { err, provider: p.name, channel: channelLabel },
+            `Provider ${p.name} failed, trying next in chain`,
+          );
+        }
+      }
+      throw lastErr ?? new Error(`All ${channelLabel} providers in chain failed`);
+    },
+  };
+}
+
 function makeFcmPushProvider(): ExternalChannelProvider {
   return {
     name: 'fcm',
@@ -362,10 +441,27 @@ function makeExpoPushProvider(): ExternalChannelProvider {
   };
 }
 
+function resolveWhatsappProvider(name: string): ExternalChannelProvider | null {
+  switch (name) {
+    case 'twilio': return makeTwilioWhatsappProvider();
+    case 'wapino': return makeWapinoWhatsappProvider();
+    case 'meta': return makeMetaWhatsappProvider();
+    case 'africas-talking': return makeAfricasTalkingWhatsappProvider();
+    case 'log': return makeLogProvider('WHATSAPP');
+    default: return null;
+  }
+}
+
 export function registerNotificationProviders(): void {
   const smsKind = (process.env.SMS_PROVIDER ?? 'log').toLowerCase();
-  const waKind = (process.env.WHATSAPP_PROVIDER ?? 'log').toLowerCase();
   const pushKind = (process.env.PUSH_PROVIDER ?? 'log').toLowerCase();
+
+  // WhatsApp : chaine de fallback ordonnee.
+  // WHATSAPP_PROVIDER_CHAIN=twilio,wapino (essaie twilio d'abord, wapino si echec)
+  // Retombe sur WHATSAPP_PROVIDER pour compatibilite ascendante.
+  const waChainRaw = process.env.WHATSAPP_PROVIDER_CHAIN ?? process.env.WHATSAPP_PROVIDER ?? 'twilio,wapino';
+  const waChainNames = waChainRaw.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+  const waProviders = waChainNames.map(resolveWhatsappProvider).filter((p): p is ExternalChannelProvider => p !== null);
 
   setSmsProvider(
     smsKind === 'twilio' ? makeTwilioSmsProvider()
@@ -374,13 +470,15 @@ export function registerNotificationProviders(): void {
     : smsKind === 'log' ? makeLogProvider('SMS')
     : null,
   );
-  setWhatsappProvider(
-    waKind === 'twilio' ? makeTwilioWhatsappProvider()
-    : waKind === 'meta' ? makeMetaWhatsappProvider()
-    : waKind === 'africas-talking' ? makeAfricasTalkingWhatsappProvider()
-    : waKind === 'log' ? makeLogProvider('WHATSAPP')
-    : null,
-  );
+
+  if (waProviders.length === 0) {
+    setWhatsappProvider(null);
+  } else if (waProviders.length === 1) {
+    setWhatsappProvider(waProviders[0]);
+  } else {
+    setWhatsappProvider(makeProviderChain('WHATSAPP', waProviders));
+  }
+
   setPushProvider(
     pushKind === 'expo' ? makeExpoPushProvider()
     : pushKind === 'fcm' ? makeFcmPushProvider()
@@ -389,7 +487,7 @@ export function registerNotificationProviders(): void {
   );
 
   logger.info(
-    { smsKind, waKind, pushKind },
+    { smsKind, waChain: waChainNames, pushKind },
     'Notification providers registered',
   );
 }

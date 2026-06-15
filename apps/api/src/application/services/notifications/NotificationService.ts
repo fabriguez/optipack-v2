@@ -1,4 +1,9 @@
 import { injectable } from 'tsyringe';
+import { prisma } from '../../../config/database';
+import {
+  notificationChannelConfigSchema,
+  DEFAULT_NOTIFICATION_CHANNEL_CONFIG,
+} from '@transitsoftservices/shared';
 import {
   deliverEmail,
   deliverInApp,
@@ -13,19 +18,18 @@ import type {
   NotificationTarget,
 } from './types';
 
-const DEFAULT_CHANNELS: NotificationChannel[] = ['IN_APP'];
+// Par defaut : IN_APP + EMAIL + WHATSAPP sur toutes les notifications.
+const DEFAULT_CHANNELS: NotificationChannel[] = ['IN_APP', 'EMAIL', 'WHATSAPP'];
 
 /**
  * Service principal de notification. Point d'entree unique pour declencher
  * une notification multi-canal a partir d'un evenement metier.
  *
  * Comportement :
- *  - IN_APP est toujours inclus implicitement (sauf si exclu explicitement
- *    en passant un tableau qui ne le contient pas)
- *  - Chaque canal est best-effort : un echec d'email n'annule pas le SMS
- *  - Chaque canal cree son propre row Notification pour audit + statut
- *  - Les providers externes (SMS / WhatsApp / Push) sont SKIPPED si non
- *    configures -- pas d'erreur, pas de blocage
+ *  - Canaux par defaut : IN_APP + EMAIL + WHATSAPP (configurable par tenant)
+ *  - Chaque canal est best-effort : un echec d'email n'annule pas le WhatsApp
+ *  - Les canaux desactives par le tenant sont SKIPPED avant dispatch
+ *  - Les providers externes sont SKIPPED si non configures (pas d'erreur)
  *
  * Utilisation typique :
  *   await notificationService.notify(
@@ -44,12 +48,13 @@ export class NotificationService {
     target: NotificationTarget,
     payload: NotificationPayload,
   ): Promise<NotificationResult> {
-    const channels = payload.channels && payload.channels.length > 0
+    const requested = payload.channels && payload.channels.length > 0
       ? payload.channels
       : DEFAULT_CHANNELS;
 
-    // Lancement en parallele : pas de raison qu'IN_APP attende le SMS.
-    // Chaque canal renvoie son propre ChannelDeliveryResult.
+    // Filtrer les canaux desactives par le tenant.
+    const channels = await this.filterByTenantConfig(target, requested);
+
     const tasks: Promise<import('./types').ChannelDeliveryResult>[] = [];
     for (const channel of channels) {
       switch (channel) {
@@ -72,6 +77,51 @@ export class NotificationService {
     }
     const results = await Promise.all(tasks);
     return { results };
+  }
+
+  /**
+   * Retire de la liste les canaux que le tenant a desactives.
+   * IN_APP n'est jamais filtre (canal interne, pas de cout reseau).
+   */
+  private async filterByTenantConfig(
+    target: NotificationTarget,
+    channels: NotificationChannel[],
+  ): Promise<NotificationChannel[]> {
+    const orgId = target.organizationId ?? await this.resolveOrgId(target);
+    if (!orgId) return channels;
+
+    const org = await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { notificationConfig: true },
+    });
+
+    const raw = org?.notificationConfig ?? null;
+    const parsed = notificationChannelConfigSchema.safeParse(raw ?? DEFAULT_NOTIFICATION_CHANNEL_CONFIG);
+    const cfg = parsed.success ? parsed.data : DEFAULT_NOTIFICATION_CHANNEL_CONFIG;
+
+    return channels.filter(ch => {
+      if (ch === 'IN_APP' || ch === 'PUSH') return true;
+      if (ch === 'EMAIL') return cfg.email;
+      if (ch === 'WHATSAPP') return cfg.whatsapp;
+      if (ch === 'SMS') return cfg.sms;
+      return true;
+    });
+  }
+
+  private async resolveOrgId(target: NotificationTarget): Promise<string | null> {
+    if (target.clientId) {
+      const c = await prisma.client.findUnique({ where: { id: target.clientId }, select: { organizationId: true } });
+      if (c?.organizationId) return c.organizationId;
+    }
+    if (target.userId) {
+      const u = await prisma.user.findUnique({ where: { id: target.userId }, select: { organizationId: true } });
+      if (u?.organizationId) return u.organizationId;
+    }
+    if (target.agencyId) {
+      const a = await prisma.agency.findUnique({ where: { id: target.agencyId }, select: { organizationId: true } });
+      if (a?.organizationId) return a.organizationId;
+    }
+    return null;
   }
 }
 
