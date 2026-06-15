@@ -9,6 +9,7 @@ import { StripeCardForm } from './StripeCardForm';
 type Tab = 'mobile_money' | 'card' | 'cash';
 
 interface Props {
+  /** Solde restant (montant max). */
   amount: number;
   currency: string;
   reference: string;
@@ -28,6 +29,15 @@ const TAB_META: Record<Tab, { label: string; Icon: typeof CreditCard }> = {
 export function CheckoutPanel(props: Props) {
   const methods = props.methods ?? ['mobile_money', 'card'];
   const [tab, setTab] = useState<Tab>(methods[0]);
+  const [rawAmount, setRawAmount] = useState(String(props.amount));
+  const parsedAmount = Math.round(Number(rawAmount) || 0);
+  const payAmount = Math.min(Math.max(parsedAmount, 1), props.amount);
+  const amountError =
+    parsedAmount > props.amount
+      ? `Maximum : ${props.amount.toLocaleString('fr-FR')} ${props.currency}`
+      : parsedAmount <= 0
+        ? 'Montant invalide'
+        : null;
 
   return (
     <div className="p-6 space-y-5 skin-card">
@@ -38,23 +48,51 @@ export function CheckoutPanel(props: Props) {
         >
           Paiement
         </p>
-        <div
-          className="mt-1 flex items-baseline gap-2 skin-font-heading"
-          style={{ color: 'var(--skin-foreground)' }}
-        >
-          <span className="text-3xl font-bold">
-            {props.amount.toLocaleString('fr-FR')}
-          </span>
-          <span className="text-base" style={{ color: 'var(--skin-muted)' }}>
-            {props.currency}
-          </span>
-        </div>
         <p
           className="mt-1 text-xs"
           style={{ color: 'var(--skin-muted)' }}
         >
           {props.referenceType} #{props.reference}
         </p>
+      </div>
+
+      {/* Saisie du montant (acompte possible) */}
+      <div>
+        <label
+          className="block text-xs font-semibold mb-1"
+          style={{ color: 'var(--skin-foreground)' }}
+        >
+          Montant a payer
+        </label>
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            min={1}
+            max={props.amount}
+            value={rawAmount}
+            onChange={(e) => setRawAmount(e.target.value)}
+            className="flex-1 px-3 py-2 text-lg font-semibold skin-radius border outline-none"
+            style={{
+              background: 'var(--skin-background)',
+              color: 'var(--skin-foreground)',
+              borderColor: amountError ? '#dc2626' : 'var(--skin-border)',
+            }}
+          />
+          <span className="text-sm font-medium" style={{ color: 'var(--skin-muted)' }}>
+            {props.currency}
+          </span>
+        </div>
+        {amountError ? (
+          <p className="mt-1 text-xs" style={{ color: '#dc2626' }}>{amountError}</p>
+        ) : parsedAmount < props.amount ? (
+          <p className="mt-1 text-xs" style={{ color: 'var(--skin-muted)' }}>
+            Acompte — solde restant apres : {(props.amount - parsedAmount).toLocaleString('fr-FR')} {props.currency}
+          </p>
+        ) : (
+          <p className="mt-1 text-xs" style={{ color: 'var(--skin-muted)' }}>
+            Solde total : {props.amount.toLocaleString('fr-FR')} {props.currency}
+          </p>
+        )}
       </div>
 
       <div
@@ -94,6 +132,7 @@ export function CheckoutPanel(props: Props) {
           {tab === 'mobile_money' && (
             <MobileMoneyForm
               amount={props.amount}
+              payAmount={payAmount}
               currency={props.currency}
               reference={props.reference}
               referenceType={props.referenceType}
@@ -103,7 +142,7 @@ export function CheckoutPanel(props: Props) {
           )}
           {tab === 'card' && (
             <StripeCardForm
-              amount={props.amount}
+              amount={payAmount}
               currency={props.currency}
               reference={props.reference}
               referenceType={props.referenceType}

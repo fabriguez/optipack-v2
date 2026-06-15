@@ -10,7 +10,10 @@ import { Field } from '@/components/auth/Field';
 import { AppPhoneInput } from '@/components/ui/AppPhoneInput';
 
 interface Props {
+  /** Solde max (pour affichage fallback chain). */
   amount: number;
+  /** Montant effectivement a debiter (acompte ou total). Defaut = amount. */
+  payAmount?: number;
   currency: string;
   reference: string;
   referenceType: 'PARCEL' | 'INVOICE' | 'TOPUP';
@@ -22,10 +25,11 @@ export function MobileMoneyForm(props: Props) {
   const [phone, setPhone] = useState(props.customer.phone ?? '');
   const [preferred, setPreferred] = useState<string | undefined>();
   const { createMutation, order, reset } = useCheckout();
+  const payAmount = props.payAmount ?? props.amount;
 
   const chain = usePreviewChain({
     kind: 'mobile_money',
-    amount: props.amount,
+    amount: payAmount,
     currency: props.currency,
     phone,
     preferredProvider: preferred,
@@ -41,7 +45,7 @@ export function MobileMoneyForm(props: Props) {
     if (!phone) return;
     createMutation.mutate({
       kind: 'mobile_money',
-      amount: props.amount,
+      amount: payAmount,
       currency: props.currency,
       phone,
       preferredProvider: preferred,
@@ -130,7 +134,7 @@ export function MobileMoneyForm(props: Props) {
           <Loader2 className="h-4 w-4 animate-spin" />
         ) : (
           <>
-            Payer {props.amount.toLocaleString('fr-FR')} {props.currency}
+            Payer {payAmount.toLocaleString('fr-FR')} {props.currency}
             <ArrowRight className="h-4 w-4" />
           </>
         )}

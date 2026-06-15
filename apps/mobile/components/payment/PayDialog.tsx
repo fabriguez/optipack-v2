@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Modal, View, Text, Pressable, ActivityIndicator, Alert, Linking } from 'react-native';
+import { Modal, View, Text, Pressable, ActivityIndicator, Alert, Linking, TextInput } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { portalApi } from '@/lib/api/portal';
@@ -32,21 +32,24 @@ export function PayDialog({ open, onClose, invoiceId, amount, invoiceReference }
   const [phone, setPhone] = useState(user?.phone ?? '');
   const [country, setCountry] = useState('CM');
   const [intentId, setIntentId] = useState<string | null>(null);
+  const [payAmountRaw, setPayAmountRaw] = useState(String(amount));
+  const payAmount = Math.min(Math.max(Math.round(Number(payAmountRaw) || 0), 1), amount);
 
   useEffect(() => {
     if (open) {
       setStep('pick');
       setIntentId(null);
       setPhone(user?.phone ?? '');
+      setPayAmountRaw(String(amount));
     }
-  }, [open, user?.phone]);
+  }, [open, user?.phone, amount]);
 
   const initiate = useMutation({
     mutationFn: () =>
       portalApi.initiatePayment({
         invoiceId,
         channel,
-        amount,
+        amount: payAmount,
         country,
         payerPhone: channel === 'MOBILE_MONEY' ? phone : undefined,
         payerEmail: user?.email,
@@ -89,6 +92,10 @@ export function PayDialog({ open, onClose, invoiceId, amount, invoiceReference }
   }, [status, qc, onClose]);
 
   const onSubmit = () => {
+    if (payAmount <= 0 || payAmount > amount) {
+      Alert.alert('Montant invalide', `Entrez un montant entre 1 et ${formatAmount(amount)}.`);
+      return;
+    }
     if (channel === 'MOBILE_MONEY' && phone.replace(/[^0-9]/g, '').length < 8) {
       Alert.alert('Numero invalide');
       return;
@@ -109,7 +116,32 @@ export function PayDialog({ open, onClose, invoiceId, amount, invoiceReference }
               <Ionicons name="close" size={22} color={colors.gray[500]} />
             </Pressable>
           </View>
-          <Text style={{ fontSize: 22, fontWeight: '700', color: colors.primary[700] }}>{formatAmount(amount)}</Text>
+          {/* Input montant (acompte) */}
+          <View>
+            <Text style={{ fontSize: 12, color: colors.gray[600], marginBottom: 4 }}>Montant a payer</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <TextInput
+                value={payAmountRaw}
+                onChangeText={setPayAmountRaw}
+                keyboardType="numeric"
+                style={{
+                  flex: 1, fontSize: 22, fontWeight: '700', color: colors.primary[700],
+                  borderWidth: 1, borderColor: colors.gray[200], borderRadius: radius.md,
+                  paddingHorizontal: 12, paddingVertical: 8,
+                }}
+              />
+              <Text style={{ fontSize: 13, color: colors.gray[500] }}>XAF</Text>
+            </View>
+            {payAmount < amount ? (
+              <Text style={{ fontSize: 11, color: colors.gray[500], marginTop: 3 }}>
+                Acompte — reste : {formatAmount(amount - payAmount)}
+              </Text>
+            ) : (
+              <Text style={{ fontSize: 11, color: colors.gray[500], marginTop: 3 }}>
+                Solde total : {formatAmount(amount)}
+              </Text>
+            )}
+          </View>
 
           {step === 'pick' && (
             <View style={{ gap: 8 }}>

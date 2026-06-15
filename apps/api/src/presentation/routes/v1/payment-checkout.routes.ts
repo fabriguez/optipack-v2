@@ -159,15 +159,21 @@ router.post('/payments/checkout', authenticateClient, async (req, res, next) => 
       return res.status(400).json({ success: false, message: 'kind et amount requis' });
     }
 
-    const invoice = await prisma.invoice.findUnique({
-      where: { id: reference },
-      select: { id: true, clientId: true, balance: true, currency: true, reference: true, agency: { select: { organizationId: true } } },
-    });
+    // `reference` peut etre un UUID (id) ou une reference lisible (FAC-...).
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(reference);
+    const invoice = await (isUuid
+      ? prisma.invoice.findUnique({ where: { id: reference }, select: { id: true, clientId: true, balance: true, currency: true, reference: true, agency: { select: { organizationId: true } } } })
+      : prisma.invoice.findFirst({ where: { reference }, select: { id: true, clientId: true, balance: true, currency: true, reference: true, agency: { select: { organizationId: true } } } }));
     if (!invoice || invoice.clientId !== clientId) {
       return res.status(404).json({ success: false, message: 'Facture introuvable' });
     }
-    if (Number(invoice.balance ?? 0) <= 0) {
+    const balance = Number(invoice.balance ?? 0);
+    if (balance <= 0) {
       return res.status(400).json({ success: false, message: 'Facture deja payee' });
+    }
+    const requestedAmount = Number(amount);
+    if (!requestedAmount || requestedAmount <= 0 || requestedAmount > balance) {
+      return res.status(400).json({ success: false, message: `Montant invalide (max : ${balance})` });
     }
 
     const channelMap: Record<string, string> = {
