@@ -141,6 +141,23 @@ async function getAgencyAdminEmails(agencyId: string): Promise<string[]> {
   }
 }
 
+async function getAgencyAdmins(agencyId: string): Promise<{ id: string; email: string; phone: string | null }[]> {
+  try {
+    const users = await prisma.user.findMany({
+      where: {
+        isActive: true,
+        email: { not: '' },
+        role: { in: ['ADMIN', 'SUPER_ADMIN'] as any },
+        userAgencies: { some: { agencyId } },
+      },
+      select: { id: true, email: true, phone: true },
+    });
+    return users.filter(u => u.email) as { id: string; email: string; phone: string | null }[];
+  } catch {
+    return [];
+  }
+}
+
 function registerHandlers() {
   // PARCEL_CREATED
   eventBus.on(DomainEvents.PARCEL_CREATED, async (event: DomainEvent) => {
@@ -585,15 +602,26 @@ function registerHandlers() {
         metadata: { containerId, parcelCount, kind: 'CONTAINER_DEPARTED' } as Prisma.InputJsonValue,
       });
 
-      const adminEmails = agencyId ? await getAgencyAdminEmails(agencyId) : [];
-      for (const e of adminEmails) {
+      const admins = agencyId ? await getAgencyAdmins(agencyId) : [];
+      for (const a of admins) {
         await emailService.send(
-          e,
+          a.email,
           `Conteneur ${container.designation || container.id} parti`,
           `<p>Depart : <strong>${container.designation || container.id}</strong></p><p>Colis embarques : <strong>${parcelCount || 0}</strong></p>`,
           organizationId,
           { event: 'CONTAINER_DEPARTED' },
         );
+        if (a.phone) {
+          await notificationService.notify(
+            { userId: a.id, phone: a.phone, organizationId: organizationId ?? undefined },
+            {
+              title: 'Conteneur parti',
+              message: `Conteneur ${container.designation || container.id} est parti avec ${parcelCount || 0} colis.`,
+              channels: ['WHATSAPP'],
+              metadata: { containerId, parcelCount, kind: 'CONTAINER_DEPARTED' },
+            },
+          ).catch(() => {});
+        }
       }
     } catch (err) {
       logger.warn({ err }, 'Erreur handler CONTAINER_DEPARTED');
@@ -618,15 +646,26 @@ function registerHandlers() {
         metadata: { containerId, parcelCount, kind: 'CONTAINER_ARRIVED' } as Prisma.InputJsonValue,
       });
 
-      const adminEmails = agencyId ? await getAgencyAdminEmails(agencyId) : [];
-      for (const e of adminEmails) {
+      const admins = agencyId ? await getAgencyAdmins(agencyId) : [];
+      for (const a of admins) {
         await emailService.send(
-          e,
+          a.email,
           `Conteneur ${container.designation || container.id} arrive`,
           `<p>Arrivee : <strong>${container.designation || container.id}</strong></p><p>Colis a decharger : <strong>${parcelCount || 0}</strong></p>`,
           organizationId,
           { event: 'CONTAINER_ARRIVED' },
         );
+        if (a.phone) {
+          await notificationService.notify(
+            { userId: a.id, phone: a.phone, organizationId: organizationId ?? undefined },
+            {
+              title: 'Conteneur arrive',
+              message: `Conteneur ${container.designation || container.id} arrive. ${parcelCount || 0} colis a decharger.`,
+              channels: ['WHATSAPP'],
+              metadata: { containerId, parcelCount, kind: 'CONTAINER_ARRIVED' },
+            },
+          ).catch(() => {});
+        }
       }
     } catch (err) {
       logger.warn({ err }, 'Erreur handler CONTAINER_ARRIVED');

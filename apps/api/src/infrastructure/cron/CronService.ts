@@ -210,7 +210,7 @@ async function checkDebtAlerts(): Promise<void> {
   for (const debt of debts) {
     const channels = debt.priority === 'CRITICAL'
       ? (['IN_APP', 'EMAIL', 'SMS', 'WHATSAPP'] as const)
-      : (['IN_APP', 'EMAIL'] as const);
+      : (['IN_APP', 'EMAIL', 'WHATSAPP'] as const);
     const dueDate = debt.nextDueDate?.toLocaleDateString('fr-FR') ?? '-';
     const amount = Number(debt.remainingAmount).toLocaleString();
     try {

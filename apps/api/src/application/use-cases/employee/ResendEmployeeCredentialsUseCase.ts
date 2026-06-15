@@ -2,8 +2,10 @@ import { injectable } from 'tsyringe';
 import bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
 import { prisma } from '../../../config/database';
+import { config } from '../../../config/index';
 import { BusinessError, NotFoundError } from '../../../domain/errors/BusinessError';
 import { emailService } from '../../../infrastructure/email/EmailService';
+import { notificationService } from '../../services/notifications/NotificationService';
 
 function generatePassword(): string {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
@@ -105,6 +107,21 @@ export class ResendEmployeeCredentialsUseCase {
       organizationId,
       employee.phone ?? null,
     );
+
+    if (employee.phone) {
+      const waMsg =
+        `Bonjour ${employee.fullName} ! Vos acces au portail employe ont ete renouveles.\n\n` +
+        `Email : ${email}\n` +
+        `Mot de passe : ${plainPassword}\n\n` +
+        `Connectez-vous sur : ${config.webUrl}\n\n` +
+        `Changez votre mot de passe apres la premiere connexion.`;
+      notificationService
+        .notify(
+          { userId: employee.user?.id, phone: employee.phone, organizationId: organizationId ?? undefined },
+          { title: 'Vos acces employe', message: waMsg, channels: ['WHATSAPP'] },
+        )
+        .catch(() => {});
+    }
 
     return { ok: true, email, passwordReset: true };
   }

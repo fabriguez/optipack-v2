@@ -58,7 +58,7 @@ const CLIENT_OTP_MAX_ATTEMPTS = 5;
 const CLIENT_RESET_CHANNELS: NotificationChannel[] = ['EMAIL', 'SMS', 'WHATSAPP'];
 // Confirmation apres changement/reinitialisation du mot de passe client. Email +
 // SMS (l'user peut ne pas etre connecte). Best-effort, ne bloque jamais l'action.
-const CLIENT_PASSWORD_CHANGED_CHANNELS: NotificationChannel[] = ['EMAIL', 'SMS'];
+const CLIENT_PASSWORD_CHANGED_CHANNELS: NotificationChannel[] = ['EMAIL', 'SMS', 'WHATSAPP'];
 const CLIENT_PASSWORD_CHANGED_MESSAGE =
   'Votre mot de passe vient d\'etre modifie avec succes. ' +
   "Si vous n'etes pas a l'origine de cette action, contactez immediatement le support.";

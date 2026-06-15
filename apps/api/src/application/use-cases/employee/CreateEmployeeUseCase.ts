@@ -5,7 +5,9 @@ import { EMPLOYEE_REPOSITORY, type IEmployeeRepository } from '../../interfaces/
 import { PayrollChargeService } from '../../services/PayrollChargeService';
 import { prisma } from '../../../config/database';
 import { BusinessError } from '../../../domain/errors/BusinessError';
+import { config } from '../../../config/index';
 import { emailService } from '../../../infrastructure/email/EmailService';
+import { notificationService } from '../../services/notifications/NotificationService';
 import { provisionClientPortalAccess } from '../../services/ClientPortalAccessService';
 
 interface CreateEmployeeInput {
@@ -189,6 +191,20 @@ export class CreateEmployeeUseCase {
         emailService
           .sendEmployeePortalCredentials(input.email, input.fullName, input.email, initialPassword, organizationId ?? null, input.phone ?? null)
           .catch(() => {});
+        if (input.phone) {
+          const waMsg =
+            `Bonjour ${input.fullName} ! Votre compte employe a ete cree.\n\n` +
+            `Email : ${input.email}\n` +
+            `Mot de passe : ${initialPassword}\n\n` +
+            `Connectez-vous sur : ${config.webUrl}\n\n` +
+            `Changez votre mot de passe apres la premiere connexion.`;
+          notificationService
+            .notify(
+              { userId: user.id, phone: input.phone, organizationId: organizationId ?? undefined },
+              { title: 'Vos acces employe', message: waMsg, channels: ['WHATSAPP'] },
+            )
+            .catch(() => {});
+        }
       }
     }
 

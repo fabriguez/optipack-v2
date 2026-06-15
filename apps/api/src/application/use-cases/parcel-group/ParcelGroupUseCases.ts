@@ -3,6 +3,7 @@ import { prisma } from '../../../config/database';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
 import { generateReference } from '@transitsoftservices/shared';
 import { emailService } from '../../../infrastructure/email/EmailService';
+import { notificationService } from '../../services/notifications/NotificationService';
 import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 import { config } from '../../../config';
 import { PricingService } from '../../services/PricingService';
@@ -409,6 +410,21 @@ export class SendGroupInvoiceUseCase {
         `<p><a href="${url}">Voir la facture en ligne</a></p>`,
       ].join(''),
     );
+
+    notificationService
+      .notify(
+        { clientId: group.client.id },
+        {
+          title: `Facture groupee ${invoice.reference}`,
+          message:
+            `Bonjour ${group.client.fullName}, votre facture groupee ${invoice.reference} est disponible.\n` +
+            `${group.parcels.length} colis - Total : ${total.toLocaleString()} XAF\n` +
+            `Consulter : ${url}`,
+          channels: ['WHATSAPP'],
+          metadata: { invoiceId: invoice.id, reference: invoice.reference, kind: 'GROUP_INVOICE_SENT' },
+        },
+      )
+      .catch(() => {});
 
     await prisma.parcelGroup.update({
       where: { id: groupId },
