@@ -7,11 +7,15 @@ import type {
   PollResult,
 } from '../types';
 
-interface TaraInitiateResponse {
-  message?: string;
+interface TaraPaymentLinksResponse {
   status?: string;
-  vendor?: string;
-  authUrl?: string;
+  message?: string;
+  whatsappLink?: string;
+  telegramLink?: string;
+  dikaloLink?: string;
+  generalLink?: string;
+  cardLink?: string;
+  smsLink?: string;
 }
 
 interface TaraPollResponse {
@@ -23,6 +27,9 @@ interface TaraPollResponse {
 interface TaraWebhookBody {
   businessId?: string;
   paymentId?: string;
+  /** productId = notre intentId (present dans les webhooks payment-links / collect). */
+  productId?: string;
+  amount?: string;
   collectionId?: string;
   phoneNumber?: string;
   creationDate?: string;
@@ -30,21 +37,21 @@ interface TaraWebhookBody {
   status?: string;
 }
 
-// Countries where Wave is the preferred MoMo network.
-const WAVE_COUNTRIES = new Set(['SN', 'BF', 'CI']);
-
 /**
- * TaraMoney — Mobile Money multi-pays (14+ pays Afrique).
- * Doc : https://www.dklo.co/api/tara
+ * TaraMoney — Paiement multi-pays via lien heberge (14+ pays Afrique).
+ * Doc : https://www.dklo.co/api/tara/paymentlinks
+ *
+ * Flux : on genere un lien de paiement → on redirige le client vers generalLink.
+ * TaraMoney gere la selection MoMo / carte sur sa page. Webhook en retour.
  *
  * Credentials attendus dans config.credentials :
  *   - apiKey         : cle publique Taramoney
  *   - businessId     : identifiant business Taramoney
- *   - webhookSecret  : secret HMAC pour verifier les webhooks (optionnel si non configure)
+ *   - webhookSecret  : secret HMAC pour verifier les webhooks (optionnel)
  *
- * Particularite : le webhook API payment ne contient pas de productId.
- * On encode l'intentId dans le path du webhookUrl pour resoudre l'attempt cote serveur.
- * Route attendue : POST /webhooks/payment/taramoney/:intentId
+ * Particularite webhook : le payload ne contient pas notre productId.
+ * L'intentId est encode dans le path du webHookUrl.
+ * Route : POST /webhooks/payment/taramoney/:intentId
  */
 export class TaraMoneyProvider implements IPaymentProvider {
   readonly name = 'TARAMONEY';
@@ -58,17 +65,12 @@ export class TaraMoneyProvider implements IPaymentProvider {
     if (!cfg.credentials?.apiKey || !cfg.credentials?.businessId) {
       return { status: 'FAILED', errorCode: 'NO_CREDENTIALS', errorMessage: 'TaraMoney non configure' };
     }
-    if (!input.payerPhone) {
-      return { status: 'FAILED', errorCode: 'NO_PHONE', errorMessage: 'Numero MoMo requis' };
-    }
 
-    const network = input.country && WAVE_COUNTRIES.has(input.country) ? 'wave' : '';
-    // On utilise intentId comme productId (unique par session) pour eviter
-    // les collisions lors de retentatives sur la meme facture.
+    // intentId comme productId : unique par session, evite collisions sur retentatives.
     const webhookUrl = `${input.webhookUrl}/${encodeURIComponent(input.intentId)}`;
 
     try {
-      const res = await fetch(`${this.baseUrl(cfg)}/mobilepay`, {
+      const res = await fetch(`${this.baseUrl(cfg)}/paymentlinks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -76,16 +78,16 @@ export class TaraMoneyProvider implements IPaymentProvider {
           businessId: cfg.credentials.businessId,
           productId: input.intentId,
           productName: input.description ?? `Paiement ${input.externalReference}`,
-          network,
           productPrice: Math.round(input.amount),
-          phoneNumber: input.payerPhone.replace(/[^0-9]/g, ''),
+          productDescription: input.description ?? `Facture ${input.externalReference}`,
+          returnUrl: input.returnUrl,
           webHookUrl: webhookUrl,
         }),
       });
 
-      const body = (await res.json().catch(() => null)) as TaraInitiateResponse | null;
+      const body = (await res.json().catch(() => null)) as TaraPaymentLinksResponse | null;
 
-      if (!res.ok || body?.status === 'FAILURE') {
+      if (!res.ok || (body?.status && body.status !== 'success')) {
         return {
           status: 'FAILED',
           errorCode: `HTTP_${res.status}`,
@@ -94,20 +96,20 @@ export class TaraMoneyProvider implements IPaymentProvider {
         };
       }
 
-      // Wave (Senegal, Burkina Faso, Cote d'Ivoire) : rediriger vers authUrl
-      if (body?.authUrl) {
+      const redirectUrl = body?.generalLink ?? body?.dikaloLink ?? body?.whatsappLink;
+      if (!redirectUrl) {
         return {
-          status: 'REDIRECT',
-          redirectUrl: body.authUrl,
-          externalRef: input.intentId,
+          status: 'FAILED',
+          errorCode: 'NO_LINK',
+          errorMessage: 'TaraMoney n\'a pas retourne de lien de paiement',
           raw: body,
         };
       }
 
       return {
-        status: 'AWAITING_USER',
+        status: 'REDIRECT',
+        redirectUrl,
         externalRef: input.intentId,
-        instructions: 'Confirmez le paiement sur votre telephone.',
         raw: body,
       };
     } catch (err) {
@@ -166,8 +168,9 @@ export class TaraMoneyProvider implements IPaymentProvider {
     const b = body as TaraWebhookBody;
     const status = (b.status ?? '').toUpperCase();
     return {
-      // externalRef (intentId) injecte par la route dediee via URL param.
-      externalRef: '',
+      // productId = notre intentId (present dans tous les webhooks payment-links).
+      // Fallback '' : la route dediee /taramoney/:intentId couvre le cas ou il est absent.
+      externalRef: b.productId ?? '',
       status: status === 'SUCCESS' ? 'SUCCEEDED' : status === 'FAILURE' ? 'FAILED' : 'PENDING',
       paidAt: status === 'SUCCESS' ? (b.changeDate ? new Date(b.changeDate) : new Date()) : undefined,
       raw: body,
