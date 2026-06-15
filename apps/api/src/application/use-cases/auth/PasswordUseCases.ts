@@ -11,10 +11,10 @@ const OTP_TTL_MS = 10 * 60 * 1000; // 10 min
 const OTP_MAX_ATTEMPTS = 5; // au-dela, le code est invalide
 // Canaux par defaut pour un reset staff : email uniquement (pas d'IN_APP, l'user
 // n'est pas connecte). L'appelant peut surcharger (ex: ['EMAIL','SMS']).
-const DEFAULT_RESET_CHANNELS: NotificationChannel[] = ['EMAIL'];
+const DEFAULT_RESET_CHANNELS: NotificationChannel[] = ['EMAIL', 'WHATSAPP'];
 // Confirmation de changement/reinitialisation de mot de passe : envoyee a l'user
 // apres coup, par email (+ in-app si connecte). Best-effort, ne bloque jamais.
-const PASSWORD_CHANGED_CHANNELS: NotificationChannel[] = ['EMAIL'];
+const PASSWORD_CHANGED_CHANNELS: NotificationChannel[] = ['EMAIL', 'WHATSAPP'];
 const PASSWORD_CHANGED_TITLE = 'Mot de passe modifie';
 const PASSWORD_CHANGED_MESSAGE =
   'Votre mot de passe vient d\'etre modifie avec succes. ' +

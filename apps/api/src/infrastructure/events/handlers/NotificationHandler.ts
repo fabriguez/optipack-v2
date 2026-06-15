@@ -659,6 +659,16 @@ function registerHandlers() {
             organizationId,
           );
         }
+
+        await dispatchExternal(
+          { clientId, agencyId: agencyId || event.agencyId, organizationId },
+          {
+            title: 'Nouvelle facture',
+            message: `Votre facture ${reference || ''} a ete creee. Montant : ${Number(totalAmount || 0).toLocaleString()} ${currency || 'XAF'}.`,
+            metadata: { invoiceId, reference, totalAmount },
+            kind: 'INVOICE_CREATED',
+          },
+        );
       }
 
       const admins = agencyId ? await getAgencyAdminEmails(agencyId) : [];
@@ -702,6 +712,16 @@ function registerHandlers() {
         { event: 'INVOICE_PAID' },
       );
     }
+
+    await dispatchExternal(
+      { clientId, agencyId: agencyId || event.agencyId, organizationId },
+      {
+        title: 'Facture reglee',
+        message: `Votre facture ${reference || ''} est entierement reglee. Montant : ${Number(totalAmount || 0).toLocaleString()} ${currency || 'XAF'}. Merci !`,
+        metadata: { reference, totalAmount },
+        kind: 'INVOICE_PAID',
+      },
+    );
   });
 
   // CLIENT_LOYALTY_UPDATED -> template riche
@@ -734,6 +754,11 @@ function registerHandlers() {
           organizationId,
         );
       }
+
+      await dispatchExternal(
+        { clientId, agencyId: agencyId || event.agencyId, organizationId },
+        { title, message, metadata: { points, delta, reason }, kind: 'CLIENT_LOYALTY_UPDATED' },
+      );
 
       const admins = agencyId ? await getAgencyAdminEmails(agencyId) : [];
       for (const a of admins) {

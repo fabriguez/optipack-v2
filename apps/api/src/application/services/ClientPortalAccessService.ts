@@ -1,7 +1,9 @@
 import bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
 import { prisma } from '../../config/database';
+import { config } from '../../config/index';
 import { emailService } from '../../infrastructure/email/EmailService';
+import { notificationService } from './notifications/NotificationService';
 
 /** 10 caracteres aleatoires lisibles (pas de 0/O/1/I confus). */
 function generatePortalPassword(): string {
@@ -57,6 +59,22 @@ export async function provisionClientPortalAccess(params: {
         // eslint-disable-next-line no-console
         console.warn('[ClientPortalAccess] envoi mail identifiants echoue:', (err as Error).message);
       });
+
+    // WhatsApp : meme info que le mail, texte simple.
+    const waMessage =
+      `Bonjour ${params.fullName} ! Votre espace client est pret.\n\n` +
+      `Identifiants de connexion :\n` +
+      `• Telephone : ${params.phone}\n` +
+      `• Mot de passe : ${password}\n\n` +
+      `Connectez-vous sur : ${config.clientPortalUrl}/login\n\n` +
+      `Pour votre securite, changez votre mot de passe apres la premiere connexion.`;
+    notificationService
+      .notify(
+        { clientId: params.clientId, organizationId: params.organizationId ?? null, phone: params.phone },
+        { title: 'Votre espace client est pret', message: waMessage, channels: ['WHATSAPP'] },
+      )
+      .catch(() => {});
+
     return { provisioned: true };
   } catch (err) {
     // eslint-disable-next-line no-console

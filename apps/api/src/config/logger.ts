@@ -3,22 +3,19 @@ import { config } from './index';
 
 export const logger = pino({
   level: config.env === 'production' ? 'info' : 'debug',
-  transport:
-    config.env === 'development'
-      ? {
-          target: 'pino-pretty',
-          options: {
-            colorize: true,
-            translateTime: 'SYS:yyyy-mm-dd HH:MM:ss',
-            // Format compact : "YYYY-MM-DD HH:MM:SS [LEVEL] [module] [reqId-8] msg"
-            // (extras passes au msg). singleLine = pas de YAML multi-lignes.
-            singleLine: true,
-            ignore: 'pid,hostname,module,requestId,userId,method,url,statusCode,duration,remoteAddress',
-            messageFormat:
-              '{if module}[{module}] {end}{if requestId}[{requestId}] {end}{msg}{if method} | {method} {url} {statusCode} ({duration}){end}',
-          },
-        }
-      : undefined,
+  // pino-pretty dans tous les envs : lisible humain en dev (couleurs) et prod (monochrome).
+  // pino-pretty est en dep prod (pas devDep) donc disponible dans le container Docker.
+  transport: {
+    target: 'pino-pretty',
+    options: {
+      colorize: config.env === 'development',
+      translateTime: 'SYS:yyyy-mm-dd HH:MM:ss',
+      singleLine: true,
+      ignore: 'pid,hostname,module,requestId,userId,method,url,statusCode,duration,remoteAddress',
+      messageFormat:
+        '{if module}[{module}]{end}{if requestId}[{requestId}]{end} {msg}{if method} {method} {url} {statusCode} ({duration}){end}',
+    },
+  },
   redact: ['req.headers.authorization', 'password', 'token', 'refreshToken'],
   serializers: {
     req: (req) => ({
