@@ -2,6 +2,7 @@ import { eventBus, DomainEvents } from '../EventBus';
 import type { DomainEvent } from '../EventBus';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../../../config/database';
+import { config } from '../../../config';
 import { emailService } from '../../email/EmailService';
 import { createChildLogger } from '../../../config/logger';
 import { realtimeService } from '../../realtime/RealtimeService';
@@ -202,15 +203,22 @@ function registerHandlers() {
       );
     }
 
-    await dispatchExternal(
-      { clientId, agencyId: agencyId || event.agencyId, organizationId },
-      {
-        title: 'Colis enregistre',
-        message: `Bonjour, votre colis "${designation || ''}" est enregistre. Suivi : ${trackingNumber || ''}.`,
-        metadata: { trackingNumber, parcelId: payload.parcelId },
-        kind: 'PARCEL_CREATED',
-      },
-    );
+    {
+      const w = weight != null && Number(weight) > 0 ? `\nMasse : ${weight} kg` : '';
+      const v = volume != null && Number(volume) > 0 ? `\nVolume : ${volume} m³` : '';
+      const waMsg =
+        `Colis enregistre\n\n` +
+        `Designation : ${designation || '-'}\n` +
+        `Destination : ${destination || '-'}` +
+        w + v +
+        `\nPrix : ${price ? Number(price).toLocaleString('fr-FR') + ' XAF' : '-'}` +
+        `\nN° suivi : ${trackingNumber || '-'}` +
+        `\n\nSuivez votre colis : ${config.webUrl}/tracking/${trackingNumber || ''}`;
+      await dispatchExternal(
+        { clientId, agencyId: agencyId || event.agencyId, organizationId },
+        { title: 'Colis enregistre', message: waMsg, metadata: { trackingNumber, parcelId: payload.parcelId }, kind: 'PARCEL_CREATED' },
+      );
+    }
   });
 
   // PARCEL_STATUS_CHANGED (IN_TRANSIT / ARRIVED / DELIVERED / RECEIVED / LOADING)
@@ -266,11 +274,24 @@ function registerHandlers() {
 
     // Notifications externes (SMS / WhatsApp / Push) sur les jalons cles du
     // cycle de vie : recu, expedie (en transit), arrive, livre.
+    const trackUrl = `${config.webUrl}/tracking/${trackingNumber || ''}`;
     const externalBodies: Record<string, string> = {
-      RECEIVED: `Votre colis "${designation || ''}" (${trackingNumber || ''}) a bien ete receptionne dans nos locaux.`,
-      IN_TRANSIT: `Votre colis "${designation || ''}" (${trackingNumber || ''}) a ete expedie et est en route vers sa destination.`,
-      ARRIVED: `Votre colis "${designation || ''}" (${trackingNumber || ''}) est arrive a destination. Vous pouvez venir le retirer.`,
-      DELIVERED: `Votre colis "${designation || ''}" (${trackingNumber || ''}) a ete livre. Merci de votre confiance.`,
+      RECEIVED:
+        `Statut : Receptionne\n\n` +
+        `Designation : ${designation || '-'}\nN° suivi : ${trackingNumber || '-'}\n\n` +
+        `Votre colis a bien ete receptionne dans nos locaux.\n\nSuivre : ${trackUrl}`,
+      IN_TRANSIT:
+        `Statut : En transit\n\n` +
+        `Designation : ${designation || '-'}\nN° suivi : ${trackingNumber || '-'}\n\n` +
+        `Votre colis est en route vers sa destination.\n\nSuivre : ${trackUrl}`,
+      ARRIVED:
+        `Statut : Arrive a destination\n\n` +
+        `Designation : ${designation || '-'}\nN° suivi : ${trackingNumber || '-'}\n\n` +
+        `Votre colis est arrive et disponible au retrait.\n\nSuivre : ${trackUrl}`,
+      DELIVERED:
+        `Statut : Livre\n\n` +
+        `Designation : ${designation || '-'}\nN° suivi : ${trackingNumber || '-'}\n\n` +
+        `Votre colis a ete livre. Merci de votre confiance.\n\nSuivre : ${trackUrl}`,
     };
     if (externalBodies[newStatus]) {
       await dispatchExternal(
@@ -312,7 +333,10 @@ function registerHandlers() {
       { clientId, agencyId: agencyId || event.agencyId, organizationId },
       {
         title: 'Colis retire',
-        message: `Votre colis "${designation || ''}" (${trackingNumber || ''}) a bien ete retire. A bientot.`,
+        message:
+          `Colis retire\n\n` +
+          `Designation : ${designation || '-'}\nN° suivi : ${trackingNumber || '-'}\nAgence : ${agencyName || '-'}\n\n` +
+          `Livraison finalisee. Merci de votre confiance.`,
         kind: 'PARCEL_WITHDRAWN',
       },
     );
@@ -347,15 +371,25 @@ function registerHandlers() {
       );
     }
 
-    await dispatchExternal(
-      { clientId, agencyId: agencyId || event.agencyId, organizationId },
-      {
-        title: 'Paiement recu',
-        message: `Paiement de ${amount || ''} FCFA recu pour la facture ${invoiceRef || ''}. Solde restant : ${remainingBalance || '0'} FCFA.`,
-        metadata: { invoiceRef, amount, paymentMethod },
-        kind: 'PAYMENT_RECEIVED',
-      },
-    );
+    {
+      const methodLabels: Record<string, string> = {
+        CASH: 'Especes', MOBILE_MONEY: 'Mobile Money',
+        BANK_TRANSFER: 'Virement', CARD: 'Carte bancaire', CHECK: 'Cheque',
+      };
+      await dispatchExternal(
+        { clientId, agencyId: agencyId || event.agencyId, organizationId },
+        {
+          title: 'Paiement recu',
+          message:
+            `Paiement recu\n\n` +
+            `Montant : ${amount || '-'} FCFA\nFacture : ${invoiceRef || '-'}\n` +
+            `Mode : ${methodLabels[paymentMethod] || paymentMethod || '-'}\nAgence : ${agencyName || '-'}\n` +
+            `Solde restant : ${remainingBalance || '0'} FCFA\n\nMerci pour votre paiement.`,
+          metadata: { invoiceRef, amount, paymentMethod },
+          kind: 'PAYMENT_RECEIVED',
+        },
+      );
+    }
   });
 
   // PENALTY_APPLIED
@@ -392,7 +426,12 @@ function registerHandlers() {
       { clientId, agencyId: agencyId || event.agencyId, organizationId },
       {
         title: 'Penalite de stockage',
-        message: `Penalite de ${totalAmount || ''} FCFA appliquee sur "${designation || ''}" (${trackingNumber || ''}) -- ${days || 0} jour(s) de stockage depasses.`,
+        message:
+          `Penalite de stockage\n\n` +
+          `Designation : ${designation || '-'}\nN° suivi : ${trackingNumber || '-'}\n` +
+          `Jours en attente : ${days || 0}\nTaux journalier : ${dailyRate || '-'} XAF\n` +
+          `Penalite : ${totalAmount || '-'} FCFA\nAgence : ${agencyName || '-'}\n\n` +
+          `Recuperez votre colis au plus vite pour eviter des frais supplementaires.`,
         metadata: { trackingNumber, totalAmount, days },
         kind: 'PENALTY_APPLIED',
       },
@@ -532,7 +571,11 @@ function registerHandlers() {
       { clientId, agencyId: agencyId || event.agencyId, organizationId },
       {
         title: 'Colis charge',
-        message: `Votre colis "${designation || ''}" (${trackingNumber || ''}) a ete charge${containerName ? ` dans ${containerName}` : ''}.`,
+        message:
+          `Colis charge\n\n` +
+          `Designation : ${designation || '-'}\nN° suivi : ${trackingNumber || '-'}\n` +
+          `Conteneur : ${containerName || '-'}\n\n` +
+          `Le depart du conteneur sera notifie sous peu.\n\nSuivre : ${config.webUrl}/tracking/${trackingNumber || ''}`,
         kind: 'PARCEL_LOADED',
       },
     );
@@ -578,10 +621,21 @@ function registerHandlers() {
       );
     }
 
-    await dispatchExternal(
-      { clientId, agencyId: agencyId || event.agencyId, organizationId },
-      { title, message, kind: 'PARCEL_UNLOADED' },
-    );
+    {
+      const statusDetail = action === 'received'
+        ? `Votre colis est disponible et peut etre retire aux heures d'ouverture.`
+        : action === 'not_found'
+        ? `Notre equipe enquete et vous tiendra informe.`
+        : `Consultez votre espace pour voir les modifications.`;
+      const waMsg =
+        `${title}\n\n` +
+        `Designation : ${designation || '-'}\nN° suivi : ${trackingNumber || '-'}\nAgence : ${agencyName || '-'}\n\n` +
+        `${statusDetail}\n\nSuivre : ${config.webUrl}/tracking/${trackingNumber || ''}`;
+      await dispatchExternal(
+        { clientId, agencyId: agencyId || event.agencyId, organizationId },
+        { title, message: waMsg, kind: 'PARCEL_UNLOADED' },
+      );
+    }
   });
 
   // CONTAINER_DEPARTED -> admins agence
@@ -703,7 +757,10 @@ function registerHandlers() {
           { clientId, agencyId: agencyId || event.agencyId, organizationId },
           {
             title: 'Nouvelle facture',
-            message: `Votre facture ${reference || ''} a ete creee. Montant : ${Number(totalAmount || 0).toLocaleString()} ${currency || 'XAF'}.`,
+            message:
+              `Nouvelle facture\n\n` +
+              `Reference : ${reference || '-'}\nMontant : ${Number(totalAmount || 0).toLocaleString()} ${currency || 'XAF'}\n\n` +
+              `Consultez et reglez votre facture depuis votre espace : ${config.webUrl}/invoices`,
             metadata: { invoiceId, reference, totalAmount },
             kind: 'INVOICE_CREATED',
           },
@@ -756,7 +813,10 @@ function registerHandlers() {
       { clientId, agencyId: agencyId || event.agencyId, organizationId },
       {
         title: 'Facture reglee',
-        message: `Votre facture ${reference || ''} est entierement reglee. Montant : ${Number(totalAmount || 0).toLocaleString()} ${currency || 'XAF'}. Merci !`,
+        message:
+          `Facture entierement reglee\n\n` +
+          `Reference : ${reference || '-'}\nMontant total : ${Number(totalAmount || 0).toLocaleString()} ${currency || 'XAF'}\n\n` +
+          `Merci pour votre paiement. Consultez votre espace : ${config.webUrl}/invoices`,
         metadata: { reference, totalAmount },
         kind: 'INVOICE_PAID',
       },
@@ -794,10 +854,18 @@ function registerHandlers() {
         );
       }
 
-      await dispatchExternal(
-        { clientId, agencyId: agencyId || event.agencyId, organizationId },
-        { title, message, metadata: { points, delta, reason }, kind: 'CLIENT_LOYALTY_UPDATED' },
-      );
+      {
+        const positive = Number(delta || 0) >= 0;
+        const waMsg =
+          `Points de fidelite mis a jour\n\n` +
+          `Variation : ${positive ? '+' : ''}${delta || 0} pts\nNouveau solde : ${points || 0} pts\n` +
+          (reason ? `Motif : ${reason}\n` : '') +
+          `\nCumulez des points a chaque envoi.\nVoir mon solde : ${config.webUrl}/loyalty`;
+        await dispatchExternal(
+          { clientId, agencyId: agencyId || event.agencyId, organizationId },
+          { title, message: waMsg, metadata: { points, delta, reason }, kind: 'CLIENT_LOYALTY_UPDATED' },
+        );
+      }
 
       const admins = agencyId ? await getAgencyAdminEmails(agencyId) : [];
       for (const a of admins) {

@@ -24,7 +24,7 @@ async function settleIntentSafe(intentId: string): Promise<void> {
   }
 }
 
-function buildWebhookBase(req: any): string {
+export function buildWebhookBase(req: any): string {
   if (config.apiUrl) return config.apiUrl.replace(/\/$/, '');
   const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'https';
   const host = (req.headers['x-forwarded-host'] as string) || req.get('host') || 'localhost';
