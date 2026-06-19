@@ -3,6 +3,7 @@ import { emailService } from '../../../infrastructure/email/EmailService';
 import { logChannelDelivery } from '../../../infrastructure/email/logging';
 import { realtimeService } from '../../../infrastructure/realtime/RealtimeService';
 import { createChildLogger } from '../../../config/logger';
+import { resolveTemplate } from './NotificationTemplateRenderer';
 import type {
   ChannelDeliveryResult,
   ExternalChannelProvider,
@@ -168,16 +169,26 @@ export async function deliverEmail(
 
   const organizationId = await resolveOrganizationId(target);
 
+  // Template personnalise du tenant (prioritaire sur le message par defaut)
+  const eventKind = payload.metadata?.kind as string | undefined;
+  const customEmail = await resolveTemplate(
+    organizationId,
+    eventKind,
+    'EMAIL',
+    payload.templateVariables ?? {},
+  ).catch(() => null);
+
   try {
-    // payload.message est texte brut -> on l'enveloppe via send() qui appelle
-    // emailLayout(). Si l'appelant veut un template riche, il utilise un
-    // sendXxx() dedie en amont.
+    const bodyHtml = customEmail
+      ? customEmail.body
+      : `<p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#4B5563">${payload.message}</p>`;
+    const subject = customEmail?.subject || payload.title;
     const ok = await emailService.send(
       to,
-      payload.title,
-      `<p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#4B5563">${payload.message}</p>`,
+      subject,
+      bodyHtml,
       organizationId,
-      { event: (payload.metadata?.kind as string | undefined) ?? 'NOTIFICATION' },
+      { event: eventKind ?? 'NOTIFICATION' },
     );
     if (!ok) throw new Error('email dispatcher returned false');
     const row = await prisma.notification.create({
@@ -236,6 +247,18 @@ async function deliverExternal(
   payload: NotificationPayload,
 ): Promise<ChannelDeliveryResult> {
   const organizationId = await resolveOrganizationId(target);
+
+  // Template personnalise (SMS/WHATSAPP uniquement — PUSH reste court)
+  let customBody: string | null = null;
+  if (channel !== 'PUSH') {
+    const eventKind = payload.metadata?.kind as string | undefined;
+    if (eventKind) {
+      customBody = await resolveTemplate(organizationId, eventKind, channel, payload.templateVariables ?? {})
+        .then((t) => t?.body ?? null)
+        .catch(() => null);
+    }
+  }
+
   if (!provider || !provider.enabled) {
     logChannelDelivery({
       status: 'SKIP',
@@ -288,8 +311,11 @@ async function deliverExternal(
   const to = recipients.join(',');
 
   // Habillage tenant header/footer pour SMS/WhatsApp/Push.
+  // Si template personnalise : corps brut (l'admin a ecrit exactement ce qu'il veut).
   const tenantName = await resolveTenantName(organizationId);
-  const wrapped = wrapMessage(tenantName, payload.title, payload.message, channel);
+  const wrapped = customBody
+    ? { title: payload.title, message: customBody }
+    : wrapMessage(tenantName, payload.title, payload.message, channel);
 
   try {
     // Best-effort multi-destinataires : on tente chaque token/numero ; succes
@@ -387,6 +413,12 @@ export async function deliverWhatsapp(
 ): Promise<ChannelDeliveryResult> {
   const organizationId = await resolveOrganizationId(t);
 
+  // Template personnalise du tenant (resolu une fois pour les deux chemins)
+  const eventKind = p.metadata?.kind as string | undefined;
+  const customWa = eventKind
+    ? await resolveTemplate(organizationId, eventKind, 'WHATSAPP', p.templateVariables ?? {}).catch(() => null)
+    : null;
+
   // Tenter le canal WA Web JS du tenant en priorité
   if (organizationId) {
     try {
@@ -404,23 +436,27 @@ export async function deliverWhatsapp(
         }
         if (phone) {
           const tenantName = await resolveTenantName(organizationId);
-          const wrapped = wrapMessage(tenantName, p.title, p.message, 'WHATSAPP');
-          const sent = await tenantWaSessionService.sendMessage(organizationId, phone, wrapped.message);
+          // Template personnalise : corps brut. Defaut : wrapMessage avec branding.
+          const msgToSend = customWa
+            ? customWa.body
+            : wrapMessage(tenantName, p.title, p.message, 'WHATSAPP').message;
+          const titleToSend = customWa ? p.title : `[${tenantName}] ${p.title}`;
+          const sent = await tenantWaSessionService.sendMessage(organizationId, phone, msgToSend);
           if (sent) {
             const row = await prisma.notification.create({
               data: {
                 userId: t.userId ?? null,
                 clientId: t.clientId ?? null,
                 agencyId: t.agencyId ?? null,
-                title: wrapped.title,
-                message: wrapped.message,
+                title: titleToSend,
+                message: msgToSend,
                 type: 'WHATSAPP',
                 status: 'SENT',
                 sentAt: new Date(),
                 metadata: { to: phone, organizationId, provider: 'whatsapp-web-js', ...(p.metadata ?? {}) } as never,
               },
             });
-            logChannelDelivery({ status: 'OK', channel: 'WHATSAPP', title: p.title, target: phone, organizationId, event: (p.metadata?.kind as string | undefined) });
+            logChannelDelivery({ status: 'OK', channel: 'WHATSAPP', title: p.title, target: phone, organizationId, event: eventKind });
             return { channel: 'WHATSAPP', status: 'SENT', notificationId: row.id };
           }
         }
@@ -430,5 +466,6 @@ export async function deliverWhatsapp(
     }
   }
 
+  // deliverExternal fait sa propre resolution de template (second chemin)
   return deliverExternal('WHATSAPP', whatsappProvider, t, p);
 }

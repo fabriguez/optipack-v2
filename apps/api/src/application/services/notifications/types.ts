@@ -41,6 +41,12 @@ export interface NotificationPayload {
   emailTemplate?: 'plain' | 'parcel-status' | 'payment-receipt' | string;
   /** Fichiers joints (WhatsApp uniquement). URLs publiques presignees MinIO. */
   attachments?: NotificationAttachment[];
+  /**
+   * Variables de rendu pour les templates personnalises du tenant.
+   * Si presents, les canaux EMAIL/WHATSAPP/SMS cherchent un template en DB
+   * avant d'utiliser le message par defaut.
+   */
+  templateVariables?: Record<string, string | number | undefined | null>;
 }
 
 export interface ChannelDeliveryResult {

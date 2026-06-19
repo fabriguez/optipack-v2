@@ -7,6 +7,7 @@ import { emailService } from '../../email/EmailService';
 import { createChildLogger } from '../../../config/logger';
 import { realtimeService } from '../../realtime/RealtimeService';
 import { notificationService } from '../../../application/services/notifications/NotificationService';
+import { resolveTemplate } from '../../../application/services/notifications/NotificationTemplateRenderer';
 import type {
   NotificationAttachment,
   NotificationChannel,
@@ -89,7 +90,14 @@ async function uploadPdfForWhatsApp(
 
 async function dispatchExternal(
   target: NotificationTarget,
-  payload: { title: string; message: string; metadata?: Record<string, unknown>; kind?: string; attachments?: NotificationAttachment[] },
+  payload: {
+    title: string;
+    message: string;
+    metadata?: Record<string, unknown>;
+    kind?: string;
+    attachments?: NotificationAttachment[];
+    templateVariables?: Record<string, string | number | undefined | null>;
+  },
 ): Promise<void> {
   const requested: NotificationChannel[] = ['SMS', 'WHATSAPP', 'PUSH'];
   const allowed = await filterChannelsByPrefs(
@@ -105,6 +113,7 @@ async function dispatchExternal(
       metadata: { ...(payload.metadata ?? {}), kind: payload.kind ?? payload.metadata?.kind },
       channels: allowed,
       attachments: payload.attachments,
+      templateVariables: payload.templateVariables,
     });
   } catch (err) {
     logger.warn({ err, title: payload.title }, 'Echec dispatch externe (non bloquant)');
@@ -164,6 +173,47 @@ async function getClientEmail(clientId: string): Promise<string | null> {
   }
 }
 
+async function getClientName(clientId: string): Promise<string> {
+  try {
+    const client = await prisma.client.findUnique({
+      where: { id: clientId },
+      select: { fullName: true },
+    });
+    return client?.fullName || '';
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Envoie un email en privilegiant le template personnalise du tenant.
+ * Si aucun template actif n'existe pour cet event, appelle fallback().
+ */
+async function sendEmailWithTemplate(
+  email: string,
+  organizationId: string | null,
+  eventKind: string,
+  vars: Record<string, string | number | undefined | null>,
+  fallback: () => Promise<unknown>,
+): Promise<void> {
+  try {
+    const custom = await resolveTemplate(organizationId, eventKind, 'EMAIL', vars);
+    if (custom) {
+      await emailService.send(
+        email,
+        custom.subject || eventKind,
+        custom.body,
+        organizationId,
+        { event: eventKind },
+      );
+    } else {
+      await fallback();
+    }
+  } catch (err) {
+    logger.warn({ err, email, eventKind }, 'Email send failed (non-bloquant)');
+  }
+}
+
 async function getAgencyAdminEmails(agencyId: string): Promise<string[]> {
   try {
     const users = await prisma.user.findMany({
@@ -206,6 +256,9 @@ function registerHandlers() {
     if (!clientId) return;
 
     const organizationId = await resolveEventOrg(event, payload);
+    const clientName = await getClientName(clientId);
+    const trackingUrl = `${config.webUrl}/tracking/${trackingNumber || ''}`;
+    const priceStr = price ? Number(price).toLocaleString('fr-FR') + ' XAF' : '';
 
     await createNotification({
       clientId,
@@ -216,17 +269,31 @@ function registerHandlers() {
       metadata: { trackingNumber, parcelId: payload.parcelId, kind: 'PARCEL_CREATED' } as Prisma.InputJsonValue,
     });
 
+    const templateVars = {
+      trackingNumber: trackingNumber || '',
+      designation: designation || '',
+      destination: destination || '',
+      weight: weight != null ? String(weight) : '',
+      volume: volume != null ? String(volume) : '',
+      transitType: transitType || '',
+      price: priceStr,
+      clientName,
+      trackingUrl,
+    };
+
     const email = await getClientEmail(clientId);
     if (email) {
-      await emailService.sendParcelCreated(
-        email,
-        trackingNumber || '',
-        designation || '',
-        destination || '',
-        weight ?? null,
-        Number(price || 0).toLocaleString('fr-FR') + ' XAF',
-        organizationId,
-        { volume: volume ?? null, transitType: transitType ?? null },
+      await sendEmailWithTemplate(email, organizationId, 'PARCEL_CREATED', templateVars, () =>
+        emailService.sendParcelCreated(
+          email,
+          trackingNumber || '',
+          designation || '',
+          destination || '',
+          weight ?? null,
+          priceStr,
+          organizationId,
+          { volume: volume ?? null, transitType: transitType ?? null },
+        ),
       );
     }
 
@@ -250,12 +317,12 @@ function registerHandlers() {
         `Designation : ${designation || '-'}\n` +
         `Destination : ${destination || '-'}` +
         w + v +
-        `\nPrix : ${price ? Number(price).toLocaleString('fr-FR') + ' XAF' : '-'}` +
+        `\nPrix : ${priceStr || '-'}` +
         `\nN° suivi : ${trackingNumber || '-'}` +
-        `\n\nSuivez votre colis : ${config.webUrl}/tracking/${trackingNumber || ''}`;
+        `\n\nSuivez votre colis : ${trackingUrl}`;
       await dispatchExternal(
         { clientId, agencyId: agencyId || event.agencyId, organizationId },
-        { title: 'Colis enregistre', message: waMsg, metadata: { trackingNumber, parcelId: payload.parcelId }, kind: 'PARCEL_CREATED' },
+        { title: 'Colis enregistre', message: waMsg, metadata: { trackingNumber, parcelId: payload.parcelId }, kind: 'PARCEL_CREATED', templateVariables: templateVars },
       );
     }
   });
@@ -286,14 +353,18 @@ function registerHandlers() {
       metadata: { trackingNumber, newStatus, kind: meta.kind } as Prisma.InputJsonValue,
     });
 
+    const trackUrl = `${config.webUrl}/tracking/${trackingNumber || ''}`;
+    const templateVars = {
+      trackingNumber: trackingNumber || '',
+      designation: designation || '',
+      newStatus: newStatus || '',
+      trackingUrl: trackUrl,
+    };
+
     const email = await getClientEmail(clientId);
     if (email) {
-      await emailService.sendParcelStatusChanged(
-        email,
-        trackingNumber || '',
-        designation || '',
-        newStatus,
-        organizationId,
+      await sendEmailWithTemplate(email, organizationId, meta.kind, templateVars, () =>
+        emailService.sendParcelStatusChanged(email, trackingNumber || '', designation || '', newStatus, organizationId),
       );
     }
 
@@ -313,7 +384,6 @@ function registerHandlers() {
 
     // Notifications externes (SMS / WhatsApp / Push) sur les jalons cles du
     // cycle de vie : recu, expedie (en transit), arrive, livre.
-    const trackUrl = `${config.webUrl}/tracking/${trackingNumber || ''}`;
     const externalBodies: Record<string, string> = {
       RECEIVED:
         `Statut : Receptionne\n\n` +
@@ -335,7 +405,7 @@ function registerHandlers() {
     if (externalBodies[newStatus]) {
       await dispatchExternal(
         { clientId, agencyId: agencyId || event.agencyId, organizationId },
-        { title: meta.title, message: externalBodies[newStatus], metadata: { trackingNumber, newStatus }, kind: meta.kind },
+        { title: meta.title, message: externalBodies[newStatus], metadata: { trackingNumber, newStatus }, kind: meta.kind, templateVariables: templateVars },
       );
     }
   });
@@ -348,23 +418,26 @@ function registerHandlers() {
     if (!clientId) return;
     const organizationId = await resolveEventOrg(event, payload);
 
+    const templateVars = {
+      trackingNumber: trackingNumber || '',
+      designation: designation || '',
+      agencyName: agencyName || '',
+      trackingUrl: `${config.webUrl}/tracking/${trackingNumber || ''}`,
+    };
+
     await createNotification({
       clientId,
       agencyId: agencyId || event.agencyId,
       organizationId,
       title: 'Colis retire',
       message: `Vous avez retire votre colis "${designation || ''}" (${trackingNumber || ''}).`,
-      metadata: { trackingNumber, kind: 'PARCEL_WITHDRAWN' } as Prisma.InputJsonValue,
+      metadata: { trackingNumber, kind: 'PARCEL_DELIVERED' } as Prisma.InputJsonValue,
     });
 
     const email = await getClientEmail(clientId);
     if (email) {
-      await emailService.sendParcelWithdrawn(
-        email,
-        trackingNumber || '',
-        designation || '',
-        agencyName || '',
-        organizationId,
+      await sendEmailWithTemplate(email, organizationId, 'PARCEL_DELIVERED', templateVars, () =>
+        emailService.sendParcelWithdrawn(email, trackingNumber || '', designation || '', agencyName || '', organizationId),
       );
     }
 
@@ -376,7 +449,8 @@ function registerHandlers() {
           `Colis retire\n\n` +
           `Designation : ${designation || '-'}\nN° suivi : ${trackingNumber || '-'}\nAgence : ${agencyName || '-'}\n\n` +
           `Livraison finalisee. Merci de votre confiance.`,
-        kind: 'PARCEL_WITHDRAWN',
+        kind: 'PARCEL_DELIVERED',
+        templateVariables: templateVars,
       },
     );
   });
@@ -387,6 +461,20 @@ function registerHandlers() {
     const { clientId, agencyId, amount, invoiceRef, agencyName, paymentMethod, remainingBalance } = payload;
     if (!clientId) return;
     const organizationId = await resolveEventOrg(event, payload);
+
+    const methodLabels: Record<string, string> = {
+      CASH: 'Especes', MOBILE_MONEY: 'Mobile Money',
+      BANK_TRANSFER: 'Virement', CARD: 'Carte bancaire', CHECK: 'Cheque',
+    };
+
+    const templateVars = {
+      amount: String(amount || ''),
+      invoiceRef: invoiceRef || '',
+      agencyName: agencyName || '',
+      paymentMethod: methodLabels[paymentMethod] || paymentMethod || '',
+      remainingBalance: String(remainingBalance || '0'),
+      invoiceUrl: `${config.webUrl}/invoices`,
+    };
 
     await createNotification({
       clientId,
@@ -399,52 +487,58 @@ function registerHandlers() {
 
     const email = await getClientEmail(clientId);
     if (email) {
-      await emailService.sendPaymentReceived(
-        email,
-        String(amount || ''),
-        invoiceRef || '',
-        agencyName || '',
-        paymentMethod || '',
-        String(remainingBalance || '0'),
-        organizationId,
+      await sendEmailWithTemplate(email, organizationId, 'PAYMENT_RECEIVED', templateVars, () =>
+        emailService.sendPaymentReceived(
+          email,
+          String(amount || ''),
+          invoiceRef || '',
+          agencyName || '',
+          paymentMethod || '',
+          String(remainingBalance || '0'),
+          organizationId,
+        ),
       );
     }
 
     {
-      const methodLabels: Record<string, string> = {
-        CASH: 'Especes', MOBILE_MONEY: 'Mobile Money',
-        BANK_TRANSFER: 'Virement', CARD: 'Carte bancaire', CHECK: 'Cheque',
-      };
+      // Lire la config d'attachments du template WA pour cet event (si configure).
+      const waTemplate = await resolveTemplate(organizationId, 'PAYMENT_RECEIVED', 'WHATSAPP', templateVars).catch(() => null);
+      const wantReceipt = waTemplate?.attachments?.receipt !== false;
+      const wantInvoice = waTemplate?.attachments?.invoice !== false;
 
       // Generer les pieces jointes PDF (recu + facture) pour WhatsApp.
       const attachments: NotificationAttachment[] = [];
       try {
         const refSlug = (invoiceRef || 'facture').replace(/[^a-zA-Z0-9-]/g, '-');
 
-        // 1. Recu de paiement : trouver le paiement le plus recent pour cette facture.
-        const latestPayment = await prisma.payment.findFirst({
-          where: { invoice: { reference: invoiceRef }, isVoided: false },
-          orderBy: { createdAt: 'desc' },
-          select: { id: true },
-        });
-        if (latestPayment) {
-          const receiptResult = await buildPaymentReceiptPdfBuffer(latestPayment.id);
-          if (receiptResult) {
-            const url = await uploadPdfForWhatsApp(receiptResult.pdf, `recu-${refSlug}.pdf`);
-            if (url) attachments.push({ url, filename: `Recu-${refSlug}.pdf`, caption: `Recu de paiement - ${invoiceRef}` });
+        // 1. Recu de paiement
+        if (wantReceipt) {
+          const latestPayment = await prisma.payment.findFirst({
+            where: { invoice: { reference: invoiceRef }, isVoided: false },
+            orderBy: { createdAt: 'desc' },
+            select: { id: true },
+          });
+          if (latestPayment) {
+            const receiptResult = await buildPaymentReceiptPdfBuffer(latestPayment.id);
+            if (receiptResult) {
+              const url = await uploadPdfForWhatsApp(receiptResult.pdf, `recu-${refSlug}.pdf`);
+              if (url) attachments.push({ url, filename: `Recu-${refSlug}.pdf`, caption: `Recu de paiement - ${invoiceRef}` });
+            }
           }
         }
 
-        // 2. Facture complete.
-        const invoiceRow = await prisma.invoice.findFirst({
-          where: { reference: invoiceRef },
-          select: { id: true },
-        });
-        if (invoiceRow) {
-          const invoiceResult = await buildInvoicePdfBuffer(invoiceRow.id);
-          if (invoiceResult) {
-            const url = await uploadPdfForWhatsApp(invoiceResult.pdf, `facture-${refSlug}.pdf`);
-            if (url) attachments.push({ url, filename: `Facture-${refSlug}.pdf`, caption: `Facture ${invoiceRef}` });
+        // 2. Facture complete
+        if (wantInvoice) {
+          const invoiceRow = await prisma.invoice.findFirst({
+            where: { reference: invoiceRef },
+            select: { id: true },
+          });
+          if (invoiceRow) {
+            const invoiceResult = await buildInvoicePdfBuffer(invoiceRow.id);
+            if (invoiceResult) {
+              const url = await uploadPdfForWhatsApp(invoiceResult.pdf, `facture-${refSlug}.pdf`);
+              if (url) attachments.push({ url, filename: `Facture-${refSlug}.pdf`, caption: `Facture ${invoiceRef}` });
+            }
           }
         }
       } catch (err) {
@@ -463,6 +557,7 @@ function registerHandlers() {
           metadata: { invoiceRef, amount, paymentMethod },
           kind: 'PAYMENT_RECEIVED',
           attachments: attachments.length > 0 ? attachments : undefined,
+          templateVariables: templateVars,
         },
       );
     }
@@ -475,6 +570,15 @@ function registerHandlers() {
     if (!clientId) return;
     const organizationId = await resolveEventOrg(event, payload);
 
+    const templateVars = {
+      trackingNumber: trackingNumber || '',
+      designation: designation || '',
+      days: String(days || 0),
+      dailyRate: String(dailyRate || ''),
+      totalAmount: String(totalAmount || ''),
+      agencyName: agencyName || '',
+    };
+
     await createNotification({
       clientId,
       agencyId: agencyId || event.agencyId,
@@ -486,15 +590,17 @@ function registerHandlers() {
 
     const email = await getClientEmail(clientId);
     if (email) {
-      await emailService.sendPenaltyAlert(
-        email,
-        trackingNumber || '',
-        designation || '',
-        days || 0,
-        String(dailyRate || ''),
-        String(totalAmount || ''),
-        agencyName || '',
-        organizationId,
+      await sendEmailWithTemplate(email, organizationId, 'PENALTY_APPLIED', templateVars, () =>
+        emailService.sendPenaltyAlert(
+          email,
+          trackingNumber || '',
+          designation || '',
+          days || 0,
+          String(dailyRate || ''),
+          String(totalAmount || ''),
+          agencyName || '',
+          organizationId,
+        ),
       );
     }
 
@@ -510,6 +616,7 @@ function registerHandlers() {
           `Recuperez votre colis au plus vite pour eviter des frais supplementaires.`,
         metadata: { trackingNumber, totalAmount, days },
         kind: 'PENALTY_APPLIED',
+        templateVariables: templateVars,
       },
     );
   });
@@ -545,20 +652,30 @@ function registerHandlers() {
       metadata: { trackingNumber: parcel.trackingNumber, phase, freeDays: free, dailyRate: rate, kind: 'STORAGE_CHARGE_STARTED' } as Prisma.InputJsonValue,
     });
 
+    const templateVars = {
+      trackingNumber: parcel.trackingNumber || '',
+      designation: parcel.designation || '',
+      phase: phase || '',
+      freeDays: String(free),
+      dailyRate: String(rate),
+    };
+
     const email = await getClientEmail(parcel.clientId);
     if (email) {
-      await emailService.send(
-        email,
-        `Debut des frais de magasinage - ${parcel.trackingNumber || ''}`,
-        `<p>${message}</p>`,
-        organizationId,
-        { event: 'STORAGE_CHARGE_STARTED' },
+      await sendEmailWithTemplate(email, organizationId, 'STORAGE_CHARGE_STARTED', templateVars, () =>
+        emailService.send(
+          email,
+          `Debut des frais de magasinage - ${parcel.trackingNumber || ''}`,
+          `<p>${message}</p>`,
+          organizationId,
+          { event: 'STORAGE_CHARGE_STARTED' },
+        ),
       );
     }
 
     await dispatchExternal(
       { clientId: parcel.clientId, agencyId, organizationId },
-      { title: 'Frais de magasinage', message, metadata: { trackingNumber: parcel.trackingNumber, phase }, kind: 'STORAGE_CHARGE_STARTED' },
+      { title: 'Frais de magasinage', message, metadata: { trackingNumber: parcel.trackingNumber, phase }, kind: 'STORAGE_CHARGE_STARTED', templateVariables: templateVars },
     );
   });
 
@@ -586,20 +703,31 @@ function registerHandlers() {
       metadata: { trackingNumber, estimatedArrivalDate, kind: 'PARCEL_DELAYED' } as Prisma.InputJsonValue,
     });
 
+    const templateVars = {
+      trackingNumber: trackingNumber || '',
+      designation: designation || '',
+      estimatedArrivalDate: estimatedArrivalDate
+        ? new Date(estimatedArrivalDate).toLocaleDateString('fr-FR')
+        : '',
+      trackingUrl: `${config.webUrl}/tracking/${trackingNumber || ''}`,
+    };
+
     const email = await getClientEmail(clientId);
     if (email) {
-      await emailService.send(
-        email,
-        `Retard de votre colis - ${trackingNumber || ''}`,
-        `<p>${message}</p>`,
-        organizationId,
-        { event: 'PARCEL_DELAYED' },
+      await sendEmailWithTemplate(email, organizationId, 'PARCEL_DELAYED', templateVars, () =>
+        emailService.send(
+          email,
+          `Retard de votre colis - ${trackingNumber || ''}`,
+          `<p>${message}</p>`,
+          organizationId,
+          { event: 'PARCEL_DELAYED' },
+        ),
       );
     }
 
     await dispatchExternal(
       { clientId, agencyId: agencyId || event.agencyId, organizationId },
-      { title: 'Retard de votre colis', message, metadata: { trackingNumber }, kind: 'PARCEL_DELAYED' },
+      { title: 'Retard de votre colis', message, metadata: { trackingNumber }, kind: 'PARCEL_DELAYED', templateVariables: templateVars },
     );
   });
 
@@ -632,14 +760,17 @@ function registerHandlers() {
       metadata: { parcelId, trackingNumber, containerName, kind: 'PARCEL_LOADED' } as Prisma.InputJsonValue,
     });
 
+    const templateVars = {
+      trackingNumber: trackingNumber || '',
+      designation: designation || '',
+      containerName: containerName || '',
+      trackingUrl: `${config.webUrl}/tracking/${trackingNumber || ''}`,
+    };
+
     const email = await getClientEmail(clientId);
     if (email) {
-      await emailService.sendParcelLoaded(
-        email,
-        trackingNumber || '',
-        designation || '',
-        containerName || 'le conteneur',
-        organizationId,
+      await sendEmailWithTemplate(email, organizationId, 'PARCEL_LOADED', templateVars, () =>
+        emailService.sendParcelLoaded(email, trackingNumber || '', designation || '', containerName || 'le conteneur', organizationId),
       );
     }
 
@@ -653,6 +784,7 @@ function registerHandlers() {
           `Conteneur : ${containerName || '-'}\n\n` +
           `Le depart du conteneur sera notifie sous peu.\n\nSuivre : ${config.webUrl}/tracking/${trackingNumber || ''}`,
         kind: 'PARCEL_LOADED',
+        templateVariables: templateVars,
       },
     );
   });
@@ -685,15 +817,25 @@ function registerHandlers() {
       metadata: { parcelId, trackingNumber, action, kind: 'PARCEL_UNLOADED' } as Prisma.InputJsonValue,
     });
 
+    const templateVars = {
+      trackingNumber: trackingNumber || '',
+      designation: designation || '',
+      action: action || '',
+      agencyName: agencyName || '',
+      trackingUrl: `${config.webUrl}/tracking/${trackingNumber || ''}`,
+    };
+
     const email = await getClientEmail(clientId);
     if (email) {
-      await emailService.sendParcelUnloaded(
-        email,
-        trackingNumber || '',
-        designation || '',
-        (action as 'received' | 'not_found' | 'modified') || 'modified',
-        agencyName || '',
-        organizationId,
+      await sendEmailWithTemplate(email, organizationId, 'PARCEL_UNLOADED', templateVars, () =>
+        emailService.sendParcelUnloaded(
+          email,
+          trackingNumber || '',
+          designation || '',
+          (action as 'received' | 'not_found' | 'modified') || 'modified',
+          agencyName || '',
+          organizationId,
+        ),
       );
     }
 
@@ -709,7 +851,7 @@ function registerHandlers() {
         `${statusDetail}\n\nSuivre : ${config.webUrl}/tracking/${trackingNumber || ''}`;
       await dispatchExternal(
         { clientId, agencyId: agencyId || event.agencyId, organizationId },
-        { title, message: waMsg, kind: 'PARCEL_UNLOADED' },
+        { title, message: waMsg, kind: 'PARCEL_UNLOADED', templateVariables: templateVars },
       );
     }
   });
@@ -732,23 +874,32 @@ function registerHandlers() {
         metadata: { containerId, parcelCount, kind: 'CONTAINER_DEPARTED' } as Prisma.InputJsonValue,
       });
 
+      const containerLabel = container.designation || container.id;
+      const containerTemplateVars = {
+        containerName: containerLabel,
+        parcelCount: String(parcelCount || 0),
+        containerId,
+      };
       const admins = agencyId ? await getAgencyAdmins(agencyId) : [];
       for (const a of admins) {
-        await emailService.send(
-          a.email,
-          `Conteneur ${container.designation || container.id} parti`,
-          `<p>Depart : <strong>${container.designation || container.id}</strong></p><p>Colis embarques : <strong>${parcelCount || 0}</strong></p>`,
-          organizationId,
-          { event: 'CONTAINER_DEPARTED' },
+        await sendEmailWithTemplate(a.email, organizationId, 'CONTAINER_DEPARTED', containerTemplateVars, () =>
+          emailService.send(
+            a.email,
+            `Conteneur ${containerLabel} parti`,
+            `<p>Depart : <strong>${containerLabel}</strong></p><p>Colis embarques : <strong>${parcelCount || 0}</strong></p>`,
+            organizationId,
+            { event: 'CONTAINER_DEPARTED' },
+          ),
         );
         if (a.phone) {
           await notificationService.notify(
             { userId: a.id, phone: a.phone, organizationId: organizationId ?? undefined },
             {
               title: 'Conteneur parti',
-              message: `Conteneur ${container.designation || container.id} est parti avec ${parcelCount || 0} colis.`,
+              message: `Conteneur ${containerLabel} est parti avec ${parcelCount || 0} colis.`,
               channels: ['WHATSAPP'],
               metadata: { containerId, parcelCount, kind: 'CONTAINER_DEPARTED' },
+              templateVariables: containerTemplateVars,
             },
           ).catch(() => {});
         }
@@ -776,23 +927,32 @@ function registerHandlers() {
         metadata: { containerId, parcelCount, kind: 'CONTAINER_ARRIVED' } as Prisma.InputJsonValue,
       });
 
+      const containerLabel2 = container.designation || container.id;
+      const arrivedTemplateVars = {
+        containerName: containerLabel2,
+        parcelCount: String(parcelCount || 0),
+        containerId,
+      };
       const admins = agencyId ? await getAgencyAdmins(agencyId) : [];
       for (const a of admins) {
-        await emailService.send(
-          a.email,
-          `Conteneur ${container.designation || container.id} arrive`,
-          `<p>Arrivee : <strong>${container.designation || container.id}</strong></p><p>Colis a decharger : <strong>${parcelCount || 0}</strong></p>`,
-          organizationId,
-          { event: 'CONTAINER_ARRIVED' },
+        await sendEmailWithTemplate(a.email, organizationId, 'CONTAINER_ARRIVED', arrivedTemplateVars, () =>
+          emailService.send(
+            a.email,
+            `Conteneur ${containerLabel2} arrive`,
+            `<p>Arrivee : <strong>${containerLabel2}</strong></p><p>Colis a decharger : <strong>${parcelCount || 0}</strong></p>`,
+            organizationId,
+            { event: 'CONTAINER_ARRIVED' },
+          ),
         );
         if (a.phone) {
           await notificationService.notify(
             { userId: a.id, phone: a.phone, organizationId: organizationId ?? undefined },
             {
               title: 'Conteneur arrive',
-              message: `Conteneur ${container.designation || container.id} arrive. ${parcelCount || 0} colis a decharger.`,
+              message: `Conteneur ${containerLabel2} arrive. ${parcelCount || 0} colis a decharger.`,
               channels: ['WHATSAPP'],
               metadata: { containerId, parcelCount, kind: 'CONTAINER_ARRIVED' },
+              templateVariables: arrivedTemplateVars,
             },
           ).catch(() => {});
         }
@@ -818,14 +978,17 @@ function registerHandlers() {
           metadata: { invoiceId, reference, totalAmount, kind: 'INVOICE_CREATED' } as Prisma.InputJsonValue,
         });
 
+        const invTemplateVars = {
+          reference: reference || '',
+          totalAmount: Number(totalAmount || 0).toLocaleString(),
+          currency: currency || 'XAF',
+          invoiceUrl: `${config.webUrl}/invoices`,
+        };
+
         const email = await getClientEmail(clientId);
         if (email) {
-          await emailService.sendInvoiceCreated(
-            email,
-            reference || '',
-            Number(totalAmount || 0).toLocaleString(),
-            currency || 'XAF',
-            organizationId,
+          await sendEmailWithTemplate(email, organizationId, 'INVOICE_CREATED', invTemplateVars, () =>
+            emailService.sendInvoiceCreated(email, reference || '', Number(totalAmount || 0).toLocaleString(), currency || 'XAF', organizationId),
           );
         }
 
@@ -839,6 +1002,7 @@ function registerHandlers() {
               `Consultez et reglez votre facture depuis votre espace : ${config.webUrl}/invoices`,
             metadata: { invoiceId, reference, totalAmount },
             kind: 'INVOICE_CREATED',
+            templateVariables: invTemplateVars,
           },
         );
       }
@@ -874,30 +1038,45 @@ function registerHandlers() {
       metadata: { reference, kind: 'INVOICE_PAID' } as Prisma.InputJsonValue,
     });
 
+    const paidTemplateVars = {
+      reference: reference || '',
+      totalAmount: Number(totalAmount || 0).toLocaleString(),
+      currency: currency || 'XAF',
+      invoiceUrl: `${config.webUrl}/invoices`,
+    };
+
     const email = await getClientEmail(clientId);
     if (email) {
-      await emailService.send(
-        email,
-        `Facture reglee - ${reference || ''}`,
-        `<p>Votre facture <strong>${reference || ''}</strong> est entierement reglee.</p><p>Montant total : <strong>${Number(totalAmount || 0).toLocaleString()} ${currency || 'XAF'}</strong></p><p>Merci pour votre confiance.</p>`,
-        organizationId,
-        { event: 'INVOICE_PAID' },
+      await sendEmailWithTemplate(email, organizationId, 'INVOICE_PAID', paidTemplateVars, () =>
+        emailService.send(
+          email,
+          `Facture reglee - ${reference || ''}`,
+          `<p>Votre facture <strong>${reference || ''}</strong> est entierement reglee.</p><p>Montant total : <strong>${Number(totalAmount || 0).toLocaleString()} ${currency || 'XAF'}</strong></p><p>Merci pour votre confiance.</p>`,
+          organizationId,
+          { event: 'INVOICE_PAID' },
+        ),
       );
     }
 
     // Piece jointe PDF de la facture reglee pour WhatsApp.
+    // Respecte la config d'attachments du template WA si configure.
+    const paidWaTemplate = await resolveTemplate(organizationId, 'INVOICE_PAID', 'WHATSAPP', paidTemplateVars).catch(() => null);
+    const wantPaidInvoice = paidWaTemplate?.attachments?.invoice !== false;
+
     const invoicePaidAttachments: NotificationAttachment[] = [];
     try {
-      const refSlug = (reference || 'facture').replace(/[^a-zA-Z0-9-]/g, '-');
-      const invoiceRow = await prisma.invoice.findFirst({
-        where: { reference },
-        select: { id: true },
-      });
-      if (invoiceRow) {
-        const result = await buildInvoicePdfBuffer(invoiceRow.id);
-        if (result) {
-          const url = await uploadPdfForWhatsApp(result.pdf, `facture-${refSlug}.pdf`);
-          if (url) invoicePaidAttachments.push({ url, filename: `Facture-${refSlug}.pdf`, caption: `Facture ${reference} - reglee` });
+      if (wantPaidInvoice) {
+        const refSlug = (reference || 'facture').replace(/[^a-zA-Z0-9-]/g, '-');
+        const invoiceRow = await prisma.invoice.findFirst({
+          where: { reference },
+          select: { id: true },
+        });
+        if (invoiceRow) {
+          const result = await buildInvoicePdfBuffer(invoiceRow.id);
+          if (result) {
+            const url = await uploadPdfForWhatsApp(result.pdf, `facture-${refSlug}.pdf`);
+            if (url) invoicePaidAttachments.push({ url, filename: `Facture-${refSlug}.pdf`, caption: `Facture ${reference} - reglee` });
+          }
         }
       }
     } catch (err) {
@@ -915,6 +1094,7 @@ function registerHandlers() {
         metadata: { reference, totalAmount },
         kind: 'INVOICE_PAID',
         attachments: invoicePaidAttachments.length > 0 ? invoicePaidAttachments : undefined,
+        templateVariables: paidTemplateVars,
       },
     );
   });
@@ -939,14 +1119,17 @@ function registerHandlers() {
         metadata: { points, delta, reason, kind: 'CLIENT_LOYALTY_UPDATED' } as Prisma.InputJsonValue,
       });
 
+      const loyaltyVars = {
+        points: String(points || 0),
+        delta: String(delta || 0),
+        reason: reason || '',
+        loyaltyUrl: `${config.webUrl}/loyalty`,
+      };
+
       const email = await getClientEmail(clientId);
       if (email) {
-        await emailService.sendLoyaltyPointsUpdated(
-          email,
-          Number(delta || 0),
-          Number(points || 0),
-          reason || '',
-          organizationId,
+        await sendEmailWithTemplate(email, organizationId, 'CLIENT_LOYALTY_UPDATED', loyaltyVars, () =>
+          emailService.sendLoyaltyPointsUpdated(email, Number(delta || 0), Number(points || 0), reason || '', organizationId),
         );
       }
 
@@ -959,7 +1142,7 @@ function registerHandlers() {
           `\nCumulez des points a chaque envoi.\nVoir mon solde : ${config.webUrl}/loyalty`;
         await dispatchExternal(
           { clientId, agencyId: agencyId || event.agencyId, organizationId },
-          { title, message: waMsg, metadata: { points, delta, reason }, kind: 'CLIENT_LOYALTY_UPDATED' },
+          { title, message: waMsg, metadata: { points, delta, reason }, kind: 'CLIENT_LOYALTY_UPDATED', templateVariables: loyaltyVars },
         );
       }
 
