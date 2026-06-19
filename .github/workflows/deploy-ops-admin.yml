@@ -65,9 +65,7 @@ jobs:
     name: Deploy to control plane VPS
     needs: build
     runs-on: ubuntu-latest
-    # Le deploy est manuel pour l'instant (pas de SSH automatise vers le control plane).
-    # Pour l'activer : ajouter SSH_HOST/USER/KEY dans secrets et decommenter la step.
-    if: false
+    if: success()
     steps:
       - name: Pull & restart ops-admin container on control plane
         uses: appleboy/ssh-action@v1
