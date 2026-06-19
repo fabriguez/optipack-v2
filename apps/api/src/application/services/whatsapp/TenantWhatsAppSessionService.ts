@@ -116,6 +116,11 @@ export class TenantWhatsAppSessionService extends EventEmitter {
       }),
       puppeteer: {
         headless: true,
+        // En production Alpine Docker, Chromium est installee via apk et
+        // PUPPETEER_EXECUTABLE_PATH pointe vers /usr/bin/chromium-browser.
+        ...(process.env.PUPPETEER_EXECUTABLE_PATH
+          ? { executablePath: process.env.PUPPETEER_EXECUTABLE_PATH }
+          : {}),
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',

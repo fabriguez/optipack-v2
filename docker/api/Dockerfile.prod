@@ -5,6 +5,10 @@ RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
 
 WORKDIR /app
 
+# Evite que puppeteer (dep de whatsapp-web.js) ne telecharge Chrome pendant
+# pnpm install : le runner Alpine utilise le Chromium du systeme via apk.
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+
 # Copy workspace config
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
 COPY apps/api/package.json ./apps/api/
@@ -18,7 +22,7 @@ COPY packages/config/eslint/package.json ./packages/config/eslint/
 COPY packages/config/tailwind/package.json ./packages/config/tailwind/
 COPY patches/ ./patches/
 
-RUN pnpm install --frozen-lockfile || pnpm install
+RUN pnpm install --frozen-lockfile
 
 # Copy source
 COPY packages/ ./packages/
@@ -42,6 +46,12 @@ RUN pnpm prune --prod
 
 # ---- Production stage ----
 FROM node:20-alpine AS runner
+
+# Chromium pour whatsapp-web.js (puppeteer-core utilise le binaire systeme).
+# PUPPETEER_EXECUTABLE_PATH lu par TenantWhatsAppSessionService au demarrage.
+RUN apk add --no-cache chromium
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
 WORKDIR /app
 
