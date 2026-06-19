@@ -25,8 +25,11 @@ async function getBranding(organizationId?: string | null) {
     select: { logoUrl: true, name: true },
   });
   if (org) {
-    brandingCache.set(organizationId, { logoUrl: org.logoUrl, name: org.name });
-    return { logoUrl: org.logoUrl, name: org.name };
+    const publicLogo = org.logoUrl
+      ? `${config.apiUrl}/api/v1/uploads/public-logo/${organizationId}`
+      : null;
+    brandingCache.set(organizationId, { logoUrl: publicLogo, name: org.name });
+    return { logoUrl: publicLogo, name: org.name };
   }
   return undefined;
 }

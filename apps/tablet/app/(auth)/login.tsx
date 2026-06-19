@@ -27,7 +27,7 @@ export default function LoginScreen() {
 
   // Form : 40% de la largeur, contraint entre 300 et 400 px.
   const formWidth = Math.max(300, Math.min(400, Math.round(width * 0.4)));
-  const tenantName = meta?.name ?? 'TransitSoftServices';
+  const tenantName = meta?.name ?? '';
 
   const handleLogin = async () => {
     setError(null);

@@ -15,7 +15,7 @@ type IdentifierMode = 'phone' | 'email';
 export default function ClientPortalForgotPasswordPage() {
   const router = useRouter();
   const { meta } = useTenantMeta();
-  const orgName = meta?.name?.trim() || 'TransitSoftServices';
+  const orgName = meta?.name?.trim() || '';
 
   const [step, setStep] = useState<Step>('identifier');
   const [mode, setMode] = useState<IdentifierMode>('phone');

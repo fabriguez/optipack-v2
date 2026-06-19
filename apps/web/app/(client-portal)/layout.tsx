@@ -78,7 +78,7 @@ export default function ClientPortalLayout({
   const router = useRouter();
   const pathname = usePathname();
   const { meta } = useTenantMeta();
-  const orgName = meta?.name?.trim() || 'TransitSoftServices';
+  const orgName = meta?.name?.trim() || '';
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [badges, setBadges] = useState<NavBadges>(ZERO_BADGES);
 

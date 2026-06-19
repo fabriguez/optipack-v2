@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { prisma } from '../../../config/database';
+import { config } from '../../../config';
 import { authenticate, authorize, requirePermission } from '../../middleware/authMiddleware';
 import { tenantGuard, getOrgId } from '../../middleware/tenantGuard';
 import { isKnownSkinId, listSkins, isKnownThemeId, listThemes } from '@transitsoftservices/skins';
@@ -31,6 +32,18 @@ function publicEmailConfig(cfg: EmailConfig | null | undefined): EmailConfigPubl
 }
 
 const router = Router();
+
+// Alias : /public === /  (mobile et tablette appellent /tenant-meta/public).
+router.use((req, _res, next) => {
+  if (req.path === '/public') req.url = '/';
+  next();
+});
+
+// Retourne l'URL publique du logo du tenant (proxied, sans auth).
+function publicLogoUrl(orgId: string, rawUrl: string | null): string | null {
+  if (!rawUrl) return null;
+  return `${config.apiUrl}/api/v1/uploads/public-logo/${orgId}`;
+}
 
 /**
  * Service-token middleware for ops -> tenant sync. The orchestrator pushes
@@ -225,7 +238,7 @@ router.get('/', async (req, res, next) => {
         id: org.id,
         slug: org.slug,
         name: org.name,
-        logoUrl: org.logoUrl,
+        logoUrl: publicLogoUrl(org.id, org.logoUrl),
         primaryColor: org.primaryColor,
         secondaryColor: org.secondaryColor,
         accentColor: org.accentColor,
@@ -293,11 +306,17 @@ router.patch(
         }
       }
 
+      // Si logoUrl est notre propre URL proxy publique (retournee par GET /tenant-meta),
+      // ne pas l'ecrire en DB : garder l'URL raw du bucket. Null = suppression voulue.
+      const isPublicProxy = (u: string | null | undefined): boolean =>
+        typeof u === 'string' && u.includes('/api/v1/uploads/public-logo/');
+      const shouldUpdateLogo = logoUrl !== undefined && !isPublicProxy(logoUrl);
+
       const updated = await prisma.organization.update({
         where: { id: orgId },
         data: {
           ...(name !== undefined && { name }),
-          ...(logoUrl !== undefined && { logoUrl }),
+          ...(shouldUpdateLogo && { logoUrl }),
           ...(primaryColor !== undefined && { primaryColor }),
           ...(secondaryColor !== undefined && { secondaryColor }),
           ...(accentColor !== undefined && { accentColor }),
@@ -320,7 +339,7 @@ router.patch(
         data: {
           id: updated.id,
           name: updated.name,
-          logoUrl: updated.logoUrl,
+          logoUrl: publicLogoUrl(updated.id, updated.logoUrl),
           primaryColor: updated.primaryColor,
           secondaryColor: updated.secondaryColor,
           accentColor: updated.accentColor,

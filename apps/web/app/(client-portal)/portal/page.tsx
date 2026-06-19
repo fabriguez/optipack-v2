@@ -22,7 +22,7 @@ export default function ClientPortalLoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { meta } = useTenantMeta();
-  const orgName = meta?.name?.trim() || 'TransitSoftServices';
+  const orgName = meta?.name?.trim() || '';
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();

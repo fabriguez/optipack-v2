@@ -28,7 +28,7 @@ export default function LoginPage() {
   const reason = search.get('reason');
   const loginMutation = useLogin();
   const { meta } = useTenantMeta();
-  const orgName = meta?.name?.trim() || 'TransitSoftServices';
+  const orgName = meta?.name?.trim() || '';
   const logoUrl = meta?.logoUrl ?? null;
 
   useEffect(() => {

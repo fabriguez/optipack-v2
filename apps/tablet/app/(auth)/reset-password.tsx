@@ -23,7 +23,7 @@ export default function ResetPasswordScreen() {
   const { width } = useWindowDimensions();
 
   const formWidth = Math.max(300, Math.min(400, Math.round(width * 0.4)));
-  const tenantName = meta?.name ?? 'TransitSoftServices';
+  const tenantName = meta?.name ?? '';
   const canSubmit = !!email.trim() && code.length === 6 && !!password && !!confirm;
 
   const handleSubmit = async () => {

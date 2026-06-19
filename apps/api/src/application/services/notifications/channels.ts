@@ -51,12 +51,12 @@ async function resolveOrganizationId(
  * d'un entete coherent ("[Acme Transit] ...").
  */
 async function resolveTenantName(organizationId: string | null): Promise<string> {
-  if (!organizationId) return 'TransitSoftServices';
+  if (!organizationId) return '';
   const org = await prisma.organization.findUnique({
     where: { id: organizationId },
     select: { name: true },
   });
-  return org?.name || 'TransitSoftServices';
+  return org?.name || '';
 }
 
 /**
@@ -71,14 +71,15 @@ function wrapMessage(
 ): { title: string; message: string } {
   // IN_APP : la UI affiche deja titre + message + tenant, pas besoin de doubler.
   if (channel === 'IN_APP') return { title, message: body };
+  const prefix = tenantName ? `[${tenantName}] ` : '';
   if (channel === 'SMS') {
     // SMS : on garde compact (max ~160 chars sur le body wrapper).
-    return { title, message: `[${tenantName}] ${body}` };
+    return { title, message: `${prefix}${body}` };
   }
   // WHATSAPP / PUSH : entete + pied avec branding tenant.
   return {
-    title: `[${tenantName}] ${title}`,
-    message: `${body}\n\n— ${tenantName} via TransitSoftServices`,
+    title: `${prefix}${title}`,
+    message: tenantName ? `${body}\n\n— ${tenantName}` : body,
   };
 }
 

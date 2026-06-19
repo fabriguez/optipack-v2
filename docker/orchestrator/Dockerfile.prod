@@ -13,6 +13,7 @@ COPY packages/skins/package.json ./packages/skins/
 COPY packages/ops-schemas/package.json ./packages/ops-schemas/
 COPY packages/config/package.json ./packages/config/
 COPY packages/config/tsconfig/package.json ./packages/config/tsconfig/
+COPY patches/ ./patches/
 
 RUN pnpm install --frozen-lockfile || pnpm install
 

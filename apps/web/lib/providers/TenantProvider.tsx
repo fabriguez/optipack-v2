@@ -37,7 +37,7 @@ const API_URL =
 const FALLBACK_META: TenantMeta = {
   id: 'fallback',
   slug: null,
-  name: 'TransitSoftServices',
+  name: '',
   logoUrl: null,
   primaryColor: '#1B5E20',
   secondaryColor: '#4CAF50',
@@ -90,7 +90,7 @@ function applyTheme(meta: TenantMeta) {
       document.documentElement.style.setProperty('--color-sidebar-hover', palette[800]);
       document.documentElement.style.setProperty('--color-sidebar-active', palette[700]);
       document.documentElement.style.setProperty('--color-sidebar-muted', palette[200]);
-      document.title = meta.name || 'TransitSoftServices';
+      document.title = meta.name || '';
     }
     return;
   }

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, KeyboardAvoidingView, Platform, Pressable, ScrollView } from 'react-native';
+import { View, Text, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView } from 'react-native';
 import { Link, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Input } from '@/components/ui/Input';
@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { AppPhoneInput } from '@/components/ui/AppPhoneInput';
 import { SocialAuthButtons } from '@/components/auth/SocialAuthButtons';
 import { useAuth } from '@/lib/auth/AuthContext';
+import { useTenant } from '@/lib/tenant/TenantContext';
 import { colors, radius, spacing } from '@/lib/theme/colors';
 import { toast } from '@/lib/toast';
 
@@ -14,6 +15,7 @@ type IdentifierMode = 'phone' | 'email';
 
 export default function LoginScreen() {
   const { login } = useAuth();
+  const { meta } = useTenant();
   const router = useRouter();
   const [mode, setMode] = useState<IdentifierMode>('phone');
   const [phone, setPhone] = useState('');
@@ -43,10 +45,20 @@ export default function LoginScreen() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: spacing['2xl'] }}>
           <View style={{ alignItems: 'center', marginBottom: 32 }}>
-            <View style={{ width: 72, height: 72, borderRadius: 18, backgroundColor: colors.primary[500], alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
-              <Text style={{ fontSize: 28, fontWeight: '700', color: colors.white }}>TS</Text>
-            </View>
-            <Text style={{ fontSize: 22, fontWeight: '700', color: colors.gray[900] }}>TransitSoftServices</Text>
+            {meta?.logoUrl ? (
+              <Image
+                source={{ uri: meta.logoUrl }}
+                style={{ width: 72, height: 72, borderRadius: 18, marginBottom: 16 }}
+                resizeMode="contain"
+              />
+            ) : (
+              <View style={{ width: 72, height: 72, borderRadius: 18, backgroundColor: colors.primary[500], alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+                <Text style={{ fontSize: 28, fontWeight: '700', color: colors.white }}>
+                  {(meta?.name ?? 'T').charAt(0).toUpperCase()}
+                </Text>
+              </View>
+            )}
+            <Text style={{ fontSize: 22, fontWeight: '700', color: colors.gray[900] }}>{meta?.name ?? ''}</Text>
             <Text style={{ fontSize: 13, color: colors.gray[500], marginTop: 4 }}>Espace client</Text>
           </View>
 
