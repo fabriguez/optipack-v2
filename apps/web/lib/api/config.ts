@@ -34,6 +34,110 @@ export const currenciesApi = {
     apiClient.delete(`/currencies/${id}`).then((r) => r.data),
 };
 
+// ── Notification Config ────────────────────────────────────
+
+export interface NotificationGlobalChannels {
+  email: boolean;
+  whatsapp: boolean;
+  sms: boolean;
+  push: boolean;
+}
+
+export interface NotificationEventChannels {
+  email?: boolean;
+  whatsapp?: boolean;
+  sms?: boolean;
+  push?: boolean;
+}
+
+export interface NotificationConfig {
+  channels: NotificationGlobalChannels;
+  events: Record<string, NotificationEventChannels>;
+}
+
+export interface NotificationEventVariable {
+  name: string;
+  label: string;
+  example: string;
+}
+
+export interface NotificationEventAttachment {
+  key: string;
+  label: string;
+  description: string;
+}
+
+export interface NotificationEventDef {
+  kind: string;
+  label: string;
+  description: string;
+  category: string;
+  recipient: 'client' | 'admin' | 'both';
+  variables: NotificationEventVariable[];
+  attachments: NotificationEventAttachment[];
+}
+
+export interface NotificationTemplate {
+  id: string;
+  organizationId: string;
+  eventKind: string;
+  channel: string;
+  subject?: string | null;
+  body: string;
+  attachments?: Record<string, boolean> | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const notificationConfigApi = {
+  getConfig: () =>
+    apiClient.get<{ success: boolean; data: NotificationConfig }>('/notification-config').then((r) => r.data.data),
+
+  patchChannels: (channels: Partial<NotificationGlobalChannels>) =>
+    apiClient.patch('/notification-config/channels', channels).then((r) => r.data),
+
+  patchEventChannels: (kind: string, channels: NotificationEventChannels) =>
+    apiClient.patch(`/notification-config/events/${kind}`, channels).then((r) => r.data),
+
+  listTemplates: () =>
+    apiClient.get<{ success: boolean; data: NotificationTemplate[] }>('/notification-templates').then((r) => r.data.data),
+
+  upsertTemplate: (eventKind: string, channel: string, data: { subject?: string; body: string; attachments?: Record<string, boolean>; isActive?: boolean }) =>
+    apiClient.put(`/notification-templates/${eventKind}/${channel}`, data).then((r) => r.data),
+
+  deleteTemplate: (eventKind: string, channel: string) =>
+    apiClient.delete(`/notification-templates/${eventKind}/${channel}`).then((r) => r.data),
+
+  listEvents: () =>
+    apiClient.get<{ success: boolean; data: NotificationEventDef[] }>('/notification-events').then((r) => r.data.data),
+};
+
+// ── WhatsApp Personnel ─────────────────────────────────────
+
+export type WaSessionStatus = 'DISCONNECTED' | 'QR_READY' | 'CONNECTING' | 'CONNECTED' | 'BANNED';
+
+export interface WaSessionState {
+  status: WaSessionStatus;
+  qrCode: string | null;
+  connectedPhone: string | null;
+  lastError: string | null;
+}
+
+export const whatsappPersonalApi = {
+  getStatus: () =>
+    apiClient.get<{ success: boolean; data: WaSessionState }>('/whatsapp-personal/status').then((r) => r.data.data),
+
+  start: () =>
+    apiClient.post('/whatsapp-personal/start').then((r) => r.data),
+
+  disconnect: () =>
+    apiClient.delete('/whatsapp-personal/disconnect').then((r) => r.data),
+
+  updateRateLimit: (perHour: number, minDelaySeconds: number) =>
+    apiClient.patch('/whatsapp-personal/rate-limit', { perHour, minDelaySeconds }).then((r) => r.data),
+};
+
 // ── Reports ────────────────────────────────────────────────
 
 export interface ReportParams {

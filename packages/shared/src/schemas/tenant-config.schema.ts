@@ -107,19 +107,63 @@ export type MobileAppConfig = z.infer<typeof mobileAppConfigSchema>;
 
 // ---- Notification channel config ----
 
-export const notificationChannelConfigSchema = z.object({
-  /** Canal email (Resend/SMTP). Actif par défaut. */
+/** Bascules globales des canaux (master on/off). */
+export const notificationGlobalChannelsSchema = z.object({
   email: z.boolean().default(true),
-  /** Canal WhatsApp (Twilio → Wapino fallback). Actif par défaut. */
   whatsapp: z.boolean().default(true),
-  /** Canal SMS. Inactif par défaut. */
   sms: z.boolean().default(false),
+  push: z.boolean().default(false),
+});
+export type NotificationGlobalChannels = z.infer<typeof notificationGlobalChannelsSchema>;
+
+/** Config par-event : quels canaux sont actifs pour cet event. */
+export const notificationEventChannelsSchema = z.object({
+  email: z.boolean().optional(),
+  whatsapp: z.boolean().optional(),
+  sms: z.boolean().optional(),
+  push: z.boolean().optional(),
+});
+export type NotificationEventChannels = z.infer<typeof notificationEventChannelsSchema>;
+
+/**
+ * Configuration complète des notifications d'un tenant.
+ *
+ * Logique de résolution :
+ *  1. Si `channels.<canal>` est false → canal totalement désactivé pour ce tenant.
+ *  2. Si `events.<kind>.<canal>` est false → canal désactivé pour cet event uniquement.
+ *  3. Si `events.<kind>.<canal>` est undefined → suit la valeur globale `channels.<canal>`.
+ *
+ * Les templates HTML / WhatsApp / SMS personnalisés sont stockés dans
+ * TenantNotificationTemplate (table dédiée) pour éviter un JSON trop lourd.
+ */
+export const notificationChannelConfigSchema = z.object({
+  /** Canaux globaux (master switches). Si absent, comportement défaut. */
+  channels: notificationGlobalChannelsSchema.optional(),
+  /**
+   * Config par event. Clé = event kind (PARCEL_CREATED, PAYMENT_RECEIVED, …).
+   * Seuls les overrides sont stockés — undefined = comportement global.
+   */
+  events: z.record(z.string(), notificationEventChannelsSchema).optional(),
 });
 export type NotificationChannelConfig = z.infer<typeof notificationChannelConfigSchema>;
 
-/** Defaults when Organization.notificationConfig is null. */
-export const DEFAULT_NOTIFICATION_CHANNEL_CONFIG: NotificationChannelConfig = {
+export const DEFAULT_NOTIFICATION_GLOBAL_CHANNELS: NotificationGlobalChannels = {
   email: true,
   whatsapp: true,
   sms: false,
+  push: false,
 };
+
+/** Defaults when Organization.notificationConfig is null. */
+export const DEFAULT_NOTIFICATION_CHANNEL_CONFIG: NotificationChannelConfig = {
+  channels: DEFAULT_NOTIFICATION_GLOBAL_CHANNELS,
+  events: {},
+};
+
+// ---- WhatsApp personal channel (whatsapp-web.js) ----
+
+export const whatsAppPersonalRateLimitSchema = z.object({
+  perHour: z.number().int().min(1).max(500).default(50),
+  minDelaySeconds: z.number().int().min(0).max(60).default(3),
+});
+export type WhatsAppPersonalRateLimit = z.infer<typeof whatsAppPersonalRateLimitSchema>;

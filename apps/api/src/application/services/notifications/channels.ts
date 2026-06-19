@@ -374,7 +374,61 @@ async function deliverExternal(
 
 export const deliverSms = (t: NotificationTarget, p: NotificationPayload) =>
   deliverExternal('SMS', smsProvider, t, p);
-export const deliverWhatsapp = (t: NotificationTarget, p: NotificationPayload) =>
-  deliverExternal('WHATSAPP', whatsappProvider, t, p);
 export const deliverPush = (t: NotificationTarget, p: NotificationPayload) =>
   deliverExternal('PUSH', pushProvider, t, p);
+
+/**
+ * Livraison WhatsApp : essaie d'abord la session WhatsApp Web JS du tenant
+ * (si CONNECTED), puis retombe sur le provider chain configuré (Twilio/Wapino/Meta).
+ */
+export async function deliverWhatsapp(
+  t: NotificationTarget,
+  p: NotificationPayload,
+): Promise<ChannelDeliveryResult> {
+  const organizationId = await resolveOrganizationId(t);
+
+  // Tenter le canal WA Web JS du tenant en priorité
+  if (organizationId) {
+    try {
+      const { tenantWaSessionService } = await import('../whatsapp/TenantWhatsAppSessionService');
+      if (tenantWaSessionService.isConnected(organizationId)) {
+        // Résoudre le numéro du destinataire
+        let phone = t.phone ?? null;
+        if (!phone && t.clientId) {
+          const c = await prisma.client.findUnique({ where: { id: t.clientId }, select: { phone: true } });
+          phone = c?.phone ?? null;
+        }
+        if (!phone && t.userId) {
+          const u = await prisma.user.findUnique({ where: { id: t.userId }, select: { phone: true } });
+          phone = u?.phone ?? null;
+        }
+        if (phone) {
+          const tenantName = await resolveTenantName(organizationId);
+          const wrapped = wrapMessage(tenantName, p.title, p.message, 'WHATSAPP');
+          const sent = await tenantWaSessionService.sendMessage(organizationId, phone, wrapped.message);
+          if (sent) {
+            const row = await prisma.notification.create({
+              data: {
+                userId: t.userId ?? null,
+                clientId: t.clientId ?? null,
+                agencyId: t.agencyId ?? null,
+                title: wrapped.title,
+                message: wrapped.message,
+                type: 'WHATSAPP',
+                status: 'SENT',
+                sentAt: new Date(),
+                metadata: { to: phone, organizationId, provider: 'whatsapp-web-js', ...(p.metadata ?? {}) } as never,
+              },
+            });
+            logChannelDelivery({ status: 'OK', channel: 'WHATSAPP', title: p.title, target: phone, organizationId, event: (p.metadata?.kind as string | undefined) });
+            return { channel: 'WHATSAPP', status: 'SENT', notificationId: row.id };
+          }
+        }
+      }
+    } catch {
+      // Fallback silencieux vers le provider chain
+    }
+  }
+
+  return deliverExternal('WHATSAPP', whatsappProvider, t, p);
+}

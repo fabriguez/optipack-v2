@@ -50,6 +50,8 @@ import publicPricingRoutes from './public-pricing.routes';
 import whatsappWebhookRoutes from './whatsapp-webhook.routes';
 import financeRoutes from './finance.routes';
 import headOfficeRoutes from './head-office.routes';
+import notificationTemplatesRoutes from './notification-templates.routes';
+import whatsappPersonalRoutes from './whatsapp-personal.routes';
 
 const router = Router();
 
@@ -117,6 +119,10 @@ router.use('/notifications', notificationRoutes);
 // Rapports & Config
 router.use('/reports', reportRoutes);
 router.use(configRoutes);
+// Notification config (canaux globaux + par event) + templates personnalisés
+router.use(notificationTemplatesRoutes);
+// WhatsApp personnel par tenant (whatsapp-web.js)
+router.use(whatsappPersonalRoutes);
 
 // Uploads generiques (recus, justificatifs, photos colis, ...)
 router.use('/uploads', uploadRoutes);

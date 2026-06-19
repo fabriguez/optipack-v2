@@ -111,6 +111,10 @@ model Organization {
   headOfficeDisbursements HeadOfficeDisbursementVoucher[]
   // Transferts de fond initie depuis le siege.
   headOfficeFundTransfers FundTransfer[]                  @relation("HeadOfficeSourceTransfers")
+  // Templates de notification personnalises par le tenant.
+  notificationTemplates   TenantNotificationTemplate[]
+  // Session WhatsApp personnel du tenant (whatsapp-web.js).
+  whatsAppSession         TenantWhatsAppSession?
 
   @@map("organizations")
 }
@@ -3025,6 +3029,77 @@ enum NotificationStatus {
   SENT
   FAILED
   READ
+}
+
+// ============================================================
+// NOTIFICATION TEMPLATES (par tenant, par event, par canal)
+// ============================================================
+
+/**
+ * Template de notification personnalisé par le tenant admin.
+ * Un template overrides le message par défaut du système pour un triplet
+ * (organizationId, eventKind, channel).
+ *
+ * Le body est un template Handlebars avec les variables de l'event.
+ * Ex : "Bonjour {{clientName}}, votre colis {{trackingNumber}} est arrivé !"
+ */
+model TenantNotificationTemplate {
+  id             String   @id @default(cuid())
+  organizationId String
+  eventKind      String
+  channel        String
+  subject        String?
+  body           String   @db.Text
+  /** JSON : { invoice: bool, receipt: bool, parcelLabel: bool } */
+  attachments    Json?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, eventKind, channel])
+  @@index([organizationId])
+  @@map("tenant_notification_templates")
+}
+
+// ============================================================
+// WHATSAPP PERSONAL CHANNEL (whatsapp-web.js par tenant)
+// ============================================================
+
+/**
+ * Session WhatsApp personnel d'un tenant (via whatsapp-web.js).
+ * L'admin scanne le QR depuis son dashboard pour connecter son WhatsApp.
+ * Les messages de notification partent depuis ce compte quand CONNECTED.
+ */
+model TenantWhatsAppSession {
+  id               String                  @id @default(cuid())
+  organizationId   String                  @unique
+  status           WhatsAppSessionStatus   @default(DISCONNECTED)
+  /** QR code base64 (null une fois connecté). */
+  qrCode           String?                 @db.Text
+  /** Numéro WhatsApp connecté (format E.164). */
+  connectedPhone   String?
+  /** Quota messages/heure (défaut : 50). */
+  rateLimitPerHour Int                     @default(50)
+  /** Délai minimum entre envois en secondes (défaut : 3). */
+  minDelaySeconds  Int                     @default(3)
+  connectedAt      DateTime?
+  lastError        String?
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_whatsapp_sessions")
+}
+
+enum WhatsAppSessionStatus {
+  DISCONNECTED
+  QR_READY
+  CONNECTING
+  CONNECTED
+  BANNED
 }
 
 // ============================================================

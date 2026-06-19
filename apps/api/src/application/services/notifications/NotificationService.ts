@@ -3,6 +3,7 @@ import { prisma } from '../../../config/database';
 import {
   notificationChannelConfigSchema,
   DEFAULT_NOTIFICATION_CHANNEL_CONFIG,
+  DEFAULT_NOTIFICATION_GLOBAL_CHANNELS,
 } from '@transitsoftservices/shared';
 import {
   deliverEmail,
@@ -52,8 +53,9 @@ export class NotificationService {
       ? payload.channels
       : DEFAULT_CHANNELS;
 
-    // Filtrer les canaux desactives par le tenant.
-    const channels = await this.filterByTenantConfig(target, requested);
+    // Filtrer les canaux desactives par le tenant (global + par event).
+    const eventKind = payload.metadata?.kind as string | undefined;
+    const channels = await this.filterByTenantConfig(target, requested, eventKind);
 
     const tasks: Promise<import('./types').ChannelDeliveryResult>[] = [];
     for (const channel of channels) {
@@ -81,11 +83,15 @@ export class NotificationService {
 
   /**
    * Retire de la liste les canaux que le tenant a desactives.
-   * IN_APP n'est jamais filtre (canal interne, pas de cout reseau).
+   * Logique :
+   *  1. Si global channels.<canal> == false => retire definitivement.
+   *  2. Si events.<kind>.<canal> == false => retire pour cet event.
+   *  3. IN_APP n'est jamais retire (canal interne, pas de cout reseau).
    */
   private async filterByTenantConfig(
     target: NotificationTarget,
     channels: NotificationChannel[],
+    eventKind?: string,
   ): Promise<NotificationChannel[]> {
     const orgId = target.organizationId ?? await this.resolveOrgId(target);
     if (!orgId) return channels;
@@ -99,11 +105,21 @@ export class NotificationService {
     const parsed = notificationChannelConfigSchema.safeParse(raw ?? DEFAULT_NOTIFICATION_CHANNEL_CONFIG);
     const cfg = parsed.success ? parsed.data : DEFAULT_NOTIFICATION_CHANNEL_CONFIG;
 
+    const globalCh = cfg.channels ?? DEFAULT_NOTIFICATION_GLOBAL_CHANNELS;
+    const eventCh = eventKind ? (cfg.events?.[eventKind] ?? {}) : {};
+
     return channels.filter(ch => {
-      if (ch === 'IN_APP' || ch === 'PUSH') return true;
-      if (ch === 'EMAIL') return cfg.email;
-      if (ch === 'WHATSAPP') return cfg.whatsapp;
-      if (ch === 'SMS') return cfg.sms;
+      if (ch === 'IN_APP') return true;
+      // Vérification master switch global
+      if (ch === 'EMAIL' && globalCh.email === false) return false;
+      if (ch === 'WHATSAPP' && globalCh.whatsapp === false) return false;
+      if (ch === 'SMS' && globalCh.sms === false) return false;
+      if (ch === 'PUSH' && globalCh.push === false) return false;
+      // Vérification override par event
+      if (ch === 'EMAIL' && eventCh.email === false) return false;
+      if (ch === 'WHATSAPP' && eventCh.whatsapp === false) return false;
+      if (ch === 'SMS' && eventCh.sms === false) return false;
+      if (ch === 'PUSH' && eventCh.push === false) return false;
       return true;
     });
   }

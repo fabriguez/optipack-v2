@@ -17,3 +17,4 @@ export * from './head-office.schema';
 export * from './debt.schema';
 export * from './common.schema';
 export * from './tenant-config.schema';
+export * from './notification-events';
