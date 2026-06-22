@@ -78,6 +78,7 @@ export class MigrateTenantUseCase {
     const dbName = tenant.dbName ?? `tenant_${slug.replace(/-/g, '_')}_db`;
     const apiName = `tenant-${slug}-api`;
     const webName = `tenant-${slug}-web`;
+    const pgName = `tenant-${slug}-postgres`;
     const dumpPath = `/tmp/tenant-${slug}-${Date.now()}.sql`;
 
     await log(`[migrate] start tenant=${slug} ${tenant.vps.host} -> ${targetVps.host}`);
@@ -93,7 +94,7 @@ export class MigrateTenantUseCase {
       await log(`[migrate] step 2: pg_dump ${dbName}`);
       const dumpResult = await this.ssh.exec(
         sourceCreds,
-        `docker exec postgres pg_dump -U \${POSTGRES_USER:-postgres} -F c "${dbName}" > ${dumpPath}`,
+        `docker exec ${pgName} pg_dump -U \${POSTGRES_USER:-postgres} -F c "${dbName}" > ${dumpPath}`,
       );
       if (dumpResult.code !== 0) {
         throw new Error(`pg_dump echoue : ${dumpResult.stderr}`);
@@ -109,7 +110,7 @@ export class MigrateTenantUseCase {
       await log(`[migrate] step 4: CREATE DATABASE + pg_restore on target`);
       await this.ssh.exec(
         targetCreds,
-        `docker exec postgres psql -U \${POSTGRES_USER:-postgres} -tc "SELECT 1 FROM pg_database WHERE datname='${dbName}'" | grep -q 1 || docker exec postgres psql -U \${POSTGRES_USER:-postgres} -c 'CREATE DATABASE "${dbName}"'`,
+        `docker exec ${pgName} psql -U \${POSTGRES_USER:-postgres} -tc "SELECT 1 FROM pg_database WHERE datname='${dbName}'" | grep -q 1 || docker exec ${pgName} psql -U \${POSTGRES_USER:-postgres} -c 'CREATE DATABASE "${dbName}"'`,
       );
       dbCreatedOnTarget = true;
       const restoreResult = await this.ssh.exec(

@@ -39,11 +39,12 @@ export class BackupTenantUseCase {
     const ts = Date.now();
     const dir = `${BACKUP_ROOT}/tenant-${tenant.slug}`;
     const path = `${dir}/${ts}.dump`;
+    const pgName = `tenant-${tenant.slug}-postgres`;
 
     await this.ssh.exec(creds, `mkdir -p ${dir}`);
     const dump = await this.ssh.exec(
       creds,
-      `docker exec postgres pg_dump -U \${POSTGRES_USER:-postgres} -F c "${tenant.dbName}" > ${path}`,
+      `docker exec ${pgName} pg_dump -U \${POSTGRES_USER:-postgres} -F c "${tenant.dbName}" > ${path}`,
     );
     if (dump.code !== 0) {
       const err = dump.stderr || 'pg_dump failed';

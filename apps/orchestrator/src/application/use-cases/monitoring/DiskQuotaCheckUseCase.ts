@@ -42,12 +42,13 @@ export class DiskQuotaCheckUseCase {
         sshKeyEncrypted: t.vps.sshKeyEncrypted,
       };
       const dbName = t.dbName ?? `tenant_${t.slug.replace(/-/g, '_')}_db`;
+      const pgName = `tenant-${t.slug}-postgres`;
 
       try {
         // pg_database_size renvoie en bytes
         const r = await this.ssh.exec(
           creds,
-          `docker exec postgres psql -U \${POSTGRES_USER:-postgres} -tA -c "SELECT pg_database_size('${dbName}')"`,
+          `docker exec ${pgName} psql -U \${POSTGRES_USER:-postgres} -tA -c "SELECT pg_database_size('${dbName}')"`,
         );
         if (r.code !== 0) continue;
         const dbBytes = Number(r.stdout.trim());

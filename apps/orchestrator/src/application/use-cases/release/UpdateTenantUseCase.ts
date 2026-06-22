@@ -65,6 +65,7 @@ export class UpdateTenantUseCase {
     const dbName = tenant.dbName ?? `tenant_${slug.replace(/-/g, '_')}_db`;
     const apiName = `tenant-${slug}-api`;
     const webName = `tenant-${slug}-web`;
+    const pgName = `tenant-${slug}-postgres`;
     const fromVersion = tenant.currentVersion ?? 'unknown';
     const backupPath = `/tmp/tenant-${slug}-pre-${fromVersion}-${Date.now()}.sql`;
 
@@ -81,7 +82,7 @@ export class UpdateTenantUseCase {
       await log('[update] step 1: pg_dump backup');
       const dump = await this.ssh.exec(
         creds,
-        `docker exec postgres pg_dump -U \${POSTGRES_USER:-postgres} -F c "${dbName}" > ${backupPath}`,
+        `docker exec ${pgName} pg_dump -U \${POSTGRES_USER:-postgres} -F c "${dbName}" > ${backupPath}`,
       );
       if (dump.code !== 0) throw new Error(`pg_dump failed: ${dump.stderr}`);
       backupTaken = true;
@@ -192,7 +193,7 @@ export class UpdateTenantUseCase {
           await log('[update] rollback : pg_restore depuis backup');
           await this.ssh.exec(
             creds,
-            `cat ${backupPath} | docker exec -i postgres pg_restore -U \${POSTGRES_USER:-postgres} -d "${dbName}" --clean --if-exists`,
+            `cat ${backupPath} | docker exec -i ${pgName} pg_restore -U \${POSTGRES_USER:-postgres} -d "${dbName}" --clean --if-exists`,
           );
         }
         if (oldImagesTagged) {
@@ -280,6 +281,7 @@ export class RollbackTenantUseCase {
     const dbName = tenant.dbName ?? `tenant_${slug.replace(/-/g, '_')}_db`;
     const apiName = `tenant-${slug}-api`;
     const webName = `tenant-${slug}-web`;
+    const pgName = `tenant-${slug}-postgres`;
     const envFile = `${config.tenantEnvDir}/tenant-${slug}.env`;
 
     const log = (m: string) => this.jobLogger.append(updateJobId, m);
@@ -293,7 +295,7 @@ export class RollbackTenantUseCase {
     await log('[rollback] pg_restore');
     await this.ssh.exec(
       creds,
-      `cat ${job.backupRef} | docker exec -i postgres pg_restore -U \${POSTGRES_USER:-postgres} -d "${dbName}" --clean --if-exists`,
+      `cat ${job.backupRef} | docker exec -i ${pgName} pg_restore -U \${POSTGRES_USER:-postgres} -d "${dbName}" --clean --if-exists`,
     );
 
     // 3. Restart anciens containers (image :previous-<slug>)
