@@ -73,6 +73,11 @@ services:
       OPS_GHCR_TOKEN: ${OPS_GHCR_TOKEN}
       OPS_PUBLIC_WEB_URL: ${OPS_PUBLIC_WEB_URL:-https://ops-admin.transitsoftservices.com}
       CADDY_ADMIN_URL: ${CADDY_ADMIN_URL:-http://host.docker.internal:2019}
+      # Origin envoye dans les requetes a l admin API Caddy. http://localhost
+      # est toujours accepte par Caddy (defaut) meme sans config prealable,
+      # ce qui resout le bootstrap : avant le premier push, Caddy n a pas
+      # encore notre liste d origines custom (orchestrator/host.docker.internal).
+      CADDY_ADMIN_ORIGIN: ${CADDY_ADMIN_ORIGIN:-http://localhost}
       OPS_SELF_VPS_NAME: ${OPS_SELF_VPS_NAME:-self}
       OPS_BASE_DOMAIN: ${OPS_BASE_DOMAIN:-transitsoftservices.com}
       OPS_CADDY_EMAIL: ${OPS_CADDY_EMAIL:-admin@transitsoftservices.com}
