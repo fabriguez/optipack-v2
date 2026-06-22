@@ -185,6 +185,9 @@ export class ProvisionTenantUseCase {
     const minioUser = existingEnv?.MINIO_ROOT_USER || `tenant_${tenant.slug.replace(/-/g, '_')}`;
     const minioPass = existingEnv?.MINIO_ROOT_PASSWORD || randomBytes(24).toString('hex');
     const minioBucket = `tenant-${tenant.slug}`;
+    // Nom du container API tenant : DNS au sein du network compose. Utilise
+    // par INTERNAL_API_URL (NextAuth server-side) et plus bas dans le compose.
+    const apiName = `tenant-${tenant.slug}-api`;
     // Les noms de services compose = noms DNS au sein du network compose.
     // L'API tenant s'y connecte directement (pas de port host expose pour
     // postgres/redis/minio).
@@ -237,8 +240,7 @@ export class ProvisionTenantUseCase {
     // reserves -> "port is already allocated" au prochain compose up.
     // Solution : compose down --remove-orphans -t 5 -v pour reset complet,
     // PUIS rm -f par nom comme garde-fou (au cas ou le compose file aurait
-    // change de nom de container entre essais).
-    const apiName = `tenant-${tenant.slug}-api`;
+    // change de nom de container entre essais). apiName deja declare plus haut.
     const webName = `tenant-${tenant.slug}-web`;
     const webClientName = `tenant-${tenant.slug}-web-client`;
     // Stocke le compose dans tenantEnvDir (persistant, comme le .env).
