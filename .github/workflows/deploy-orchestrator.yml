@@ -62,6 +62,11 @@ jobs:
             # et sont definis dans la meme stack control-plane).
             docker compose -f docker-compose.control-plane.yml build orchestrator ops-admin
 
+            # Cleanup : retire tout container standalone ops-admin (cree par un ancien
+            # workflow) qui tiendrait le port 3020 et bloquerait compose.
+            docker stop ops-admin 2>/dev/null || true
+            docker rm   ops-admin 2>/dev/null || true
+
             # (Re)demarrage : l'entrypoint orchestrator joue prisma migrate deploy
             # avant de booter. ops-admin est un Next.js standalone -> demarrage direct.
             docker compose -f docker-compose.control-plane.yml up -d orchestrator ops-admin
