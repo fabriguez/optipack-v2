@@ -39,27 +39,27 @@ async function seedOpsAdmin() {
     ? { twoFactorSecret: totpSecret, twoFactorEnabled: true }
     : { twoFactorSecret: null, twoFactorEnabled: false, twoFactorRecoveryCodes: [] };
 
-  const existed = await prisma.opsAdmin.findUnique({ where: { email }, select: { id: true } });
-
-  await prisma.opsAdmin.upsert({
-    where: { email },
-    create: {
-      email,
-      passwordHash,
-      fullName,
-      isSuperAdmin: true,
-      isActive: true,
-      ...twoFactorData,
-    },
-    update: {
-      passwordHash,
-      fullName,
-      isActive: true,
-      ...twoFactorData,
-    },
+  // Cherche d abord par email exact, sinon prend le premier super-admin existant.
+  // Permet de changer l email sans creer de doublon : l ancien est mis a jour.
+  const byEmail = await prisma.opsAdmin.findUnique({ where: { email }, select: { id: true } });
+  const existing = byEmail ?? await prisma.opsAdmin.findFirst({
+    where: { isSuperAdmin: true },
+    select: { id: true, email: true },
   });
 
-  console.log(`[seed] OpsAdmin ${existed ? 'mis a jour' : 'cree'} : ${email}`);
+  if (existing) {
+    await prisma.opsAdmin.update({
+      where: { id: existing.id },
+      data: { email, passwordHash, fullName, isActive: true, ...twoFactorData },
+    });
+    const emailChanged = (existing as { email?: string }).email !== email;
+    console.log(`[seed] OpsAdmin mis a jour : ${emailChanged ? `${(existing as any).email} -> ${email}` : email}`);
+  } else {
+    await prisma.opsAdmin.create({
+      data: { email, passwordHash, fullName, isSuperAdmin: true, isActive: true, ...twoFactorData },
+    });
+    console.log(`[seed] OpsAdmin cree : ${email}`);
+  }
   if (totpSecret) {
     console.log(`[seed] 2FA TOTP active (secret: ${totpSecret.slice(0, 6)}...)`);
   } else {
