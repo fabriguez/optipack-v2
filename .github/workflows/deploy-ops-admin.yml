@@ -64,6 +64,7 @@ jobs:
               --restart unless-stopped \
               --network optipack-shared \
               -p 3020:3020 \
+              -e PORT=3020 \
               ops-admin:latest
             docker image prune -f
         env:
