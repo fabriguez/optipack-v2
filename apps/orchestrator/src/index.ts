@@ -6,7 +6,7 @@ import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import { config } from './config';
-import { disconnectPrisma } from './config/database';
+import { disconnectPrisma, prisma } from './config/database';
 import { logger } from './infrastructure/logger';
 import routes from './presentation/routes';
 import { errorHandler } from './presentation/middleware/errorHandler';
@@ -14,6 +14,7 @@ import { requestContext } from './presentation/middleware/requestContext';
 import { container } from './container';
 import { MetricsService } from './infrastructure/metrics/MetricsService';
 import { ReconcileCaddyUseCase } from './application/use-cases/caddy/ReconcileCaddyUseCase';
+import { SSHService, SSH_SERVICE } from './infrastructure/ssh/SSHService';
 import { startProvisioningWorkers, stopWorkers } from './infrastructure/queue/workers';
 import { closeQueues } from './infrastructure/queue/queues';
 import { redisConnection } from './infrastructure/queue/connection';
@@ -184,6 +185,65 @@ if (!reconcileDisabled) {
       }
     })();
   }, 3000);
+}
+
+// Boot migration : injecte OPS_TENANT_PROXY_TOKEN dans le .env de tous les
+// tenants actifs qui ne l'ont pas encore. Non bloquant. Idempotent (grep -q
+// avant d'ecrire). Couvre les tenants provisiones avant ce fix.
+// Override : OPS_DISABLE_TOKEN_SYNC=1
+if (!process.env.OPS_DISABLE_TOKEN_SYNC) {
+  const proxyToken = process.env.OPS_TENANT_PROXY_TOKEN ?? '';
+  if (!proxyToken) {
+    logger.warn('[orchestrator] OPS_TENANT_PROXY_TOKEN absent -- boot token-sync skip');
+  } else {
+    setTimeout(() => {
+      void (async () => {
+        try {
+          const tenants = await prisma.tenant.findMany({
+            where: { status: { in: ['ACTIVE', 'PROVISIONING'] } },
+            include: { vps: true },
+          });
+          const ssh = container.resolve<SSHService>(SSH_SERVICE);
+          const envDir = process.env.OPS_TENANT_ENV_DIR ?? '/home/brightky/.optipack';
+          const escapedToken = proxyToken.replace(/'/g, "'\\''");
+          let patched = 0;
+          for (const t of tenants) {
+            if (!t.vps) continue;
+            const creds = {
+              host: t.vps.host,
+              port: t.vps.port,
+              username: t.vps.username,
+              sshKeyEncrypted: t.vps.sshKeyEncrypted,
+            };
+            const envFile = `${envDir}/tenant-${t.slug}.env`;
+            const apiName = `tenant-${t.slug}-api`;
+            const cmd = [
+              `if ! grep -q "^OPS_TENANT_PROXY_TOKEN=" "${envFile}" 2>/dev/null; then`,
+              `  printf 'OPS_TENANT_PROXY_TOKEN=%s\\n' '${escapedToken}' >> "${envFile}"`,
+              `  docker restart ${apiName} 2>/dev/null || true`,
+              `  echo PATCHED`,
+              `else`,
+              `  echo OK`,
+              `fi`,
+            ].join('\n');
+            try {
+              const r = await ssh.exec(creds, cmd);
+              const out = (r.stdout || '').trim();
+              if (out === 'PATCHED') {
+                patched++;
+                logger.info({ slug: t.slug }, '[token-sync] patched + restarted');
+              }
+            } catch (err) {
+              logger.warn({ slug: t.slug, err: (err as Error).message }, '[token-sync] SSH fail (skip)');
+            }
+          }
+          logger.info({ total: tenants.length, patched }, '[token-sync] boot token-sync done');
+        } catch (err) {
+          logger.warn({ err: (err as Error).message }, '[token-sync] boot token-sync failed (non-fatal)');
+        }
+      })();
+    }, 5000);
+  }
 }
 
 // Phase 2+3 : workers de provisioning + monitoring. OPS_DISABLE_WORKERS=1 pour
