@@ -73,8 +73,10 @@ jobs:
           host: ${{ secrets.OPS_CONTROL_PLANE_HOST }}
           username: ${{ secrets.OPS_CONTROL_PLANE_USER }}
           key: ${{ secrets.OPS_CONTROL_PLANE_SSH_KEY }}
+          envs: GHCR_TOKEN,IMAGE
           script: |
-            docker pull ${{ env.IMAGE }}:latest
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u fabriguez --password-stdin
+            docker pull $IMAGE:latest
             docker stop ops-admin || true
             docker rm ops-admin || true
             docker run -d --name ops-admin \
@@ -82,4 +84,7 @@ jobs:
               --network optipack-shared \
               -p 3020:3020 \
               -e NEXT_PUBLIC_ORCHESTRATOR_URL=${{ secrets.OPS_ORCHESTRATOR_URL }} \
-              ${{ env.IMAGE }}:latest
+              $IMAGE:latest
+        env:
+          GHCR_TOKEN: ${{ secrets.OPS_GHCR_TOKEN }}
+          IMAGE: ${{ env.IMAGE }}
