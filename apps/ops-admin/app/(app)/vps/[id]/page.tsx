@@ -13,6 +13,8 @@ import {
   Trash2,
   Activity,
   Package,
+  RotateCcw,
+  PauseCircle,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -115,6 +117,11 @@ export default function VpsDetailPage({
       window.location.href = '/vps';
     },
   });
+  const setStatus = useMutation({
+    mutationFn: async (status: 'ACTIVE' | 'MAINTENANCE' | 'DECOMMISSIONED') =>
+      (await api.patch(`/vps/${id}`, { status })).data?.data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['vps', id] }),
+  });
 
   const v = vps.data;
 
@@ -156,6 +163,39 @@ export default function VpsDetailPage({
           >
             <Shield className="h-4 w-4" /> UFW
           </Link>
+          {v?.status === 'DECOMMISSIONED' && (
+            <button
+              type="button"
+              onClick={() => setStatus.mutate('ACTIVE')}
+              disabled={setStatus.isPending}
+              className="inline-flex items-center gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-sm text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+            >
+              {setStatus.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+              Réactiver
+            </button>
+          )}
+          {v?.status === 'ACTIVE' && (
+            <button
+              type="button"
+              onClick={() => setStatus.mutate('MAINTENANCE')}
+              disabled={setStatus.isPending}
+              className="inline-flex items-center gap-1.5 rounded-md border bg-white px-3 py-1.5 text-sm text-amber-600 hover:bg-amber-50 disabled:opacity-50"
+            >
+              {setStatus.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <PauseCircle className="h-4 w-4" />}
+              Maintenance
+            </button>
+          )}
+          {v?.status === 'MAINTENANCE' && (
+            <button
+              type="button"
+              onClick={() => setStatus.mutate('ACTIVE')}
+              disabled={setStatus.isPending}
+              className="inline-flex items-center gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-sm text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+            >
+              {setStatus.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+              Réactiver
+            </button>
+          )}
           <button
             type="button"
             onClick={() => {
