@@ -4,7 +4,7 @@ import { config } from '../../../config';
 import { logger } from '../../../infrastructure/logger';
 import { DockerService, DOCKER_SERVICE } from '../../../infrastructure/docker/DockerService';
 import { SSHService, SSH_SERVICE, type SshConnection } from '../../../infrastructure/ssh/SSHService';
-import { ProvisioningJobLogger } from '../provisioning/ProvisioningJobLogger';
+import { UpdateJobLogger } from './UpdateJobLogger';
 import { CapacityService } from '../../services/CapacityService';
 import { BusinessError, NotFoundError } from '../../../domain/errors/BusinessError';
 
@@ -31,7 +31,7 @@ export class UpdateTenantUseCase {
   constructor(
     @inject(SSH_SERVICE) private ssh: SSHService,
     @inject(DOCKER_SERVICE) private docker: DockerService,
-    private jobLogger: ProvisioningJobLogger,
+    private jobLogger: UpdateJobLogger,
     private capacity: CapacityService,
   ) {}
 
@@ -66,6 +66,7 @@ export class UpdateTenantUseCase {
     const apiName = `tenant-${slug}-api`;
     const webName = `tenant-${slug}-web`;
     const pgName = `tenant-${slug}-postgres`;
+    const netName = `tenant-${slug}-net`;
     const fromVersion = tenant.currentVersion ?? 'unknown';
     const backupPath = `/tmp/tenant-${slug}-pre-${fromVersion}-${Date.now()}.sql`;
 
@@ -117,11 +118,15 @@ export class UpdateTenantUseCase {
       await this.docker.stop(creds, webName);
 
       // 5. Run prisma migrate deploy avec une instance temporaire de la nouvelle image
+      // Reseau : tenant-<slug>-net (network compose isole du tenant). Les noms de
+      // services compose (postgres/redis/minio) ne resolvent QUE sur ce reseau.
+      // Avant : optipack-shared (ancienne archi shared) -> EAI_AGAIN redis +
+      // Can't reach postgres:5432 car le container n etait pas sur le bon reseau.
       await log('[update] step 5: prisma migrate deploy (container temp)');
       const envFile = `${config.tenantEnvDir}/tenant-${slug}.env`;
       const migrateRes = await this.ssh.exec(
         creds,
-        `docker run --rm --env-file ${envFile} --network optipack-shared ${targetRelease.apiImageTag} pnpm prisma migrate deploy`,
+        `docker run --rm --env-file ${envFile} --network ${netName} ${targetRelease.apiImageTag} pnpm prisma migrate deploy`,
       );
       if (migrateRes.code !== 0) {
         await log(`[update] migrate FAILED : ${migrateRes.stderr}`);
@@ -144,7 +149,7 @@ export class UpdateTenantUseCase {
         ports: { [tenant.apiPort!]: 4000 },
         envFile,
         restart: 'unless-stopped',
-        network: 'optipack-shared',
+        network: netName,
         cpuLimit: halfCpu,
         memoryMb: apiMem,
       });
@@ -155,9 +160,10 @@ export class UpdateTenantUseCase {
         env: {
           TENANT_SLUG: slug,
           NEXT_PUBLIC_API_URL: `https://api.${slug}.${process.env.OPS_BASE_DOMAIN ?? 'transitsoftservices.com'}/api/v1`,
+          INTERNAL_API_URL: `http://${apiName}:4000/api/v1`,
         },
         restart: 'unless-stopped',
-        network: 'optipack-shared',
+        network: netName,
         cpuLimit: halfCpu,
         memoryMb: webMem,
       });
@@ -211,7 +217,7 @@ export class UpdateTenantUseCase {
             ports: { [tenant.apiPort!]: 4000 },
             envFile,
             restart: 'unless-stopped',
-            network: 'optipack-shared',
+            network: netName,
             cpuLimit: halfCpu,
             memoryMb: apiMem,
           });
@@ -219,9 +225,12 @@ export class UpdateTenantUseCase {
             name: webName,
             image: `ghcr.io/${config.ghcr.namespace}/optipack-web:previous-${slug}`,
             ports: { [tenant.webPort!]: 3000 },
-            env: { TENANT_SLUG: slug },
+            env: {
+              TENANT_SLUG: slug,
+              INTERNAL_API_URL: `http://${apiName}:4000/api/v1`,
+            },
             restart: 'unless-stopped',
-            network: 'optipack-shared',
+            network: netName,
             cpuLimit: halfCpu,
             memoryMb: webMem,
           });
@@ -248,7 +257,7 @@ export class RollbackTenantUseCase {
   constructor(
     @inject(SSH_SERVICE) private ssh: SSHService,
     @inject(DOCKER_SERVICE) private docker: DockerService,
-    private jobLogger: ProvisioningJobLogger,
+    private jobLogger: UpdateJobLogger,
     private capacity: CapacityService,
   ) {}
 
@@ -282,6 +291,7 @@ export class RollbackTenantUseCase {
     const apiName = `tenant-${slug}-api`;
     const webName = `tenant-${slug}-web`;
     const pgName = `tenant-${slug}-postgres`;
+    const netName = `tenant-${slug}-net`;
     const envFile = `${config.tenantEnvDir}/tenant-${slug}.env`;
 
     const log = (m: string) => this.jobLogger.append(updateJobId, m);
@@ -314,7 +324,7 @@ export class RollbackTenantUseCase {
       ports: { [tenant.apiPort!]: 4000 },
       envFile,
       restart: 'unless-stopped',
-      network: 'optipack-shared',
+      network: netName,
       cpuLimit: halfCpu,
       memoryMb: apiMem,
     });
@@ -322,9 +332,12 @@ export class RollbackTenantUseCase {
       name: webName,
       image: `ghcr.io/${config.ghcr.namespace}/optipack-web:previous-${slug}`,
       ports: { [tenant.webPort!]: 3000 },
-      env: { TENANT_SLUG: slug },
+      env: {
+        TENANT_SLUG: slug,
+        INTERNAL_API_URL: `http://${apiName}:4000/api/v1`,
+      },
       restart: 'unless-stopped',
-      network: 'optipack-shared',
+      network: netName,
       cpuLimit: halfCpu,
       memoryMb: webMem,
     });

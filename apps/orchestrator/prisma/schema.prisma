@@ -374,6 +374,7 @@ model TenantUpdateJob {
   finishedAt      DateTime?
   backupRef       String?
   errorLog        String?   @db.Text
+  logs            String?   @db.Text // logs textuels accumules pendant l'update (live)
   triggeredBy     String    // tenant_owner | ops_admin | auto_critical
   rollbackBefore  DateTime?
   createdAt       DateTime  @default(now())

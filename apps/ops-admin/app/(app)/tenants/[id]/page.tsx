@@ -58,6 +58,8 @@ interface UpdateJob {
   toVersion: string;
   status: string;
   startedAt: string | null;
+  logs?: string | null;
+  errorLog?: string | null;
 }
 
 type ActionKind = 'freeze' | 'unfreeze' | 'archive' | 'purge' | 'migrate' | null;
@@ -71,6 +73,7 @@ export default function TenantDetailPage({
   const qc = useQueryClient();
   const [confirm, setConfirm] = useState<ActionKind>(null);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [logsUpdateId, setLogsUpdateId] = useState<string | null>(null);
 
   const tenant = useQuery({
     queryKey: ['tenant', id],
@@ -87,6 +90,12 @@ export default function TenantDetailPage({
     queryKey: ['tenant-updates', id],
     queryFn: async (): Promise<UpdateJob[]> =>
       (await api.get(`/tenants/${id}/updates`)).data?.data ?? [],
+    // Poll tant qu'un update tourne (scheduled/running) pour voir les logs live.
+    refetchInterval: (q) => {
+      const data = q.state.data as UpdateJob[] | undefined;
+      const active = (data ?? []).some((u) => u.status === 'running' || u.status === 'scheduled');
+      return active ? 2000 : false;
+    },
   });
 
   function actionMutation(path: 'freeze' | 'unfreeze' | 'archive') {
@@ -385,6 +394,7 @@ export default function TenantDetailPage({
               <th className="text-left font-normal">Vers</th>
               <th className="text-left font-normal">Status</th>
               <th className="text-left font-normal">Demarre</th>
+              <th className="text-right font-normal">Logs</th>
             </tr>
           </thead>
           <tbody>
@@ -396,11 +406,20 @@ export default function TenantDetailPage({
                   <StatusBadge status={u.status} />
                 </td>
                 <td className="py-2 text-xs text-gray-500">{formatDate(u.startedAt)}</td>
+                <td className="py-2 text-right">
+                  <button
+                    type="button"
+                    onClick={() => setLogsUpdateId(u.id)}
+                    className="rounded border px-2 py-0.5 text-[11px] hover:bg-gray-50"
+                  >
+                    {u.status === 'running' || u.status === 'scheduled' ? 'Suivre' : 'Logs'}
+                  </button>
+                </td>
               </tr>
             ))}
             {(updates.data ?? []).length === 0 && (
               <tr>
-                <td colSpan={4} className="py-4 text-center text-xs text-gray-400">
+                <td colSpan={5} className="py-4 text-center text-xs text-gray-400">
                   Aucune mise a jour.
                 </td>
               </tr>
@@ -408,6 +427,14 @@ export default function TenantDetailPage({
           </tbody>
         </table>
       </Section>
+
+      {logsUpdateId && (
+        <UpdateLogsModal
+          tenantId={id}
+          updateJobId={logsUpdateId}
+          onClose={() => setLogsUpdateId(null)}
+        />
+      )}
 
       {dialogProps && (
         <ConfirmDialog
@@ -887,6 +914,54 @@ function ContainerExecModal({
             {exec.isPending ? '...' : 'Run'}
           </button>
         </form>
+      </div>
+    </div>
+  );
+}
+
+function UpdateLogsModal({
+  tenantId,
+  updateJobId,
+  onClose,
+}: {
+  tenantId: string;
+  updateJobId: string;
+  onClose: () => void;
+}) {
+  const { data, isFetching, refetch } = useQuery<UpdateJob>({
+    queryKey: ['tenant', tenantId, 'update-logs', updateJobId],
+    queryFn: async () =>
+      (await api.get(`/tenants/${tenantId}/updates/${updateJobId}`)).data?.data,
+    // Poll tant que l'update tourne ; stop quand termine.
+    refetchInterval: (q) => {
+      const d = q.state.data as UpdateJob | undefined;
+      return d && (d.status === 'running' || d.status === 'scheduled') ? 2000 : false;
+    },
+  });
+  const body = data?.logs || data?.errorLog || '(pas encore de logs)';
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(body); } catch {/* */}
+  };
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="flex h-[80vh] w-full max-w-4xl flex-col rounded-lg bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b px-4 py-2">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold">
+              Logs update : <span className="font-mono">{data?.toVersion ?? ''}</span>
+            </h3>
+            {data?.status && <StatusBadge status={data.status} />}
+            {isFetching && <span className="text-[10px] text-gray-400">refresh...</span>}
+          </div>
+          <div className="flex gap-1">
+            <button type="button" onClick={() => refetch()} className="rounded border px-2 py-1 text-[11px] hover:bg-gray-50">Refresh</button>
+            <button type="button" onClick={copy} className="rounded border px-2 py-1 text-[11px] hover:bg-gray-50">Copier</button>
+            <button type="button" onClick={onClose} className="rounded border px-2 py-1 text-[11px] hover:bg-gray-50">Fermer</button>
+          </div>
+        </div>
+        <pre className="flex-1 overflow-auto bg-gray-900 p-4 text-[11px] leading-relaxed text-gray-100">
+{body}
+        </pre>
       </div>
     </div>
   );

@@ -135,6 +135,7 @@ export class UpgradeTenantPlanUseCase {
       };
       const apiName = `tenant-${tenant.slug}-api`;
       const webName = `tenant-${tenant.slug}-web`;
+      const netName = `tenant-${tenant.slug}-net`;
       const envFile = `${config.tenantEnvDir}/tenant-${tenant.slug}.env`;
       const apiImage = `ghcr.io/${config.ghcr.namespace}/optipack-api:${tenant.currentVersion ?? 'latest'}`;
       const webImage = `ghcr.io/${config.ghcr.namespace}/optipack-web:${tenant.currentVersion ?? 'latest'}`;
@@ -153,7 +154,7 @@ export class UpgradeTenantPlanUseCase {
         ports: { [tenant.apiPort]: 4000 },
         envFile,
         restart: 'unless-stopped',
-        network: 'optipack-shared',
+        network: netName,
         cpuLimit: halfCpu,
         memoryMb: apiMem,
       });
@@ -164,9 +165,10 @@ export class UpgradeTenantPlanUseCase {
         env: {
           TENANT_SLUG: tenant.slug,
           NEXT_PUBLIC_API_URL: `https://api.${tenant.slug}.${process.env.OPS_BASE_DOMAIN ?? 'transitsoftservices.com'}/api/v1`,
+          INTERNAL_API_URL: `http://${apiName}:4000/api/v1`,
         },
         restart: 'unless-stopped',
-        network: 'optipack-shared',
+        network: netName,
         cpuLimit: halfCpu,
         memoryMb: webMem,
       });
