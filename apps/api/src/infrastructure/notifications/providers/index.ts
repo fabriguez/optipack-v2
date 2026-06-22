@@ -4,17 +4,14 @@
  * Activation par env vars :
  *   - SMS_PROVIDER              : 'twilio' | 'africas-talking' | 'vonage' | 'log' (defaut: 'log')
  *   - WHATSAPP_PROVIDER_CHAIN   : liste ordonnee de providers a enchaîner en fallback
- *                                 ex: 'twilio,wapino' (essaie twilio, puis wapino si echec)
- *                                 Valeurs : 'twilio' | 'wapino' | 'meta' | 'africas-talking' | 'log'
- *                                 Defaut : 'twilio,wapino'
+ *                                 Valeurs : 'twilio' | 'meta' | 'africas-talking' | 'log'
+ *                                 Defaut : 'twilio'
+ *                                 NB : le canal prioritaire est WhatsApp Web JS (TenantWhatsAppSessionService)
+ *                                      ce provider chain n'est utilise qu'en fallback si la session perso n'est pas connectee.
  *   - PUSH_PROVIDER             : 'expo' | 'fcm' | 'log' (defaut: 'log')
  *
  * Credentials Twilio WhatsApp :
  *   TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_FROM (E.164)
- *
- * Credentials Wapino WhatsApp :
- *   WAPINO_API_KEY    (Bearer token, ex: wp_live_...)
- *   WAPINO_INSTANCE   (nom de l'instance Wapino, ex: "OptiPack")
  *
  * Credentials Africa's Talking (SMS + WhatsApp partagent username/apiKey) :
  *   AT_USERNAME, AT_API_KEY
@@ -320,58 +317,6 @@ function makeTwilioWhatsappProvider(): ExternalChannelProvider {
 }
 
 /**
- * Wapino WhatsApp provider.
- * Doc : https://wapino.consolidis.com/docs
- * Env :
- *   WAPINO_API_KEY      Bearer token (ex: wp_live_...)
- *   WAPINO_INSTANCE     Nom de l'instance Wapino (ex: "OptiPack")
- *
- * number format : international sans le +, ex 237690000000
- */
-function makeWapinoWhatsappProvider(): ExternalChannelProvider {
-  const apiKey = process.env.WAPINO_API_KEY ?? '';
-  const instance = process.env.WAPINO_INSTANCE ?? '';
-  const enabled = !!apiKey && !!instance;
-  if (!enabled) {
-    logger.warn(
-      'Wapino WhatsApp provider non active : WAPINO_API_KEY et/ou WAPINO_INSTANCE manquant(s)',
-    );
-  }
-  const wapinoFetch = async (endpoint: string, body: Record<string, unknown>) => {
-    const res = await fetch(`https://api.wapino.consolidis.com/v1/messages/${endpoint}`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-      const txt = await res.text().catch(() => '');
-      throw new Error(`Wapino WhatsApp HTTP ${res.status}: ${txt.slice(0, 300)}`);
-    }
-  };
-  return {
-    name: 'wapino',
-    enabled,
-    async send(to, message) {
-      if (!enabled) throw new Error('Wapino WhatsApp provider non configure');
-      const number = to.replace(/[^0-9]/g, '');
-      await wapinoFetch('send-text', { instance, number, text: message });
-    },
-    async sendDocument(to, docUrl, filename, caption) {
-      if (!enabled) throw new Error('Wapino WhatsApp provider non configure');
-      const number = to.replace(/[^0-9]/g, '');
-      await wapinoFetch('send-media', {
-        instance,
-        number,
-        mediaUrl: docUrl,
-        type: 'document',
-        fileName: filename,
-        ...(caption ? { caption } : {}),
-      });
-    },
-  };
-}
-
-/**
  * Construit une chaine de fallback a partir d'une liste ordonnee de providers.
  * Essaie chaque provider dans l'ordre ; passe au suivant si le precedent echoue.
  * Seuls les providers enabled sont tentes.
@@ -482,7 +427,6 @@ function makeExpoPushProvider(): ExternalChannelProvider {
 function resolveWhatsappProvider(name: string): ExternalChannelProvider | null {
   switch (name) {
     case 'twilio': return makeTwilioWhatsappProvider();
-    case 'wapino': return makeWapinoWhatsappProvider();
     case 'meta': return makeMetaWhatsappProvider();
     case 'africas-talking': return makeAfricasTalkingWhatsappProvider();
     case 'log': return makeLogProvider('WHATSAPP');
@@ -494,10 +438,9 @@ export function registerNotificationProviders(): void {
   const smsKind = (process.env.SMS_PROVIDER ?? 'log').toLowerCase();
   const pushKind = (process.env.PUSH_PROVIDER ?? 'log').toLowerCase();
 
-  // WhatsApp : chaine de fallback ordonnee.
-  // WHATSAPP_PROVIDER_CHAIN=twilio,wapino (essaie twilio d'abord, wapino si echec)
-  // Retombe sur WHATSAPP_PROVIDER pour compatibilite ascendante.
-  const waChainRaw = process.env.WHATSAPP_PROVIDER_CHAIN ?? process.env.WHATSAPP_PROVIDER ?? 'twilio,wapino';
+  // WhatsApp : chaine de fallback ordonnee (priorite : WA Web JS via TenantWhatsAppSessionService).
+  // Ce provider chain n'est tente que si la session perso du tenant n'est pas connectee.
+  const waChainRaw = process.env.WHATSAPP_PROVIDER_CHAIN ?? process.env.WHATSAPP_PROVIDER ?? 'twilio';
   const waChainNames = waChainRaw.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
   const waProviders = waChainNames.map(resolveWhatsappProvider).filter((p): p is ExternalChannelProvider => p !== null);
 

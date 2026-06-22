@@ -24,6 +24,7 @@ router.get(
     try {
       const organizationId = getOrgId(req);
       const state = await tenantWaSessionService.getStatus(organizationId);
+      res.setHeader('Cache-Control', 'no-store');
       res.json({ success: true, data: state });
     } catch (err) {
       next(err);
