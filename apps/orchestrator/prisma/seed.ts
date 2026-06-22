@@ -123,7 +123,7 @@ async function seedMainTenant() {
   } else {
     selfVps = await prisma.vPS.update({
       where: { id: selfVps.id },
-      data: { host: selfHost, name: selfName },
+      data: { host: selfHost, name: selfName, status: 'ACTIVE' },
     });
     console.log(`[seed] VPS self mis a jour : ${selfName} (${selfHost})`);
   }
