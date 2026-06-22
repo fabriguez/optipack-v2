@@ -5,6 +5,7 @@ import App from './App';
 import { AuthProvider } from '@/lib/providers/AuthProvider';
 import { TenantProvider } from '@/lib/providers/TenantProvider';
 import { AppToaster } from '@/components/ui/AppToast';
+import { DynamicFavicon } from '@/components/layout/DynamicFavicon';
 import './globals.css';
 
 const queryClient = new QueryClient();
@@ -14,6 +15,7 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <TenantProvider>
+          <DynamicFavicon />
           <App />
           <AppToaster />
         </TenantProvider>

@@ -11,6 +11,7 @@ import { useTenantMeta } from '@/lib/providers/TenantMetaProvider';
 export function DynamicFavicon() {
   const { meta } = useTenantMeta();
   const logo = meta?.logoUrl ?? null;
+  const name = (meta as any)?.name ?? null;
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -22,6 +23,11 @@ export function DynamicFavicon() {
     link.href = logo;
     head.appendChild(link);
   }, [logo]);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    if (name) document.title = name;
+  }, [name]);
 
   return null;
 }

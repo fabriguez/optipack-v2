@@ -519,15 +519,18 @@ true`;
       ownerUsername: tenant.ownerUsername ?? 'admin',
       ownerPassword,
     };
-    // Le script lit le JSON via process.env.SEED_DATA -- plus de pollution du
-    // shell par le contenu utilisateur (couleurs, names, emails).
+    // Le script lit le JSON depuis /app/seed.json (copie via docker cp).
+    // Ne PAS utiliser SEED_DATA env var : le JSON contient des guillemets et
+    // des caracteres speciaux (#couleurs) qui cassent `docker exec -e VAR="..."`.
     const seedScript = `
+const fs = require('fs');
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
-const data = JSON.parse(process.env.SEED_DATA || '{}');
+const data = JSON.parse(fs.readFileSync('/app/seed.json', 'utf8'));
 const p = new PrismaClient();
 (async () => {
   const existing = await p.organization.findUnique({ where: { id: data.id } });
+  console.log('[seed] data.id=' + data.id + ' existing=' + !!existing);
   if (!existing) {
     await p.organization.create({
       data: {
@@ -556,8 +559,9 @@ const p = new PrismaClient();
       },
     });
   }
+  console.log('[seed] done');
   await p.$disconnect();
-})().catch((e) => { console.error(e); process.exit(1); });
+})().catch((e) => { console.error('[seed] FATAL', e.message || e); process.exit(1); });
 `;
     // On ecrit le script + le payload JSON sur le HOST via heredoc quote
     // ('SEED_EOF' avec quotes -> aucune expansion shell), puis on docker cp
@@ -583,16 +587,18 @@ docker cp ${tmpData} ${apiName}:/app/seed.json
 #      /app/seed.js, comme garde-fou.
 docker exec ${apiName} cp /app/seed.js /app/apps/api/seed.js 2>/dev/null || true
 docker exec \\
-  -e SEED_DATA="$(cat ${tmpData})" \\
   -e NODE_PATH="/app/apps/api/node_modules:/app/node_modules:/app/apps/api/node_modules/.prisma/client" \\
   -w /app/apps/api \\
   ${apiName} \\
-  sh -c 'node seed.js || node /app/seed.js'
+  sh -c 'node /app/apps/api/seed.js || node /app/seed.js'
 rm -f ${tmpScript} ${tmpData}
 `;
     const seedResult = await this.ssh.exec(creds, sshSeedCmd);
+    const seedOut = (seedResult.stdout || '').trim();
+    const seedErr = (seedResult.stderr || '').trim();
+    if (seedOut) await log(`[provision] seed stdout: ${seedOut.slice(0, 1000)}`);
     if (seedResult.code !== 0) {
-      await log(`[provision] WARN seed : ${(seedResult.stderr || seedResult.stdout || '').trim()}`);
+      throw new Error(`[provision] seed echoue (code ${seedResult.code}): ${seedErr.slice(0, 500)}`);
     }
 
     // 9. (supprime) -- web et web-client sont deja demarres par

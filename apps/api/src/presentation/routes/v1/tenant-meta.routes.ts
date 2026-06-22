@@ -42,6 +42,11 @@ router.use((req, _res, next) => {
 // Retourne l'URL publique du logo du tenant (proxied, sans auth).
 function publicLogoUrl(orgId: string, rawUrl: string | null): string | null {
   if (!rawUrl) return null;
+  // URL externe absolue (logo pousse depuis ops-admin via ops-sync) :
+  // retourner directement, pas besoin du proxy public-logo.
+  if (/^https?:\/\//i.test(rawUrl) && !rawUrl.includes('/uploads/public-logo/')) {
+    return rawUrl;
+  }
   return `${config.apiUrl}/api/v1/uploads/public-logo/${orgId}`;
 }
 
