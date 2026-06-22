@@ -32,14 +32,14 @@ echo "[entrypoint] Database is reachable."
 
 if [ "${RUN_DB_PUSH:-true}" = "true" ]; then
   echo "[entrypoint] Syncing schema (prisma db push)..."
-  "$PRISMA" db push --schema=./prisma/schema.prisma --skip-generate --accept-data-loss
+  NODE_OPTIONS="--max-old-space-size=256" "$PRISMA" db push --schema=./prisma/schema.prisma --skip-generate --accept-data-loss
 else
   echo "[entrypoint] Schema sync skipped (RUN_DB_PUSH=${RUN_DB_PUSH})."
 fi
 
 if [ "${RUN_SEED:-true}" = "true" ]; then
   echo "[entrypoint] Running seed (idempotent, version-guarded)..."
-  "$PRISMA" db seed
+  NODE_OPTIONS="--max-old-space-size=256" "$PRISMA" db seed
 else
   echo "[entrypoint] Seed skipped (RUN_SEED=${RUN_SEED})."
 fi

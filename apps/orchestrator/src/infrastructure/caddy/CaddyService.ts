@@ -221,13 +221,12 @@ export class CaddyService {
     const json = JSON.stringify(configJson);
     // Echappement single-quote pour heredoc bash
     const escaped = json.replace(/'/g, "'\\''");
-    // Caddy admin API valide l'header Origin et rejette '' avec 403 (meme
-    // bug que pushLocal). Sans cet header, curl par defaut n'envoie pas
-    // d'Origin -> "client is not allowed to access from origin ''".
-    // L'origin envoye doit etre liste dans `admin { origins ... }` du
-    // Caddyfile. La valeur par defaut "http://orchestrator" matche le bloc
-    // admin auto-genere a la ligne 175 de ce fichier.
-    const origin = process.env.CADDY_ADMIN_ORIGIN ?? 'http://orchestrator';
+    // push() SSHe dans le VPS et lance curl DEPUIS l'host. L'host est
+    // toujours dans les origines autorisees par defaut de Caddy (localhost).
+    // On n'utilise PAS http://orchestrator ici : ce serait le nom du conteneur
+    // Docker, qui n'est pas reconnu par Caddy natif sans config prealable.
+    // CADDY_ADMIN_ORIGIN permet de surcharger si le VPS a une config custom.
+    const origin = process.env.CADDY_ADMIN_ORIGIN ?? 'http://localhost';
     const cmd = `cat > /tmp/caddy-tenants.json <<'EOF'\n${escaped}\nEOF\ncurl -fsSL -X POST -H "Content-Type: application/json" -H "Origin: ${origin}" --data-binary @/tmp/caddy-tenants.json http://localhost:2019/load`;
     const r = await this.ssh.exec(creds, cmd);
     if (r.code !== 0) {
@@ -249,12 +248,12 @@ export class CaddyService {
    *    (plus simple sur un VPS Linux mono-machine).
    */
   async pushLocal(configJson: unknown): Promise<void> {
-    // Caddy admin API valide l'header Origin (pas Host). Notre fetch Node.js
-    // n'envoie pas d'Origin par defaut -> Caddy voit '' et rejette avec
-    //   {"error":"client is not allowed to access from origin ''"}.
-    // On force une valeur connue ; la meme valeur doit etre listee dans
-    // `admin <addr> { origins ... }` du Caddyfile sur l'host.
-    const origin = process.env.CADDY_ADMIN_ORIGIN ?? 'http://orchestrator';
+    // Caddy admin API valide l'header Origin et rejette '' avec 403.
+    // On utilise http://localhost : toujours dans la liste par defaut de Caddy,
+    // meme avant le premier push qui injecte notre liste d'origines elargie.
+    // http://orchestrator ne fonctionnerait qu'apres un premier push reussi
+    // (bootstrap impossible). CADDY_ADMIN_ORIGIN permet de surcharger.
+    const origin = process.env.CADDY_ADMIN_ORIGIN ?? 'http://localhost';
     const body = JSON.stringify(configJson);
 
     // Bridge mode : on tente host.docker.internal (recommande, mappe via

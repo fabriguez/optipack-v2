@@ -409,6 +409,32 @@ true`;
     // pas besoin de pre-creation. La stack est entierement isolee.
     await this.docker.composeUp(creds, composeFilePath, composeYaml, composeProjectName);
 
+    // 7a. Attendre que l'entrypoint de l'API termine son propre db push avant
+    // de lancer le notre. L'entrypoint fait : wait-db -> db push -> seed -> serve.
+    // Si on lance docker exec db push pendant ce temps, on a 2 processus Prisma
+    // concurrents -> pression memoire -> OOM kill (code 137).
+    // On poll le container jusqu'a ce qu'il soit Running et healthy (ou que
+    // son entrypoint ait fini son travail init), via une boucle SSH.
+    await log(`[provision] attente readiness API (entrypoint db push)...`);
+    {
+      const maxWait = 120; // secondes
+      const pollInterval = 5;
+      let waited = 0;
+      while (waited < maxWait) {
+        // On tente un appel HTTP sur le port API ; succes = entrypoint termine + serveur up.
+        const checkCmd = `curl -fs --max-time 3 http://localhost:${tenant.apiPort}/health >/dev/null 2>&1 && echo OK || echo WAIT`;
+        const r = await this.ssh.exec(creds, checkCmd);
+        if ((r.stdout || '').trim() === 'OK') break;
+        await new Promise((res) => setTimeout(res, pollInterval * 1000));
+        waited += pollInterval;
+      }
+      if (waited >= maxWait) {
+        await log(`[provision] WARN API pas encore ready apres ${maxWait}s (on continue quand meme)`);
+      } else {
+        await log(`[provision] API ready apres ~${waited}s`);
+      }
+    }
+
     // 7. Sync schema BDD dans le container API.
     //
     // L'API ne contient pas de dossier prisma/migrations (developpe via
@@ -430,16 +456,23 @@ true`;
       'elif command -v npx >/dev/null 2>&1; then PRISMA="npx -y prisma"; ' +
       'elif command -v pnpm >/dev/null 2>&1; then PRISMA="pnpm prisma"; ' +
       'else echo "ERR: prisma CLI introuvable" >&2; exit 1; fi';
+    // NODE_OPTIONS borne le heap Node.js a 256 Mo pour eviter que Prisma OOM-kill
+    // le container pendant db push (le kernel envoie SIGKILL -> code 137).
     const migrateSteps =
-      '$PRISMA migrate deploy --schema=./prisma/schema.prisma 2>&1 || true; ' +
+      'NODE_OPTIONS="--max-old-space-size=256" $PRISMA migrate deploy --schema=./prisma/schema.prisma 2>&1 || true; ' +
       (dbSyncMode === 'push'
-        ? '$PRISMA db push --schema=./prisma/schema.prisma --accept-data-loss=false --skip-generate'
+        ? 'NODE_OPTIONS="--max-old-space-size=256" $PRISMA db push --schema=./prisma/schema.prisma --accept-data-loss=false --skip-generate'
         : 'echo "db push skipped (OPS_TENANT_DB_SYNC=migrate)"');
     const migrateCmd = `sh -c 'cd /app/apps/api 2>/dev/null || cd /app; ${prismaResolve}; ${migrateSteps}'`;
     const migrateResult = await this.docker.exec(creds, apiName, migrateCmd);
     if (migrateResult.code !== 0) {
       const detail = [migrateResult.stderr, migrateResult.stdout].filter(Boolean).join(' | ').trim();
       await log(`[provision] WARN migrate (code=${migrateResult.code}) : ${detail || '(no output)'}`);
+      // Code 137 = OOM kill. Le schema n'est pas cree -> le seed echouerait avec P2021.
+      // On remonte en erreur pour que le job soit marque en echec et retente.
+      if (migrateResult.code === 137) {
+        throw new Error(`Schema sync OOM-killed (code 137). Retentez le provisioning.`);
+      }
     } else {
       // Affiche le resume du push (Prisma loggue "Your database is now in sync...")
       const summary = (migrateResult.stdout || '')
