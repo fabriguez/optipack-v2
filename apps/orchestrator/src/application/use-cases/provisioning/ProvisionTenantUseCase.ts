@@ -210,6 +210,11 @@ export class ProvisionTenantUseCase {
       `API_PORT=4000`,
       `NEXT_PUBLIC_API_URL=https://api.${tenant.slug}.${BASE_DOMAIN}/api/v1`,
       `PUBLIC_TRACKING_URL=https://${tenant.slug}.${BASE_DOMAIN}`,
+      // Token partage orchestrator <-> tenant API. Requis pour :
+      //   - PATCH /api/v1/tenant-meta/ops-sync (branding/skin/theme depuis l'ops-admin)
+      //   - POST  /api/v1/system/reset-owner-password (regeneration mot de passe)
+      // Sans ce token, ces appels renvoient 503 "Service token non configure".
+      `OPS_TENANT_PROXY_TOKEN=${process.env.OPS_TENANT_PROXY_TOKEN ?? ''}`,
     ].join('\n');
 
     await log(`[provision] write env file ${envFile}`);
@@ -422,7 +427,7 @@ true`;
       let waited = 0;
       while (waited < maxWait) {
         // On tente un appel HTTP sur le port API ; succes = entrypoint termine + serveur up.
-        const checkCmd = `curl -fs --max-time 3 http://localhost:${tenant.apiPort}/health >/dev/null 2>&1 && echo OK || echo WAIT`;
+        const checkCmd = `curl -fs --max-time 3 http://localhost:${tenant.apiPort}/api/v1/health >/dev/null 2>&1 && echo OK || echo WAIT`;
         const r = await this.ssh.exec(creds, checkCmd);
         if ((r.stdout || '').trim() === 'OK') break;
         await new Promise((res) => setTimeout(res, pollInterval * 1000));

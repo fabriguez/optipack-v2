@@ -18,6 +18,17 @@ router.get('/public-logo/:orgId', async (req, res, next) => {
     });
     if (!org?.logoUrl) return res.status(404).end();
 
+    // URL externe absolue (ex: logo pousse depuis l'ops-admin via ops-sync) :
+    // on redirige directement plutot que de tenter d'extraire une cle MinIO.
+    if (/^https?:\/\//i.test(org.logoUrl)) {
+      // Verifie quand meme que ce n'est pas notre propre proxy (boucle infinie).
+      const isSelfProxy = org.logoUrl.includes('/api/v1/uploads/public-logo/');
+      if (!isSelfProxy) {
+        res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');
+        return res.redirect(301, org.logoUrl);
+      }
+    }
+
     // Extrait la cle MinIO depuis l'URL stockee.
     // Format : https://host/api/v1/uploads/object/<key>  ou  /api/v1/uploads/object/<key>
     const marker = '/uploads/object/';
