@@ -82,7 +82,7 @@ export class UpdateTenantUseCase {
       await log('[update] step 1: pg_dump backup');
       const dump = await this.ssh.exec(
         creds,
-        `docker exec ${pgName} pg_dump -U \${POSTGRES_USER:-postgres} -F c "${dbName}" > ${backupPath}`,
+        `PGUSER=$(docker exec ${pgName} printenv POSTGRES_USER 2>/dev/null || echo postgres); docker exec ${pgName} pg_dump -U "$PGUSER" -F c "${dbName}" > ${backupPath}`,
       );
       if (dump.code !== 0) throw new Error(`pg_dump failed: ${dump.stderr}`);
       backupTaken = true;
@@ -193,7 +193,7 @@ export class UpdateTenantUseCase {
           await log('[update] rollback : pg_restore depuis backup');
           await this.ssh.exec(
             creds,
-            `cat ${backupPath} | docker exec -i ${pgName} pg_restore -U \${POSTGRES_USER:-postgres} -d "${dbName}" --clean --if-exists`,
+            `PGUSER=$(docker exec ${pgName} printenv POSTGRES_USER 2>/dev/null || echo postgres); cat ${backupPath} | docker exec -i ${pgName} pg_restore -U "$PGUSER" -d "${dbName}" --clean --if-exists`,
           );
         }
         if (oldImagesTagged) {
@@ -295,7 +295,7 @@ export class RollbackTenantUseCase {
     await log('[rollback] pg_restore');
     await this.ssh.exec(
       creds,
-      `cat ${job.backupRef} | docker exec -i ${pgName} pg_restore -U \${POSTGRES_USER:-postgres} -d "${dbName}" --clean --if-exists`,
+      `PGUSER=$(docker exec ${pgName} printenv POSTGRES_USER 2>/dev/null || echo postgres); cat ${job.backupRef} | docker exec -i ${pgName} pg_restore -U "$PGUSER" -d "${dbName}" --clean --if-exists`,
     );
 
     // 3. Restart anciens containers (image :previous-<slug>)

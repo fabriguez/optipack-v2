@@ -44,7 +44,7 @@ export class BackupTenantUseCase {
     await this.ssh.exec(creds, `mkdir -p ${dir}`);
     const dump = await this.ssh.exec(
       creds,
-      `docker exec ${pgName} pg_dump -U \${POSTGRES_USER:-postgres} -F c "${tenant.dbName}" > ${path}`,
+      `PGUSER=$(docker exec ${pgName} printenv POSTGRES_USER 2>/dev/null || echo postgres); docker exec ${pgName} pg_dump -U "$PGUSER" -F c "${tenant.dbName}" > ${path}`,
     );
     if (dump.code !== 0) {
       const err = dump.stderr || 'pg_dump failed';
@@ -161,6 +161,7 @@ export class BackupTenantUseCase {
     if (!tenant?.vps || !tenant.dbName) throw new BusinessError('Tenant invalide');
 
     const path = backup.storageRef.replace(/^vps:/, '');
+    const pgName = `tenant-${tenant.slug}-postgres`;
     const creds: SshConnection = {
       host: tenant.vps.host,
       port: tenant.vps.port,
@@ -169,7 +170,7 @@ export class BackupTenantUseCase {
     };
     const res = await this.ssh.exec(
       creds,
-      `cat ${path} | docker exec -i postgres pg_restore -U \${POSTGRES_USER:-postgres} -d "${tenant.dbName}" --clean --if-exists`,
+      `PGUSER=$(docker exec ${pgName} printenv POSTGRES_USER 2>/dev/null || echo postgres); cat ${path} | docker exec -i ${pgName} pg_restore -U "$PGUSER" -d "${tenant.dbName}" --clean --if-exists`,
     );
     if (res.code !== 0) {
       throw new Error(`pg_restore failed: ${res.stderr}`);

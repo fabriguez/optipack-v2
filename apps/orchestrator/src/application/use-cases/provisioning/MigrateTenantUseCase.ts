@@ -94,7 +94,7 @@ export class MigrateTenantUseCase {
       await log(`[migrate] step 2: pg_dump ${dbName}`);
       const dumpResult = await this.ssh.exec(
         sourceCreds,
-        `docker exec ${pgName} pg_dump -U \${POSTGRES_USER:-postgres} -F c "${dbName}" > ${dumpPath}`,
+        `PGUSER=$(docker exec ${pgName} printenv POSTGRES_USER 2>/dev/null || echo postgres); docker exec ${pgName} pg_dump -U "$PGUSER" -F c "${dbName}" > ${dumpPath}`,
       );
       if (dumpResult.code !== 0) {
         throw new Error(`pg_dump echoue : ${dumpResult.stderr}`);
@@ -110,12 +110,12 @@ export class MigrateTenantUseCase {
       await log(`[migrate] step 4: CREATE DATABASE + pg_restore on target`);
       await this.ssh.exec(
         targetCreds,
-        `docker exec ${pgName} psql -U \${POSTGRES_USER:-postgres} -tc "SELECT 1 FROM pg_database WHERE datname='${dbName}'" | grep -q 1 || docker exec ${pgName} psql -U \${POSTGRES_USER:-postgres} -c 'CREATE DATABASE "${dbName}"'`,
+        `PGUSER=$(docker exec ${pgName} printenv POSTGRES_USER 2>/dev/null || echo postgres); docker exec ${pgName} psql -U "$PGUSER" -d postgres -tc "SELECT 1 FROM pg_database WHERE datname='${dbName}'" | grep -q 1 || docker exec ${pgName} psql -U "$PGUSER" -d postgres -c 'CREATE DATABASE "${dbName}"'`,
       );
       dbCreatedOnTarget = true;
       const restoreResult = await this.ssh.exec(
         targetCreds,
-        `cat ${dumpPath} | docker exec -i postgres pg_restore -U \${POSTGRES_USER:-postgres} -d "${dbName}" --clean --if-exists`,
+        `PGUSER=$(docker exec ${pgName} printenv POSTGRES_USER 2>/dev/null || echo postgres); cat ${dumpPath} | docker exec -i ${pgName} pg_restore -U "$PGUSER" -d "${dbName}" --clean --if-exists`,
       );
       if (restoreResult.code !== 0) {
         await log(`[migrate] WARN restore : ${restoreResult.stderr}`);
@@ -185,8 +185,11 @@ export class MigrateTenantUseCase {
       await log(`[migrate] step 9: cleanup source (containers, DB, dump)`);
       await this.docker.remove(sourceCreds, apiName, true);
       await this.docker.remove(sourceCreds, webName, true);
-      await this.docker
-        .exec(sourceCreds, 'postgres', `psql -U \${POSTGRES_USER:-postgres} -c 'DROP DATABASE IF EXISTS "${dbName}"'`)
+      await this.ssh
+        .exec(
+          sourceCreds,
+          `PGUSER=$(docker exec ${pgName} printenv POSTGRES_USER 2>/dev/null || echo postgres); docker exec ${pgName} psql -U "$PGUSER" -d postgres -c 'DROP DATABASE IF EXISTS "${dbName}"'`,
+        )
         .catch(() => undefined);
       await this.scp.deleteRemote(sourceCreds, dumpPath);
       await this.scp.deleteRemote(targetCreds, dumpPath);
@@ -204,8 +207,11 @@ export class MigrateTenantUseCase {
       const msg = err instanceof Error ? err.message : String(err);
       await log(`[migrate] ROLLBACK : ${msg}`);
       if (dbCreatedOnTarget) {
-        await this.docker
-          .exec(targetCreds, 'postgres', `psql -U \${POSTGRES_USER:-postgres} -c 'DROP DATABASE IF EXISTS "${dbName}"'`)
+        await this.ssh
+          .exec(
+            targetCreds,
+            `PGUSER=$(docker exec ${pgName} printenv POSTGRES_USER 2>/dev/null || echo postgres); docker exec ${pgName} psql -U "$PGUSER" -d postgres -c 'DROP DATABASE IF EXISTS "${dbName}"'`,
+          )
           .catch(() => undefined);
         await this.docker.remove(targetCreds, apiName, true).catch(() => undefined);
         await this.docker.remove(targetCreds, webName, true).catch(() => undefined);
