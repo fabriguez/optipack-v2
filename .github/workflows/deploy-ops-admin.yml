@@ -80,6 +80,8 @@ jobs:
             docker network create optipack-shared || true
             docker stop ops-admin || true
             docker rm ops-admin || true
+            docker ps -q --filter publish=3020 | xargs -r docker stop || true
+            docker ps -aq --filter publish=3020 | xargs -r docker rm || true
             docker run -d --name ops-admin \
               --restart unless-stopped \
               --network optipack-shared \

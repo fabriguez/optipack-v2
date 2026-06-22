@@ -3102,6 +3102,21 @@ enum WhatsAppSessionStatus {
   BANNED
 }
 
+// ABAC Phase 2 : traçabilité des uploads pour scoping objet.
+// Chaque fichier uploade est lie a une org. getObject verifie l appartenance.
+// Les cles anterieures (sans ligne) sont tolerees (backward compat).
+model UploadObject {
+  id             String   @id @default(uuid())
+  key            String   @unique
+  organizationId String
+  uploadedById   String
+  uploadedByType String   @default("USER") // "USER" | "CLIENT"
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId])
+  @@map("upload_objects")
+}
+
 // ============================================================
 // CHAT / SUPPORT
 // ============================================================

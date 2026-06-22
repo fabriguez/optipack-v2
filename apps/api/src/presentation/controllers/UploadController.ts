@@ -4,6 +4,9 @@ import { StorageService } from '../../infrastructure/storage/StorageService';
 import { extFromMime } from '../middleware/upload';
 import { config } from '../../config';
 import { prisma } from '../../config/database';
+import { createChildLogger } from '../../config/logger';
+
+const logger = createChildLogger('UploadController');
 
 /**
  * Construit l'URL absolue d'un objet uploade. Prefere config.apiUrl (env API_URL),
@@ -43,8 +46,14 @@ export class UploadController {
       const storage = container.resolve(StorageService);
       const ext = extFromMime(file.mimetype);
       const userId = req.user?.userId || 'anon';
+      const orgId = req.user?.organizationId ?? '';
       const key = storage.buildKey(`uploads/${userId}`, ext);
       await storage.uploadBuffer(key, file.buffer, file.mimetype);
+
+      // ABAC : enregistre la propriete de l objet pour scoping acces.
+      await prisma.uploadObject.create({
+        data: { key, organizationId: orgId, uploadedById: userId, uploadedByType: 'USER' },
+      }).catch((err) => logger.warn({ err, key }, 'Failed to record upload ownership'));
 
       const url = buildAbsoluteUrl(req, key);
       res.json({ success: true, data: { url, key, contentType: file.mimetype, size: file.size } });
@@ -61,8 +70,14 @@ export class UploadController {
       const storage = container.resolve(StorageService);
       const ext = extFromMime(file.mimetype);
       const userId = req.user?.userId || 'anon';
+      const orgId = req.user?.organizationId ?? '';
       const key = storage.buildKey(`uploads/${userId}`, ext);
       await storage.uploadBuffer(key, file.buffer, file.mimetype);
+
+      // ABAC : enregistre la propriete de l objet pour scoping acces.
+      await prisma.uploadObject.create({
+        data: { key, organizationId: orgId, uploadedById: userId, uploadedByType: 'USER' },
+      }).catch((err) => logger.warn({ err, key }, 'Failed to record upload ownership'));
 
       const url = buildAbsoluteUrl(req, key);
       res.json({
@@ -90,6 +105,27 @@ export class UploadController {
       if (!key.startsWith('uploads/')) {
         return res.status(404).end();
       }
+
+      // ABAC Phase 2 : scoping objet par organisation.
+      // Si un enregistrement existe, on verifie que le demandeur appartient a la meme org.
+      // Si aucun enregistrement (cle anterieure) : acces tolere avec warning (backward compat).
+      const record = await prisma.uploadObject.findUnique({
+        where: { key },
+        select: { organizationId: true },
+      });
+      if (record) {
+        const requesterOrgId =
+          req.user?.organizationId ??
+          (req as any).clientPortal?.organizationId ??
+          null;
+        if (!requesterOrgId || requesterOrgId !== record.organizationId) {
+          logger.warn({ key, requesterOrgId, ownerOrgId: record.organizationId }, 'Upload access denied — org mismatch');
+          return res.status(403).end();
+        }
+      } else {
+        logger.warn({ key }, 'Upload object without ownership record — allowing (legacy)');
+      }
+
       const storage = container.resolve(StorageService);
       const obj = await storage.getObject(key);
       if (!obj) return res.status(404).end();
@@ -103,6 +139,3 @@ export class UploadController {
     }
   }
 }
-
-// Suppress unused prisma import lint (kept here for future audit logging hook)
-void prisma;
