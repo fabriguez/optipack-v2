@@ -392,7 +392,7 @@ export class TenantUseCases {
    * persistee cote orchestrator.
    */
   async resetOwnerPassword(id: string): Promise<{ email: string; password: string }> {
-    const tenant = await prisma.tenant.findUnique({ where: { id } });
+    const tenant = await prisma.tenant.findUnique({ where: { id }, include: { vps: true } });
     if (!tenant) throw new NotFoundError('Tenant', id);
 
     const token = process.env.OPS_TENANT_PROXY_TOKEN ?? '';
@@ -410,15 +410,70 @@ export class TenantUseCases {
         : `api.${tenant.slug}.${base}`;
     const url = `https://${apiHost}/api/v1/tenant-meta/reset-owner-password`;
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Service-Token': token,
-        'X-Tenant-Id': tenant.id,
-      },
-      body: JSON.stringify({}),
-    });
+    const doCall = () =>
+      fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Service-Token': token,
+          'X-Tenant-Id': tenant.id,
+        },
+        body: JSON.stringify({}),
+      });
+
+    let res = await doCall();
+
+    // Self-heal : token absent du .env tenant (tenant provisionne avant ce fix).
+    // SSH sur le VPS -> ajoute OPS_TENANT_PROXY_TOKEN dans le .env -> restart
+    // le container API -> retente l appel.
+    if (res.status === 503) {
+      const bodyText = await res.text().catch(() => '');
+      if (bodyText.includes('Service token non configure') && tenant.vps) {
+        console.warn(`[resetOwnerPassword] 503 token absent pour ${tenant.slug} -- self-heal...`);
+        const creds = {
+          host: tenant.vps.host,
+          port: tenant.vps.port,
+          username: tenant.vps.username,
+          sshKeyEncrypted: tenant.vps.sshKeyEncrypted,
+        };
+        const envDir = process.env.OPS_TENANT_ENV_DIR ?? '/home/brightky/.optipack';
+        const envFile = `${envDir}/tenant-${tenant.slug}.env`;
+        const apiName = `tenant-${tenant.slug}-api`;
+        // Ajoute le token seulement s'il n'est pas deja present, puis restart.
+        const escapedToken = token.replace(/'/g, "'\\''");
+        const patchCmd = `grep -q OPS_TENANT_PROXY_TOKEN ${envFile} 2>/dev/null || echo "OPS_TENANT_PROXY_TOKEN='${escapedToken}'" >> ${envFile} && docker restart ${apiName}`;
+        const patchResult = await this.ssh.exec(creds, patchCmd);
+        if (patchResult.code !== 0) {
+          console.warn(`[resetOwnerPassword] patch env echoue: ${patchResult.stderr}`);
+        } else {
+          // Attendre que le container soit pret (~15s max)
+          await new Promise<void>((resolve) => {
+            let elapsed = 0;
+            const iv = setInterval(async () => {
+              elapsed += 2;
+              try {
+                const check = await this.ssh.exec(
+                  creds,
+                  `curl -fs --max-time 3 http://localhost:${tenant.apiPort}/api/v1/health >/dev/null 2>&1 && echo OK || echo WAIT`,
+                );
+                if ((check.stdout || '').trim() === 'OK' || elapsed >= 30) {
+                  clearInterval(iv);
+                  resolve();
+                }
+              } catch {
+                if (elapsed >= 30) { clearInterval(iv); resolve(); }
+              }
+            }, 2000);
+          });
+        }
+        res = await doCall();
+      } else {
+        throw new BusinessError(
+          `Reset pwd echoue (${apiHost} HTTP ${res.status}) : ${bodyText.slice(0, 200)}`,
+        );
+      }
+    }
+
     if (!res.ok) {
       const body = await res.text().catch(() => '');
       throw new BusinessError(
