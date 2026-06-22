@@ -1,6 +1,4 @@
-name: Build & deploy ops-admin
-
-# Phase 5 — image ops-admin pour le control plane SaaS.
+name: Deploy ops-admin
 
 on:
   push:
@@ -12,71 +10,51 @@ on:
       - '.github/workflows/deploy-ops-admin.yml'
   workflow_dispatch:
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE: ghcr.io/${{ github.repository_owner }}/optipack-ops-admin
-
 jobs:
-  build:
-    name: Build & push ops-admin image
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata (tags + labels)
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.IMAGE }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=tag
-            type=sha,prefix=sha-
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-
-      - name: Build & push ops-admin image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: docker/ops-admin/Dockerfile.prod
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            NEXT_PUBLIC_ORCHESTRATOR_URL=${{ secrets.OPS_ORCHESTRATOR_URL }}
-          cache-from: type=gha,scope=ops-admin
-          cache-to: type=gha,scope=ops-admin,mode=max
-
   deploy:
-    name: Deploy to control plane VPS
-    needs: build
+    name: Deploy ops-admin to control plane
     runs-on: ubuntu-latest
-    if: success()
+
     steps:
-      - name: Pull & restart ops-admin container on control plane
+      - name: Sync code on control plane VPS
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.OPS_CONTROL_PLANE_HOST }}
           username: ${{ secrets.OPS_CONTROL_PLANE_USER }}
           key: ${{ secrets.OPS_CONTROL_PLANE_SSH_KEY }}
-          envs: GHCR_TOKEN,IMAGE,ORCHESTRATOR_URL
           script: |
-            echo "$GHCR_TOKEN" | docker login ghcr.io -u fabriguez --password-stdin
-            docker pull $IMAGE:latest
+            set -e
+            if [ ! -d ~/optipack-v2/.git ]; then
+              mkdir -p ~/optipack-v2
+              git -C ~/optipack-v2 init -b main
+              git -C ~/optipack-v2 remote add origin https://github.com/${{ github.repository }}.git
+            fi
+            cd ~/optipack-v2
+            git remote prune origin || true
+            rm -f .git/refs/remotes/origin/main.lock 2>/dev/null || true
+            if ! git fetch origin main --force --prune; then
+              git update-ref -d refs/remotes/origin/main 2>/dev/null || true
+              git gc --prune=now 2>/dev/null || true
+              git fetch origin main --force --prune
+            fi
+            git reset --hard origin/main
+
+      - name: Build & restart ops-admin container
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.OPS_CONTROL_PLANE_HOST }}
+          username: ${{ secrets.OPS_CONTROL_PLANE_USER }}
+          key: ${{ secrets.OPS_CONTROL_PLANE_SSH_KEY }}
+          command_timeout: 30m
+          envs: ORCHESTRATOR_URL
+          script: |
+            set -e
+            cd ~/optipack-v2
+            docker build \
+              --build-arg NEXT_PUBLIC_ORCHESTRATOR_URL="$ORCHESTRATOR_URL" \
+              -t ops-admin:latest \
+              -f docker/ops-admin/Dockerfile.prod \
+              .
             docker network create optipack-shared || true
             docker stop ops-admin || true
             docker rm ops-admin || true
@@ -86,9 +64,7 @@ jobs:
               --restart unless-stopped \
               --network optipack-shared \
               -p 3020:3020 \
-              -e NEXT_PUBLIC_ORCHESTRATOR_URL="$ORCHESTRATOR_URL" \
-              $IMAGE:latest
+              ops-admin:latest
+            docker image prune -f
         env:
-          GHCR_TOKEN: ${{ secrets.OPS_GHCR_TOKEN }}
-          IMAGE: ${{ env.IMAGE }}
           ORCHESTRATOR_URL: ${{ secrets.OPS_ORCHESTRATOR_URL }}
