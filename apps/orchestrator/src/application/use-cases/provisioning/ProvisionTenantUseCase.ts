@@ -210,6 +210,10 @@ export class ProvisionTenantUseCase {
       `API_PORT=4000`,
       `NEXT_PUBLIC_API_URL=https://api.${tenant.slug}.${BASE_DOMAIN}/api/v1`,
       `PUBLIC_TRACKING_URL=https://${tenant.slug}.${BASE_DOMAIN}`,
+      // Appels server-side NextAuth -> API directement via reseau Docker interne.
+      // Evite hairpin NAT + TLS + Caddy pour le login. auth.ts lit
+      // INTERNAL_API_URL || NEXT_PUBLIC_API_URL.
+      `INTERNAL_API_URL=http://${apiName}:4000/api/v1`,
       // Token partage orchestrator <-> tenant API. Requis pour :
       //   - PATCH /api/v1/tenant-meta/ops-sync (branding/skin/theme depuis l'ops-admin)
       //   - POST  /api/v1/system/reset-owner-password (regeneration mot de passe)
