@@ -243,6 +243,33 @@ export class TenantController {
     }
   }
 
+  static async stackStop(req: Request, res: Response, next: NextFunction) {
+    try {
+      await container.resolve(TenantUseCases).stackStop(req.params.id);
+      res.json({ success: true });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async stackStart(req: Request, res: Response, next: NextFunction) {
+    try {
+      await container.resolve(TenantUseCases).stackStart(req.params.id);
+      res.json({ success: true });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async stackRestart(req: Request, res: Response, next: NextFunction) {
+    try {
+      await container.resolve(TenantUseCases).stackRestart(req.params.id);
+      res.json({ success: true });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   /**
    * POST /ops/tenants/:id/reset-owner-password -- regenere le pwd owner
    * (SUPER_ADMIN du tenant) + retourne email + plaintext one-shot.

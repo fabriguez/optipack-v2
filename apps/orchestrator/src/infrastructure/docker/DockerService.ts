@@ -126,6 +126,26 @@ export class DockerService {
     return this.ssh.exec(creds, `docker exec ${container} ${cmd}`);
   }
 
+  private composeCmd(composeFilePath: string, projectName: string, subCmd: string): string {
+    const base = `docker compose -f ${composeFilePath} -p ${projectName}`;
+    return `if docker compose version >/dev/null 2>&1; then ${base} ${subCmd}; elif docker-compose version >/dev/null 2>&1; then docker-compose -f ${composeFilePath} -p ${projectName} ${subCmd}; else echo 'compose non trouve' >&2; exit 1; fi`;
+  }
+
+  async composeStop(creds: SshConnection, composeFilePath: string, projectName: string): Promise<void> {
+    const r = await this.ssh.exec(creds, this.composeCmd(composeFilePath, projectName, 'stop'));
+    if (r.code !== 0) throw new Error(`compose stop echoue : ${r.stderr || r.stdout}`);
+  }
+
+  async composeStart(creds: SshConnection, composeFilePath: string, projectName: string): Promise<void> {
+    const r = await this.ssh.exec(creds, this.composeCmd(composeFilePath, projectName, 'start'));
+    if (r.code !== 0) throw new Error(`compose start echoue : ${r.stderr || r.stdout}`);
+  }
+
+  async composeRestart(creds: SshConnection, composeFilePath: string, projectName: string): Promise<void> {
+    const r = await this.ssh.exec(creds, this.composeCmd(composeFilePath, projectName, 'restart'));
+    if (r.code !== 0) throw new Error(`compose restart echoue : ${r.stderr || r.stdout}`);
+  }
+
   /**
    * Liste les containers du stack tenant (project compose `tenant-<slug>`).
    * Renvoie name + image + state + status + ports + CPU/MEM via docker stats.

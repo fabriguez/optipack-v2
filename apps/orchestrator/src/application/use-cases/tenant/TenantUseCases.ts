@@ -49,6 +49,38 @@ export class TenantUseCases {
     return this.docker.listTenantContainers(creds, tenant.slug);
   }
 
+  private async tenantCreds(id: string) {
+    const tenant = await prisma.tenant.findUnique({ where: { id }, include: { vps: true } });
+    if (!tenant || !tenant.vps) throw new NotFoundError('Tenant', id);
+    const envDir = process.env.OPS_TENANT_ENV_DIR ?? '/home/brightky/.optipack';
+    return {
+      creds: {
+        host: tenant.vps.host,
+        port: tenant.vps.port,
+        username: tenant.vps.username,
+        sshKeyEncrypted: tenant.vps.sshKeyEncrypted,
+      },
+      slug: tenant.slug,
+      composeFilePath: `${envDir}/tenant-${tenant.slug}-compose.yml`,
+      projectName: `tenant-${tenant.slug}`,
+    };
+  }
+
+  async stackStop(id: string) {
+    const { creds, composeFilePath, projectName } = await this.tenantCreds(id);
+    await this.docker.composeStop(creds, composeFilePath, projectName);
+  }
+
+  async stackStart(id: string) {
+    const { creds, composeFilePath, projectName } = await this.tenantCreds(id);
+    await this.docker.composeStart(creds, composeFilePath, projectName);
+  }
+
+  async stackRestart(id: string) {
+    const { creds, composeFilePath, projectName } = await this.tenantCreds(id);
+    await this.docker.composeRestart(creds, composeFilePath, projectName);
+  }
+
   /** docker logs <container> --tail N. Verifie que le container appartient au tenant. */
   async containerLogs(id: string, containerName: string, tail = 200) {
     const tenant = await this.assertTenantContainer(id, containerName);

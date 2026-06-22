@@ -630,6 +630,7 @@ interface ContainerInfo {
  * pour debug rapide uniquement, sinon `docker exec -it` SSH direct.
  */
 function TenantContainers({ tenantId }: { tenantId: string }) {
+  const qc = useQueryClient();
   const list = useQuery<ContainerInfo[]>({
     queryKey: ['tenant', tenantId, 'containers'],
     queryFn: async () =>
@@ -639,8 +640,52 @@ function TenantContainers({ tenantId }: { tenantId: string }) {
   const [logsTarget, setLogsTarget] = useState<string | null>(null);
   const [execTarget, setExecTarget] = useState<string | null>(null);
 
+  const stackAction = useMutation({
+    mutationFn: async (action: 'stop' | 'start' | 'restart') => {
+      await api.post(`/tenants/${tenantId}/stack/${action}`);
+    },
+    onSuccess: () => {
+      setTimeout(() => qc.invalidateQueries({ queryKey: ['tenant', tenantId, 'containers'] }), 2000);
+    },
+  });
+
+  const actionLabel: Record<string, string> = {
+    stop: 'Arret stack...',
+    start: 'Demarrage stack...',
+    restart: 'Redemarrage stack...',
+  };
+
   return (
     <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-gray-500 mr-1">Stack :</span>
+        {(['stop', 'start', 'restart'] as const).map((a) => (
+          <button
+            key={a}
+            type="button"
+            disabled={stackAction.isPending}
+            onClick={() => stackAction.mutate(a)}
+            className={
+              'rounded border px-2.5 py-1 text-xs font-medium transition ' +
+              (a === 'stop'
+                ? 'border-red-300 text-red-700 hover:bg-red-50 disabled:opacity-50'
+                : a === 'start'
+                ? 'border-green-300 text-green-700 hover:bg-green-50 disabled:opacity-50'
+                : 'border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50')
+            }
+          >
+            {stackAction.isPending && stackAction.variables === a
+              ? actionLabel[a]
+              : a === 'stop' ? 'Arreter' : a === 'start' ? 'Demarrer' : 'Redemarrer'}
+          </button>
+        ))}
+        {stackAction.isError && (
+          <span className="text-xs text-red-600 ml-2">
+            {(stackAction.error as any)?.response?.data?.message ?? 'Erreur'}
+          </span>
+        )}
+      </div>
+
       {list.isLoading && <p className="text-xs text-gray-400">Chargement...</p>}
       {!list.isLoading && (list.data ?? []).length === 0 && (
         <p className="text-xs text-gray-400">

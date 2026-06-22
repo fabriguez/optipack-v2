@@ -64,6 +64,9 @@ router.post('/tenants/:id/reset-owner-password', authenticateOps, requireSuperAd
 router.get('/tenants/:id/containers', authenticateOps, TenantController.containers);
 router.get('/tenants/:id/containers/:name/logs', authenticateOps, TenantController.containerLogs);
 router.post('/tenants/:id/containers/:name/exec', authenticateOps, requireSuperAdmin, TenantController.containerExec);
+router.post('/tenants/:id/stack/stop', authenticateOps, requireSuperAdmin, TenantController.stackStop);
+router.post('/tenants/:id/stack/start', authenticateOps, requireSuperAdmin, TenantController.stackStart);
+router.post('/tenants/:id/stack/restart', authenticateOps, requireSuperAdmin, TenantController.stackRestart);
 router.post('/tenants/:id/migrate', authenticateOps, requireSuperAdmin, TenantController.migrate);
 router.post('/tenants/:id/upgrade', authenticateOps, BillingController.requestUpgrade);
 router.get('/tenants/:id/jobs', authenticateOps, TenantController.listJobs);

@@ -237,7 +237,9 @@ export class ProvisionTenantUseCase {
     const apiName = `tenant-${tenant.slug}-api`;
     const webName = `tenant-${tenant.slug}-web`;
     const webClientName = `tenant-${tenant.slug}-web-client`;
-    const composeFilePath = `${config.vpsWorkDir}/tenant-${tenant.slug}-compose.yml`;
+    // Stocke le compose dans tenantEnvDir (persistant, comme le .env).
+    // vpsWorkDir (/tmp) est ephemere -> le fichier disparait au reboot VPS.
+    const composeFilePath = `${config.tenantEnvDir}/tenant-${tenant.slug}-compose.yml`;
     const composeProjectName = `tenant-${tenant.slug}`;
     await log(`[provision] cleanup anciens containers (rejouabilite)`);
     await this.ssh.exec(
