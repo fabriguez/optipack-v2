@@ -27,7 +27,23 @@ import { PrismaClient } from '../node_modules/.prisma/orchestrator-client';
 
 const prisma = new PrismaClient();
 
+function log(msg: string) {
+  console.log(`[seed] ${msg}`);
+}
+
+function debugEnv() {
+  log('--- env vars ---');
+  log(`OPS_RUN_SEED          = ${process.env.OPS_RUN_SEED ?? '(unset)'}`);
+  log(`SEED_OPS_ADMIN_EMAIL  = ${process.env.SEED_OPS_ADMIN_EMAIL ?? '(unset -> default)'}`);
+  log(`SEED_OPS_ADMIN_NAME   = ${process.env.SEED_OPS_ADMIN_NAME ?? '(unset -> default)'}`);
+  log(`SEED_OPS_ADMIN_PASSWORD set? ${process.env.SEED_OPS_ADMIN_PASSWORD ? 'yes' : 'no (default)'}`);
+  log(`SEED_OPS_ADMIN_TOTP_SECRET set? ${process.env.SEED_OPS_ADMIN_TOTP_SECRET ? 'yes' : 'no -> 2FA off'}`);
+  log(`SEED_MAIN_TENANT      = ${process.env.SEED_MAIN_TENANT ?? '(unset -> false)'}`);
+  log('--- end env ---');
+}
+
 async function seedOpsAdmin() {
+  log('seedOpsAdmin() start');
   const email = process.env.SEED_OPS_ADMIN_EMAIL ?? 'admin@transitsoftservices.com';
   const password = process.env.SEED_OPS_ADMIN_PASSWORD ?? 'changeme-in-production';
   const fullName = process.env.SEED_OPS_ADMIN_NAME ?? 'Ops Super Admin';
@@ -61,15 +77,17 @@ async function seedOpsAdmin() {
     console.log(`[seed] OpsAdmin cree : ${email}`);
   }
   if (totpSecret) {
-    console.log(`[seed] 2FA TOTP active (secret: ${totpSecret.slice(0, 6)}...)`);
+    log(`2FA TOTP active (secret: ${totpSecret.slice(0, 6)}...)`);
   } else {
-    console.log('[seed] 2FA desactive (SEED_OPS_ADMIN_TOTP_SECRET absent)');
+    log('2FA desactive (SEED_OPS_ADMIN_TOTP_SECRET absent)');
   }
+  log('seedOpsAdmin() done');
 }
 
 async function seedMainTenant() {
+  log('seedMainTenant() start');
   if (process.env.SEED_MAIN_TENANT !== 'true') {
-    console.log('[seed] SEED_MAIN_TENANT != true, skip tenant principal');
+    log('SEED_MAIN_TENANT != true, skip');
     return;
   }
 
@@ -149,8 +167,11 @@ async function seedMainTenant() {
 }
 
 async function main() {
+  log('=== seed start ===');
+  debugEnv();
   await seedOpsAdmin();
   await seedMainTenant();
+  log('=== seed done ===');
 }
 
 main()
