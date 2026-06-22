@@ -217,10 +217,23 @@ if (!process.env.OPS_DISABLE_TOKEN_SYNC) {
             };
             const envFile = `${envDir}/tenant-${t.slug}.env`;
             const apiName = `tenant-${t.slug}-api`;
+            const webName = `tenant-${t.slug}-web`;
+            // Injecte OPS_TENANT_PROXY_TOKEN (requis pour ops-sync + reset-pwd)
+            // et INTERNAL_API_URL (requis pour que NextAuth appelle l API via
+            // reseau Docker interne, sans hairpin NAT / TLS / Caddy).
+            const internalApiUrl = `http://${apiName}:4000/api/v1`;
             const cmd = [
+              `CHANGED=0`,
               `if ! grep -q "^OPS_TENANT_PROXY_TOKEN=" "${envFile}" 2>/dev/null; then`,
               `  printf 'OPS_TENANT_PROXY_TOKEN=%s\\n' '${escapedToken}' >> "${envFile}"`,
-              `  docker restart ${apiName} 2>/dev/null || true`,
+              `  CHANGED=1`,
+              `fi`,
+              `if ! grep -q "^INTERNAL_API_URL=" "${envFile}" 2>/dev/null; then`,
+              `  printf 'INTERNAL_API_URL=%s\\n' '${internalApiUrl}' >> "${envFile}"`,
+              `  CHANGED=1`,
+              `fi`,
+              `if [ "$CHANGED" = "1" ]; then`,
+              `  docker restart ${apiName} ${webName} 2>/dev/null || true`,
               `  echo PATCHED`,
               `else`,
               `  echo OK`,
@@ -231,7 +244,7 @@ if (!process.env.OPS_DISABLE_TOKEN_SYNC) {
               const out = (r.stdout || '').trim();
               if (out === 'PATCHED') {
                 patched++;
-                logger.info({ slug: t.slug }, '[token-sync] patched + restarted');
+                logger.info({ slug: t.slug }, '[token-sync] patched + restarted api+web');
               }
             } catch (err) {
               logger.warn({ slug: t.slug, err: (err as Error).message }, '[token-sync] SSH fail (skip)');

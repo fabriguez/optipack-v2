@@ -352,6 +352,10 @@ export class ProvisionTenantUseCase {
     environment:
       TENANT_SLUG: ${JSON.stringify(tenant.slug)}
       NEXT_PUBLIC_API_URL: ${JSON.stringify(`https://api.${tenant.slug}.${BASE_DOMAIN}/api/v1`)}
+      # NextAuth s-side : appelle l API directement via le reseau Docker (pas
+      # de hairpin NAT / TLS / Caddy). Evite les erreurs de cert ou de routing
+      # interne quand le web container appelle son propre domaine public.
+      INTERNAL_API_URL: ${JSON.stringify(`http://${apiName}:4000/api/v1`)}
       # NextAuth v5 multi-tenant : Caddy forward le host public, container
       # ne le connait pas a build time -> trust X-Forwarded-Host du proxy.
       AUTH_TRUST_HOST: "true"
