@@ -18,6 +18,7 @@ import {
   UserCircle,
 } from 'lucide-react';
 import { logout } from '@/lib/api';
+import { useMe } from '@/lib/useMe';
 import { cn } from '@/lib/utils';
 
 const items = [
@@ -38,6 +39,15 @@ const items = [
 export function Sidebar() {
   const path = usePathname();
   const router = useRouter();
+  const { me, isTenantUser } = useMe();
+
+  // Compte facturation tenant : navigation reduite a sa vue tenant + son compte.
+  const navItems = isTenantUser && me?.tenantId
+    ? [
+        { href: `/tenants/${me.tenantId}`, label: 'Mon espace', icon: Package },
+        { href: '/me', label: 'Mon compte', icon: UserCircle },
+      ]
+    : items;
 
   async function handleLogout() {
     await logout();
@@ -51,7 +61,7 @@ export function Sidebar() {
         <span className="font-semibold text-sm">TransitSoft Ops</span>
       </div>
       <nav className="flex-1 overflow-y-auto p-2">
-        {items.map((it) => {
+        {navItems.map((it) => {
           const Icon = it.icon;
           const active = path?.startsWith(it.href);
           return (

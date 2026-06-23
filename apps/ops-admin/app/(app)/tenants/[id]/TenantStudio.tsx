@@ -150,6 +150,9 @@ const THEME_CATALOG: ThemeTokens[] = [
 interface Props {
   tenantId: string;
   initial: StudioInput;
+  // Vue compte facturation tenant : lecture seule. Modules desactives, domaine
+  // perso masque, bouton Enregistrer cache (le PATCH est bloque cote serveur).
+  readOnly?: boolean;
 }
 
 /**
@@ -195,7 +198,7 @@ const AUTO_UPDATE_POLICIES = [
   { value: 'AUTO_STABLE', label: 'Auto-stable (toutes les releases stables)' },
 ];
 
-export function TenantStudio({ tenantId, initial }: Props) {
+export function TenantStudio({ tenantId, initial, readOnly = false }: Props) {
   const qc = useQueryClient();
   const [form, setForm] = useState<StudioInput>(initial);
   const [saved, setSaved] = useState(false);
@@ -330,22 +333,24 @@ export function TenantStudio({ tenantId, initial }: Props) {
           <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
             Modules actives
           </h3>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={enableAllModules}
-              className="rounded border bg-white px-2 py-1 text-[11px] hover:bg-gray-50"
-            >
-              Tout activer
-            </button>
-            <button
-              type="button"
-              onClick={disableAllModules}
-              className="rounded border bg-white px-2 py-1 text-[11px] hover:bg-gray-50"
-            >
-              Tout desactiver
-            </button>
-          </div>
+          {!readOnly && (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={enableAllModules}
+                className="rounded border bg-white px-2 py-1 text-[11px] hover:bg-gray-50"
+              >
+                Tout activer
+              </button>
+              <button
+                type="button"
+                onClick={disableAllModules}
+                className="rounded border bg-white px-2 py-1 text-[11px] hover:bg-gray-50"
+              >
+                Tout desactiver
+              </button>
+            </div>
+          )}
         </div>
         <p className="mt-1 text-xs text-gray-500">
           Coche les modules visibles pour ce tenant. Liste vide = tous actifs (compat).
@@ -364,7 +369,8 @@ export function TenantStudio({ tenantId, initial }: Props) {
                     <label
                       key={m.code}
                       className={
-                        'flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm ' +
+                        'flex items-center gap-2 rounded-md border px-3 py-2 text-sm ' +
+                        (readOnly ? 'cursor-not-allowed opacity-70 ' : 'cursor-pointer ') +
                         (on ? 'border-primary-300 bg-primary-50' : 'bg-white hover:bg-gray-50')
                       }
                     >
@@ -372,6 +378,7 @@ export function TenantStudio({ tenantId, initial }: Props) {
                         type="checkbox"
                         checked={on}
                         onChange={() => toggleModule(m.code)}
+                        disabled={readOnly}
                         className="h-4 w-4"
                       />
                       <span className="flex-1">
@@ -577,7 +584,8 @@ export function TenantStudio({ tenantId, initial }: Props) {
         )}
       </div>
 
-      {/* Domain + update policy */}
+      {/* Domain + update policy : ops global uniquement (masque pour compte facturation). */}
+      {!readOnly && (
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Field label="Domaine personnalise" hint="ex: app.entreprise.com">
           <input
@@ -612,7 +620,15 @@ export function TenantStudio({ tenantId, initial }: Props) {
           />
         </Field>
       </div>
+      )}
 
+      {readOnly && (
+        <p className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-500">
+          Vue en lecture seule. Pour modifier le theme ou les modules, contactez votre administrateur.
+        </p>
+      )}
+
+      {!readOnly && (
       <div className="flex items-center justify-end gap-3 border-t pt-3">
         {saved && <span className="text-xs text-emerald-600">Configuration enregistree.</span>}
         {mut.isError && (
@@ -635,6 +651,7 @@ export function TenantStudio({ tenantId, initial }: Props) {
           Enregistrer
         </button>
       </div>
+      )}
     </div>
   );
 }

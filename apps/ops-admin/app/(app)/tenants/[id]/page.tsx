@@ -12,12 +12,15 @@ import {
   Loader2,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { useMe } from '@/lib/useMe';
 import { StatusBadge } from '@/components/StatusBadge';
 import { formatDate } from '@/lib/utils';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { JobLogsViewer } from '@/components/JobLogsViewer';
 import { TenantStudio } from './TenantStudio';
 import { TenantMail } from './TenantMail';
+import { TenantBilling } from './TenantBilling';
+import { BillingUserCard } from './BillingUserCard';
 
 interface TenantDetail {
   id: string;
@@ -71,6 +74,7 @@ export default function TenantDetailPage({
 }) {
   const { id } = use(params);
   const qc = useQueryClient();
+  const { isTenantUser, isSuperAdmin } = useMe();
   const [confirm, setConfirm] = useState<ActionKind>(null);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [logsUpdateId, setLogsUpdateId] = useState<string | null>(null);
@@ -80,16 +84,20 @@ export default function TenantDetailPage({
     queryFn: async (): Promise<TenantDetail> =>
       (await api.get(`/tenants/${id}`)).data?.data,
   });
+  // Sections infra/ops : reservees aux ops globaux. Pour un compte facturation
+  // tenant ces routes renvoient 403 -> on ne lance pas les requetes.
   const jobs = useQuery({
     queryKey: ['tenant-jobs', id],
     queryFn: async (): Promise<Job[]> =>
       (await api.get(`/tenants/${id}/jobs`)).data?.data ?? [],
+    enabled: !isTenantUser,
     refetchInterval: activeJobId ? 2000 : false,
   });
   const updates = useQuery({
     queryKey: ['tenant-updates', id],
     queryFn: async (): Promise<UpdateJob[]> =>
       (await api.get(`/tenants/${id}/updates`)).data?.data ?? [],
+    enabled: !isTenantUser,
     // Poll tant qu'un update tourne (scheduled/running) pour voir les logs live.
     refetchInterval: (q) => {
       const data = q.state.data as UpdateJob[] | undefined;
@@ -203,7 +211,7 @@ export default function TenantDetailPage({
           <p className="font-mono text-sm text-gray-500">{t.slug}</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {t.status === 'ACTIVE' && (
+          {!isTenantUser && t.status === 'ACTIVE' && (
             <button
               type="button"
               onClick={() => setConfirm('freeze')}
@@ -218,7 +226,7 @@ export default function TenantDetailPage({
               Freezer
             </button>
           )}
-          {t.status === 'FROZEN' && (
+          {!isTenantUser && t.status === 'FROZEN' && (
             <button
               type="button"
               onClick={() => setConfirm('unfreeze')}
@@ -233,7 +241,7 @@ export default function TenantDetailPage({
               Defreezer
             </button>
           )}
-          {!t.isMain && t.status !== 'ARCHIVED' && (
+          {!isTenantUser && !t.isMain && t.status !== 'ARCHIVED' && (
             <button
               type="button"
               onClick={() => setConfirm('archive')}
@@ -244,7 +252,7 @@ export default function TenantDetailPage({
               Archiver
             </button>
           )}
-          {!t.isMain && (
+          {!isTenantUser && !t.isMain && (
             <button
               type="button"
               onClick={() => setConfirm('purge')}
@@ -264,41 +272,66 @@ export default function TenantDetailPage({
           <StatusBadge status={t.status} />
         </Info>
         <Info label="Version">{t.currentVersion ?? '-'}</Info>
-        <Info label="VPS">
-          {t.vps ? (
-            <Link href={`/vps/${t.vps.id}`} className="hover:underline">
-              {t.vps.name}
-            </Link>
-          ) : (
-            '-'
-          )}
-        </Info>
         <Info label="Owner">{t.ownerEmail}</Info>
-        <Info label="API port">{t.apiPort ?? '-'}</Info>
-        <Info label="Web port">{t.webPort ?? '-'}</Info>
-        <Info label="Web-client port">{t.webClientPort ?? '-'}</Info>
-        <Info label="Custom domain">{t.customDomain ?? '-'}</Info>
+        {/* Infra (VPS, ports, domaine) : ops global uniquement. */}
+        {!isTenantUser && (
+          <>
+            <Info label="VPS">
+              {t.vps ? (
+                <Link href={`/vps/${t.vps.id}`} className="hover:underline">
+                  {t.vps.name}
+                </Link>
+              ) : (
+                '-'
+              )}
+            </Info>
+            <Info label="API port">{t.apiPort ?? '-'}</Info>
+            <Info label="Web port">{t.webPort ?? '-'}</Info>
+            <Info label="Web-client port">{t.webClientPort ?? '-'}</Info>
+            <Info label="Custom domain">{t.customDomain ?? '-'}</Info>
+          </>
+        )}
       </div>
 
       <Section title="URLs publiques du tenant">
         <TenantUrls slug={t.slug} customDomain={t.customDomain} isMain={!!t.isMain} />
       </Section>
 
-      <Section title="Compte admin tenant">
-        <OwnerCredentials tenantId={t.id} ownerEmail={t.ownerEmail} />
+      {/* Facturation : abonnement + factures + reglement Mobile Money + plan.
+          Visible par le compte facturation tenant ET les ops globaux. */}
+      <Section title="Facturation et abonnement">
+        <TenantBilling tenantId={t.id} />
       </Section>
 
-      <Section title="Containers (stack tenant)">
-        <TenantContainers tenantId={t.id} />
-      </Section>
+      {/* Gestion du compte facturation tenant : super-admin uniquement. */}
+      {isSuperAdmin && (
+        <Section title="Acces facturation (compte client)">
+          <BillingUserCard tenantId={t.id} ownerEmail={t.ownerEmail} />
+        </Section>
+      )}
 
-      <Section title="Messagerie (Resend)">
-        <TenantMail tenantId={t.id} />
-      </Section>
+      {!isTenantUser && (
+        <Section title="Compte admin tenant">
+          <OwnerCredentials tenantId={t.id} ownerEmail={t.ownerEmail} />
+        </Section>
+      )}
+
+      {!isTenantUser && (
+        <Section title="Containers (stack tenant)">
+          <TenantContainers tenantId={t.id} />
+        </Section>
+      )}
+
+      {!isTenantUser && (
+        <Section title="Messagerie (Resend)">
+          <TenantMail tenantId={t.id} />
+        </Section>
+      )}
 
       <Section title="Studio (theme et configuration)">
         <TenantStudio
           tenantId={t.id}
+          readOnly={isTenantUser}
           initial={{
             primaryColor: t.primaryColor,
             secondaryColor: t.secondaryColor,
@@ -315,7 +348,7 @@ export default function TenantDetailPage({
         />
       </Section>
 
-      {activeJobId && (
+      {!isTenantUser && activeJobId && (
         <Section
           title="Job en cours"
           action={
@@ -332,6 +365,7 @@ export default function TenantDetailPage({
         </Section>
       )}
 
+      {!isTenantUser && (
       <Section title="Jobs de provisioning">
         <table className="w-full text-sm">
           <thead className="text-xs text-gray-500">
@@ -385,7 +419,9 @@ export default function TenantDetailPage({
           </tbody>
         </table>
       </Section>
+      )}
 
+      {!isTenantUser && (
       <Section title="Updates de version">
         <table className="w-full text-sm">
           <thead className="text-xs text-gray-500">
@@ -427,8 +463,9 @@ export default function TenantDetailPage({
           </tbody>
         </table>
       </Section>
+      )}
 
-      {logsUpdateId && (
+      {!isTenantUser && logsUpdateId && (
         <UpdateLogsModal
           tenantId={id}
           updateJobId={logsUpdateId}
