@@ -24,6 +24,7 @@ export interface LoginResult {
     email: string;
     fullName: string;
     isSuperAdmin: boolean;
+    tenantId?: string | null;
   };
 }
 
@@ -44,6 +45,26 @@ export class LoginOpsAdminUseCase {
 
     const passwordOk = await bcrypt.compare(input.password, opsAdmin.passwordHash);
     if (!passwordOk) throw new AuthenticationError('Email ou mot de passe incorrect');
+
+    // Compte facturation tenant : login simple, PAS de 2FA. On emet le token
+    // directement (decision produit : friction minimale pour un client qui
+    // vient regler ses factures).
+    if (opsAdmin.tenantId) {
+      await prisma.opsAdmin.update({
+        where: { id: opsAdmin.id },
+        data: { lastLoginAt: new Date() },
+      });
+      return {
+        accessToken: this.signAccess(opsAdmin),
+        opsAdmin: {
+          id: opsAdmin.id,
+          email: opsAdmin.email,
+          fullName: opsAdmin.fullName,
+          isSuperAdmin: opsAdmin.isSuperAdmin,
+          tenantId: opsAdmin.tenantId,
+        },
+      };
+    }
 
     // Si pas encore configure -> retourner un challenge "setup_required"
     if (!opsAdmin.twoFactorEnabled || !opsAdmin.twoFactorSecret) {
@@ -74,26 +95,30 @@ export class LoginOpsAdminUseCase {
       data: { lastLoginAt: new Date() },
     });
 
-    const accessToken = jwt.sign(
-      {
-        sub: opsAdmin.id,
-        email: opsAdmin.email,
-        isSuperAdmin: opsAdmin.isSuperAdmin,
-        scope: 'ops',
-      },
-      config.jwt.secret as jwt.Secret,
-      { expiresIn: config.jwt.accessExpiry } as jwt.SignOptions,
-    );
-
     return {
-      accessToken,
+      accessToken: this.signAccess(opsAdmin),
       opsAdmin: {
         id: opsAdmin.id,
         email: opsAdmin.email,
         fullName: opsAdmin.fullName,
         isSuperAdmin: opsAdmin.isSuperAdmin,
+        tenantId: opsAdmin.tenantId,
       },
     };
+  }
+
+  private signAccess(opsAdmin: { id: string; email: string; isSuperAdmin: boolean; tenantId: string | null }): string {
+    return jwt.sign(
+      {
+        sub: opsAdmin.id,
+        email: opsAdmin.email,
+        isSuperAdmin: opsAdmin.isSuperAdmin,
+        tenantId: opsAdmin.tenantId ?? null,
+        scope: 'ops',
+      },
+      config.jwt.secret as jwt.Secret,
+      { expiresIn: config.jwt.accessExpiry } as jwt.SignOptions,
+    );
   }
 
   private signChallenge(opsAdminId: string, kind: 'setup_required' | 'totp_required'): string {

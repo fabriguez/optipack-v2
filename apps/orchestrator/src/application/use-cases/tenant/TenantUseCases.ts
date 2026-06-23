@@ -1,4 +1,6 @@
 import { inject, injectable } from 'tsyringe';
+import bcrypt from 'bcryptjs';
+import { randomBytes } from 'node:crypto';
 import { prisma } from '../../../config/database';
 import { BusinessError, ConflictError, NotFoundError } from '../../../domain/errors/BusinessError';
 import { SSHService, SSH_SERVICE } from '../../../infrastructure/ssh/SSHService';
@@ -523,6 +525,76 @@ export class TenantUseCases {
       );
     }
     return { email: json.data.email, password: json.data.password };
+  }
+
+  /**
+   * Cree (ou met a jour l'email de) le compte facturation ops-admin scope a ce
+   * tenant, et lui (re)genere un mot de passe. Idempotent : un seul compte
+   * facturation par tenant. Retourne email + mot de passe en clair (one-shot).
+   *
+   * Reutilise au provisioning (creation auto) et via l'endpoint super-admin
+   * (reset / creation pour tenants existants).
+   */
+  static async createOrResetBillingUser(
+    tenantId: string,
+    opts?: { email?: string; password?: string },
+  ): Promise<{ email: string; password: string; created: boolean }> {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { id: true, ownerEmail: true },
+    });
+    if (!tenant) throw new NotFoundError('Tenant', tenantId);
+
+    const email = (opts?.email ?? tenant.ownerEmail).trim().toLowerCase();
+    const password = opts?.password ?? randomBytes(9).toString('base64url');
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // Un compte facturation existe deja pour ce tenant ?
+    const existing = await prisma.opsAdmin.findFirst({ where: { tenantId } });
+
+    // Garde-fou : l'email cible ne doit pas appartenir a un AUTRE compte
+    // (global ou d'un autre tenant) -> sinon collision unique sur email.
+    const emailOwner = await prisma.opsAdmin.findUnique({ where: { email }, select: { id: true, tenantId: true } });
+    if (emailOwner && emailOwner.id !== existing?.id) {
+      throw new BusinessError(
+        `L'email ${email} est deja utilise par un autre compte ops-admin. Choisissez un autre email.`,
+      );
+    }
+
+    if (existing) {
+      await prisma.opsAdmin.update({
+        where: { id: existing.id },
+        data: { email, passwordHash, isActive: true },
+      });
+      return { email, password, created: false };
+    }
+
+    await prisma.opsAdmin.create({
+      data: {
+        email,
+        passwordHash,
+        fullName: `Facturation ${email}`,
+        isSuperAdmin: false,
+        isActive: true,
+        twoFactorEnabled: false,
+        tenantId,
+      },
+    });
+    return { email, password, created: true };
+  }
+
+  /** Infos du compte facturation tenant (existe ? email ? dernier login ?). */
+  async getBillingUser(tenantId: string) {
+    const user = await prisma.opsAdmin.findFirst({
+      where: { tenantId },
+      select: { id: true, email: true, isActive: true, lastLoginAt: true, createdAt: true },
+    });
+    return { exists: !!user, user };
+  }
+
+  /** (Re)genere le compte facturation tenant. Retourne creds one-shot. */
+  async resetBillingUser(tenantId: string, email?: string) {
+    return TenantUseCases.createOrResetBillingUser(tenantId, { email });
   }
 
   /**

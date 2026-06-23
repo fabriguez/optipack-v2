@@ -36,12 +36,18 @@ model OpsAdmin {
   twoFactorRecoveryCodes String[] @default([])
   isActive        Boolean   @default(true)
   isSuperAdmin    Boolean   @default(false)
+  // Scope tenant : si renseigne, ce compte est un "user facturation" lie a UN
+  // tenant. Acces ops-admin restreint a la vue de son tenant + reglement des
+  // factures (Mobile Money). Null = ops admin global (super ou staff).
+  tenantId        String?
+  tenant          Tenant?   @relation("TenantBillingUsers", fields: [tenantId], references: [id])
   lastLoginAt     DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
   auditLogs AuditLog[]
 
+  @@index([tenantId])
   @@map("ops_admins")
 }
 
@@ -169,6 +175,7 @@ model Tenant {
   updateJobs  TenantUpdateJob[]
   planChanges PlanChange[]
   mail        TenantMail?
+  billingUsers OpsAdmin[] @relation("TenantBillingUsers")
 
   @@index([vpsId])
   @@index([status])

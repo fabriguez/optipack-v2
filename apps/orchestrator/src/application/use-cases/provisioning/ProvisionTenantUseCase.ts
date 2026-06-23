@@ -18,6 +18,7 @@ import {
 } from '../../../infrastructure/ssh/SSHService';
 import { ProvisioningJobLogger } from './ProvisioningJobLogger';
 import { CapacityService } from '../../services/CapacityService';
+import { TenantUseCases } from '../tenant/TenantUseCases';
 import { BusinessError, NotFoundError } from '../../../domain/errors/BusinessError';
 
 const BASE_DOMAIN = process.env.OPS_BASE_DOMAIN ?? 'transitsoftservices.com';
@@ -611,6 +612,19 @@ rm -f ${tmpScript} ${tmpData}
     if (seedOut) await log(`[provision] seed stdout: ${seedOut.slice(0, 1000)}`);
     if (seedResult.code !== 0) {
       throw new Error(`[provision] seed echoue (code ${seedResult.code}): ${seedErr.slice(0, 500)}`);
+    }
+
+    // 8.5. Compte facturation ops-admin scope a ce tenant. Le client se
+    // connecte a l'ops-admin avec ces identifiants pour voir son tenant et
+    // regler ses factures (Mobile Money). Idempotent (1 compte / tenant).
+    try {
+      const billing = await TenantUseCases.createOrResetBillingUser(tenant.id);
+      await log(
+        `[provision] BILLING USER : email=${billing.email} password=${billing.password} (NOTE-LE : non recuperable apres ce log)`,
+      );
+    } catch (e) {
+      // Non bloquant : un super-admin peut le (re)generer via la vue tenant.
+      await log(`[provision] WARN creation compte facturation : ${(e as Error).message}`);
     }
 
     // 9. (supprime) -- web et web-client sont deja demarres par

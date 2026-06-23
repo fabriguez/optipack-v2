@@ -290,6 +290,37 @@ export class TenantController {
     }
   }
 
+  /** GET /ops/tenants/:id/billing-user -- infos du compte facturation tenant. */
+  static async getBillingUser(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = await container.resolve(TenantUseCases).getBillingUser(req.params.id);
+      res.json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * POST /ops/tenants/:id/billing-user -- (re)genere le compte facturation
+   * tenant + retourne email + mot de passe one-shot. Email optionnel (defaut =
+   * ownerEmail du tenant). Reserve super-admin.
+   */
+  static async resetBillingUser(req: Request, res: Response, next: NextFunction) {
+    try {
+      const email = (req.body?.email as string | undefined)?.trim() || undefined;
+      const result = await container.resolve(TenantUseCases).resetBillingUser(req.params.id, email);
+      await container.resolve(AuditLogger).log(req, {
+        action: 'TENANT_BILLING_USER_RESET',
+        entityType: 'Tenant',
+        entityId: req.params.id,
+        payload: { email: result.email, created: result.created } as Record<string, unknown>,
+      });
+      res.json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   /**
    * DELETE /ops/tenants/:id/purge -- destruction physique COMPLETE
    * (containers + volumes + images locales + network + env files + record

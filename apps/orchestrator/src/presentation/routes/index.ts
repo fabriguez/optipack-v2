@@ -11,7 +11,7 @@ import { ReleaseController } from '../controllers/ReleaseController';
 import { BackupController } from '../controllers/BackupController';
 import { CaddyController } from '../controllers/CaddyController';
 import { UfwController } from '../controllers/UfwController';
-import { authenticateOps, requireSuperAdmin } from '../middleware/authOpsMiddleware';
+import { authenticateOps, requireSuperAdmin, requireGlobalOps, enforceTenantParam } from '../middleware/authOpsMiddleware';
 import { requireServiceToken } from '../middleware/serviceTokenMiddleware';
 
 const router = Router();
@@ -52,32 +52,39 @@ router.get('/vps/:id/capacity', authenticateOps, requireSuperAdmin, BillingContr
 // ============================================================
 // TENANTS (auth ; archive + migrate reserves super-admin)
 // ============================================================
-router.get('/tenants', authenticateOps, TenantController.list);
-router.post('/tenants', authenticateOps, TenantController.create);
-router.get('/tenants/:id', authenticateOps, TenantController.getById);
-router.patch('/tenants/:id', authenticateOps, TenantController.update);
-router.post('/tenants/:id/freeze', authenticateOps, TenantController.freeze);
-router.post('/tenants/:id/unfreeze', authenticateOps, TenantController.unfreeze);
+router.get('/tenants', authenticateOps, requireGlobalOps, TenantController.list);
+router.post('/tenants', authenticateOps, requireGlobalOps, TenantController.create);
+// Vue tenant : un compte facturation ne voit QUE son propre tenant.
+router.get('/tenants/:id', authenticateOps, enforceTenantParam(), TenantController.getById);
+// Billing scope tenant : abonnement + paiements + plan (vue + paiement MoMo).
+router.get('/tenants/:id/billing', authenticateOps, enforceTenantParam(), BillingController.tenantBilling);
+router.patch('/tenants/:id', authenticateOps, requireGlobalOps, TenantController.update);
+router.post('/tenants/:id/freeze', authenticateOps, requireGlobalOps, TenantController.freeze);
+router.post('/tenants/:id/unfreeze', authenticateOps, requireGlobalOps, TenantController.unfreeze);
 router.post('/tenants/:id/archive', authenticateOps, requireSuperAdmin, TenantController.archive);
 router.delete('/tenants/:id/purge', authenticateOps, requireSuperAdmin, TenantController.purge);
 router.post('/tenants/:id/reset-owner-password', authenticateOps, requireSuperAdmin, TenantController.resetOwnerPassword);
-router.get('/tenants/:id/containers', authenticateOps, TenantController.containers);
-router.get('/tenants/:id/containers/:name/logs', authenticateOps, TenantController.containerLogs);
+// Gestion du compte facturation tenant (super-admin) : (re)generer / consulter.
+router.get('/tenants/:id/billing-user', authenticateOps, requireSuperAdmin, TenantController.getBillingUser);
+router.post('/tenants/:id/billing-user', authenticateOps, requireSuperAdmin, TenantController.resetBillingUser);
+router.get('/tenants/:id/containers', authenticateOps, requireGlobalOps, TenantController.containers);
+router.get('/tenants/:id/containers/:name/logs', authenticateOps, requireGlobalOps, TenantController.containerLogs);
 router.post('/tenants/:id/containers/:name/exec', authenticateOps, requireSuperAdmin, TenantController.containerExec);
 router.post('/tenants/:id/stack/stop', authenticateOps, requireSuperAdmin, TenantController.stackStop);
 router.post('/tenants/:id/stack/start', authenticateOps, requireSuperAdmin, TenantController.stackStart);
 router.post('/tenants/:id/stack/restart', authenticateOps, requireSuperAdmin, TenantController.stackRestart);
 router.post('/tenants/:id/migrate', authenticateOps, requireSuperAdmin, TenantController.migrate);
-router.post('/tenants/:id/upgrade', authenticateOps, BillingController.requestUpgrade);
-router.get('/tenants/:id/jobs', authenticateOps, TenantController.listJobs);
-router.get('/tenants/:id/jobs/:jobId', authenticateOps, TenantController.getJob);
-router.get('/tenants/:id/logs', authenticateOps, TenantController.getLogs);
+// Upgrade/changement de plan : autorise au compte facturation pour SON tenant.
+router.post('/tenants/:id/upgrade', authenticateOps, enforceTenantParam(), BillingController.requestUpgrade);
+router.get('/tenants/:id/jobs', authenticateOps, requireGlobalOps, TenantController.listJobs);
+router.get('/tenants/:id/jobs/:jobId', authenticateOps, requireGlobalOps, TenantController.getJob);
+router.get('/tenants/:id/logs', authenticateOps, requireGlobalOps, TenantController.getLogs);
 
 // Messagerie (envoi via Resend, 1 domaine par tenant).
-router.get('/tenants/:id/mail', authenticateOps, TenantMailController.get);
-router.post('/tenants/:id/mail/provision', authenticateOps, TenantMailController.provision);
-router.post('/tenants/:id/mail/verify', authenticateOps, TenantMailController.verify);
-router.post('/tenants/:id/mail/refresh', authenticateOps, TenantMailController.refresh);
+router.get('/tenants/:id/mail', authenticateOps, requireGlobalOps, TenantMailController.get);
+router.post('/tenants/:id/mail/provision', authenticateOps, requireGlobalOps, TenantMailController.provision);
+router.post('/tenants/:id/mail/verify', authenticateOps, requireGlobalOps, TenantMailController.verify);
+router.post('/tenants/:id/mail/refresh', authenticateOps, requireGlobalOps, TenantMailController.refresh);
 
 // ============================================================
 // PLANS (lecture pour tous les ops, ecriture super-admin)
@@ -91,7 +98,9 @@ router.post('/plans/:id/deactivate', authenticateOps, requireSuperAdmin, PlanCon
 // ============================================================
 // BILLING (checkout + webhooks publics + actions ops)
 // ============================================================
-router.get('/billing/overview', authenticateOps, BillingController.overview);
+router.get('/billing/overview', authenticateOps, requireGlobalOps, BillingController.overview);
+// Checkout : accessible au compte facturation tenant. Le controller force le
+// scope (un compte tenant ne peut payer QUE pour son propre tenant).
 router.post('/billing/checkout', authenticateOps, BillingController.startCheckout);
 router.post('/billing/confirm-manual', authenticateOps, requireSuperAdmin, BillingController.confirmManualPayment);
 router.post('/billing/run-autofreeze', authenticateOps, requireSuperAdmin, BillingController.runAutoFreeze);
@@ -104,18 +113,18 @@ router.post('/billing/webhook/momo', BillingController.momoWebhook);
 // ============================================================
 // RELEASES + TENANT UPDATES (Phase 4.5)
 // ============================================================
-router.get('/releases', authenticateOps, ReleaseController.list);
+router.get('/releases', authenticateOps, requireGlobalOps, ReleaseController.list);
 router.post('/releases/sync', authenticateOps, requireSuperAdmin, ReleaseController.sync);
-router.get('/ghcr/tags', authenticateOps, ReleaseController.listGhcrTags);
+router.get('/ghcr/tags', authenticateOps, requireGlobalOps, ReleaseController.listGhcrTags);
 router.post('/releases', authenticateOps, requireSuperAdmin, ReleaseController.create);
-router.get('/releases/:id', authenticateOps, ReleaseController.getById);
+router.get('/releases/:id', authenticateOps, requireGlobalOps, ReleaseController.getById);
 router.patch('/releases/:id', authenticateOps, requireSuperAdmin, ReleaseController.update);
 router.post('/releases/:id/publish', authenticateOps, requireSuperAdmin, ReleaseController.publish);
 
-router.post('/tenants/:id/updates', authenticateOps, ReleaseController.requestUpdate);
-router.get('/tenants/:id/updates', authenticateOps, ReleaseController.listJobs);
-router.get('/tenants/:id/updates/:jobId', authenticateOps, ReleaseController.getJob);
-router.post('/tenants/:id/updates/:jobId/rollback', authenticateOps, ReleaseController.rollback);
+router.post('/tenants/:id/updates', authenticateOps, requireGlobalOps, ReleaseController.requestUpdate);
+router.get('/tenants/:id/updates', authenticateOps, requireGlobalOps, ReleaseController.listJobs);
+router.get('/tenants/:id/updates/:jobId', authenticateOps, requireGlobalOps, ReleaseController.getJob);
+router.post('/tenants/:id/updates/:jobId/rollback', authenticateOps, requireSuperAdmin, ReleaseController.rollback);
 
 // Endpoint de proxy pour l'API tenant (pas auth ops admin, mais service token partage).
 // L'API tenant appelle ceci depuis son backend pour repondre a /api/v1/system/updates
@@ -153,7 +162,7 @@ router.post('/ops-admins/:id/reset-2fa', authenticateOps, requireSuperAdmin, Ops
 // ============================================================
 // BACKUPS (Phase 5)
 // ============================================================
-router.get('/tenants/:id/backups', authenticateOps, BackupController.list);
+router.get('/tenants/:id/backups', authenticateOps, requireGlobalOps, BackupController.list);
 router.post('/tenants/:id/backups', authenticateOps, requireSuperAdmin, BackupController.create);
 router.post('/backups/:backupId/restore', authenticateOps, requireSuperAdmin, BackupController.restore);
 router.post('/backups/run-nightly', authenticateOps, requireSuperAdmin, BackupController.runNightly);

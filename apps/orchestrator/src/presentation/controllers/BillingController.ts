@@ -76,6 +76,53 @@ export class BillingController {
     }
   }
 
+  /**
+   * GET /ops/tenants/:id/billing — vue facturation scope tenant.
+   * Abonnement courant + historique paiements + plan + plans disponibles.
+   * Accessible au compte facturation tenant (enforceTenantParam en amont).
+   */
+  static async tenantBilling(req: Request, res: Response, next: NextFunction) {
+    try {
+      const tenantId = req.params.id;
+      const [tenant, subscription, plans] = await Promise.all([
+        prisma.tenant.findUnique({
+          where: { id: tenantId },
+          select: { id: true, slug: true, name: true, status: true, resourcePlanId: true },
+        }),
+        prisma.subscription.findUnique({
+          where: { tenantId },
+          include: {
+            payments: { orderBy: { createdAt: 'desc' }, take: 50 },
+          },
+        }),
+        prisma.resourcePlan.findMany({
+          where: { isActive: true },
+          orderBy: { pricePerMonth: 'asc' },
+        }),
+      ]);
+      if (!tenant) throw new BusinessError('Tenant introuvable');
+
+      const pendingPlanChange = await prisma.planChange.findFirst({
+        where: { tenantId, status: 'pending_payment' },
+        include: { toPlan: { select: { id: true, code: true, name: true, pricePerMonth: true, currency: true } } },
+        orderBy: { requestedAt: 'desc' },
+      });
+
+      res.json({
+        success: true,
+        data: {
+          tenant,
+          subscription,
+          payments: subscription?.payments ?? [],
+          plans,
+          pendingPlanChange,
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   /** GET /ops/vps/:id/capacity — etat de la capacite d'un VPS */
   static async vpsCapacity(req: Request, res: Response, next: NextFunction) {
     try {
@@ -107,11 +154,32 @@ export class BillingController {
   static async startCheckout(req: Request, res: Response, next: NextFunction) {
     try {
       const parsed = startCheckoutSchema.parse(req.body);
+      // Scope tenant : un compte facturation ne peut payer QUE pour son tenant.
+      // On verifie que l'intent cible bien son tenantId (sinon 403).
+      const scoped = req.opsAdmin?.tenantId;
+      if (scoped) {
+        const intentTenantId =
+          parsed.intent.type === 'subscription_renewal'
+            ? parsed.intent.tenantId
+            : await BillingController.planChangeTenantId(parsed.intent.planChangeId);
+        if (intentTenantId !== scoped) {
+          throw new BusinessError('Vous ne pouvez regler que les factures de votre tenant');
+        }
+      }
       const result = await container.resolve(BillingUseCases).startCheckout(parsed);
       res.json({ success: true, data: result });
     } catch (err) {
       next(err);
     }
+  }
+
+  /** Resout le tenantId d'un planChange (pour verifier le scope au checkout). */
+  private static async planChangeTenantId(planChangeId: string): Promise<string | null> {
+    const pc = await prisma.planChange.findUnique({
+      where: { id: planChangeId },
+      select: { tenantId: true },
+    });
+    return pc?.tenantId ?? null;
   }
 
   /** POST /ops/billing/confirm-manual — l'ops admin confirme un paiement manuel */

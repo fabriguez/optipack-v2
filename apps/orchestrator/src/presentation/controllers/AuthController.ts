@@ -38,6 +38,7 @@ export class AuthController {
           sub: result.opsAdmin.id,
           email: result.opsAdmin.email,
           isSuperAdmin: result.opsAdmin.isSuperAdmin,
+          tenantId: result.opsAdmin.tenantId ?? null,
           scope: 'ops',
         };
         await container.resolve(AuditLogger).log(req, {
