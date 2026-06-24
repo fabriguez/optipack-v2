@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { applyPaletteToDocument, generatePalette } from '@/lib/theme/palette-generator';
 import { applySkinById, applyThemeById, type SkinCustomization, isKnownSkinId, isKnownThemeId, getTheme } from '@transitsoftservices/skins';
+import { getApiBaseUrl } from '@/lib/api/baseUrl';
 
 export interface TenantMeta {
   id: string;
@@ -31,9 +32,6 @@ interface TenantContextValue {
 
 const TenantContext = createContext<TenantContextValue | undefined>(undefined);
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
-
 const FALLBACK_META: TenantMeta = {
   id: 'fallback',
   slug: null,
@@ -50,7 +48,7 @@ const FALLBACK_META: TenantMeta = {
 
 async function fetchTenantMeta(): Promise<TenantMeta> {
   try {
-    const res = await fetch(`${API_URL}/tenant-meta`, {
+    const res = await fetch(`${getApiBaseUrl()}/tenant-meta`, {
       cache: 'no-store',
     });
     if (!res.ok) throw new Error(String(res.status));

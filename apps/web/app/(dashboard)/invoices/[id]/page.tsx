@@ -16,6 +16,7 @@ import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 import { useQuery } from '@tanstack/react-query';
 import { usePaymentsByInvoice } from '@/lib/hooks/usePayments';
 import { apiClient } from '@/lib/api/client';
+import { getApiBaseUrl } from '@/lib/api/baseUrl';
 import { formatAmount, formatDate, formatDateTime } from '@transitsoftservices/shared';
 import { PaymentFormDialog } from '../../payments/PaymentFormDialog';
 import { InvoiceDiscountDialog } from './InvoiceDiscountDialog';
@@ -33,7 +34,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   const [showDiscount, setShowDiscount] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
 
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
+  const API_BASE = getApiBaseUrl();
 
   const [xlsxLoading, setXlsxLoading] = useState(false);
   const [lightbox, setLightbox] = useState<{ parcelId: string; index: number; images: any[] } | null>(null);

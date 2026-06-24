@@ -28,6 +28,7 @@ import {
   useRemoveParcelImage,
 } from '@/lib/hooks/useParcels';
 import { apiClient } from '@/lib/api/client';
+import { getApiBaseUrl } from '@/lib/api/baseUrl';
 import { formatAmount, formatDate, formatDateTime } from '@transitsoftservices/shared';
 import { ParcelFormDialog } from '../ParcelFormDialog';
 import { PaymentFormDialog } from '../../payments/PaymentFormDialog';
@@ -139,7 +140,7 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
   const [imageToDelete, setImageToDelete] = useState<string | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
+  const API_BASE = getApiBaseUrl();
 
   const parcel = data?.data;
   const history = historyData?.data || [];

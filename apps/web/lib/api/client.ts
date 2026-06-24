@@ -8,18 +8,20 @@ import {
   OfflineQueuedError,
   shouldQueueOnError,
 } from './offlineQueue';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
+import { getApiBaseUrl } from './baseUrl';
 
 export const apiClient = axios.create({
-  baseURL: API_URL,
+  baseURL: getApiBaseUrl(),
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Request interceptor: attache le JWT depuis la session NextAuth
+// Request interceptor: attache le JWT depuis la session NextAuth + resout la
+// baseURL au moment de l'appel (toujours cote navigateur), pour gerer le
+// multi-tenant (app.<tenant> -> api.<tenant>) malgre un build Next partage.
 apiClient.interceptors.request.use(async (config) => {
+  config.baseURL = getApiBaseUrl();
   if (typeof window !== 'undefined') {
     const session = await getSession();
     const token = (session as any)?.accessToken;

@@ -3,8 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { getSession } from 'next-auth/react';
 import { resolveImageUrl } from '@/lib/api/imageUrl';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
+import { getApiBaseUrl } from '@/lib/api/baseUrl';
 
 /**
  * Cache local des blob URLs : meme image utilisee plusieurs fois ne sera fetchee
@@ -69,7 +68,7 @@ export function AuthedImage({ src, fallback, alt, ...rest }: AuthedImageProps) {
     }
 
     // URL externe absolue (https://...) qui n'est pas notre API : on la sert directement
-    if (/^https?:\/\//i.test(src) && !src.includes(stripPath(API_BASE))) {
+    if (/^https?:\/\//i.test(src) && !src.includes(stripPath(getApiBaseUrl()))) {
       setResolved(src);
       return;
     }
