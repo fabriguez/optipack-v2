@@ -152,6 +152,22 @@ function NotificationCenterContent() {
       ),
     },
     {
+      key: 'retryCount',
+      label: 'Tentatives',
+      render: (row: AdminNotification) => {
+        if (!row.retryCount) return <span className="text-sm text-gray-300">-</span>;
+        return (
+          <span
+            className="inline-flex items-center gap-1 text-sm text-amber-700"
+            title={row.lastRetryAt ? `Dernier renvoi : ${formatDateTime(row.lastRetryAt)}` : undefined}
+          >
+            <RotateCw className="h-3.5 w-3.5 text-amber-500" />
+            {row.retryCount}
+          </span>
+        );
+      },
+    },
+    {
       key: 'attachments',
       label: 'Pieces jointes',
       render: (row: AdminNotification) => {

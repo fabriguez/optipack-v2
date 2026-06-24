@@ -263,13 +263,16 @@ async function sendEmailWithTemplate(
   vars: Record<string, string | number | undefined | null>,
   fallback: () => Promise<unknown>,
   attachments?: EmailAttachment[],
+  target?: { clientId?: string; userId?: string; agencyId?: string },
 ): Promise<void> {
+  let subject = eventKind;
   try {
     const custom = await resolveTemplate(organizationId, eventKind, 'EMAIL', vars);
     if (custom) {
+      subject = custom.subject || eventKind;
       await emailService.send(
         email,
-        custom.subject || eventKind,
+        subject,
         custom.body,
         organizationId,
         { event: eventKind, attachments },
@@ -277,8 +280,49 @@ async function sendEmailWithTemplate(
     } else {
       await fallback();
     }
+    // Trace dans le centre de notifications : canal EMAIL, statut SENT.
+    await recordEmailNotification({ email, organizationId, eventKind, subject, status: 'SENT', target });
   } catch (err) {
     logger.warn({ err, email, eventKind }, 'Email send failed (non-bloquant)');
+    await recordEmailNotification({
+      email, organizationId, eventKind, subject, status: 'FAILED',
+      error: err instanceof Error ? err.message : String(err), target,
+    });
+  }
+}
+
+/**
+ * Cree une ligne Notification (canal EMAIL) pour le centre de notifications :
+ * visibilite des emails envoyes/echoues + retry depuis l'UI. Best-effort.
+ */
+async function recordEmailNotification(args: {
+  email: string;
+  organizationId: string | null;
+  eventKind: string;
+  subject: string;
+  status: 'SENT' | 'FAILED';
+  error?: string;
+  target?: { clientId?: string; userId?: string; agencyId?: string };
+}): Promise<void> {
+  try {
+    await prisma.notification.create({
+      data: {
+        organizationId: args.organizationId ?? undefined,
+        clientId: args.target?.clientId,
+        userId: args.target?.userId,
+        agencyId: args.target?.agencyId,
+        title: args.subject,
+        message: args.subject,
+        type: 'EMAIL',
+        status: args.status,
+        eventKind: args.eventKind,
+        recipient: args.email,
+        error: args.error,
+        sentAt: args.status === 'SENT' ? new Date() : null,
+      },
+    });
+  } catch (err) {
+    logger.warn({ err, email: args.email, eventKind: args.eventKind }, 'recordEmailNotification failed (ignored)');
   }
 }
 
