@@ -527,15 +527,21 @@ export async function deliverWhatsapp(
             : wrapMessage(tenantName, p.title, p.message, 'WHATSAPP').message;
           const titleToSend = customWa ? p.title : `[${tenantName}] ${p.title}`;
 
-          // Envoi en deux temps : (1) images du colis inline avec le texte en
-          // legende sur la 1ere image ; (2) documents (facture/recu) en fichier.
-          // Si pas d'image, on envoie le texte seul puis les documents.
+          // Mode media WhatsApp Web JS :
+          //  - 'link' (defaut) : on N'UPLOADE PAS les fichiers. Envoyer un PDF/
+          //    image en base64 a travers la page puppeteer la fait FIGER
+          //    (Runtime.callFunctionOn timeout) -> tous les envois suivants,
+          //    meme texte, pendent. On ajoute les fichiers comme LIENS dans le
+          //    texte : fiable, et le client telecharge en 1 tap.
+          //  - 'upload' : ancien comportement (envoi des bytes). A reserver a une
+          //    session WA stable (WA_WEB_VERSION pinnee). Via WA_MEDIA_MODE=upload.
           const attachments = p.attachments ?? [];
           const images = attachments.filter((a) => a.type === 'image');
           const docs = attachments.filter((a) => a.type !== 'image');
+          const mediaMode = (process.env.WA_MEDIA_MODE ?? 'link').toLowerCase();
 
           let sentMain = false;
-          if (images.length > 0) {
+          if (mediaMode === 'upload' && images.length > 0) {
             sentMain = await tenantWaSessionService.sendMedia(organizationId, phone, images[0].url, {
               caption: msgToSend,
               filename: images[0].filename,
@@ -547,16 +553,30 @@ export async function deliverWhatsapp(
               });
             }
           } else {
-            sentMain = await tenantWaSessionService.sendMessage(organizationId, phone, msgToSend);
+            // Mode lien (ou aucune image) : texte + liens des pieces jointes.
+            const linkLines =
+              attachments.length > 0
+                ? '\n\n' +
+                  attachments
+                    .map((a) => `${a.caption ? `${a.caption} : ` : ''}${a.url}`)
+                    .join('\n')
+                : '';
+            sentMain = await tenantWaSessionService.sendMessage(
+              organizationId,
+              phone,
+              msgToSend + linkLines,
+            );
           }
 
           if (sentMain) {
-            for (const doc of docs) {
-              await tenantWaSessionService.sendMedia(organizationId, phone, doc.url, {
-                filename: doc.filename,
-                caption: doc.caption,
-                asDocument: true,
-              });
+            if (mediaMode === 'upload') {
+              for (const doc of docs) {
+                await tenantWaSessionService.sendMedia(organizationId, phone, doc.url, {
+                  filename: doc.filename,
+                  caption: doc.caption,
+                  asDocument: true,
+                });
+              }
             }
             const row = await prisma.notification.create({
               data: buildNotifRow({
