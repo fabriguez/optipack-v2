@@ -116,6 +116,11 @@ export class TenantWhatsAppSessionService extends EventEmitter {
       }),
       puppeteer: {
         headless: true,
+        // protocolTimeout : delai max d'une commande CDP (Runtime.callFunctionOn).
+        // Le defaut puppeteer (180s) etait depasse sous charge / page WA lente
+        // sur container a faible RAM -> ProtocolError "callFunctionOn timed out".
+        // On le rend explicite + configurable.
+        protocolTimeout: Number(process.env.WA_PROTOCOL_TIMEOUT_MS ?? 180000),
         // En production Alpine Docker, Chromium est installee via apk et
         // PUPPETEER_EXECUTABLE_PATH pointe vers /usr/bin/chromium-browser.
         ...(process.env.PUPPETEER_EXECUTABLE_PATH
@@ -126,6 +131,13 @@ export class TenantWhatsAppSessionService extends EventEmitter {
           '--disable-setuid-sandbox',
           '--disable-dev-shm-usage',
           '--disable-gpu',
+          // Stabilite headless en container contraint : reduit le throttling
+          // des timers/onglets en arriere-plan (WA Web JS evalue en continu).
+          '--disable-extensions',
+          '--disable-background-timer-throttling',
+          '--disable-backgrounding-occluded-windows',
+          '--disable-renderer-backgrounding',
+          '--no-first-run',
         ],
       },
     });
@@ -232,7 +244,7 @@ export class TenantWhatsAppSessionService extends EventEmitter {
 
     try {
       const chatId = phone.replace(/[^0-9]/g, '') + '@c.us';
-      await client.sendMessage(chatId, message);
+      await this.withSendTimeout(() => client.sendMessage(chatId, message));
       limiter.consume();
       return true;
     } catch (err) {
@@ -240,6 +252,26 @@ export class TenantWhatsAppSessionService extends EventEmitter {
       await this.notifyFailure(organizationId, phone, String(err));
       return false;
     }
+  }
+
+  /**
+   * Borne la duree d'un envoi WhatsApp. Le canal WA Web JS (puppeteer) peut se
+   * figer (page lente, RAM container) et faire trainer un envoi jusqu'au
+   * protocolTimeout (180s), bloquant le Promise.all de NotificationService.
+   * On echoue vite (defaut 60s) -> deliverWhatsapp retombe sur le provider
+   * chain (Twilio/Meta/AT) au lieu de pendre. Configurable via WA_SEND_TIMEOUT_MS.
+   */
+  private withSendTimeout<T>(fn: () => Promise<T>): Promise<T> {
+    const ms = Number(process.env.WA_SEND_TIMEOUT_MS ?? 60000);
+    let timer: ReturnType<typeof setTimeout>;
+    const p = fn();
+    // Si l'envoi rejette APRES le timeout (la page se debloque tard), on evite
+    // un unhandledRejection en absorbant le resultat tardif.
+    p.catch(() => {});
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`WA send timeout apres ${ms}ms`)), ms);
+    });
+    return Promise.race([p, timeout]).finally(() => clearTimeout(timer)) as Promise<T>;
   }
 
   /**
@@ -290,10 +322,12 @@ export class TenantWhatsAppSessionService extends EventEmitter {
         opts?.filename ?? 'fichier',
       );
       const chatId = phone.replace(/[^0-9]/g, '') + '@c.us';
-      await client.sendMessage(chatId, media, {
-        caption: opts?.caption,
-        sendMediaAsDocument: opts?.asDocument ?? false,
-      });
+      await this.withSendTimeout(() =>
+        client.sendMessage(chatId, media, {
+          caption: opts?.caption,
+          sendMediaAsDocument: opts?.asDocument ?? false,
+        }),
+      );
       limiter.consume();
       return true;
     } catch (err) {
