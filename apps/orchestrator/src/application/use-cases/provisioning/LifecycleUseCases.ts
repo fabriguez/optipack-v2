@@ -247,6 +247,17 @@ export class DeleteTenantUseCase {
     await refreshCaddy(this.caddy, tenant.vpsId, creds);
     await log(`[delete] Caddy reloaded (tenant retire)`);
 
+    // 8. Supprime les comptes ops-admin scopes a ce tenant (users facturation
+    //    lies via OpsAdmin.tenantId). Sans ca ils restent orphelins (tenantId
+    //    SetNull) -> comptes fantomes dans le systeme. Les audit logs associes
+    //    sont conserves (opsAdminId mis a null automatiquement).
+    const removedAdmins = await prisma.opsAdmin
+      .deleteMany({ where: { tenantId } })
+      .catch(() => ({ count: 0 }));
+    if (removedAdmins.count > 0) {
+      await log(`[delete] ${removedAdmins.count} compte(s) ops-admin lie(s) au tenant supprime(s)`);
+    }
+
     await prisma.tenant.update({
       where: { id: tenantId },
       data: { status: 'ARCHIVED', archivedAt: new Date() },
@@ -358,6 +369,9 @@ export class PurgeTenantUseCase {
       await tx.planChange.deleteMany({ where: { tenantId } }).catch(() => {});
       await tx.subscription.deleteMany({ where: { tenantId } }).catch(() => {});
       await tx.tenantUpdateJob.deleteMany({ where: { tenantId } }).catch(() => {});
+      // Comptes ops-admin scopes a ce tenant (users facturation). Leurs audit
+      // logs sont conserves (opsAdminId -> null). Sans ca : compte fantome.
+      await tx.opsAdmin.deleteMany({ where: { tenantId } }).catch(() => {});
       await tx.tenant.delete({ where: { id: tenantId } });
     });
 

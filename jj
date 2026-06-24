@@ -1,0 +1,7 @@
+# liste d'abord les comptes facturation liés à cbt (vérif avant suppression)
+docker exec optipack-v2-ops-postgres-1 sh -lc \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT a.id, a.email, a.\"tenantId\" FROM ops_admins a JOIN tenants t ON t.id=a.\"tenantId\" WHERE t.slug='\''cbt-tansitsoftservices'\'';"'
+
+# puis supprime-les
+docker exec optipack-v2-ops-postgres-1 sh -lc \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "DELETE FROM ops_admins WHERE \"tenantId\" IN (SELECT id FROM tenants WHERE slug='\''cbt-tansitsoftservices'\'');"'
