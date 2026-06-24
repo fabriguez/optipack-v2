@@ -20,13 +20,25 @@ function buildAbsoluteUrl(req: Request, key: string): string {
   const safeKey = key.split('/').map(encodeURIComponent).join('/');
   const path = `/api/v1/uploads/object/${safeKey}`;
   const fromEnv = config.apiUrl;
-  if (fromEnv && /^https?:\/\//i.test(fromEnv)) {
-    return `${fromEnv.replace(/\/$/, '')}${path}`;
-  }
+  const usedEnv = !!(fromEnv && /^https?:\/\//i.test(fromEnv));
   // Fallback : derive from request (utile en dev quand API_URL n'est pas posee)
   const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'http';
-  const host = (req.headers['x-forwarded-host'] as string) || req.get('host') || 'localhost';
-  return `${proto}://${host}${path}`;
+  const reqHost = (req.headers['x-forwarded-host'] as string) || req.get('host') || 'localhost';
+  const url = usedEnv ? `${fromEnv!.replace(/\/$/, '')}${path}` : `${proto}://${reqHost}${path}`;
+  // Log la resolution du host de l'URL : c'est ici qu'on diagnostique une URL
+  // qui sortirait avec un host interne (ex minio:9000) ou un API_URL mal pose.
+  logger.info(
+    {
+      key,
+      url,
+      hostSource: usedEnv ? 'API_URL' : 'request',
+      apiUrlEnv: fromEnv || null,
+      xForwardedHost: (req.headers['x-forwarded-host'] as string) || null,
+      reqHost: req.get('host') || null,
+    },
+    '[upload] resolved object URL',
+  );
+  return url;
 }
 
 /**
@@ -48,6 +60,10 @@ export class UploadController {
       const userId = req.user?.userId || 'anon';
       const orgId = req.user?.organizationId ?? '';
       const key = storage.buildKey(`uploads/${userId}`, ext);
+      logger.info(
+        { kind: 'image', key, originalname: file.originalname, mimetype: file.mimetype, size: file.size, userId, orgId },
+        '[upload] received',
+      );
       await storage.uploadBuffer(key, file.buffer, file.mimetype);
 
       // ABAC : enregistre la propriete de l objet pour scoping acces.
@@ -72,6 +88,10 @@ export class UploadController {
       const userId = req.user?.userId || 'anon';
       const orgId = req.user?.organizationId ?? '';
       const key = storage.buildKey(`uploads/${userId}`, ext);
+      logger.info(
+        { kind: 'file', key, originalname: file.originalname, mimetype: file.mimetype, size: file.size, userId, orgId },
+        '[upload] received',
+      );
       await storage.uploadBuffer(key, file.buffer, file.mimetype);
 
       // ABAC : enregistre la propriete de l objet pour scoping acces.

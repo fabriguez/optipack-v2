@@ -214,6 +214,13 @@ export class ProvisionTenantUseCase {
       `API_PORT=4000`,
       `NEXT_PUBLIC_API_URL=https://api.${tenant.slug}.${BASE_DOMAIN}/api/v1`,
       `PUBLIC_TRACKING_URL=https://${tenant.slug}.${BASE_DOMAIN}`,
+      // URLs publiques cote API (origines, sans /api/v1). Sans API_URL, l'API
+      // retombait sur http://localhost:4000 -> URLs d'images (agence, colis,
+      // avatars) et liens email figes en localhost. WEB_URL / CLIENT_PORTAL_URL
+      // alimentent les liens email (tracking, factures, espace client).
+      `API_URL=https://api.${tenant.slug}.${BASE_DOMAIN}`,
+      `WEB_URL=https://app.${tenant.slug}.${BASE_DOMAIN}`,
+      `CLIENT_PORTAL_URL=https://${tenant.slug}.${BASE_DOMAIN}`,
       // Appels server-side NextAuth -> API directement via reseau Docker interne.
       // Evite hairpin NAT + TLS + Caddy pour le login. auth.ts lit
       // INTERNAL_API_URL || NEXT_PUBLIC_API_URL.
@@ -239,9 +246,11 @@ export class ProvisionTenantUseCase {
     // Bug fixe : avant on faisait juste `docker rm -f tenant-<slug>-(api|web|
     // web-client)`. Mais le compose project pouvait garder des refs / ports
     // reserves -> "port is already allocated" au prochain compose up.
-    // Solution : compose down --remove-orphans -t 5 -v pour reset complet,
-    // PUIS rm -f par nom comme garde-fou (au cas ou le compose file aurait
-    // change de nom de container entre essais). apiName deja declare plus haut.
+    // Solution : compose down --remove-orphans -t 5 (SANS -v) pour liberer les
+    // refs/ports, PUIS rm -f par nom comme garde-fou. IMPORTANT : pas de `-v` --
+    // sinon un re-provisioning DETRUIT le volume postgres (perte de donnees ->
+    // "Database is uninitialized"). Les credentials sont reutilises via
+    // readExistingEnv justement pour repartir sur le volume persistant.
     const webName = `tenant-${tenant.slug}-web`;
     const webClientName = `tenant-${tenant.slug}-web-client`;
     // Stocke le compose dans tenantEnvDir (persistant, comme le .env).
@@ -251,7 +260,7 @@ export class ProvisionTenantUseCase {
     await log(`[provision] cleanup anciens containers (rejouabilite)`);
     await this.ssh.exec(
       creds,
-      `docker compose -p ${composeProjectName} -f ${composeFilePath} down --remove-orphans -t 5 -v 2>/dev/null || true`,
+      `docker compose -p ${composeProjectName} -f ${composeFilePath} down --remove-orphans -t 5 2>/dev/null || true`,
     );
     await this.docker.remove(creds, apiName, true);
     await this.docker.remove(creds, webName, true);

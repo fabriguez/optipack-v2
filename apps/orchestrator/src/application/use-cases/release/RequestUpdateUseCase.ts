@@ -91,12 +91,42 @@ export class RequestUpdateUseCase {
       throw new BusinessError('Cette version n\'est pas encore publiee.');
     }
 
-    // Pas de update concurrent
+    // Pas de update concurrent -- MAIS un job zombie (worker tue / orchestrator
+    // redeploye en plein update) peut rester 'running'/'scheduled' indefiniment
+    // et bloquer toute nouvelle mise a jour. On auto-annule les jobs perimes
+    // (marque 'failed' + retire de BullMQ) avant de bloquer sur un vrai job en
+    // cours, pour pouvoir re-upgrade / downgrade a volonte.
     const inflight = await prisma.tenantUpdateJob.findFirst({
       where: { tenantId, status: { in: ['scheduled', 'running'] } },
+      orderBy: { createdAt: 'desc' },
     });
     if (inflight) {
-      throw new BusinessError('Un update est deja en cours ou planifie pour ce tenant.');
+      const now = Date.now();
+      const RUNNING_STALE_MS = 30 * 60 * 1000; // un update prend quelques minutes
+      const SCHEDULED_STALE_MS = 15 * 60 * 1000;
+      const startedAt = inflight.startedAt?.getTime() ?? inflight.createdAt.getTime();
+      const schedRef = inflight.scheduledFor?.getTime() ?? inflight.createdAt.getTime();
+      const isStale =
+        (inflight.status === 'running' && now - startedAt > RUNNING_STALE_MS) ||
+        (inflight.status === 'scheduled' && now - schedRef > SCHEDULED_STALE_MS);
+      if (isStale) {
+        await prisma.tenantUpdateJob.update({
+          where: { id: inflight.id },
+          data: {
+            status: 'failed',
+            errorLog: 'Job perime (zombie) auto-annule pour debloquer une nouvelle mise a jour',
+            finishedAt: new Date(),
+          },
+        });
+        try {
+          await updateQueue.remove(inflight.id);
+        } catch {
+          /* job BullMQ deja absent : on ignore */
+        }
+        logger.warn({ tenantId, staleJobId: inflight.id }, '[request-update] job zombie auto-annule');
+      } else {
+        throw new BusinessError('Un update est deja en cours ou planifie pour ce tenant.');
+      }
     }
 
     const fromVersion = tenant.currentVersion ?? 'unknown';

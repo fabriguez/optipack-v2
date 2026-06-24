@@ -27,9 +27,11 @@ export const config = {
     pullToken: process.env.OPS_GHCR_TOKEN ?? '',
   },
   // Chemin local des fichiers d'environnement des tenants sur le VPS.
-  // Si le VPS ne permet pas l'ecriture dans /etc/optipack, definissez
-  // OPS_TENANT_ENV_DIR vers un repertoire utilisateur persistant.
-  tenantEnvDir: process.env.OPS_TENANT_ENV_DIR ?? '~/.optipack',
+  // ABSOLU obligatoire : ce chemin est embarque tel quel dans le `env_file:`
+  // du compose tenant, et docker compose N'EXPAND PAS `~` -> un defaut `~/...`
+  // donnerait un env_file introuvable (POSTGRES_PASSWORD absent -> postgres
+  // "uninitialized"). Aligne sur les autres call sites (index.ts / TenantUseCases).
+  tenantEnvDir: process.env.OPS_TENANT_ENV_DIR ?? '/home/brightky/.optipack',
   // Dir de travail pour les fichiers compose.yml + seed.js + JSON par
   // tenant, sur le filesystem du VPS (host). Tous les VPS (distants ET
   // self) utilisent SSH pour ecrire ici -> meme path partout. Override

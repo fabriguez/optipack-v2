@@ -199,15 +199,19 @@ export default function UpdatesFleetPage() {
                 <td className="px-4 py-2 text-right">
                   <button
                     type="button"
-                    disabled={!latestVersion || t.upToDate}
+                    // Toujours actif sur un tenant ACTIVE : on doit pouvoir
+                    // re-deployer la meme version (re-run migrate/db push) ou
+                    // downgrade, pas seulement upgrader vers la derniere.
+                    disabled={t.status !== 'ACTIVE'}
                     onClick={() => {
-                      setTargetVersion(latestVersion ?? '');
+                      setTargetVersion(t.upToDate ? '' : latestVersion ?? '');
                       setConfirmTenant(t);
                     }}
                     className="inline-flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-40"
+                    title="Deployer une version (upgrade, downgrade ou redeploiement)"
                   >
                     <ArrowUpRight className="h-3 w-3" />
-                    Mettre a jour
+                    Deployer
                   </button>
                 </td>
               </tr>

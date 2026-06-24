@@ -6,6 +6,9 @@ import { logger } from '../../config/logger';
 
 const BUCKET = config.minio.bucket;
 
+/** Endpoint MinIO cible (pour les logs : aide a voir si on tape minio:9000 interne). */
+const MINIO_ENDPOINT = `${config.minio.useSSL ? 'https' : 'http'}://${config.minio.endpoint}:${config.minio.port}`;
+
 export interface UploadResult {
   key: string;
   size: number;
@@ -21,11 +24,36 @@ export class StorageService {
    * @param contentType type MIME
    */
   async uploadBuffer(key: string, buffer: Buffer, contentType: string): Promise<UploadResult> {
-    await minioClient.putObject(BUCKET, key, buffer, buffer.length, {
-      'Content-Type': contentType,
-      'Cache-Control': 'public, max-age=86400',
-    });
-    return { key, size: buffer.length, contentType };
+    const started = Date.now();
+    logger.info(
+      { key, bucket: BUCKET, endpoint: MINIO_ENDPOINT, size: buffer.length, contentType },
+      '[upload] putObject start',
+    );
+    try {
+      await minioClient.putObject(BUCKET, key, buffer, buffer.length, {
+        'Content-Type': contentType,
+        'Cache-Control': 'public, max-age=86400',
+      });
+      logger.info(
+        { key, bucket: BUCKET, size: buffer.length, durationMs: Date.now() - started },
+        '[upload] putObject OK',
+      );
+      return { key, size: buffer.length, contentType };
+    } catch (err: any) {
+      logger.error(
+        {
+          key,
+          bucket: BUCKET,
+          endpoint: MINIO_ENDPOINT,
+          size: buffer.length,
+          code: err?.code,
+          message: err?.message,
+          durationMs: Date.now() - started,
+        },
+        '[upload] putObject FAILED',
+      );
+      throw err;
+    }
   }
 
   /**

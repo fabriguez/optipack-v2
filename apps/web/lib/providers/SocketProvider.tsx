@@ -5,8 +5,7 @@ import { io, type Socket } from 'socket.io-client';
 import { useSession } from 'next-auth/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-
-const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:4000';
+import { getApiOrigin } from '@/lib/api/baseUrl';
 
 interface SocketContextValue {
   socket: Socket | null;
@@ -31,7 +30,12 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     // automatiquement les rooms (user / client / agency / org).
     if (status !== 'authenticated' || !accessToken) return;
 
-    const socketInstance = io(SOCKET_URL, {
+    // URL socket = origine API courante (api.<tenant> en prod, derivee a
+    // l'execution depuis le host). Un override explicite reste possible via
+    // NEXT_PUBLIC_SOCKET_URL. Evite le localhost:4000 fige au build.
+    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || getApiOrigin();
+
+    const socketInstance = io(socketUrl, {
       auth: { token: accessToken },
       transports: ['websocket', 'polling'],
       reconnection: true,

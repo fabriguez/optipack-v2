@@ -173,9 +173,12 @@ export class DeleteTenantUseCase {
     await log(`[delete] start tenant=${tenant.slug}`);
 
     const slug = tenant.slug;
-    const composeFilePath = `${config.vpsWorkDir}/tenant-${slug}-compose.yml`;
+    // compose + env sont ecrits par le provisioning dans tenantEnvDir (PAS
+    // vpsWorkDir). Utiliser le mauvais chemin laissait le vrai compose/env
+    // derriere -> fichiers orphelins au recreate.
+    const composeFilePath = `${config.tenantEnvDir}/tenant-${slug}-compose.yml`;
     const composeProjectName = `tenant-${slug}`;
-    const envFile = `~/.optipack/tenant-${slug}.env`;
+    const envFile = `${config.tenantEnvDir}/tenant-${slug}.env`;
     const allContainers = [
       `tenant-${slug}-api`,
       `tenant-${slug}-web`,
@@ -282,9 +285,12 @@ export class PurgeTenantUseCase {
     await log(`[purge] start tenant=${tenant.slug} (HARD DELETE)`);
 
     const slug = tenant.slug;
-    const composeFilePath = `${config.vpsWorkDir}/tenant-${slug}-compose.yml`;
+    // compose + env sont ecrits par le provisioning dans tenantEnvDir (PAS
+    // vpsWorkDir). Utiliser le mauvais chemin laissait le vrai compose/env
+    // derriere -> fichiers orphelins au recreate.
+    const composeFilePath = `${config.tenantEnvDir}/tenant-${slug}-compose.yml`;
     const composeProjectName = `tenant-${slug}`;
-    const envFile = `~/.optipack/tenant-${slug}.env`;
+    const envFile = `${config.tenantEnvDir}/tenant-${slug}.env`;
     const containers = [
       `tenant-${slug}-api`,
       `tenant-${slug}-web`,

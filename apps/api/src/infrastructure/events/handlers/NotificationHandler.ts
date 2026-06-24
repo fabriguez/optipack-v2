@@ -74,15 +74,38 @@ async function uploadBufferForWhatsApp(
       'Content-Type': contentType,
     });
     const signed = await (minioClient as any).presignedGetObject(bucket, key, 1800);
-    if (config.minio.publicBaseUrl) {
+    const hasPublic = !!config.minio.publicBaseUrl;
+    let finalUrl: string = signed;
+    if (hasPublic) {
       const parsedSigned = new URL(signed);
       const parsedPublic = new URL(config.minio.publicBaseUrl);
       parsedSigned.protocol = parsedPublic.protocol;
       parsedSigned.hostname = parsedPublic.hostname;
       parsedSigned.port = parsedPublic.port;
-      return parsedSigned.toString();
+      finalUrl = parsedSigned.toString();
     }
-    return signed;
+    let signedHost: string | null = null;
+    try {
+      signedHost = new URL(signed).host;
+    } catch {
+      /* ignore */
+    }
+    // Diagnostic : sans MINIO_PUBLIC_BASE_URL, l'URL garde le host interne
+    // (ex minio:9000) -> INACCESSIBLE hors conteneur (WhatsApp/email/navigateur).
+    logger.info(
+      {
+        filename,
+        key,
+        signedHost,
+        publicBaseUrl: config.minio.publicBaseUrl || null,
+        externallyReachable: hasPublic,
+        finalUrl,
+      },
+      hasPublic
+        ? '[notif-upload] URL presignee (host public)'
+        : '[notif-upload] URL presignee host INTERNE (MINIO_PUBLIC_BASE_URL absent -> inaccessible hors conteneur)',
+    );
+    return finalUrl;
   } catch (err) {
     logger.warn({ err, filename }, 'uploadBufferForWhatsApp failed (piece jointe ignoree)');
     return null;
