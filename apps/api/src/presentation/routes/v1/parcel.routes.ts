@@ -78,6 +78,7 @@ router.get('/:id/label', requirePermission('parcel.read'), async (req, res, next
         warehouse: { include: { agency: { select: { name: true, city: true } } } },
         transitRoute: { select: { name: true, type: true } },
         parcelGroup: { select: { id: true, reference: true } },
+        invoice: { select: { netAmount: true, balance: true } },
       },
     });
     if (!parcel) {
@@ -121,6 +122,8 @@ router.get('/:id/label', requirePermission('parcel.read'), async (req, res, next
           : null,
         observation: parcel.observation ?? null,
         price: parcel.price ? Number(parcel.price) : null,
+        invoiceTotal: parcel.invoice?.netAmount != null ? Number(parcel.invoice.netAmount) : null,
+        invoiceBalance: parcel.invoice?.balance != null ? Number(parcel.invoice.balance) : null,
         isFragile: parcel.isFragile,
         isHazardous: parcel.isHazardous,
         groupIndex,

@@ -40,6 +40,18 @@ function Row({ label, value, mono }: { label: string; value?: string | number | 
   );
 }
 
+const fcfaShort = (n: number) => `${Math.round(n).toLocaleString('fr-FR')} FCFA`;
+
+// Valeur ajoutee d'une route : montant fixe (+2 000 FCFA) ou pourcentage (+10%).
+function formatAddedValue(
+  value: number | null | undefined,
+  type: 'AMOUNT' | 'PERCENT' | null | undefined,
+): string | null {
+  if (value == null || !type) return null;
+  if (type === 'PERCENT') return `+${value}%`;
+  return `+${fcfaShort(value)}`;
+}
+
 function AgencyBlock({ title, agency }: { title: string; agency?: { name?: string; city?: string; country?: string; googleMapsLink?: string | null } | null }) {
   if (!agency) return null;
   return (
@@ -212,11 +224,11 @@ export default function ParcelDetail() {
             <Card>
               <CardHeader title="Trajet" />
               <View style={{ gap: 10 }}>
-                <AgencyBlock title="Depart" agency={departAgency} />
+                <AgencyBlock title="Agence de depart" agency={departAgency} />
                 <View style={{ alignItems: 'center', paddingVertical: 2 }}>
                   <Ionicons name="arrow-down" size={18} color={colors.gray[400]} />
                 </View>
-                <AgencyBlock title="Destination" agency={destAgency} />
+                <AgencyBlock title="Agence d'arrivee" agency={destAgency} />
               </View>
               {p.transitRoute && (
                 <View style={{ marginTop: 10, padding: spacing.md, backgroundColor: colors.primary[50], borderRadius: radius.md }}>
@@ -225,6 +237,11 @@ export default function ParcelDetail() {
                   <Text style={{ fontSize: 12, color: colors.primary[700] }}>
                     {p.transitRoute.departureCity} → {p.transitRoute.arrivalCity} · {p.transitRoute.type}
                   </Text>
+                  {formatAddedValue(p.transitRoute.addedValue, p.transitRoute.addedValueType) && (
+                    <Text style={{ fontSize: 12, color: colors.primary[700], fontWeight: '600', marginTop: 2 }}>
+                      Valeur ajoutee {formatAddedValue(p.transitRoute.addedValue, p.transitRoute.addedValueType)}
+                    </Text>
+                  )}
                 </View>
               )}
             </Card>

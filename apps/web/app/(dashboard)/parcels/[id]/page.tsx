@@ -210,8 +210,8 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
         <div className="grid grid-cols-2 gap-3">
           <InfoRow icon={Package} label="Designation" value={parcel.designation} />
           <InfoRow icon={Package} label="Pesee" value={pesee} />
-          <InfoRow icon={MapPin} label="Destination" value={parcel.destination} />
-          <InfoRow icon={MapPin} label="Origine" value={parcel.origin || '-'} />
+          <InfoRow icon={MapPin} label="Agence de depart" value={parcel.warehouse?.agency?.name || parcel.origin || '-'} />
+          <InfoRow icon={MapPin} label="Agence d'arrivee" value={parcel.destinationAgency?.name || parcel.destination || '-'} />
           <LinkRow icon={User} label="Client" value={parcel.client?.fullName || '-'} href={parcel.client ? `/clients/${parcel.client.id}` : undefined} />
           <LinkRow icon={User} label="Destinataire" value={parcel.recipient?.fullName || '-'} href={undefined} />
           <LinkRow icon={Warehouse} label="Magasin" value={parcel.warehouse?.name || '-'} href={parcel.warehouse ? `/warehouses/${parcel.warehouse.id}` : undefined} />

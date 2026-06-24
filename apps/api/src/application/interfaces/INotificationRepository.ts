@@ -6,6 +6,27 @@ export interface NotificationWithRelations extends Notification {
   client?: { id: string; fullName: string; phone: string } | null;
 }
 
+/**
+ * Filtres du centre de notifications (vue admin tenant-scopee). Les champs
+ * CSV (type/status/eventKind) acceptent une valeur unique ou plusieurs separees
+ * par des virgules.
+ */
+export interface AdminNotificationFilters {
+  organizationId: string;
+  type?: string;
+  status?: string;
+  clientId?: string;
+  eventKind?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+export interface AdminNotificationStats {
+  total: number;
+  byStatus: Record<string, number>;
+  byChannel: Record<string, number>;
+}
+
 export interface INotificationRepository {
   findById(id: string): Promise<NotificationWithRelations | null>;
   findByUser(userId: string, pagination: PaginationInput): Promise<PaginatedResponse<NotificationWithRelations>>;
@@ -14,6 +35,13 @@ export interface INotificationRepository {
     filters: { agencyIds?: string[]; userId?: string; clientId?: string; status?: string },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<NotificationWithRelations>>;
+  /** Liste tenant-scopee pour le centre de notifications (admin). */
+  findAllAdmin(
+    filters: AdminNotificationFilters,
+    pagination: PaginationInput,
+  ): Promise<PaginatedResponse<NotificationWithRelations>>;
+  /** Agregats (file d'attente) pour le centre de notifications. */
+  adminStats(filters: AdminNotificationFilters): Promise<AdminNotificationStats>;
   create(data: Prisma.NotificationUncheckedCreateInput): Promise<Notification>;
   markAsRead(id: string): Promise<Notification>;
   markAllAsRead(userId: string): Promise<number>;

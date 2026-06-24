@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import { View } from 'react-native';
+import { useWatch, type Control } from 'react-hook-form';
 import { AppTextInput, AppSelect, AppSwitch, AppSearchSelect, ResourceFormDialog } from '@/components/forms';
 import { transitRoutesApi } from '@/lib/api/transitRoutes';
+import type { TransitRoute } from '@/lib/hooks/useTransitRoutes';
 import { COUNTRIES } from '@/lib/data/countries';
 import { spacing } from '@/lib/theme/spacing';
 
@@ -15,21 +17,33 @@ const schema = z.object({
   pricePerKg: z.string().optional(),
   pricePerVolume: z.string().optional(),
   estimatedDurationDays: z.string().optional(),
+  addedValueType: z.string().optional(),
+  addedValue: z.string().optional(),
   isActive: z.boolean().optional(),
 });
+type FormValues = z.infer<typeof schema>;
 
-interface TransitRoute {
-  id: string;
-  name?: string;
-  type?: string;
-  departureCity?: string;
-  departureCountry?: string;
-  arrivalCity?: string;
-  arrivalCountry?: string;
-  pricePerKg?: number | string | null;
-  pricePerVolume?: number | string | null;
-  estimatedDurationDays?: number | null;
-  isActive?: boolean;
+const ADDED_VALUE_OPTIONS = [
+  { value: 'NONE', label: 'Aucune' },
+  { value: 'AMOUNT', label: 'Montant fixe' },
+  { value: 'PERCENT', label: 'Pourcentage' },
+];
+
+/** Champ "Valeur ajoutee" affiche uniquement quand un type est selectionne. */
+function AddedValueField({ control }: { control: Control<FormValues> }) {
+  const type = useWatch({ control, name: 'addedValueType' });
+  if (!type || type === 'NONE') return null;
+  return (
+    <View style={{ flex: 1 }}>
+      <AppTextInput
+        control={control}
+        name="addedValue"
+        label={type === 'PERCENT' ? 'Valeur ajoutee (%)' : 'Valeur ajoutee (FCFA)'}
+        keyboardType="decimal-pad"
+        required
+      />
+    </View>
+  );
 }
 
 export function TransitRouteFormDialog({ open, onClose, route }: { open: boolean; onClose: () => void; route?: TransitRoute }) {
@@ -50,9 +64,13 @@ export function TransitRouteFormDialog({ open, onClose, route }: { open: boolean
         pricePerKg: route?.pricePerKg != null ? String(route.pricePerKg) : '',
         pricePerVolume: route?.pricePerVolume != null ? String(route.pricePerVolume) : '',
         estimatedDurationDays: route?.estimatedDurationDays != null ? String(route.estimatedDurationDays) : '',
+        addedValueType: route?.addedValueType ?? 'NONE',
+        addedValue: route?.addedValue != null ? String(route.addedValue) : '',
         isActive: route?.isActive ?? true,
       }}
       submit={(v) => {
+        const hasAddedValue = v.addedValueType === 'AMOUNT' || v.addedValueType === 'PERCENT';
+        const addedValue = hasAddedValue && v.addedValue ? Number(v.addedValue) : null;
         const payload = {
           name: v.name,
           type: v.type,
@@ -63,6 +81,8 @@ export function TransitRouteFormDialog({ open, onClose, route }: { open: boolean
           pricePerKg: v.type === 'SEA' ? null : v.pricePerKg ? Number(v.pricePerKg) : null,
           pricePerVolume: v.type === 'AIR' ? null : v.pricePerVolume ? Number(v.pricePerVolume) : null,
           estimatedDurationDays: v.estimatedDurationDays ? Number(v.estimatedDurationDays) : 0,
+          addedValue: addedValue && addedValue > 0 ? addedValue : null,
+          addedValueType: addedValue && addedValue > 0 ? v.addedValueType : null,
           isActive: v.isActive ?? true,
         };
         return isEdit ? transitRoutesApi.update(route!.id, payload) : transitRoutesApi.create(payload);
@@ -93,6 +113,12 @@ export function TransitRouteFormDialog({ open, onClose, route }: { open: boolean
           <View style={{ flexDirection: 'row', gap: spacing.lg }}>
             <View style={{ flex: 1 }}><AppTextInput control={control} name="pricePerKg" label="Prix /kg (Aerien/Terrestre)" keyboardType="decimal-pad" /></View>
             <View style={{ flex: 1 }}><AppTextInput control={control} name="pricePerVolume" label="Prix /m3 (Maritime/Terrestre)" keyboardType="decimal-pad" /></View>
+          </View>
+          <View style={{ flexDirection: 'row', gap: spacing.lg }}>
+            <View style={{ flex: 1 }}>
+              <AppSelect control={control} name="addedValueType" label="Type de valeur ajoutee" options={ADDED_VALUE_OPTIONS} />
+            </View>
+            <AddedValueField control={control} />
           </View>
           <AppSwitch control={control} name="isActive" label="Active" />
         </>

@@ -32,7 +32,16 @@ interface Route {
   pricePerKg?: number | string | null;
   pricePerVolume?: number | string | null;
   estimatedDurationDays?: number | null;
+  addedValue?: number | null;
+  addedValueType?: 'AMOUNT' | 'PERCENT' | null;
   isActive?: boolean;
+}
+
+/** Formate la valeur ajoutee : "+2 000 FCFA", "+10%" ou "-". */
+function formatAddedValue(r: Route): string {
+  if (r.addedValue == null || !r.addedValueType) return '-';
+  if (r.addedValueType === 'PERCENT') return `+${r.addedValue}%`;
+  return `+${formatAmount(Number(r.addedValue))}`;
 }
 
 const TYPE_LABEL: Record<string, string> = { AIR: 'Aerien', SEA: 'Maritime', LAND: 'Terrestre' };
@@ -85,6 +94,7 @@ export default function TransitRoutesScreen() {
     { key: 'arrival', label: 'Arrivee', width: 150, render: (r) => <Text style={{ fontSize: 13 }}>{[r.arrivalCity, r.arrivalCountry].filter(Boolean).join(', ')}</Text> },
     { key: 'pricePerKg', label: 'Prix/kg', width: 110, align: 'right', render: (r) => <Text style={{ fontSize: 13 }}>{r.pricePerKg != null ? formatAmount(Number(r.pricePerKg)) : '-'}</Text> },
     { key: 'pricePerVolume', label: 'Prix/m3', width: 110, align: 'right', render: (r) => <Text style={{ fontSize: 13 }}>{r.pricePerVolume != null ? formatAmount(Number(r.pricePerVolume)) : '-'}</Text> },
+    { key: 'addedValue', label: 'Valeur ajoutee', width: 130, align: 'right', render: (r) => <Text style={{ fontSize: 13, color: r.addedValue != null ? colors.primary[700] : colors.gray[500] }}>{formatAddedValue(r)}</Text> },
     { key: 'estimatedDurationDays', label: 'Delai', width: 80, align: 'center', render: (r) => <Text style={{ fontSize: 13 }}>{r.estimatedDurationDays ?? 0}j</Text> },
     { key: 'isActive', label: 'Statut', width: 100, render: (r) => <Badge variant={r.isActive === false ? 'error' : 'success'}>{r.isActive === false ? 'Inactif' : 'Actif'}</Badge> },
     {

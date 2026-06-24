@@ -1212,6 +1212,10 @@ export class PDFService {
       agencyName?: string | null;
       observation?: string | null;
       price?: number | null;
+      // Facture rattachee : solde total (montant net) et reste a payer.
+      // Affiches sous le montant du colis sur l'etiquette.
+      invoiceTotal?: number | null;
+      invoiceBalance?: number | null;
       // Marquages speciaux pour la manutention. Affiches en haut de l'etiquette
       // et signales par une bordure speciale autour du PDF.
       isFragile?: boolean;
@@ -1357,12 +1361,38 @@ export class PDFService {
       y += 18;
     }
 
+    // Bloc financier : montant du colis, solde total de la facture et reste a
+    // payer. Le reste a payer est rouge s'il est > 0, vert s'il est solde.
+    const money: Array<{ label: string; value: number; kind: 'amount' | 'total' | 'balance' }> = [];
     if (parcel.price != null && parcel.price > 0) {
-      doc.rect(20, y, w - 10, 18).fill(COLORS.lightGray);
-      doc.fontSize(9).fillColor(COLORS.dark).text(
-        `Montant: ${formatCurrency(Number(parcel.price))}`,
-        25, y + 4, { width: w - 20, align: 'left' },
-      );
+      money.push({ label: 'Montant colis', value: Number(parcel.price), kind: 'amount' });
+    }
+    if (parcel.invoiceTotal != null) {
+      money.push({ label: 'Solde total', value: Number(parcel.invoiceTotal), kind: 'total' });
+    }
+    if (parcel.invoiceBalance != null) {
+      money.push({ label: 'Reste a payer', value: Number(parcel.invoiceBalance), kind: 'balance' });
+    }
+    if (money.length > 0) {
+      const boxH = money.length * 13 + 6;
+      doc.rect(20, y, w - 10, boxH).fill(COLORS.lightGray);
+      let my = y + 4;
+      doc.fontSize(8);
+      for (const row of money) {
+        doc.fillColor(COLORS.gray).text(row.label, 25, my, { width: 80 });
+        const color =
+          row.kind === 'balance'
+            ? row.value > 0
+              ? '#C62828'
+              : COLORS.primary
+            : COLORS.dark;
+        doc.fillColor(color).text(formatCurrency(row.value), 95, my, {
+          width: w - 90,
+          align: 'right',
+        });
+        my += 13;
+      }
+      y += boxH;
     }
 
     // Footer line

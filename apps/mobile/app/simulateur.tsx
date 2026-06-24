@@ -19,6 +19,8 @@ interface Route {
   arrivalCity: string;
   estimatedDurationDays: number;
   unit: 'kg' | 'm3';
+  addedValue: number | null;
+  addedValueType: 'AMOUNT' | 'PERCENT' | null;
 }
 
 interface Simulation {
@@ -41,6 +43,16 @@ const TYPE_ICON: Record<TransitType, keyof typeof Ionicons.glyphMap> = {
 };
 
 const fcfa = (n: number) => `${Math.round(n).toLocaleString('fr-FR')} FCFA`;
+
+// Valeur ajoutee d'une route : montant fixe (+2 000 FCFA) ou pourcentage (+10%).
+const formatAddedValue = (
+  value: number | null | undefined,
+  type: 'AMOUNT' | 'PERCENT' | null | undefined,
+): string | null => {
+  if (value == null || !type) return null;
+  if (type === 'PERCENT') return `+${value}%`;
+  return `+${fcfa(value)}`;
+};
 
 export default function SimulateurScreen() {
   const router = useRouter();
@@ -119,10 +131,18 @@ export default function SimulateurScreen() {
                       size={20}
                       color={active ? colors.primary[600] : colors.gray[500]}
                     />
-                    <View style={{ flex: 1 }}>
+                    <View style={{ flex: 1, gap: 2 }}>
                       <Text style={{ fontSize: 14, fontWeight: '500', color: colors.gray[900] }}>
                         {r.name}
                       </Text>
+                      <Text style={{ fontSize: 12, color: colors.gray[500] }}>
+                        {r.departureCity} → {r.arrivalCity} · {TYPE_LABEL[r.type]} · {r.estimatedDurationDays} j
+                      </Text>
+                      {formatAddedValue(r.addedValue, r.addedValueType) && (
+                        <Text style={{ fontSize: 12, color: colors.primary[600], fontWeight: '500' }}>
+                          Valeur ajoutee {formatAddedValue(r.addedValue, r.addedValueType)}
+                        </Text>
+                      )}
                     </View>
                     {active && <Ionicons name="checkmark-circle" size={20} color={colors.primary[500]} />}
                   </Pressable>

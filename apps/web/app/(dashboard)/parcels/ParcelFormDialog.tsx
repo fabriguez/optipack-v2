@@ -21,6 +21,7 @@ import { Camera } from 'lucide-react';
 import { ParcelImagesField, persistParcelImages, type PendingImage } from './ParcelImagesField';
 import { uploadImage } from '@/lib/api/uploads';
 import { parcelsApi } from '@/lib/api/parcels';
+import { apiClient } from '@/lib/api/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
@@ -215,6 +216,9 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
     } else {
       const created = await createMutation.mutateAsync(data);
       parcelId = (created as any)?.data?.id ?? (created as any)?.id ?? null;
+      // Telechargement automatique de l'etiquette PDF du/des colis cree(s).
+      // Best-effort : un echec ne doit pas casser le flux de succes (toast / fermeture).
+      void downloadCreatedLabels(created);
     }
 
     // 2eme partie : upload des nouvelles images + suppression des images marquees.
@@ -618,6 +622,44 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
 
 function typeLabel(t: 'AIR' | 'SEA' | 'LAND'): string {
   return t === 'AIR' ? 'Aerien' : t === 'SEA' ? 'Maritime' : 'Terrestre';
+}
+
+/**
+ * Telecharge l'etiquette PDF d'un colis (memes appels que ParcelQRDialog :
+ * apiClient.get('/parcels/:id/label', { responseType: 'blob' }) puis save du blob).
+ * Best-effort : toute erreur est avalee (ne doit pas casser le flux de creation).
+ */
+async function downloadParcelLabel(id: string, trackingNumber?: string | null): Promise<void> {
+  try {
+    const res = await apiClient.get(`/parcels/${id}/label`, { responseType: 'blob' });
+    const blob = new Blob([res.data], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `etiquette-${trackingNumber || id}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch {
+    // Silencieux : echec de telechargement non bloquant.
+  }
+}
+
+/**
+ * Extrait le(s) colis cree(s) de la reponse de creation (colis unique OU lot)
+ * et declenche le telechargement de chaque etiquette.
+ */
+async function downloadCreatedLabels(created: unknown): Promise<void> {
+  const payload = (created as any)?.data ?? created;
+  const list: any[] = Array.isArray(payload)
+    ? payload
+    : Array.isArray(payload?.parcels)
+      ? payload.parcels
+      : payload
+        ? [payload]
+        : [];
+  for (const p of list) {
+    if (p?.id) await downloadParcelLabel(p.id, p.trackingNumber);
+  }
 }
 
 function categoryLabel(v: string): string {

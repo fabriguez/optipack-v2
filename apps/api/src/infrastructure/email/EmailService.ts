@@ -56,7 +56,10 @@ class EmailService {
     subject: string,
     bodyContent: string,
     organizationId?: string | null,
-    options?: { event?: string },
+    options?: {
+      event?: string;
+      attachments?: Array<{ filename: string; content: Buffer; contentType?: string }>;
+    },
   ): Promise<boolean> {
     // Branding tenant : logo + nom dans header/footer du mail. Sans
     // organizationId, on garde le wording generique TransitSoftServices.
@@ -68,6 +71,7 @@ class EmailService {
         to,
         subject: `${orgName} - ${subject}`,
         html: emailLayout(bodyContent, branding),
+        attachments: options?.attachments,
       },
       { event: options?.event },
     );
@@ -87,7 +91,11 @@ class EmailService {
     weight: string | number | null | undefined,
     price: string,
     organizationId?: string | null,
-    options?: { volume?: string | number | null; transitType?: 'AIR' | 'SEA' | 'LAND' | string | null },
+    options?: {
+      volume?: string | number | null;
+      transitType?: 'AIR' | 'SEA' | 'LAND' | string | null;
+      attachments?: Array<{ filename: string; content: Buffer; contentType?: string }>;
+    },
   ) {
     // Choix de l'unite affichee selon le type de route :
     //  - SEA  -> volume uniquement (m3)
@@ -123,7 +131,10 @@ class EmailService {
       paragraph('Conservez votre numero de suivi pour suivre votre colis a tout moment.'),
       actionButton('Suivre mon colis', `${config.webUrl}/tracking/${trackingNumber}`),
     ].join('');
-    return this.send(to, `Colis enregistre - ${trackingNumber}`, content, organizationId, { event: 'PARCEL_CREATED' });
+    return this.send(to, `Colis enregistre - ${trackingNumber}`, content, organizationId, {
+      event: 'PARCEL_CREATED',
+      attachments: options?.attachments,
+    });
   }
 
   async sendParcelStatusChanged(
@@ -302,6 +313,7 @@ class EmailService {
     paymentMethod: string,
     remainingBalance: string,
     organizationId?: string | null,
+    options?: { attachments?: Array<{ filename: string; content: Buffer; contentType?: string }> },
   ) {
     const methodLabels: Record<string, string> = {
       CASH: 'Especes',
@@ -311,6 +323,10 @@ class EmailService {
       CHECK: 'Cheque',
     };
 
+    // Etat de la facture : soldee si plus rien a payer, sinon partiellement reglee.
+    const remainingNum = Number(String(remainingBalance).replace(/[^0-9.-]/g, '')) || 0;
+    const invoiceState = remainingNum <= 0 ? 'Facture soldee' : 'Reglement partiel';
+
     const content = [
       heading('Paiement recu'),
       paragraph('Nous avons bien recu votre paiement. Voici les details :'),
@@ -319,13 +335,18 @@ class EmailService {
         infoRow('Facture', invoiceRef) +
         infoRow('Mode de paiement', methodLabels[paymentMethod] || paymentMethod) +
         infoRow('Agence encaisseuse', agencyName) +
+        infoRow('Etat de la facture', invoiceState) +
         infoRow('Solde restant', remainingBalance),
       ),
       divider(),
+      paragraph('Vous trouverez en piece jointe votre recu de paiement et la facture mise a jour.'),
       paragraph('Merci pour votre paiement.'),
     ].join('');
 
-    return this.send(to, `Paiement recu - ${invoiceRef}`, content, organizationId, { event: 'PAYMENT_RECEIVED' });
+    return this.send(to, `Paiement recu - ${invoiceRef}`, content, organizationId, {
+      event: 'PAYMENT_RECEIVED',
+      attachments: options?.attachments,
+    });
   }
 
   async sendPenaltyAlert(

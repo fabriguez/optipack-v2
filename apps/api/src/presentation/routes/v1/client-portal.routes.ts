@@ -91,6 +91,7 @@ router.get('/parcels/:tracking/label', authenticateClient, async (req, res, next
         warehouse: { select: { agency: { select: { name: true, city: true } } } },
         transitRoute: { select: { name: true, type: true } },
         parcelGroup: { select: { reference: true } },
+        invoice: { select: { netAmount: true, balance: true } },
       },
     });
     if (!parcel || parcel.clientId !== clientId || parcel.isDeleted) {
@@ -117,6 +118,8 @@ router.get('/parcels/:tracking/label', authenticateClient, async (req, res, next
           : null,
         observation: parcel.observation ?? null,
         price: parcel.price ? Number(parcel.price) : null,
+        invoiceTotal: parcel.invoice?.netAmount != null ? Number(parcel.invoice.netAmount) : null,
+        invoiceBalance: parcel.invoice?.balance != null ? Number(parcel.invoice.balance) : null,
         isFragile: parcel.isFragile,
         isHazardous: parcel.isHazardous,
         groupIndex: null,

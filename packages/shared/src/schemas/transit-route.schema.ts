@@ -1,6 +1,16 @@
 import { z } from 'zod';
-import { TransitType } from '../constants/enums';
+import { TransitType, AddedValueType } from '../constants/enums';
 import { validatePricing } from './pricing-rules';
+
+// Valeur ajoutee : montant/pourcentage nullable. Vide / NaN -> null.
+const addedValueField = z.preprocess(
+  (v) => (v === '' || v === undefined || v === null || Number.isNaN(v as number) ? null : v),
+  z.number().nonnegative('La valeur ajoutee ne peut pas etre negative').nullable().optional(),
+);
+const addedValueTypeField = z
+  .enum([AddedValueType.AMOUNT, AddedValueType.PERCENT])
+  .nullable()
+  .optional();
 
 export const createTransitRouteSchema = z
   .object({
@@ -22,8 +32,26 @@ export const createTransitRouteSchema = z
       z.number().nonnegative('Le prix par m3 ne peut pas etre negatif').nullable().optional(),
     ),
     estimatedDurationDays: z.number().int().min(0).optional().default(0),
+    addedValue: addedValueField,
+    addedValueType: addedValueTypeField,
   })
-  .superRefine((data, ctx) => validatePricing(data, ctx));
+  .superRefine((data, ctx) => {
+    validatePricing(data, ctx);
+    if ((data.addedValue ?? 0) > 0 && !data.addedValueType) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Precisez si la valeur ajoutee est un montant fixe ou un pourcentage.',
+        path: ['addedValueType'],
+      });
+    }
+    if (data.addedValueType === AddedValueType.PERCENT && (data.addedValue ?? 0) > 100) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Un pourcentage de valeur ajoutee ne peut pas depasser 100.',
+        path: ['addedValue'],
+      });
+    }
+  });
 
 /**
  * Update : tous les champs optionnels MAIS si type ou un prix est fourni, on
@@ -47,9 +75,18 @@ export const updateTransitRouteSchema = z
       z.number().nonnegative().nullable().optional(),
     ),
     estimatedDurationDays: z.number().int().min(0).optional(),
+    addedValue: addedValueField,
+    addedValueType: addedValueTypeField,
   })
   .superRefine((data, ctx) => {
     if (data.type !== undefined) validatePricing(data, ctx);
+    if (data.addedValueType === AddedValueType.PERCENT && (data.addedValue ?? 0) > 100) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Un pourcentage de valeur ajoutee ne peut pas depasser 100.',
+        path: ['addedValue'],
+      });
+    }
   });
 
 export type CreateTransitRouteInput = z.infer<typeof createTransitRouteSchema>;

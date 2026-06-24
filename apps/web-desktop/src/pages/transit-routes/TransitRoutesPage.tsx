@@ -24,6 +24,13 @@ const TYPE_COLORS: Record<string, string> = {
 };
 const TYPE_LABELS: Record<string, string> = { AIR: 'Aerien', SEA: 'Maritime', LAND: 'Terrestre' };
 
+/** Formatte la valeur ajoutee : "+2 000 FCFA" (AMOUNT), "+10%" (PERCENT) ou "-". */
+function formatAddedValue(value: number | string | null | undefined, type: string | null | undefined): string {
+  const n = Number(value);
+  if (!type || !Number.isFinite(n) || n <= 0) return '-';
+  return type === 'PERCENT' ? `+${n}%` : `+${formatAmount(n)}`;
+}
+
 export default function TransitRoutesPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -106,6 +113,7 @@ export default function TransitRoutesPage() {
     { key: 'arrival', label: 'Arrivee', render: (row: any) => `${row.arrivalCity}, ${row.arrivalCountry}` },
     { key: 'pricePerKg', label: 'Prix/kg', render: (row: any) => formatAmount(Number(row.pricePerKg)) },
     { key: 'pricePerVolume', label: 'Prix/m3', render: (row: any) => Number(row.pricePerVolume) > 0 ? formatAmount(Number(row.pricePerVolume)) : '-' },
+    { key: 'addedValue', label: 'Valeur ajoutee', render: (row: any) => formatAddedValue(row.addedValue, row.addedValueType) },
     { key: 'estimatedDurationDays', label: 'Delai', render: (row: any) => `${row.estimatedDurationDays}j` },
     { key: 'isActive', label: 'Statut', render: (row: any) => <AppBadge variant={row.isActive ? 'success' : 'error'}>{row.isActive ? 'Actif' : 'Inactif'}</AppBadge> },
     {

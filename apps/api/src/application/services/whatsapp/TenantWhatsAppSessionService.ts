@@ -243,6 +243,66 @@ export class TenantWhatsAppSessionService extends EventEmitter {
   }
 
   /**
+   * Envoie un media (image ou document) WhatsApp depuis la session du tenant.
+   * Les images sont envoyees inline avec une legende ; les documents (PDF)
+   * comme fichier. Le media est telecharge depuis `url` puis envoye en base64
+   * (robuste : ne depend pas de l'accessibilite de l'URL par WhatsApp).
+   *
+   * @returns true si envoye, false si rate limite / session inactive / erreur.
+   */
+  async sendMedia(
+    organizationId: string,
+    phone: string,
+    url: string,
+    opts?: { caption?: string; filename?: string; asDocument?: boolean },
+  ): Promise<boolean> {
+    const client = this.clients.get(organizationId);
+    if (!client) return false;
+
+    const session = await prisma.tenantWhatsAppSession.findUnique({
+      where: { organizationId },
+    });
+    if (!session || session.status !== 'CONNECTED') return false;
+
+    const limiter = this.getOrCreateLimiter(
+      organizationId,
+      session.rateLimitPerHour,
+      session.minDelaySeconds * 1000,
+    );
+    const check = limiter.canSend();
+    if (!check.ok) {
+      logger.warn({ organizationId, waitMs: check.waitMs }, 'WA rate limit hit (media)');
+      return false;
+    }
+
+    try {
+      const { MessageMedia } = await import('whatsapp-web.js');
+      const res = await fetch(url);
+      if (!res.ok) {
+        logger.warn({ organizationId, url, status: res.status }, 'WA media fetch failed');
+        return false;
+      }
+      const contentType = res.headers.get('content-type') || 'application/octet-stream';
+      const buffer = Buffer.from(await res.arrayBuffer());
+      const media = new MessageMedia(
+        contentType,
+        buffer.toString('base64'),
+        opts?.filename ?? 'fichier',
+      );
+      const chatId = phone.replace(/[^0-9]/g, '') + '@c.us';
+      await client.sendMessage(chatId, media, {
+        caption: opts?.caption,
+        sendMediaAsDocument: opts?.asDocument ?? false,
+      });
+      limiter.consume();
+      return true;
+    } catch (err) {
+      logger.error({ err, organizationId, phone, url }, 'WA sendMedia failed');
+      return false;
+    }
+  }
+
+  /**
    * Retourne l'état courant d'une session (pour l'API status).
    */
   async getStatus(organizationId: string): Promise<WaSessionState> {

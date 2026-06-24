@@ -7,11 +7,82 @@ import { resolveTemplate } from './NotificationTemplateRenderer';
 import type {
   ChannelDeliveryResult,
   ExternalChannelProvider,
+  NotificationAttachment,
+  NotificationChannel,
   NotificationPayload,
   NotificationTarget,
 } from './types';
 
 const logger = createChildLogger('NotificationChannels');
+
+/**
+ * Construit les colonnes communes d'un row Notification, y compris les champs
+ * du centre de notifications (organizationId, eventKind, recipient, error,
+ * attachments) en plus du metadata historique. DRY : utilise par tous les
+ * canaux pour garantir un schema de persistance coherent + rejouable.
+ */
+function buildNotifRow(args: {
+  target: NotificationTarget;
+  organizationId: string | null;
+  channel: NotificationChannel;
+  title: string;
+  message: string;
+  status: 'SENT' | 'FAILED';
+  recipient?: string | null;
+  error?: string | null;
+  provider?: string | null;
+  attachments?: NotificationAttachment[];
+  metadata?: Record<string, unknown>;
+}) {
+  const eventKind = (args.metadata?.kind as string | undefined) ?? null;
+  const atts = args.attachments && args.attachments.length > 0 ? args.attachments : null;
+  return {
+    organizationId: args.organizationId,
+    userId: args.target.userId ?? null,
+    clientId: args.target.clientId ?? null,
+    agencyId: args.target.agencyId ?? null,
+    title: args.title,
+    message: args.message,
+    type: args.channel,
+    status: args.status,
+    eventKind,
+    recipient: args.recipient ?? null,
+    error: args.error ?? null,
+    attachments: (atts ?? undefined) as never,
+    sentAt: args.status === 'SENT' ? new Date() : null,
+    metadata: {
+      ...(args.recipient ? { to: args.recipient } : {}),
+      organizationId: args.organizationId,
+      ...(args.provider ? { provider: args.provider } : {}),
+      ...(args.metadata ?? {}),
+    } as never,
+  };
+}
+
+/**
+ * Telecharge les pieces jointes (URL) en Buffer pour les joindre a un email.
+ * Best-effort : une piece jointe qui echoue est ignoree (email envoye sans).
+ */
+async function toEmailAttachments(
+  attachments?: NotificationAttachment[],
+): Promise<Array<{ filename: string; content: Buffer; contentType?: string }> | undefined> {
+  if (!attachments || attachments.length === 0) return undefined;
+  const out: Array<{ filename: string; content: Buffer; contentType?: string }> = [];
+  for (const att of attachments) {
+    try {
+      const res = await fetch(att.url);
+      if (!res.ok) continue;
+      out.push({
+        filename: att.filename,
+        content: Buffer.from(await res.arrayBuffer()),
+        contentType: res.headers.get('content-type') || undefined,
+      });
+    } catch (err) {
+      logger.warn({ err, filename: att.filename }, 'Email attachment fetch failed (ignored)');
+    }
+  }
+  return out.length > 0 ? out : undefined;
+}
 
 /**
  * Resout l'organizationId du tenant pour router le mail vers le bon provider.
@@ -94,17 +165,16 @@ export async function deliverInApp(
   const organizationId = await resolveOrganizationId(target);
   try {
     const row = await prisma.notification.create({
-      data: {
-        userId: target.userId ?? null,
-        clientId: target.clientId ?? null,
-        agencyId: target.agencyId ?? null,
+      data: buildNotifRow({
+        target,
+        organizationId,
+        channel: 'IN_APP',
         title: payload.title,
         message: payload.message,
-        type: 'IN_APP',
         status: 'SENT',
-        sentAt: new Date(),
-        metadata: (payload.metadata ?? undefined) as never,
-      },
+        attachments: payload.attachments,
+        metadata: payload.metadata,
+      }),
     });
     const event = {
       id: row.id,
@@ -170,14 +240,20 @@ export async function deliverEmail(
 
   const organizationId = await resolveOrganizationId(target);
 
-  // Template personnalise du tenant (prioritaire sur le message par defaut)
+  // Template personnalise du tenant (prioritaire sur le message par defaut).
+  // skipTemplate (rejeu depuis le centre de notifications) => message verbatim.
   const eventKind = payload.metadata?.kind as string | undefined;
-  const customEmail = await resolveTemplate(
-    organizationId,
-    eventKind,
-    'EMAIL',
-    payload.templateVariables ?? {},
-  ).catch(() => null);
+  const customEmail = payload.skipTemplate
+    ? null
+    : await resolveTemplate(
+        organizationId,
+        eventKind,
+        'EMAIL',
+        payload.templateVariables ?? {},
+      ).catch(() => null);
+
+  // Pieces jointes (images colis + facture/recu) telechargees en Buffer.
+  const emailAttachments = await toEmailAttachments(payload.attachments);
 
   try {
     const bodyHtml = customEmail
@@ -189,37 +265,39 @@ export async function deliverEmail(
       subject,
       bodyHtml,
       organizationId,
-      { event: eventKind ?? 'NOTIFICATION' },
+      { event: eventKind ?? 'NOTIFICATION', attachments: emailAttachments },
     );
     if (!ok) throw new Error('email dispatcher returned false');
     const row = await prisma.notification.create({
-      data: {
-        userId: target.userId ?? null,
-        clientId: target.clientId ?? null,
-        agencyId: target.agencyId ?? null,
+      data: buildNotifRow({
+        target,
+        organizationId,
+        channel: 'EMAIL',
         title: payload.title,
         message: payload.message,
-        type: 'EMAIL',
         status: 'SENT',
-        sentAt: new Date(),
-        metadata: { to, organizationId, ...(payload.metadata ?? {}) } as never,
-      },
+        recipient: to,
+        attachments: payload.attachments,
+        metadata: payload.metadata,
+      }),
     });
     return { channel: 'EMAIL', status: 'SENT', notificationId: row.id };
   } catch (err: any) {
     logger.warn({ err, to }, 'EMAIL delivery failed');
     await prisma.notification
       .create({
-        data: {
-          userId: target.userId ?? null,
-          clientId: target.clientId ?? null,
-          agencyId: target.agencyId ?? null,
+        data: buildNotifRow({
+          target,
+          organizationId,
+          channel: 'EMAIL',
           title: payload.title,
           message: payload.message,
-          type: 'EMAIL',
           status: 'FAILED',
-          metadata: { to, organizationId, error: err?.message } as never,
-        },
+          recipient: to,
+          error: err?.message ?? String(err),
+          attachments: payload.attachments,
+          metadata: payload.metadata,
+        }),
       })
       .catch(() => {});
     return { channel: 'EMAIL', status: 'FAILED', error: err?.message ?? String(err) };
@@ -249,9 +327,10 @@ async function deliverExternal(
 ): Promise<ChannelDeliveryResult> {
   const organizationId = await resolveOrganizationId(target);
 
-  // Template personnalise (SMS/WHATSAPP uniquement — PUSH reste court)
+  // Template personnalise (SMS/WHATSAPP uniquement — PUSH reste court).
+  // skipTemplate (rejeu) => message verbatim, pas de resolution de template.
   let customBody: string | null = null;
-  if (channel !== 'PUSH') {
+  if (channel !== 'PUSH' && !payload.skipTemplate) {
     const eventKind = payload.metadata?.kind as string | undefined;
     if (eventKind) {
       customBody = await resolveTemplate(organizationId, eventKind, channel, payload.templateVariables ?? {})
@@ -350,17 +429,18 @@ async function deliverExternal(
     }
 
     const row = await prisma.notification.create({
-      data: {
-        userId: target.userId ?? null,
-        clientId: target.clientId ?? null,
-        agencyId: target.agencyId ?? null,
+      data: buildNotifRow({
+        target,
+        organizationId,
+        channel,
         title: wrapped.title,
         message: wrapped.message,
-        type: channel,
         status: 'SENT',
-        sentAt: new Date(),
-        metadata: { to, organizationId, provider: provider.name, ...(payload.metadata ?? {}) } as never,
-      },
+        recipient: to,
+        provider: provider.name,
+        attachments: payload.attachments,
+        metadata: payload.metadata,
+      }),
     });
     logChannelDelivery({
       status: 'OK',
@@ -383,16 +463,19 @@ async function deliverExternal(
     });
     await prisma.notification
       .create({
-        data: {
-          userId: target.userId ?? null,
-          clientId: target.clientId ?? null,
-          agencyId: target.agencyId ?? null,
+        data: buildNotifRow({
+          target,
+          organizationId,
+          channel,
           title: payload.title,
           message: payload.message,
-          type: channel,
           status: 'FAILED',
-          metadata: { to, organizationId, provider: provider.name, error: err?.message } as never,
-        },
+          recipient: to,
+          provider: provider.name,
+          error: err?.message ?? String(err),
+          attachments: payload.attachments,
+          metadata: payload.metadata,
+        }),
       })
       .catch(() => {});
     return { channel, status: 'FAILED', error: err?.message ?? String(err) };
@@ -414,9 +497,10 @@ export async function deliverWhatsapp(
 ): Promise<ChannelDeliveryResult> {
   const organizationId = await resolveOrganizationId(t);
 
-  // Template personnalise du tenant (resolu une fois pour les deux chemins)
+  // Template personnalise du tenant (resolu une fois pour les deux chemins).
+  // skipTemplate (rejeu) => message verbatim.
   const eventKind = p.metadata?.kind as string | undefined;
-  const customWa = eventKind
+  const customWa = eventKind && !p.skipTemplate
     ? await resolveTemplate(organizationId, eventKind, 'WHATSAPP', p.templateVariables ?? {}).catch(() => null)
     : null;
 
@@ -442,20 +526,51 @@ export async function deliverWhatsapp(
             ? customWa.body
             : wrapMessage(tenantName, p.title, p.message, 'WHATSAPP').message;
           const titleToSend = customWa ? p.title : `[${tenantName}] ${p.title}`;
-          const sent = await tenantWaSessionService.sendMessage(organizationId, phone, msgToSend);
-          if (sent) {
+
+          // Envoi en deux temps : (1) images du colis inline avec le texte en
+          // legende sur la 1ere image ; (2) documents (facture/recu) en fichier.
+          // Si pas d'image, on envoie le texte seul puis les documents.
+          const attachments = p.attachments ?? [];
+          const images = attachments.filter((a) => a.type === 'image');
+          const docs = attachments.filter((a) => a.type !== 'image');
+
+          let sentMain = false;
+          if (images.length > 0) {
+            sentMain = await tenantWaSessionService.sendMedia(organizationId, phone, images[0].url, {
+              caption: msgToSend,
+              filename: images[0].filename,
+            });
+            for (const img of images.slice(1)) {
+              await tenantWaSessionService.sendMedia(organizationId, phone, img.url, {
+                filename: img.filename,
+                caption: img.caption,
+              });
+            }
+          } else {
+            sentMain = await tenantWaSessionService.sendMessage(organizationId, phone, msgToSend);
+          }
+
+          if (sentMain) {
+            for (const doc of docs) {
+              await tenantWaSessionService.sendMedia(organizationId, phone, doc.url, {
+                filename: doc.filename,
+                caption: doc.caption,
+                asDocument: true,
+              });
+            }
             const row = await prisma.notification.create({
-              data: {
-                userId: t.userId ?? null,
-                clientId: t.clientId ?? null,
-                agencyId: t.agencyId ?? null,
+              data: buildNotifRow({
+                target: t,
+                organizationId,
+                channel: 'WHATSAPP',
                 title: titleToSend,
                 message: msgToSend,
-                type: 'WHATSAPP',
                 status: 'SENT',
-                sentAt: new Date(),
-                metadata: { to: phone, organizationId, provider: 'whatsapp-web-js', ...(p.metadata ?? {}) } as never,
-              },
+                recipient: phone,
+                provider: 'whatsapp-web-js',
+                attachments: p.attachments,
+                metadata: p.metadata,
+              }),
             });
             logChannelDelivery({ status: 'OK', channel: 'WHATSAPP', title: p.title, target: phone, organizationId, event: eventKind });
             return { channel: 'WHATSAPP', status: 'SENT', notificationId: row.id };

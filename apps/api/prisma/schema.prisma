@@ -1376,6 +1376,11 @@ model TransitRoute {
   // pour SEA. LAND accepte les deux (au moins un > 0).
   pricePerKg            Decimal?    @db.Decimal(15, 2)
   pricePerVolume        Decimal?    @db.Decimal(15, 2)
+  // Valeur ajoutee appliquee a chaque colis de cette route. addedValueType
+  // determine si addedValue est un montant fixe (AMOUNT, en FCFA) ou un
+  // pourcentage (PERCENT) du prix de base. null/0 -> aucune valeur ajoutee.
+  addedValue            Decimal?        @db.Decimal(15, 2)
+  addedValueType        AddedValueType?
   estimatedDurationDays Int         @default(0)
   isActive              Boolean     @default(true)
   createdAt             DateTime    @default(now())
@@ -1395,6 +1400,13 @@ enum TransitType {
   AIR
   SEA
   LAND
+}
+
+// Nature de la valeur ajoutee d'une route : montant fixe (FCFA) ou pourcentage
+// du prix de base. Cf. TransitRoute.addedValue / PricingService.
+enum AddedValueType {
+  AMOUNT
+  PERCENT
 }
 
 // ============================================================
@@ -2995,6 +3007,9 @@ model AuditLog {
 
 model Notification {
   id        String             @id @default(uuid())
+  // Scope tenant : permet au centre de notifications de filtrer sans JOIN
+  // sur agency/client/user. Nullable pour les anciens rows.
+  organizationId String?
   userId    String?
   clientId  String?
   agencyId  String?
@@ -3002,6 +3017,19 @@ model Notification {
   message   String
   type      NotificationType
   status    NotificationStatus @default(PENDING)
+  // Nature de l'evenement metier (PARCEL_CREATED, PAYMENT_RECEIVED, ...).
+  // Stocke aussi dans metadata.kind ; colonne dediee pour le filtrage.
+  eventKind String?
+  // Destinataire effectif (email / telephone / token) pour le canal.
+  recipient String?
+  // Message d'erreur du dernier echec (pour le centre de notifications).
+  error     String?
+  // Pieces jointes envoyees (URL + filename + caption), au format
+  // NotificationAttachment[]. Permet de rejouer/afficher les fichiers.
+  attachments Json?
+  // Suivi des retentatives manuelles depuis le centre de notifications.
+  retryCount Int             @default(0)
+  lastRetryAt DateTime?
   sentAt    DateTime?
   readAt    DateTime?
   metadata  Json?
@@ -3013,6 +3041,10 @@ model Notification {
   @@index([userId])
   @@index([clientId])
   @@index([status])
+  @@index([organizationId])
+  @@index([eventKind])
+  @@index([type])
+  @@index([createdAt])
   @@map("notifications")
 }
 

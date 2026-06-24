@@ -32,6 +32,7 @@ type Parcel = {
   designation: string;
   status: string;
   isPresent: boolean;
+  origin?: string | null;
   destination: string;
   destinationAddress?: string | null;
   createdAt: string;
@@ -41,8 +42,23 @@ type Parcel = {
   category: string;
   warehouse?: { name: string; agency?: { name: string; city: string } | null } | null;
   destinationAgency?: { name: string; city: string } | null;
-  transitRoute?: { name: string; type: string } | null;
+  transitRoute?: {
+    name: string;
+    type: string;
+    addedValue?: number | null;
+    addedValueType?: 'AMOUNT' | 'PERCENT' | null;
+  } | null;
 };
+
+// Valeur ajoutee d'une route : montant fixe (+2 000 FCFA) ou pourcentage (+10%).
+function formatAddedValue(
+  value: number | null | undefined,
+  type: 'AMOUNT' | 'PERCENT' | null | undefined,
+): string | null {
+  if (value == null || !type) return null;
+  if (type === 'PERCENT') return `+${value}%`;
+  return `+${Math.round(value).toLocaleString('fr-FR')} FCFA`;
+}
 
 export default function TrackPage() {
   // Next 16 + Turbopack : useSearchParams() doit etre dans une boundary
@@ -173,6 +189,13 @@ function ParcelCard({ parcel }: { parcel: Parcel }) {
     { key: 'delivered', label: 'Remis au destinataire', date: parcel.pickupDate ?? null, done: parcel.status === 'DELIVERED' },
   ];
 
+  // Agence de depart : l'agence du magasin d'origine, sinon la ville d'origine.
+  const departureAgency = parcel.warehouse?.agency
+    ? `${parcel.warehouse.agency.name}${parcel.warehouse.agency.city ? ` (${parcel.warehouse.agency.city})` : ''}`
+    : parcel.origin || null;
+
+  const routeAddedValue = formatAddedValue(parcel.transitRoute?.addedValue, parcel.transitRoute?.addedValueType);
+
   return (
     <article className="mt-8 overflow-hidden rounded-2xl border shadow-sm" style={{ borderColor: 'var(--skin-border)', background: 'var(--skin-card)' }}>
       <header className="border-b px-6 py-4" style={{ borderColor: 'var(--skin-border)' }}>
@@ -200,9 +223,16 @@ function ParcelCard({ parcel }: { parcel: Parcel }) {
       </header>
 
       <div className="grid gap-4 px-6 py-5 sm:grid-cols-2">
+        {departureAgency && (
+          <InfoItem
+            icon={<MapPin className="h-4 w-4" />}
+            label="Agence de depart"
+            value={departureAgency}
+          />
+        )}
         <InfoItem
           icon={<MapPin className="h-4 w-4" />}
-          label="Destination"
+          label="Agence d'arrivee"
           value={
             parcel.destinationAgency
               ? `${parcel.destinationAgency.name}${parcel.destinationAgency.city ? ` (${parcel.destinationAgency.city})` : ''}`
@@ -221,6 +251,13 @@ function ParcelCard({ parcel }: { parcel: Parcel }) {
             icon={<MapPin className="h-4 w-4" />}
             label="Route de transit"
             value={`${parcel.transitRoute.name} (${parcel.transitRoute.type})`}
+          />
+        )}
+        {routeAddedValue && (
+          <InfoItem
+            icon={<MapPin className="h-4 w-4" />}
+            label="Valeur ajoutee"
+            value={routeAddedValue}
           />
         )}
         <InfoItem

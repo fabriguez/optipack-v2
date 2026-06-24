@@ -19,6 +19,8 @@ export class CreateTransitRouteUseCase {
       arrivalCountry: input.arrivalCountry,
       pricePerKg: input.pricePerKg,
       pricePerVolume: input.pricePerVolume ?? 0,
+      addedValue: input.addedValue ?? null,
+      addedValueType: (input.addedValue ?? 0) > 0 ? (input.addedValueType ?? 'AMOUNT') : null,
       estimatedDurationDays: input.estimatedDurationDays ?? 0,
       organization: { connect: { id: organizationId } },
     });

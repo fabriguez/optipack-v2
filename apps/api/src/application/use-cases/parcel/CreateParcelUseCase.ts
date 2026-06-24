@@ -125,7 +125,9 @@ export class CreateParcelUseCase {
       try {
         invoice = await this.invoiceRepo.create({
           reference: ref,
-          totalAmount: pricing.basePrice,
+          // totalAmount = charge brute du colis (prix de base + valeur ajoutee
+          // route). Egal a basePrice quand aucune valeur ajoutee n'est definie.
+          totalAmount: pricing.finalPrice,
           discount: pricing.discountAmount,
           tva: 0,
           netAmount: pricing.finalPrice,
@@ -147,7 +149,7 @@ export class CreateParcelUseCase {
       const fallback = `${generateReference('FAC', invoiceCount + 1)}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
       invoice = await this.invoiceRepo.create({
         reference: fallback,
-        totalAmount: pricing.basePrice,
+        totalAmount: pricing.finalPrice,
         discount: pricing.discountAmount,
         tva: 0,
         netAmount: pricing.finalPrice,

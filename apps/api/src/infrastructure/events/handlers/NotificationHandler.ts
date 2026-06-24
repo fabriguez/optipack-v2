@@ -62,15 +62,16 @@ async function resolveEventOrg(event: DomainEvent, payload: Record<string, any>)
  * pour que WhatsApp puisse telecharger le fichier depuis internet).
  * Retourne null sur toute erreur (envoi WhatsApp se fait sans piece jointe).
  */
-async function uploadPdfForWhatsApp(
+async function uploadBufferForWhatsApp(
   buffer: Buffer,
   filename: string,
+  contentType = 'application/pdf',
 ): Promise<string | null> {
   try {
     const bucket = config.minio.bucket;
     const key = `tmp/notif/${Date.now()}-${filename}`;
     await minioClient.putObject(bucket, key, buffer, buffer.length, {
-      'Content-Type': 'application/pdf',
+      'Content-Type': contentType,
     });
     const signed = await (minioClient as any).presignedGetObject(bucket, key, 1800);
     if (config.minio.publicBaseUrl) {
@@ -83,9 +84,75 @@ async function uploadPdfForWhatsApp(
     }
     return signed;
   } catch (err) {
-    logger.warn({ err, filename }, 'uploadPdfForWhatsApp failed (piece jointe ignoree)');
+    logger.warn({ err, filename }, 'uploadBufferForWhatsApp failed (piece jointe ignoree)');
     return null;
   }
+}
+
+/** Alias retro-compat : PDF = buffer avec content-type application/pdf. */
+const uploadPdfForWhatsApp = (buffer: Buffer, filename: string) =>
+  uploadBufferForWhatsApp(buffer, filename, 'application/pdf');
+
+/** Type d'une piece jointe email (buffer en memoire). */
+type EmailAttachment = { filename: string; content: Buffer; contentType?: string };
+
+/**
+ * Telecharge le contenu d'une URL (image colis, etc.) en Buffer.
+ * Best-effort : retourne null en cas d'echec.
+ */
+async function fetchUrlBuffer(url: string): Promise<{ buffer: Buffer; contentType: string } | null> {
+  try {
+    const target = url.startsWith('/') ? `${config.apiUrl}${url}` : url;
+    const res = await fetch(target);
+    if (!res.ok) return null;
+    return {
+      buffer: Buffer.from(await res.arrayBuffer()),
+      contentType: res.headers.get('content-type') || 'application/octet-stream',
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Construit les pieces jointes images d'un colis pour les notifications.
+ * Retourne deux structures paralleles :
+ *  - `wa` : NotificationAttachment[] (URLs re-hebergees publiques, type 'image')
+ *  - `email` : EmailAttachment[] (Buffers en memoire)
+ * Limite a `max` images (par defaut 4) pour rester raisonnable.
+ */
+async function buildParcelImageAttachments(
+  parcelId: string,
+  designation: string,
+  max = 4,
+): Promise<{ wa: NotificationAttachment[]; email: EmailAttachment[] }> {
+  const wa: NotificationAttachment[] = [];
+  const email: EmailAttachment[] = [];
+  try {
+    const images = await prisma.parcelImage.findMany({
+      where: { parcelId },
+      orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
+      take: max,
+      select: { url: true, caption: true },
+    });
+    let i = 0;
+    for (const img of images) {
+      const fetched = await fetchUrlBuffer(img.url);
+      if (!fetched) continue;
+      i += 1;
+      const ext = (fetched.contentType.split('/')[1] || 'jpg').split(';')[0];
+      const filename = `photo-${i}.${ext}`;
+      email.push({ filename, content: fetched.buffer, contentType: fetched.contentType });
+      // Re-heberge pour garantir une URL publique accessible par WhatsApp.
+      const url = await uploadBufferForWhatsApp(fetched.buffer, filename, fetched.contentType);
+      if (url) {
+        wa.push({ url, filename, caption: img.caption ?? `Photo colis ${designation || ''}`.trim(), type: 'image' });
+      }
+    }
+  } catch (err) {
+    logger.warn({ err, parcelId }, 'buildParcelImageAttachments failed (ignored)');
+  }
+  return { wa, email };
 }
 
 async function dispatchExternal(
@@ -195,6 +262,7 @@ async function sendEmailWithTemplate(
   eventKind: string,
   vars: Record<string, string | number | undefined | null>,
   fallback: () => Promise<unknown>,
+  attachments?: EmailAttachment[],
 ): Promise<void> {
   try {
     const custom = await resolveTemplate(organizationId, eventKind, 'EMAIL', vars);
@@ -204,7 +272,7 @@ async function sendEmailWithTemplate(
         custom.subject || eventKind,
         custom.body,
         organizationId,
-        { event: eventKind },
+        { event: eventKind, attachments },
       );
     } else {
       await fallback();
@@ -281,19 +349,52 @@ function registerHandlers() {
       trackingUrl,
     };
 
+    // Pieces jointes : photos du colis + facture (email + WhatsApp).
+    const { wa: imageWaAtts, email: imageEmailAtts } = await buildParcelImageAttachments(
+      payload.parcelId,
+      designation || '',
+    );
+    const invoiceWaAtts: NotificationAttachment[] = [];
+    const invoiceEmailAtts: EmailAttachment[] = [];
+    if (payload.invoiceId) {
+      try {
+        const inv = await buildInvoicePdfBuffer(payload.invoiceId);
+        if (inv) {
+          const refSlug = (inv.reference || 'facture').replace(/[^a-zA-Z0-9-]/g, '-');
+          invoiceEmailAtts.push({ filename: `Facture-${refSlug}.pdf`, content: inv.pdf, contentType: 'application/pdf' });
+          const url = await uploadBufferForWhatsApp(inv.pdf, `facture-${refSlug}.pdf`);
+          if (url) invoiceWaAtts.push({ url, filename: `Facture-${refSlug}.pdf`, caption: `Facture ${inv.reference}`, type: 'document' });
+        }
+      } catch (err) {
+        logger.warn({ err, invoiceId: payload.invoiceId }, 'Invoice PDF for PARCEL_CREATED failed (ignored)');
+      }
+    }
+    const parcelEmailAttachments = [...imageEmailAtts, ...invoiceEmailAtts];
+    const parcelWaAttachments = [...imageWaAtts, ...invoiceWaAtts];
+
     const email = await getClientEmail(clientId);
     if (email) {
-      await sendEmailWithTemplate(email, organizationId, 'PARCEL_CREATED', templateVars, () =>
-        emailService.sendParcelCreated(
-          email,
-          trackingNumber || '',
-          designation || '',
-          destination || '',
-          weight ?? null,
-          priceStr,
-          organizationId,
-          { volume: volume ?? null, transitType: transitType ?? null },
-        ),
+      await sendEmailWithTemplate(
+        email,
+        organizationId,
+        'PARCEL_CREATED',
+        templateVars,
+        () =>
+          emailService.sendParcelCreated(
+            email,
+            trackingNumber || '',
+            designation || '',
+            destination || '',
+            weight ?? null,
+            priceStr,
+            organizationId,
+            {
+              volume: volume ?? null,
+              transitType: transitType ?? null,
+              attachments: parcelEmailAttachments.length ? parcelEmailAttachments : undefined,
+            },
+          ),
+        parcelEmailAttachments.length ? parcelEmailAttachments : undefined,
       );
     }
 
@@ -322,7 +423,14 @@ function registerHandlers() {
         `\n\nSuivez votre colis : ${trackingUrl}`;
       await dispatchExternal(
         { clientId, agencyId: agencyId || event.agencyId, organizationId },
-        { title: 'Colis enregistre', message: waMsg, metadata: { trackingNumber, parcelId: payload.parcelId }, kind: 'PARCEL_CREATED', templateVariables: templateVars },
+        {
+          title: 'Colis enregistre',
+          message: waMsg,
+          metadata: { trackingNumber, parcelId: payload.parcelId },
+          kind: 'PARCEL_CREATED',
+          attachments: parcelWaAttachments.length ? parcelWaAttachments : undefined,
+          templateVariables: templateVars,
+        },
       );
     }
   });
@@ -485,29 +593,17 @@ function registerHandlers() {
       metadata: { invoiceRef, amount, kind: 'PAYMENT_RECEIVED' } as Prisma.InputJsonValue,
     });
 
-    const email = await getClientEmail(clientId);
-    if (email) {
-      await sendEmailWithTemplate(email, organizationId, 'PAYMENT_RECEIVED', templateVars, () =>
-        emailService.sendPaymentReceived(
-          email,
-          String(amount || ''),
-          invoiceRef || '',
-          agencyName || '',
-          paymentMethod || '',
-          String(remainingBalance || '0'),
-          organizationId,
-        ),
-      );
-    }
-
     {
       // Lire la config d'attachments du template WA pour cet event (si configure).
       const waTemplate = await resolveTemplate(organizationId, 'PAYMENT_RECEIVED', 'WHATSAPP', templateVars).catch(() => null);
       const wantReceipt = waTemplate?.attachments?.receipt !== false;
       const wantInvoice = waTemplate?.attachments?.invoice !== false;
 
-      // Generer les pieces jointes PDF (recu + facture) pour WhatsApp.
+      // Generer recu + facture une seule fois : buffers pour l'email, URLs
+      // re-hebergees pour WhatsApp. Le client recoit ainsi le recu de paiement
+      // ET la facture mise a jour sur les deux canaux.
       const attachments: NotificationAttachment[] = [];
+      const paymentEmailAtts: EmailAttachment[] = [];
       try {
         const refSlug = (invoiceRef || 'facture').replace(/[^a-zA-Z0-9-]/g, '-');
 
@@ -521,13 +617,14 @@ function registerHandlers() {
           if (latestPayment) {
             const receiptResult = await buildPaymentReceiptPdfBuffer(latestPayment.id);
             if (receiptResult) {
+              paymentEmailAtts.push({ filename: `Recu-${refSlug}.pdf`, content: receiptResult.pdf, contentType: 'application/pdf' });
               const url = await uploadPdfForWhatsApp(receiptResult.pdf, `recu-${refSlug}.pdf`);
-              if (url) attachments.push({ url, filename: `Recu-${refSlug}.pdf`, caption: `Recu de paiement - ${invoiceRef}` });
+              if (url) attachments.push({ url, filename: `Recu-${refSlug}.pdf`, caption: `Recu de paiement - ${invoiceRef}`, type: 'document' });
             }
           }
         }
 
-        // 2. Facture complete
+        // 2. Facture complete (etat mis a jour)
         if (wantInvoice) {
           const invoiceRow = await prisma.invoice.findFirst({
             where: { reference: invoiceRef },
@@ -536,13 +633,36 @@ function registerHandlers() {
           if (invoiceRow) {
             const invoiceResult = await buildInvoicePdfBuffer(invoiceRow.id);
             if (invoiceResult) {
+              paymentEmailAtts.push({ filename: `Facture-${refSlug}.pdf`, content: invoiceResult.pdf, contentType: 'application/pdf' });
               const url = await uploadPdfForWhatsApp(invoiceResult.pdf, `facture-${refSlug}.pdf`);
-              if (url) attachments.push({ url, filename: `Facture-${refSlug}.pdf`, caption: `Facture ${invoiceRef}` });
+              if (url) attachments.push({ url, filename: `Facture-${refSlug}.pdf`, caption: `Facture ${invoiceRef}`, type: 'document' });
             }
           }
         }
       } catch (err) {
-        logger.warn({ err, invoiceRef }, 'PDF generation for WhatsApp attachment failed (ignored)');
+        logger.warn({ err, invoiceRef }, 'PDF generation for payment notification failed (ignored)');
+      }
+
+      const email = await getClientEmail(clientId);
+      if (email) {
+        await sendEmailWithTemplate(
+          email,
+          organizationId,
+          'PAYMENT_RECEIVED',
+          templateVars,
+          () =>
+            emailService.sendPaymentReceived(
+              email,
+              String(amount || ''),
+              invoiceRef || '',
+              agencyName || '',
+              paymentMethod || '',
+              String(remainingBalance || '0'),
+              organizationId,
+              { attachments: paymentEmailAtts.length ? paymentEmailAtts : undefined },
+            ),
+          paymentEmailAtts.length ? paymentEmailAtts : undefined,
+        );
       }
 
       await dispatchExternal(

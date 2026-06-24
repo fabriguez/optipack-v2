@@ -15,6 +15,7 @@ import { searchers, toSearchOption } from '@/lib/api/searchers';
 import { ParcelCategoryValues } from '@transitsoftservices/shared';
 import { RecipientQuickCreateDialog } from './RecipientQuickCreateDialog';
 import { QRScannerDialog } from '@/components/shared/QRScannerDialog';
+import { openAuthedFile } from '@/components/shared/AuthedImage';
 import { scanSound } from '@/lib/utils/scanSound';
 import { Camera } from 'lucide-react';
 import { ParcelImagesField, persistParcelImages, type PendingImage } from './ParcelImagesField';
@@ -193,7 +194,11 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
     }
 
     // 1ere requete : create / update du colis. On recupere son id (pour l'upload).
+    // `createdParcelId` / `createdTracking` ne sont renseignes qu'en CREATION : ils
+    // declenchent le telechargement automatique de l'etiquette PDF apres le save.
     let parcelId: string | null = null;
+    let createdParcelId: string | null = null;
+    let createdTracking: string | null = null;
     if (isEdit && parcel) {
       await updateMutation.mutateAsync({
         id: parcel.id,
@@ -214,6 +219,8 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
     } else {
       const created = await createMutation.mutateAsync(data);
       parcelId = (created as any)?.data?.id ?? (created as any)?.id ?? null;
+      createdParcelId = parcelId;
+      createdTracking = (created as any)?.data?.trackingNumber ?? (created as any)?.trackingNumber ?? null;
     }
 
     // 2eme partie : upload des nouvelles images + suppression des images marquees.
@@ -237,6 +244,17 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
         }
       } finally {
         setUploadingImages(false);
+      }
+    }
+
+    // Telechargement automatique de l'etiquette PDF du nouveau colis (creation
+    // uniquement). Best-effort : un echec ne bloque pas le flux de succes.
+    if (createdParcelId) {
+      try {
+        const fileName = `etiquette-${createdTracking ?? createdParcelId}.pdf`;
+        await openAuthedFile(`/api/v1/parcels/${createdParcelId}/label`, fileName, true);
+      } catch {
+        // L'etiquette reste telechargeable depuis le detail du colis.
       }
     }
 

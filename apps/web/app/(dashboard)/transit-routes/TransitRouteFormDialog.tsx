@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useForm, useWatch } from 'react-hook-form';
+import { useForm, useWatch, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
   createTransitRouteSchema,
@@ -28,6 +28,8 @@ interface Props {
     pricePerKg: number | string;
     pricePerVolume?: number | string | null;
     estimatedDurationDays?: number | null;
+    addedValue?: number | string | null;
+    addedValueType?: 'AMOUNT' | 'PERCENT' | null;
   } | null;
 }
 
@@ -65,6 +67,11 @@ export function TransitRouteFormDialog({ open, onClose, route }: Props) {
   const showKg = watchedType === 'AIR' || watchedType === 'LAND';
   const showM3 = watchedType === 'SEA' || watchedType === 'LAND';
 
+  // Type de valeur ajoutee applique au prix de chaque colis (puis a la facture).
+  // 'NONE' (selection UI) = aucune valeur ajoutee : on envoie addedValue/Type null.
+  const watchedAddedValueType = useWatch({ control, name: 'addedValueType' }) as 'AMOUNT' | 'PERCENT' | null | undefined;
+  const showAddedValue = watchedAddedValueType === 'AMOUNT' || watchedAddedValueType === 'PERCENT';
+
   // Quand le type change, on nettoie le champ prix non pertinent dans le
   // state RHF (shouldUnregister=false par defaut conserve les anciennes
   // valeurs). Sans ca, switcher AIR -> SEA garde pricePerKg dans le payload
@@ -82,6 +89,8 @@ export function TransitRouteFormDialog({ open, onClose, route }: Props) {
         pricePerKg: Number(route.pricePerKg),
         pricePerVolume: route.pricePerVolume != null ? Number(route.pricePerVolume) : undefined,
         estimatedDurationDays: route.estimatedDurationDays ?? undefined,
+        addedValue: route.addedValue != null ? Number(route.addedValue) : undefined,
+        addedValueType: route.addedValueType ?? null,
       } as any);
     } else if (open && !route) {
       reset();
@@ -97,12 +106,20 @@ export function TransitRouteFormDialog({ open, onClose, route }: Props) {
     const pricePerVolume = data.type === 'AIR'
       ? null
       : (data.pricePerVolume != null && Number(data.pricePerVolume) > 0 ? Number(data.pricePerVolume) : null);
+    // Valeur ajoutee : si aucun type n'est selectionne (Aucune), on force les
+    // deux champs a null. Sinon on garde la valeur saisie (>0).
+    const addedValueType = data.addedValueType ?? null;
+    const addedValue = addedValueType && data.addedValue != null && Number(data.addedValue) > 0
+      ? Number(data.addedValue)
+      : null;
     const payload = {
       name: data.name,
       type: data.type,
       pricePerKg,
       pricePerVolume,
       estimatedDurationDays: data.estimatedDurationDays,
+      addedValue,
+      addedValueType: addedValue != null ? addedValueType : null,
     };
     if (isEdit) {
       mutation.mutate(payload);
@@ -111,6 +128,8 @@ export function TransitRouteFormDialog({ open, onClose, route }: Props) {
         ...data,
         pricePerKg,
         pricePerVolume,
+        addedValue,
+        addedValueType: addedValue != null ? addedValueType : null,
       });
     }
     reset();
@@ -225,6 +244,38 @@ export function TransitRouteFormDialog({ open, onClose, route }: Props) {
                 : 'Route terrestre : facturation au kg et/ou au m3. Le montant retenu sera le plus eleve des deux.'}
           </p>
         )}
+
+        {/* Valeur ajoutee : majoration appliquee au prix de chaque colis de cette
+            route (montant fixe en FCFA ou pourcentage), repercutee sur la facture.
+            Aucune = pas de majoration (addedValue/addedValueType envoyes a null). */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Controller
+            control={control}
+            name="addedValueType"
+            render={({ field }) => (
+              <AppSelect
+                label="Type de valeur ajoutee"
+                value={field.value ?? 'NONE'}
+                onValueChange={(v) => field.onChange(v === 'NONE' ? null : v)}
+                options={[
+                  { value: 'NONE', label: 'Aucune' },
+                  { value: 'AMOUNT', label: 'Montant fixe' },
+                  { value: 'PERCENT', label: 'Pourcentage' },
+                ]}
+                error={(errors as any).addedValueType?.message}
+              />
+            )}
+          />
+          {showAddedValue && (
+            <AppInput
+              label={watchedAddedValueType === 'PERCENT' ? 'Valeur ajoutee (%)' : 'Valeur ajoutee (FCFA)'}
+              type="number"
+              step={watchedAddedValueType === 'PERCENT' ? '1' : '0.01'}
+              {...register('addedValue', { valueAsNumber: true })}
+              error={(errors as any).addedValue?.message}
+            />
+          )}
+        </div>
       </form>
     </AppDialog>
   );

@@ -10,9 +10,12 @@ const PARCEL_INCLUDE = {
   warehouse: {
     select: {
       id: true, name: true,
-      agency: { select: { id: true, name: true } },
+      agency: { select: { id: true, name: true, city: true } },
     },
   },
+  // Agence d'arrivee (destination) du colis : affichee comme "Agence d'arrivee"
+  // sur les clients (le depart vient de warehouse.agency).
+  destinationAgency: { select: { id: true, name: true, city: true } },
   // Zone de rangement (WarehouseSpace) du colis. Necessaire pour afficher
   // l'emplacement dans les listes magasin / inventaire.
   space: { select: { id: true, name: true } },

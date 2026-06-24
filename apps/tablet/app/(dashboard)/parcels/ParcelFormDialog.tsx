@@ -12,6 +12,7 @@ import { RecipientQuickCreateDialog } from './RecipientQuickCreateDialog';
 import { useCreateParcel, useUpdateParcel } from '@/lib/hooks/useParcels';
 import { parcelsApi } from '@/lib/api/parcels';
 import { apiClient } from '@/lib/api/client';
+import { downloadAndShare } from '@/lib/api/download';
 import { searchers } from '@/lib/api/searchers';
 import { toast } from '@/lib/toast';
 import { colors } from '@/lib/theme/colors';
@@ -179,8 +180,14 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultClient, default
     setSubmitting(true);
     try {
       let parcelId = parcel?.id;
+      let createdTracking: string | undefined;
       if (isEdit) await update.mutateAsync({ id: parcel!.id, data: payload as never });
-      else { const res = await create.mutateAsync(payload as never); parcelId = res?.data?.id ?? res?.id; }
+      else {
+        const res = await create.mutateAsync(payload as never);
+        const created = (res?.data ?? res) as { id?: string; trackingNumber?: string } | undefined;
+        parcelId = created?.id;
+        createdTracking = created?.trackingNumber;
+      }
       if (parcelId && Array.isArray(images) && images.length) {
         for (const img of images) {
           try { const url = await uploadAsset(img); if (url) await parcelsApi.addImage(parcelId, { url }); } catch { /* ignore */ }
@@ -188,6 +195,12 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultClient, default
       }
       reset();
       onClose();
+      // Telechargement / partage automatique de l'etiquette du nouveau colis
+      // (best-effort : un echec ne doit pas casser le flux de creation).
+      if (!isEdit && parcelId) {
+        const fileName = `etiquette-${createdTracking ?? parcelId}`;
+        downloadAndShare(`/parcels/${parcelId}/label`, fileName, 'pdf').catch(() => { /* ignore */ });
+      }
     } finally {
       setSubmitting(false);
     }

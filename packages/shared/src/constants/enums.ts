@@ -33,6 +33,14 @@ export const TransitType = {
 
 export type TransitType = (typeof TransitType)[keyof typeof TransitType];
 
+// -- Nature valeur ajoutee route --
+export const AddedValueType = {
+  AMOUNT: 'AMOUNT',
+  PERCENT: 'PERCENT',
+} as const;
+
+export type AddedValueType = (typeof AddedValueType)[keyof typeof AddedValueType];
+
 // -- Roles utilisateur --
 export const UserRole = {
   SUPER_ADMIN: 'SUPER_ADMIN',

@@ -21,11 +21,16 @@ export interface NotificationTarget {
   phone?: string | null;
 }
 
-/** Piece jointe envoyee via WhatsApp (URL publique accessible par le provider). */
+/** Piece jointe envoyee via WhatsApp / email (URL publique accessible). */
 export interface NotificationAttachment {
   url: string;
   filename: string;
   caption?: string;
+  /**
+   * Nature de la piece jointe. 'image' = envoyee inline sur WhatsApp avec
+   * legende ; 'document' (defaut) = envoyee comme fichier (PDF facture/recu).
+   */
+  type?: 'image' | 'document';
 }
 
 export interface NotificationPayload {
@@ -47,6 +52,12 @@ export interface NotificationPayload {
    * avant d'utiliser le message par defaut.
    */
   templateVariables?: Record<string, string | number | undefined | null>;
+  /**
+   * Si true, les canaux ignorent la resolution de template personnalise et
+   * envoient title/message verbatim. Utilise par le rejeu (retry) depuis le
+   * centre de notifications, ou title/message sont deja le texte final rendu.
+   */
+  skipTemplate?: boolean;
 }
 
 export interface ChannelDeliveryResult {

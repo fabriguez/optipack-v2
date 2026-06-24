@@ -31,6 +31,12 @@ export default function TransitRouteDetailScreen() {
   if (!route) return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing['3xl'] }}><Text style={{ color: colors.gray[500] }}>Route introuvable</Text></View>;
 
   const t = TYPE[route.type] ?? TYPE.AIR;
+  const addedValueLabel =
+    route.addedValue != null && route.addedValueType
+      ? route.addedValueType === 'PERCENT'
+        ? `+${route.addedValue}%`
+        : `+${formatAmount(Number(route.addedValue))}`
+      : '-';
 
   return (
     <View style={{ flex: 1, backgroundColor: 'transparent' }}>
@@ -77,6 +83,7 @@ export default function TransitRouteDetailScreen() {
           <InfoCard icon="cube-outline" label="Prix / m3" value={route.pricePerVolume != null ? formatAmount(Number(route.pricePerVolume)) : '-'} />
           <InfoCard icon="time-outline" label="Delai estime" value={`${route.estimatedDurationDays ?? 0} jours`} />
           <InfoCard icon="git-network-outline" label="Type" value={t.label} />
+          <InfoCard icon="trending-up-outline" label="Valeur ajoutee" value={addedValueLabel} />
         </View>
       </ScrollView>
 

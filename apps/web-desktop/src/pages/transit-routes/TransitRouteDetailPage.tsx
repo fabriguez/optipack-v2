@@ -17,6 +17,13 @@ const TYPE_CONFIG: Record<string, { label: string; variant: 'info' | 'warning' |
   LAND: { label: 'Terrestre', variant: 'success', icon: Truck },
 };
 
+/** Formatte la valeur ajoutee : "+2 000 FCFA" (AMOUNT), "+10%" (PERCENT) ou "Aucune". */
+function formatAddedValue(value: number | string | null | undefined, type: string | null | undefined): string {
+  const n = Number(value);
+  if (!type || !Number.isFinite(n) || n <= 0) return 'Aucune';
+  return type === 'PERCENT' ? `+${n}%` : `+${formatAmount(n)}`;
+}
+
 export default function TransitRouteDetailPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
@@ -144,6 +151,17 @@ export default function TransitRouteDetailPage() {
               <div>
                 <p className="text-xs text-gray-400">Type de transport</p>
                 <p className="text-lg font-bold text-gray-900">{typeConfig.label}</p>
+              </div>
+            </div>
+          </AppCard>
+          <AppCard>
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50">
+                <DollarSign className="h-5 w-5 text-primary-600" />
+              </div>
+              <div>
+                <p className="text-xs text-gray-400">Valeur ajoutee</p>
+                <p className="text-lg font-bold text-gray-900">{formatAddedValue(route.addedValue, route.addedValueType)}</p>
               </div>
             </div>
           </AppCard>

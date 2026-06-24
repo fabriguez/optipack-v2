@@ -25,8 +25,14 @@ export interface PriceBreakdown {
   /** Sous-totaux par axe (utile pour expliquer le mode 'max'). */
   priceByWeight: number;
   priceByVolume: number;
-  /** Prix retenu = max des deux quand applicable. */
+  /** Prix retenu = max des deux quand applicable (avant valeur ajoutee). */
   basePrice: number;
+  /** Nature de la valeur ajoutee de la route (montant fixe / pourcentage / aucune). */
+  addedValueType: 'AMOUNT' | 'PERCENT' | null;
+  /** Valeur ajoutee configuree sur la route (FCFA si AMOUNT, % si PERCENT). */
+  addedValueRate: number;
+  /** Montant FCFA effectivement ajoute au prix de base. */
+  addedValueAmount: number;
 }
 
 export interface PriceCalculation {
@@ -81,6 +87,19 @@ export class PricingService {
       basePrice = priceByWeight;
     }
 
+    // Valeur ajoutee de la route : montant fixe (FCFA) ou pourcentage du prix de
+    // base. Appliquee apres le calcul du prix de base, avant le prix final.
+    const addedValueType = (transitRoute.addedValueType as 'AMOUNT' | 'PERCENT' | null) ?? null;
+    const addedValueRate = transitRoute.addedValue != null ? Number(transitRoute.addedValue) : 0;
+    let addedValueAmount = 0;
+    if (addedValueRate > 0) {
+      addedValueAmount =
+        addedValueType === 'PERCENT'
+          ? Math.round((basePrice * addedValueRate) / 100)
+          : Math.round(addedValueRate);
+    }
+    const finalPrice = basePrice + addedValueAmount;
+
     const breakdown: PriceBreakdown = {
       mode,
       weight,
@@ -92,13 +111,16 @@ export class PricingService {
       priceByWeight,
       priceByVolume,
       basePrice,
+      addedValueType,
+      addedValueRate,
+      addedValueAmount,
     };
 
     return {
       basePrice,
       discountPercent: 0,
       discountAmount: 0,
-      finalPrice: basePrice,
+      finalPrice,
       breakdown,
     };
   }

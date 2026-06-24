@@ -19,6 +19,14 @@ const TYPE_CONFIG: Record<string, { label: string; variant: 'info' | 'warning' |
   LAND: { label: 'Terrestre', variant: 'success', icon: Truck },
 };
 
+/** Formate la valeur ajoutee : "+2 000 FCFA" (montant), "+10%" (pourcentage), "-" sinon. */
+function formatAddedValue(value: unknown, type: unknown): string {
+  const n = Number(value);
+  if (!type || !Number.isFinite(n) || n <= 0) return '-';
+  if (type === 'PERCENT') return `+${n}%`;
+  return `+${n.toLocaleString('fr-FR')} FCFA`;
+}
+
 export default function TransitRouteDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
@@ -104,7 +112,7 @@ export default function TransitRouteDetailPage({ params }: { params: Promise<{ i
         </AppCard>
 
         {/* Detail cards */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <AppCard>
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50">
@@ -146,6 +154,17 @@ export default function TransitRouteDetailPage({ params }: { params: Promise<{ i
               <div>
                 <p className="text-xs text-gray-400">Type de transport</p>
                 <p className="text-lg font-bold text-gray-900">{typeConfig.label}</p>
+              </div>
+            </div>
+          </AppCard>
+          <AppCard>
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50">
+                <DollarSign className="h-5 w-5 text-primary-600" />
+              </div>
+              <div>
+                <p className="text-xs text-gray-400">Valeur ajoutee</p>
+                <p className="text-lg font-bold text-gray-900">{formatAddedValue(route.addedValue, route.addedValueType)}</p>
               </div>
             </div>
           </AppCard>

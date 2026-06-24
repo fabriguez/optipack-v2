@@ -120,7 +120,8 @@ function InfoTab({ parcel: p }: { parcel: any }) {
       <SectionCard title="Informations du colis">
         <Row icon="cube-outline" label="Designation" value={p.designation} />
         <Row icon="barbell-outline" label="Pesee" value={pesee} />
-        <Row icon="location-outline" label="Destination" value={p.destination} />
+        <Row icon="business-outline" label="Agence de depart" value={p.warehouse?.agency?.name ?? p.origin} />
+        <Row icon="location-outline" label="Agence d'arrivee" value={p.destinationAgency?.name ?? p.destination} />
         <Row icon="person-outline" label="Client" value={p.client?.fullName} />
         <Row icon="person-outline" label="Destinataire" value={p.recipient?.fullName} />
         <Row icon="business-outline" label="Magasin" value={p.warehouse?.name} />
