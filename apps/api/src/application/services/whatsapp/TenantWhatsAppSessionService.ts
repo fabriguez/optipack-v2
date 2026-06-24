@@ -81,6 +81,11 @@ export class TenantWhatsAppSessionService extends EventEmitter {
   private clients = new Map<string, import('whatsapp-web.js').Client>();
   private limiters = new Map<string, RateLimiter>();
   private authDir: string;
+  // Recovery auto d'une page WA Web JS figee : echecs d'envoi consecutifs par
+  // tenant + horodatage du dernier recyclage (cooldown anti-thrash) + verrou.
+  private sendFailures = new Map<string, number>();
+  private lastRecycleAt = new Map<string, number>();
+  private recycling = new Set<string>();
 
   private constructor() {
     super();
@@ -246,9 +251,11 @@ export class TenantWhatsAppSessionService extends EventEmitter {
       const chatId = phone.replace(/[^0-9]/g, '') + '@c.us';
       await this.withSendTimeout(() => client.sendMessage(chatId, message));
       limiter.consume();
+      this.sendFailures.delete(organizationId);
       return true;
     } catch (err) {
       logger.error({ err, organizationId, phone }, 'WA sendMessage failed');
+      this.onSendFailure(organizationId);
       await this.notifyFailure(organizationId, phone, String(err));
       return false;
     }
@@ -329,9 +336,11 @@ export class TenantWhatsAppSessionService extends EventEmitter {
         }),
       );
       limiter.consume();
+      this.sendFailures.delete(organizationId);
       return true;
     } catch (err) {
       logger.error({ err, organizationId, phone, url }, 'WA sendMedia failed');
+      this.onSendFailure(organizationId);
       return false;
     }
   }
@@ -369,6 +378,57 @@ export class TenantWhatsAppSessionService extends EventEmitter {
   }
 
   // ── Privé ──────────────────────────────────────────────────────────────────
+
+  /**
+   * Comptabilise un echec d'envoi. Au-dela d'un seuil de timeouts/echecs
+   * consecutifs, la page WA Web JS est probablement figee (puppeteer wedged) :
+   * on recycle la session (destroy SANS logout -> re-init -> reconnexion sans
+   * QR grace a LocalAuth). Cooldown pour eviter le thrash.
+   * Seuil/cooldown configurables (WA_RECYCLE_THRESHOLD, WA_RECYCLE_COOLDOWN_MS).
+   */
+  private onSendFailure(organizationId: string): void {
+    const n = (this.sendFailures.get(organizationId) ?? 0) + 1;
+    this.sendFailures.set(organizationId, n);
+    const threshold = Number(process.env.WA_RECYCLE_THRESHOLD ?? 2);
+    const cooldownMs = Number(process.env.WA_RECYCLE_COOLDOWN_MS ?? 120000);
+    if (n < threshold) return;
+    const last = this.lastRecycleAt.get(organizationId) ?? 0;
+    if (Date.now() - last < cooldownMs) return;
+    this.sendFailures.set(organizationId, 0);
+    this.lastRecycleAt.set(organizationId, Date.now());
+    // Fire-and-forget : recupere les ENVOIS SUIVANTS (le courant a deja echoue).
+    void this.recycleSession(organizationId);
+  }
+
+  /**
+   * Recycle la session : detruit le navigateur puppeteer (SANS logout, donc
+   * sans invalider l'appairage) puis relance startSession. LocalAuth restaure
+   * la session depuis le disque -> reconnexion sans nouveau QR.
+   */
+  private async recycleSession(organizationId: string): Promise<void> {
+    if (this.recycling.has(organizationId)) return;
+    this.recycling.add(organizationId);
+    const client = this.clients.get(organizationId);
+    // Retire de la map d'abord : isConnected() -> false pendant le recyclage,
+    // donc deliverWhatsapp bascule sur le provider chain en attendant.
+    this.clients.delete(organizationId);
+    try {
+      logger.warn({ organizationId }, 'WA session figee -> recyclage (destroy + re-init sans QR)');
+      if (client) {
+        try {
+          await client.destroy();
+        } catch (err) {
+          logger.warn({ err, organizationId }, 'WA recycle: destroy a echoue (ignore)');
+        }
+      }
+      await this.startSession(organizationId);
+      logger.info({ organizationId }, 'WA session recyclee');
+    } catch (err) {
+      logger.error({ err, organizationId }, 'WA recycle: re-init a echoue');
+    } finally {
+      this.recycling.delete(organizationId);
+    }
+  }
 
   private getOrCreateLimiter(orgId: string, perHour: number, minDelayMs: number): RateLimiter {
     if (!this.limiters.has(orgId)) {
