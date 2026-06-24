@@ -3,6 +3,7 @@ import type { JournalEntry, Prisma } from '@prisma/client';
 import type { IJournalEntryRepository, JournalEntryWithLines } from '../../../application/interfaces/IJournalEntryRepository';
 import type { PaginationInput, PaginatedResponse } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
+import { dailyDateStr, maxSeqFromRefs } from './PrismaPaymentRepository';
 
 const JOURNAL_INCLUDE = {
   lines: {
@@ -75,5 +76,19 @@ export class PrismaJournalEntryRepository implements IJournalEntryRepository {
     return prisma.journalEntry.count({
       where: { agencyId, date: { gte: start, lte: end } },
     });
+  }
+
+  /**
+   * Max de la sequence des references `PREFIX-YYYYMMDD-NNNN` du jour, toutes
+   * agences confondues (la reference journal est unique globalement). Evite les
+   * collisions inter-agences/inter-flux dues a un compteur par-agence.
+   */
+  async maxDailySequence(prefix: string, date: Date): Promise<number> {
+    const like = `${prefix}-${dailyDateStr(date)}-`;
+    const rows = await prisma.journalEntry.findMany({
+      where: { reference: { startsWith: like } },
+      select: { reference: true },
+    });
+    return maxSeqFromRefs(rows.map((r) => r.reference), like);
   }
 }

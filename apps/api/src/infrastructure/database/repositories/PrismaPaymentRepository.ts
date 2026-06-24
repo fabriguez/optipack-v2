@@ -153,4 +153,42 @@ export class PrismaPaymentRepository implements IPaymentRepository {
       },
     });
   }
+
+  /**
+   * Plus grande sequence numerique deja utilisee pour les references du jour
+   * `PREFIX-YYYYMMDD-NNNN`, TOUTES agences confondues. La reference est unique
+   * globalement (sans agence), donc un compteur par-agence provoquait des
+   * collisions systematiques entre agences le meme jour. On lit le max reel.
+   */
+  async maxDailySequence(prefix: string, date: Date): Promise<number> {
+    const like = `${prefix}-${dailyDateStr(date)}-`;
+    const rows = await prisma.payment.findMany({
+      where: { reference: { startsWith: like } },
+      select: { reference: true },
+    });
+    return maxSeqFromRefs(rows.map((r) => r.reference), like);
+  }
+}
+
+/** YYYYMMDD local — identique au format de generateReference. */
+export function dailyDateStr(date: Date): string {
+  return (
+    date.getFullYear().toString() +
+    (date.getMonth() + 1).toString().padStart(2, '0') +
+    date.getDate().toString().padStart(2, '0')
+  );
+}
+
+/** Max de la sequence numerique juste apres `like` dans une liste de refs. */
+export function maxSeqFromRefs(refs: Array<string | null>, like: string): number {
+  let max = 0;
+  for (const ref of refs) {
+    if (!ref) continue;
+    const m = ref.slice(like.length).match(/^(\d+)/);
+    if (m) {
+      const n = parseInt(m[1], 10);
+      if (Number.isFinite(n) && n > max) max = n;
+    }
+  }
+  return max;
 }

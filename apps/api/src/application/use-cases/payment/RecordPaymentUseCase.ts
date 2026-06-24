@@ -126,7 +126,10 @@ export class RecordPaymentUseCase {
       }),
     };
 
-    let baseCount = await this.paymentRepo.countByAgencyAndDate(input.agencyId, new Date());
+    // Sequence basee sur le MAX reel des references du jour (toutes agences) :
+    // la reference PAY-YYYYMMDD-NNNN est globale, donc un compteur par-agence
+    // collisionnait systematiquement entre agences le meme jour.
+    let baseCount = await this.paymentRepo.maxDailySequence('PAY', new Date());
     let payment: Awaited<ReturnType<typeof this.paymentRepo.create>> | undefined;
     let reference = '';
     for (let attempt = 0; attempt < 5; attempt++) {
@@ -137,7 +140,7 @@ export class RecordPaymentUseCase {
       } catch (err: unknown) {
         const code = (err as { code?: string })?.code;
         if (code !== 'P2002') throw err;
-        baseCount = await this.paymentRepo.countByAgencyAndDate(input.agencyId, new Date());
+        baseCount = await this.paymentRepo.maxDailySequence('PAY', new Date());
       }
     }
     if (!payment) {
@@ -206,7 +209,7 @@ export class RecordPaymentUseCase {
         },
       ],
     };
-    let journalBase = await this.journalRepo.countByDate(input.agencyId, new Date());
+    let journalBase = await this.journalRepo.maxDailySequence('JRN', new Date());
     let journalCreated = false;
     for (let attempt = 0; attempt < 5 && !journalCreated; attempt++) {
       try {
@@ -222,7 +225,7 @@ export class RecordPaymentUseCase {
         journalCreated = true;
       } catch (err: unknown) {
         if ((err as { code?: string })?.code !== 'P2002') throw err;
-        journalBase = await this.journalRepo.countByDate(input.agencyId, new Date());
+        journalBase = await this.journalRepo.maxDailySequence('JRN', new Date());
       }
     }
     if (!journalCreated) {

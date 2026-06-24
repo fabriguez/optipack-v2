@@ -19,6 +19,8 @@ export interface IPaymentRepository {
   void(id: string, reason: string, voidedByUserId: string): Promise<Payment>;
   sumByAgencyAndDate(agencyId: string, date: Date): Promise<number>;
   countByAgencyAndDate(agencyId: string, date: Date): Promise<number>;
+  /** Max sequence des references PREFIX-YYYYMMDD-NNNN du jour (global, anti-collision). */
+  maxDailySequence(prefix: string, date: Date): Promise<number>;
 }
 
 export const PAYMENT_REPOSITORY = Symbol.for('IPaymentRepository');

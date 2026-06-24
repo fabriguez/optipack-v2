@@ -20,6 +20,8 @@ export interface IJournalEntryRepository {
   ): Promise<PaginatedResponse<JournalEntryWithLines>>;
   create(data: Prisma.JournalEntryCreateInput): Promise<JournalEntry>;
   countByDate(agencyId: string, date: Date): Promise<number>;
+  /** Max sequence des references PREFIX-YYYYMMDD-NNNN du jour (global, anti-collision). */
+  maxDailySequence(prefix: string, date: Date): Promise<number>;
 }
 
 export const JOURNAL_ENTRY_REPOSITORY = Symbol.for('IJournalEntryRepository');
