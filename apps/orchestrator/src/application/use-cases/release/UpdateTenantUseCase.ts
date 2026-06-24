@@ -78,6 +78,7 @@ export class UpdateTenantUseCase {
 
     let backupTaken = false;
     let oldImagesTagged = false;
+    let imagesPulled = false;
     try {
       // 1. Backup DB
       await log('[update] step 1: pg_dump backup');
@@ -99,6 +100,7 @@ export class UpdateTenantUseCase {
       }
       await this.docker.pull(creds, targetRelease.apiImageTag);
       await this.docker.pull(creds, targetRelease.webImageTag);
+      imagesPulled = true;
 
       // 3. Tag les anciennes images :previous pour rollback rapide
       await log('[update] step 3: tag anciennes images :previous');
@@ -122,15 +124,41 @@ export class UpdateTenantUseCase {
       // services compose (postgres/redis/minio) ne resolvent QUE sur ce reseau.
       // Avant : optipack-shared (ancienne archi shared) -> EAI_AGAIN redis +
       // Can't reach postgres:5432 car le container n etait pas sur le bon reseau.
-      await log('[update] step 5: prisma migrate deploy (container temp)');
+      await log('[update] step 5: prisma migrate deploy + db push (container temp)');
       const envFile = `${config.tenantEnvDir}/tenant-${slug}.env`;
+      // L'image API a pour ENTRYPOINT `node` : passer `pnpm prisma ...` en CMD
+      // donne `node pnpm ...` -> MODULE_NOT_FOUND. On override l'entrypoint sur
+      // `sh -c` et on resout le binaire prisma comme au provisioning.
+      //
+      // L'API n'a PAS de dossier prisma/migrations (schema synchronise via
+      // `db push`). `migrate deploy` seul est donc un no-op : sans `db push`,
+      // les nouvelles colonnes/tables ne sont jamais appliquees sur la DB du
+      // tenant lors d'un update. On lance donc migrate deploy (no-op / futur)
+      // PUIS db push (la vraie synchro), idempotent.
+      const dbSyncMode = process.env.OPS_TENANT_DB_SYNC ?? 'push';
+      const prismaResolve =
+        'if command -v prisma >/dev/null 2>&1; then PRISMA=prisma; ' +
+        'elif [ -x ./node_modules/.bin/prisma ]; then PRISMA=./node_modules/.bin/prisma; ' +
+        'elif command -v npx >/dev/null 2>&1; then PRISMA="npx -y prisma"; ' +
+        'elif command -v pnpm >/dev/null 2>&1; then PRISMA="pnpm prisma"; ' +
+        'else echo "ERR: prisma CLI introuvable" >&2; exit 1; fi';
+      const migrateSteps =
+        'NODE_OPTIONS="--max-old-space-size=256" $PRISMA migrate deploy --schema=./prisma/schema.prisma 2>&1 || true; ' +
+        (dbSyncMode === 'push'
+          ? 'NODE_OPTIONS="--max-old-space-size=256" $PRISMA db push --schema=./prisma/schema.prisma --accept-data-loss=false --skip-generate'
+          : 'echo "db push skipped (OPS_TENANT_DB_SYNC=migrate)"');
+      const migrateBody = `cd /app/apps/api 2>/dev/null || cd /app; ${prismaResolve}; ${migrateSteps}`;
       const migrateRes = await this.ssh.exec(
         creds,
-        `docker run --rm --env-file ${envFile} --network ${netName} ${targetRelease.apiImageTag} pnpm prisma migrate deploy`,
+        `docker run --rm --entrypoint sh --env-file ${envFile} --network ${netName} ${targetRelease.apiImageTag} -c '${migrateBody}'`,
       );
       if (migrateRes.code !== 0) {
-        await log(`[update] migrate FAILED : ${migrateRes.stderr}`);
-        throw new Error(`Migration DB echouee : ${migrateRes.stderr}`);
+        const detail = [migrateRes.stderr, migrateRes.stdout].filter(Boolean).join(' | ').trim();
+        await log(`[update] migrate FAILED (code=${migrateRes.code}) : ${detail || '(no output)'}`);
+        if (migrateRes.code === 137) {
+          throw new Error('Synchro schema OOM-killed (code 137). Retentez l update.');
+        }
+        throw new Error(`Migration DB echouee : ${detail || '(no output)'}`);
       }
 
       // 6. Remove old containers + run nouveaux avec memes ports/limites
@@ -234,6 +262,21 @@ export class UpdateTenantUseCase {
             cpuLimit: halfCpu,
             memoryMb: webMem,
           });
+        }
+
+        // Job en echec : on retire les nouvelles images tirees a l'etape 2 pour
+        // revenir exactement au stade de depart (le tenant tourne de nouveau sur
+        // les images :previous-<slug>). Sans --force : si l'image cible est
+        // encore utilisee par un autre tenant du VPS, docker la conserve
+        // (erreur ignoree) ; on ne supprime que les images orphelines de cette
+        // tentative ratee. Les containers temporaires (step 5) sont deja
+        // auto-supprimes (`docker run --rm`).
+        if (imagesPulled) {
+          await log('[update] rollback : suppression des nouvelles images');
+          await this.ssh.exec(
+            creds,
+            `docker rmi ${targetRelease.apiImageTag} ${targetRelease.webImageTag} 2>/dev/null || true`,
+          );
         }
       } catch (rbErr) {
         await log(`[update] WARN rollback partiellement echoue : ${rbErr instanceof Error ? rbErr.message : String(rbErr)}`);
