@@ -126,6 +126,57 @@ export class DockerService {
     return this.ssh.exec(creds, `docker exec ${container} ${cmd}`);
   }
 
+  /**
+   * `docker compose up -d --remove-orphans` sur un fichier compose DEJA present
+   * (ne reecrit pas le YAML, contrairement a composeUp). Recree les services
+   * dont l'image a change en conservant env_file / environment / networks.
+   */
+  async composeUpExisting(creds: SshConnection, composeFilePath: string, projectName: string): Promise<void> {
+    const r = await this.ssh.exec(creds, this.composeCmd(composeFilePath, projectName, 'up -d --remove-orphans'));
+    if (r.code !== 0) throw new Error(`docker compose up echoue : ${r.stderr || r.stdout}`);
+  }
+
+  /**
+   * Remplace in place les tags d'image api / web / web-client dans un fichier
+   * compose tenant. Cible chaque repo par son prefixe exact suivi de `:` afin
+   * que `optipack-web:` ne matche pas `optipack-web-client:`. La valeur de tag
+   * (jusqu'au prochain espace) est entierement remplacee, quel que soit l'ancien
+   * tag (`:latest` comme `:beta-1.0.x`).
+   */
+  async patchComposeImages(
+    creds: SshConnection,
+    composeFilePath: string,
+    namespace: string,
+    tags: { api?: string; web?: string; webClient?: string },
+  ): Promise<void> {
+    const seds: string[] = [];
+    if (tags.api) seds.push(`-e "s#ghcr.io/${namespace}/optipack-api:[^[:space:]]*#${tags.api}#g"`);
+    if (tags.web) seds.push(`-e "s#ghcr.io/${namespace}/optipack-web:[^[:space:]]*#${tags.web}#g"`);
+    if (tags.webClient) seds.push(`-e "s#ghcr.io/${namespace}/optipack-web-client:[^[:space:]]*#${tags.webClient}#g"`);
+    if (seds.length === 0) return;
+    const r = await this.ssh.exec(creds, `sed -i -E ${seds.join(' ')} ${composeFilePath}`);
+    if (r.code !== 0) throw new Error(`patch des images compose echoue : ${r.stderr || r.stdout}`);
+  }
+
+  /**
+   * Recree les containers applicatifs du tenant (api/web/web-client) depuis le
+   * compose. On les retire d'abord PAR NOM (force, erreur ignoree) : robuste si
+   * un ancien `docker run` les a crees hors du projet compose (sinon `compose
+   * up` echoue sur conflit de nom). postgres/redis/minio ne sont pas touches
+   * (donnees + volumes preserves) -- compose les laisse tels quels.
+   */
+  async recreateTenantApp(
+    creds: SshConnection,
+    slug: string,
+    composeFilePath: string,
+    projectName: string,
+  ): Promise<void> {
+    for (const name of [`tenant-${slug}-api`, `tenant-${slug}-web`, `tenant-${slug}-web-client`]) {
+      await this.remove(creds, name, true);
+    }
+    await this.composeUpExisting(creds, composeFilePath, projectName);
+  }
+
   private composeCmd(composeFilePath: string, projectName: string, subCmd: string): string {
     const base = `docker compose -f ${composeFilePath} -p ${projectName}`;
     return `if docker compose version >/dev/null 2>&1; then ${base} ${subCmd}; elif docker-compose version >/dev/null 2>&1; then docker-compose -f ${composeFilePath} -p ${projectName} ${subCmd}; else echo 'compose non trouve' >&2; exit 1; fi`;

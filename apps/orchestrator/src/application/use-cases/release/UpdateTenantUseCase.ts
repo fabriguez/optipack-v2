@@ -13,18 +13,23 @@ const ROLLBACK_WINDOW_MIN = 30;
 /**
  * Phase 4.5 — Update tenant vers une nouvelle release OptiPack.
  *
+ * Le tenant tourne comme une stack docker compose (postgres/redis/minio/api/
+ * web/web-client) decrite dans `${tenantEnvDir}/tenant-<slug>-compose.yml`. Le
+ * service `web` tire son `AUTH_SECRET` (NextAuth) du `env_file` du tenant : on
+ * NE recree donc JAMAIS les containers via `docker run` (cela perdait le
+ * env_file -> NextAuth `MissingSecret` -> /api/auth/session 500). On met a jour
+ * en patchant les tags d'image dans le compose puis `docker compose up -d`.
+ *
  * Sequence :
- *  1. Health check pre-update (refus si tenant deja KO)
- *  2. Backup auto : pg_dump → /tmp/tenant-<slug>-pre-<from>-<ts>.sql sur le VPS host
- *  3. docker pull nouvelles images
- *  4. Tag les anciennes images en `:previous` (pour rollback rapide)
- *  5. Stop containers actuels (downtime debut)
- *  6. Run prisma migrate deploy via container temporaire (nouvelle image)
- *  7. Si migrate fail → restore DB depuis backup + redemarrer ancien container → status=failed
- *  8. Run nouveaux containers (memes ports, memes limites de plan)
- *  9. Health check (90s timeout)
- *  10. Si OK : tenant.currentVersion = toVersion, job.status = succeeded, rollbackBefore = now+30min
- *  11. Si KO : rollback DB + ancien container → status=failed
+ *  1. Backup DB (pg_dump)
+ *  2. docker pull nouvelles images (api + web + web-client)
+ *  3. Backup du fichier compose (rollback exact)
+ *  4. Patch des tags d'image dans le compose -> nouvelle version
+ *  5. prisma migrate deploy + db push (container temp, nouvelle image API)
+ *  6. docker compose up -d (recree api/web/web-client avec env_file conserve)
+ *  7. Health check (90s)
+ *  8. OK  : currentVersion = toVersion, job succeeded, rollbackBefore = now+30min
+ *  9. KO  : restore DB + restore compose + compose up + suppression des nouvelles images
  */
 @injectable()
 export class UpdateTenantUseCase {
@@ -62,13 +67,16 @@ export class UpdateTenantUseCase {
     };
 
     const slug = tenant.slug;
+    const ns = config.ghcr.namespace;
     const dbName = tenant.dbName ?? `tenant_${slug.replace(/-/g, '_')}_db`;
-    const apiName = `tenant-${slug}-api`;
-    const webName = `tenant-${slug}-web`;
     const pgName = `tenant-${slug}-postgres`;
     const netName = `tenant-${slug}-net`;
+    const composeFile = `${config.tenantEnvDir}/tenant-${slug}-compose.yml`;
+    const composeProject = `tenant-${slug}`;
     const fromVersion = tenant.currentVersion ?? 'unknown';
-    const backupPath = `/tmp/tenant-${slug}-pre-${fromVersion}-${Date.now()}.sql`;
+    const stamp = Date.now();
+    const backupPath = `/tmp/tenant-${slug}-pre-${fromVersion}-${stamp}.sql`;
+    const composeBackup = `${composeFile}.pre-${fromVersion}-${stamp}.bak`;
 
     await prisma.tenantUpdateJob.update({
       where: { id: jobId },
@@ -77,8 +85,9 @@ export class UpdateTenantUseCase {
     await log(`[update] start ${slug} ${fromVersion} -> ${updateJob.toVersion}`);
 
     let backupTaken = false;
-    let oldImagesTagged = false;
+    let composeBackedUp = false;
     let imagesPulled = false;
+    let resolvedWebClientTag: string | undefined;
     try {
       // 1. Backup DB
       await log('[update] step 1: pg_dump backup');
@@ -93,48 +102,52 @@ export class UpdateTenantUseCase {
         data: { backupRef: backupPath },
       });
 
-      // 2. Pull nouvelles images
+      // 2. Pull nouvelles images (api + web + web-client)
       await log(`[update] step 2: docker pull ${targetRelease.apiImageTag}`);
       if (config.ghcr.pullToken) {
         await this.docker.loginGhcr(creds, config.ghcr.namespace, config.ghcr.pullToken);
       }
       await this.docker.pull(creds, targetRelease.apiImageTag);
       await this.docker.pull(creds, targetRelease.webImageTag);
+      // web-client : tag explicite de la release, sinon derive de la version (la
+      // CI publie les 3 images par version). Best-effort : si l'image n'existe
+      // pas (anciennes releases sans web-client), web-client n'est pas mis a jour
+      // mais l'update n'echoue pas.
+      const webClientCandidate =
+        targetRelease.webClientImageTag ?? `ghcr.io/${ns}/optipack-web-client:${targetRelease.version}`;
+      try {
+        await this.docker.pull(creds, webClientCandidate);
+        resolvedWebClientTag = webClientCandidate;
+      } catch (e) {
+        await log(
+          `[update] WARN web-client non mis a jour (image ${webClientCandidate} indisponible) : ${e instanceof Error ? e.message : String(e)}`,
+        );
+      }
       imagesPulled = true;
 
-      // 3. Tag les anciennes images :previous pour rollback rapide
-      await log('[update] step 3: tag anciennes images :previous');
-      await this.ssh.exec(
-        creds,
-        `docker inspect ${apiName} --format '{{.Image}}' | xargs -I {} docker tag {} ghcr.io/${config.ghcr.namespace}/optipack-api:previous-${slug}`,
-      );
-      await this.ssh.exec(
-        creds,
-        `docker inspect ${webName} --format '{{.Image}}' | xargs -I {} docker tag {} ghcr.io/${config.ghcr.namespace}/optipack-web:previous-${slug}`,
-      );
-      oldImagesTagged = true;
+      // 3. Backup du fichier compose (pour un rollback exact au stade de depart)
+      await log('[update] step 3: backup du fichier compose');
+      const cp = await this.ssh.exec(creds, `cp ${composeFile} ${composeBackup}`);
+      if (cp.code !== 0) throw new Error(`backup compose echoue : ${cp.stderr || cp.stdout}`);
+      composeBackedUp = true;
 
-      // 4. Stop containers (downtime debut)
-      await log('[update] step 4: stop containers actuels');
-      await this.docker.stop(creds, apiName);
-      await this.docker.stop(creds, webName);
+      // 4. Patch des tags d'image dans le compose -> nouvelle version
+      await log('[update] step 4: patch des images dans le compose');
+      await this.docker.patchComposeImages(creds, composeFile, ns, {
+        api: targetRelease.apiImageTag,
+        web: targetRelease.webImageTag,
+        webClient: resolvedWebClientTag,
+      });
 
-      // 5. Run prisma migrate deploy avec une instance temporaire de la nouvelle image
-      // Reseau : tenant-<slug>-net (network compose isole du tenant). Les noms de
-      // services compose (postgres/redis/minio) ne resolvent QUE sur ce reseau.
-      // Avant : optipack-shared (ancienne archi shared) -> EAI_AGAIN redis +
-      // Can't reach postgres:5432 car le container n etait pas sur le bon reseau.
+      // 5. prisma migrate deploy + db push (container temp, nouvelle image API).
+      // ENTRYPOINT de l'image = `node` : passer `pnpm prisma ...` en CMD donne
+      // `node pnpm ...` -> MODULE_NOT_FOUND. On override l'entrypoint sur `sh -c`
+      // et on resout le binaire prisma comme au provisioning. L'API n'a PAS de
+      // dossier prisma/migrations (schema synchronise via db push) : migrate
+      // deploy seul est un no-op, donc on enchaine db push (idempotent) qui
+      // applique reellement les nouvelles colonnes/tables.
       await log('[update] step 5: prisma migrate deploy + db push (container temp)');
       const envFile = `${config.tenantEnvDir}/tenant-${slug}.env`;
-      // L'image API a pour ENTRYPOINT `node` : passer `pnpm prisma ...` en CMD
-      // donne `node pnpm ...` -> MODULE_NOT_FOUND. On override l'entrypoint sur
-      // `sh -c` et on resout le binaire prisma comme au provisioning.
-      //
-      // L'API n'a PAS de dossier prisma/migrations (schema synchronise via
-      // `db push`). `migrate deploy` seul est donc un no-op : sans `db push`,
-      // les nouvelles colonnes/tables ne sont jamais appliquees sur la DB du
-      // tenant lors d'un update. On lance donc migrate deploy (no-op / futur)
-      // PUIS db push (la vraie synchro), idempotent.
       const dbSyncMode = process.env.OPS_TENANT_DB_SYNC ?? 'push';
       const prismaResolve =
         'if command -v prisma >/dev/null 2>&1; then PRISMA=prisma; ' +
@@ -161,40 +174,10 @@ export class UpdateTenantUseCase {
         throw new Error(`Migration DB echouee : ${detail || '(no output)'}`);
       }
 
-      // 6. Remove old containers + run nouveaux avec memes ports/limites
-      await log('[update] step 6: remove old + run new containers');
-      const limits = await this.capacity.getTenantLimits(tenant.id);
-      const halfCpu = limits.cpuLimit / 2;
-      const apiMem = Math.floor(limits.memoryMb * 0.6);
-      const webMem = limits.memoryMb - apiMem;
-
-      await this.docker.remove(creds, apiName, true);
-      await this.docker.remove(creds, webName, true);
-
-      await this.docker.run(creds, {
-        name: apiName,
-        image: targetRelease.apiImageTag,
-        ports: { [tenant.apiPort!]: 4000 },
-        envFile,
-        restart: 'unless-stopped',
-        network: netName,
-        cpuLimit: halfCpu,
-        memoryMb: apiMem,
-      });
-      await this.docker.run(creds, {
-        name: webName,
-        image: targetRelease.webImageTag,
-        ports: { [tenant.webPort!]: 3000 },
-        env: {
-          TENANT_SLUG: slug,
-          NEXT_PUBLIC_API_URL: `https://api.${slug}.${process.env.OPS_BASE_DOMAIN ?? 'transitsoftservices.com'}/api/v1`,
-          INTERNAL_API_URL: `http://${apiName}:4000/api/v1`,
-        },
-        restart: 'unless-stopped',
-        network: netName,
-        cpuLimit: halfCpu,
-        memoryMb: webMem,
-      });
+      // 6. docker compose up -d : recree api/web/web-client avec leurs nouvelles
+      // images, en conservant env_file (donc AUTH_SECRET), environment et reseau.
+      await log('[update] step 6: docker compose up -d (nouvelle version)');
+      await this.docker.recreateTenantApp(creds, slug, composeFile, composeProject);
 
       // 7. Health check
       await log('[update] step 7: health check');
@@ -221,8 +204,9 @@ export class UpdateTenantUseCase {
       const msg = err instanceof Error ? err.message : String(err);
       await log(`[update] ROLLBACK : ${msg}`);
 
-      // Rollback : restore DB + ancien container
+      // Rollback : retour exact au stade de depart.
       try {
+        // a. Restore DB
         if (backupTaken) {
           await log('[update] rollback : pg_restore depuis backup');
           await this.ssh.exec(
@@ -230,53 +214,27 @@ export class UpdateTenantUseCase {
             `PGUSER=$(docker exec ${pgName} printenv POSTGRES_USER 2>/dev/null || echo postgres); cat ${backupPath} | docker exec -i ${pgName} pg_restore -U "$PGUSER" -d "${dbName}" --clean --if-exists`,
           );
         }
-        if (oldImagesTagged) {
-          await log('[update] rollback : redemarrer ancien container');
-          await this.docker.remove(creds, apiName, true);
-          await this.docker.remove(creds, webName, true);
-          const limits = await this.capacity.getTenantLimits(tenant.id);
-          const halfCpu = limits.cpuLimit / 2;
-          const apiMem = Math.floor(limits.memoryMb * 0.6);
-          const webMem = limits.memoryMb - apiMem;
-          const envFile = `${config.tenantEnvDir}/tenant-${slug}.env`;
-          await this.docker.run(creds, {
-            name: apiName,
-            image: `ghcr.io/${config.ghcr.namespace}/optipack-api:previous-${slug}`,
-            ports: { [tenant.apiPort!]: 4000 },
-            envFile,
-            restart: 'unless-stopped',
-            network: netName,
-            cpuLimit: halfCpu,
-            memoryMb: apiMem,
-          });
-          await this.docker.run(creds, {
-            name: webName,
-            image: `ghcr.io/${config.ghcr.namespace}/optipack-web:previous-${slug}`,
-            ports: { [tenant.webPort!]: 3000 },
-            env: {
-              TENANT_SLUG: slug,
-              INTERNAL_API_URL: `http://${apiName}:4000/api/v1`,
-            },
-            restart: 'unless-stopped',
-            network: netName,
-            cpuLimit: halfCpu,
-            memoryMb: webMem,
-          });
+        // b. Restore le compose d'origine (anciens tags) + relance via compose
+        // (conserve env_file -> AUTH_SECRET present, pas de MissingSecret).
+        if (composeBackedUp) {
+          await log('[update] rollback : restauration du compose + compose up');
+          await this.ssh.exec(creds, `cp -f ${composeBackup} ${composeFile}`);
+          await this.docker.recreateTenantApp(creds, slug, composeFile, composeProject);
+          const back = await this.docker.healthCheck(creds, tenant.apiPort!, '/api/v1/tenant-meta', 60);
+          if (!back) {
+            await log('[update] WARN rollback : health check KO apres restauration (intervention manuelle requise)');
+          }
         }
-
-        // Job en echec : on retire les nouvelles images tirees a l'etape 2 pour
-        // revenir exactement au stade de depart (le tenant tourne de nouveau sur
-        // les images :previous-<slug>). Sans --force : si l'image cible est
-        // encore utilisee par un autre tenant du VPS, docker la conserve
-        // (erreur ignoree) ; on ne supprime que les images orphelines de cette
-        // tentative ratee. Les containers temporaires (step 5) sont deja
-        // auto-supprimes (`docker run --rm`).
+        // c. Job en echec : retirer les nouvelles images tirees (retour stade de
+        // depart). Sans --force : une image encore utilisee par un autre tenant
+        // du VPS est conservee (erreur ignoree). Le container temp du step 5 est
+        // deja auto-supprime (`docker run --rm`).
         if (imagesPulled) {
           await log('[update] rollback : suppression des nouvelles images');
-          await this.ssh.exec(
-            creds,
-            `docker rmi ${targetRelease.apiImageTag} ${targetRelease.webImageTag} 2>/dev/null || true`,
-          );
+          const newImages = [targetRelease.apiImageTag, targetRelease.webImageTag, resolvedWebClientTag]
+            .filter(Boolean)
+            .join(' ');
+          await this.ssh.exec(creds, `docker rmi ${newImages} 2>/dev/null || true`);
         }
       } catch (rbErr) {
         await log(`[update] WARN rollback partiellement echoue : ${rbErr instanceof Error ? rbErr.message : String(rbErr)}`);
@@ -292,8 +250,9 @@ export class UpdateTenantUseCase {
 }
 
 /**
- * Rollback dans la fenetre de 30 min apres un update succeede.
- * Restore depuis backup + relance les anciens containers (image :previous-<slug>).
+ * Rollback manuel dans la fenetre de 30 min apres un update succeede.
+ * Restore la DB depuis backup + repointe le compose sur les images de la
+ * version d'origine puis `docker compose up -d` (env_file conserve).
  */
 @injectable()
 export class RollbackTenantUseCase {
@@ -330,60 +289,41 @@ export class RollbackTenantUseCase {
       sshKeyEncrypted: tenant.vps.sshKeyEncrypted,
     };
     const slug = tenant.slug;
+    const ns = config.ghcr.namespace;
     const dbName = tenant.dbName ?? `tenant_${slug.replace(/-/g, '_')}_db`;
-    const apiName = `tenant-${slug}-api`;
-    const webName = `tenant-${slug}-web`;
     const pgName = `tenant-${slug}-postgres`;
-    const netName = `tenant-${slug}-net`;
-    const envFile = `${config.tenantEnvDir}/tenant-${slug}.env`;
+    const composeFile = `${config.tenantEnvDir}/tenant-${slug}-compose.yml`;
+    const composeProject = `tenant-${slug}`;
 
     const log = (m: string) => this.jobLogger.append(updateJobId, m);
     await log(`[rollback] start ${slug} ${job.toVersion} -> ${job.fromVersion}`);
 
-    // 1. Stop new containers
-    await this.docker.stop(creds, apiName);
-    await this.docker.stop(creds, webName);
-
-    // 2. Restore DB
+    // 1. Restore DB
     await log('[rollback] pg_restore');
     await this.ssh.exec(
       creds,
       `PGUSER=$(docker exec ${pgName} printenv POSTGRES_USER 2>/dev/null || echo postgres); cat ${job.backupRef} | docker exec -i ${pgName} pg_restore -U "$PGUSER" -d "${dbName}" --clean --if-exists`,
     );
 
-    // 3. Restart anciens containers (image :previous-<slug>)
-    await log('[rollback] redemarrer anciens containers');
-    await this.docker.remove(creds, apiName, true);
-    await this.docker.remove(creds, webName, true);
+    // 2. Repointer le compose sur les images de la version d'origine. On prend
+    // les tags exacts de la release fromVersion si elle existe, sinon on les
+    // reconstruit `:<fromVersion>`.
+    const fromRelease = await prisma.release.findUnique({ where: { version: job.fromVersion } });
+    const apiTag = fromRelease?.apiImageTag ?? `ghcr.io/${ns}/optipack-api:${job.fromVersion}`;
+    const webTag = fromRelease?.webImageTag ?? `ghcr.io/${ns}/optipack-web:${job.fromVersion}`;
+    const webClientTag = fromRelease?.webClientImageTag ?? `ghcr.io/${ns}/optipack-web-client:${job.fromVersion}`;
 
-    const limits = await this.capacity.getTenantLimits(tenant.id);
-    const halfCpu = limits.cpuLimit / 2;
-    const apiMem = Math.floor(limits.memoryMb * 0.6);
-    const webMem = limits.memoryMb - apiMem;
+    await log('[rollback] patch compose -> images version d origine + compose up');
+    await this.docker.patchComposeImages(creds, composeFile, ns, {
+      api: apiTag,
+      web: webTag,
+      webClient: webClientTag,
+    });
+    await this.docker.recreateTenantApp(creds, slug, composeFile, composeProject);
 
-    await this.docker.run(creds, {
-      name: apiName,
-      image: `ghcr.io/${config.ghcr.namespace}/optipack-api:previous-${slug}`,
-      ports: { [tenant.apiPort!]: 4000 },
-      envFile,
-      restart: 'unless-stopped',
-      network: netName,
-      cpuLimit: halfCpu,
-      memoryMb: apiMem,
-    });
-    await this.docker.run(creds, {
-      name: webName,
-      image: `ghcr.io/${config.ghcr.namespace}/optipack-web:previous-${slug}`,
-      ports: { [tenant.webPort!]: 3000 },
-      env: {
-        TENANT_SLUG: slug,
-        INTERNAL_API_URL: `http://${apiName}:4000/api/v1`,
-      },
-      restart: 'unless-stopped',
-      network: netName,
-      cpuLimit: halfCpu,
-      memoryMb: webMem,
-    });
+    // 3. Health check (best-effort : on log si KO)
+    const ok = await this.docker.healthCheck(creds, tenant.apiPort!, '/api/v1/tenant-meta', 60);
+    if (!ok) await log('[rollback] WARN health check KO apres rollback');
 
     // 4. Update tenant + job status
     await prisma.tenant.update({
