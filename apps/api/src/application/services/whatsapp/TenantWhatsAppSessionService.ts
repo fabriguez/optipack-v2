@@ -266,9 +266,12 @@ export class TenantWhatsAppSessionService extends EventEmitter {
 
     try {
       const chatId = phone.replace(/[^0-9]/g, '') + '@c.us';
-      await this.enqueueSend(organizationId, () =>
-        this.withSendTimeout(() => client.sendMessage(chatId, message)),
-      );
+      await this.enqueueSend(organizationId, async () => {
+        if (!(await this.isPageResponsive(client))) {
+          throw new Error('WA page non reactive (getState timeout)');
+        }
+        await this.withSendTimeout(() => client.sendMessage(chatId, message));
+      });
       limiter.consume();
       this.sendFailures.delete(organizationId);
       return true;
@@ -300,16 +303,35 @@ export class TenantWhatsAppSessionService extends EventEmitter {
   }
 
   private withSendTimeout<T>(fn: () => Promise<T>): Promise<T> {
-    const ms = Number(process.env.WA_SEND_TIMEOUT_MS ?? 60000);
+    return this.withTimeout(fn, Number(process.env.WA_SEND_TIMEOUT_MS ?? 60000), 'WA send');
+  }
+
+  private withTimeout<T>(fn: () => Promise<T>, ms: number, label: string): Promise<T> {
     let timer: ReturnType<typeof setTimeout>;
     const p = fn();
-    // Si l'envoi rejette APRES le timeout (la page se debloque tard), on evite
-    // un unhandledRejection en absorbant le resultat tardif.
+    // Si l'op rejette APRES le timeout (la page se debloque tard), on evite un
+    // unhandledRejection en absorbant le resultat tardif.
     p.catch(() => {});
     const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new Error(`WA send timeout apres ${ms}ms`)), ms);
+      timer = setTimeout(() => reject(new Error(`${label} timeout apres ${ms}ms`)), ms);
     });
     return Promise.race([p, timeout]).finally(() => clearTimeout(timer)) as Promise<T>;
+  }
+
+  /**
+   * Sonde rapide de reactivite de la page : getState() borne (defaut 8s). Si la
+   * page WA Web est figee, getState pend aussi -> on echoue en 8s au lieu de
+   * 60s, ce qui evite de bruler le timeout d'envoi et declenche le recyclage
+   * plus tot. Retourne true seulement si l'etat est CONNECTED.
+   */
+  private async isPageResponsive(client: import('whatsapp-web.js').Client): Promise<boolean> {
+    const ms = Number(process.env.WA_PROBE_TIMEOUT_MS ?? 8000);
+    try {
+      const state = await this.withTimeout(() => client.getState(), ms, 'WA getState');
+      return state === 'CONNECTED';
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -360,14 +382,17 @@ export class TenantWhatsAppSessionService extends EventEmitter {
         opts?.filename ?? 'fichier',
       );
       const chatId = phone.replace(/[^0-9]/g, '') + '@c.us';
-      await this.enqueueSend(organizationId, () =>
-        this.withSendTimeout(() =>
+      await this.enqueueSend(organizationId, async () => {
+        if (!(await this.isPageResponsive(client))) {
+          throw new Error('WA page non reactive (getState timeout)');
+        }
+        await this.withSendTimeout(() =>
           client.sendMessage(chatId, media, {
             caption: opts?.caption,
             sendMediaAsDocument: opts?.asDocument ?? false,
           }),
-        ),
-      );
+        );
+      });
       limiter.consume();
       this.sendFailures.delete(organizationId);
       return true;
@@ -422,7 +447,7 @@ export class TenantWhatsAppSessionService extends EventEmitter {
   private onSendFailure(organizationId: string): void {
     const n = (this.sendFailures.get(organizationId) ?? 0) + 1;
     this.sendFailures.set(organizationId, n);
-    const threshold = Number(process.env.WA_RECYCLE_THRESHOLD ?? 2);
+    const threshold = Number(process.env.WA_RECYCLE_THRESHOLD ?? 1);
     const cooldownMs = Number(process.env.WA_RECYCLE_COOLDOWN_MS ?? 120000);
     if (n < threshold) return;
     const last = this.lastRecycleAt.get(organizationId) ?? 0;
