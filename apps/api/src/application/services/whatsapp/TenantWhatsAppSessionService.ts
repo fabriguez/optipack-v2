@@ -86,6 +86,10 @@ export class TenantWhatsAppSessionService extends EventEmitter {
   private sendFailures = new Map<string, number>();
   private lastRecycleAt = new Map<string, number>();
   private recycling = new Set<string>();
+  // Serialisation des envois par tenant : whatsapp-web.js partage UNE page
+  // puppeteer ; des sendMessage concurrents -> commandes CDP entrelacees ->
+  // hang/timeout. On enchaine les envois d'un meme tenant.
+  private sendQueues = new Map<string, Promise<unknown>>();
 
   private constructor() {
     super();
@@ -145,6 +149,19 @@ export class TenantWhatsAppSessionService extends EventEmitter {
           '--no-first-run',
         ],
       },
+      // Pin de version WhatsApp Web (opt-in via WA_WEB_VERSION, ex 2.3000.1023XXXXXX).
+      // Cause frequente d'un sendMessage qui pend indefiniment : le bundle WA Web
+      // par defaut a derive et la fonction d'envoi injectee n'est plus prete.
+      // Pinner une version stable (catalogue wppconnect-team/wa-version) corrige.
+      ...(process.env.WA_WEB_VERSION
+        ? {
+            webVersion: process.env.WA_WEB_VERSION,
+            webVersionCache: {
+              type: 'remote' as const,
+              remotePath: `https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/${process.env.WA_WEB_VERSION}.html`,
+            },
+          }
+        : {}),
     });
 
     this.clients.set(organizationId, client);
@@ -249,7 +266,9 @@ export class TenantWhatsAppSessionService extends EventEmitter {
 
     try {
       const chatId = phone.replace(/[^0-9]/g, '') + '@c.us';
-      await this.withSendTimeout(() => client.sendMessage(chatId, message));
+      await this.enqueueSend(organizationId, () =>
+        this.withSendTimeout(() => client.sendMessage(chatId, message)),
+      );
       limiter.consume();
       this.sendFailures.delete(organizationId);
       return true;
@@ -268,6 +287,18 @@ export class TenantWhatsAppSessionService extends EventEmitter {
    * On echoue vite (defaut 60s) -> deliverWhatsapp retombe sur le provider
    * chain (Twilio/Meta/AT) au lieu de pendre. Configurable via WA_SEND_TIMEOUT_MS.
    */
+  /**
+   * Enchaine les envois d'un meme tenant (un seul a la fois) pour eviter les
+   * commandes CDP concurrentes sur la page puppeteer partagee.
+   */
+  private enqueueSend<T>(organizationId: string, fn: () => Promise<T>): Promise<T> {
+    const prev = this.sendQueues.get(organizationId) ?? Promise.resolve();
+    const run = prev.then(fn, fn);
+    // Garde la chaine vivante sans propager les rejets au maillon suivant.
+    this.sendQueues.set(organizationId, run.then(() => undefined, () => undefined));
+    return run;
+  }
+
   private withSendTimeout<T>(fn: () => Promise<T>): Promise<T> {
     const ms = Number(process.env.WA_SEND_TIMEOUT_MS ?? 60000);
     let timer: ReturnType<typeof setTimeout>;
@@ -329,11 +360,13 @@ export class TenantWhatsAppSessionService extends EventEmitter {
         opts?.filename ?? 'fichier',
       );
       const chatId = phone.replace(/[^0-9]/g, '') + '@c.us';
-      await this.withSendTimeout(() =>
-        client.sendMessage(chatId, media, {
-          caption: opts?.caption,
-          sendMediaAsDocument: opts?.asDocument ?? false,
-        }),
+      await this.enqueueSend(organizationId, () =>
+        this.withSendTimeout(() =>
+          client.sendMessage(chatId, media, {
+            caption: opts?.caption,
+            sendMediaAsDocument: opts?.asDocument ?? false,
+          }),
+        ),
       );
       limiter.consume();
       this.sendFailures.delete(organizationId);
