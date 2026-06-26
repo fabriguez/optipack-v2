@@ -4,6 +4,7 @@ import { prisma } from '../../../config/database';
 import { config } from '../../../config';
 import { logger } from '../../../infrastructure/logger';
 import { DockerService, DOCKER_SERVICE } from '../../../infrastructure/docker/DockerService';
+import { computeServiceLimits } from '../../services/resourceLimits';
 import {
   CaddyService,
   CADDY_SERVICE,
@@ -291,18 +292,21 @@ export class ProvisionTenantUseCase {
     //   web-client   : 15% RAM, 1/8 CPU
     //   minio        : 10% RAM, 1/12 CPU
     //   redis        :  5% RAM, 1/16 CPU
-    const apiMemoryMb = Math.floor(limits.memoryMb * 0.30);
-    const pgMemoryMb = Math.floor(limits.memoryMb * 0.25);
-    const webMemoryMb = Math.floor(limits.memoryMb * 0.15);
-    const webClientMemoryMb = Math.floor(limits.memoryMb * 0.15);
-    const minioMemoryMb = Math.floor(limits.memoryMb * 0.10);
-    const redisMemoryMb = Math.max(64, limits.memoryMb - apiMemoryMb - pgMemoryMb - webMemoryMb - webClientMemoryMb - minioMemoryMb);
-    const apiCpu = Number((limits.cpuLimit / 3).toFixed(3));
-    const pgCpu = Number((limits.cpuLimit / 4).toFixed(3));
-    const webCpu = Number((limits.cpuLimit / 8).toFixed(3));
-    const webClientCpu = Number((limits.cpuLimit / 8).toFixed(3));
-    const minioCpu = Number((limits.cpuLimit / 12).toFixed(3));
-    const redisCpu = Number(Math.max(0.05, limits.cpuLimit / 16).toFixed(3));
+    // Repartition par service : source unique de verite partagee avec le
+    // changement de plan (cf computeServiceLimits).
+    const svc = computeServiceLimits({ cpuLimit: limits.cpuLimit, memoryMb: limits.memoryMb });
+    const apiMemoryMb = svc.api.memoryMb;
+    const pgMemoryMb = svc.postgres.memoryMb;
+    const webMemoryMb = svc.web.memoryMb;
+    const webClientMemoryMb = svc.webClient.memoryMb;
+    const minioMemoryMb = svc.minio.memoryMb;
+    const redisMemoryMb = svc.redis.memoryMb;
+    const apiCpu = svc.api.cpu;
+    const pgCpu = svc.postgres.cpu;
+    const webCpu = svc.web.cpu;
+    const webClientCpu = svc.webClient.cpu;
+    const minioCpu = svc.minio.cpu;
+    const redisCpu = svc.redis.cpu;
 
     const pgName = `tenant-${tenant.slug}-postgres`;
     const redisName = `tenant-${tenant.slug}-redis`;

@@ -136,7 +136,13 @@ export class BillingController {
   /** POST /ops/tenants/:id/upgrade — demande d'upgrade plan */
   static async requestUpgrade(req: Request, res: Response, next: NextFunction) {
     try {
-      const parsed = requestUpgradeSchema.parse(req.body);
+      // Le demandeur est determine par le TOKEN, jamais par le client :
+      //  - compte facturation tenant (opsAdmin.tenantId defini) -> 'tenant_owner'
+      //    => un upgrade exige un paiement prealable.
+      //  - ops global (pas de tenantId) -> 'ops_admin'
+      //    => applique immediatement les limites, sans paiement.
+      const requestedBy = req.opsAdmin?.tenantId ? 'tenant_owner' : 'ops_admin';
+      const parsed = requestUpgradeSchema.parse({ ...req.body, requestedBy });
       const result = await container.resolve(UpgradeTenantPlanUseCase).requestUpgrade(req.params.id, parsed);
       await container.resolve(AuditLogger).log(req, {
         action: 'TENANT_PLAN_UPGRADE_REQUESTED',

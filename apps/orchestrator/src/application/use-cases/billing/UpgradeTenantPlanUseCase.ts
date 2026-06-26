@@ -3,7 +3,9 @@ import { z } from 'zod';
 import { prisma } from '../../../config/database';
 import { config } from '../../../config';
 import { DockerService, DOCKER_SERVICE } from '../../../infrastructure/docker/DockerService';
+import { SSHService, SSH_SERVICE } from '../../../infrastructure/ssh/SSHService';
 import { CapacityService } from '../../services/CapacityService';
+import { computeServiceLimits } from '../../services/resourceLimits';
 import { BusinessError, NotFoundError } from '../../../domain/errors/BusinessError';
 
 export const requestUpgradeSchema = z.object({
@@ -34,6 +36,7 @@ export type RequestUpgradeInput = z.infer<typeof requestUpgradeSchema>;
 export class UpgradeTenantPlanUseCase {
   constructor(
     @inject(DOCKER_SERVICE) private docker: DockerService,
+    @inject(SSH_SERVICE) private ssh: SSHService,
     private capacity: CapacityService,
   ) {}
 
@@ -74,12 +77,18 @@ export class UpgradeTenantPlanUseCase {
     const isDowngrade =
       tenant.resourcePlan != null && Number(toPlan.pricePerMonth) < Number(tenant.resourcePlan.pricePerMonth);
 
+    // Application immediate SANS paiement quand :
+    //  - l'ops global declenche le changement (requestedBy = 'ops_admin'), OU
+    //  - c'est un downgrade (moins cher -> rien a payer ; pro-rata cote facturation).
+    // Le compte facturation tenant ('tenant_owner') qui UPGRADE doit payer avant.
+    const applyNow = input.requestedBy === 'ops_admin' || isDowngrade;
+
     const change = await prisma.planChange.create({
       data: {
         tenantId,
         fromPlanId: tenant.resourcePlanId,
         toPlanId: toPlan.id,
-        status: isDowngrade ? 'active' : 'pending_payment',
+        status: applyNow ? 'active' : 'pending_payment',
         requestedBy: input.requestedBy,
         cpuLimitAtChange: toPlan.cpuLimit,
         memoryMbAtChange: toPlan.memoryMb,
@@ -87,8 +96,7 @@ export class UpgradeTenantPlanUseCase {
       },
     });
 
-    // Si downgrade : pas de paiement, on applique direct
-    if (isDowngrade) {
+    if (applyNow) {
       await this.applyPlanChange(change.id);
       return { ...change, status: 'active', requiresPayment: false };
     }
@@ -125,53 +133,62 @@ export class UpgradeTenantPlanUseCase {
       },
     });
 
-    // 2. Restart containers avec nouvelles limites (si tenant ACTIVE)
-    if (tenant.status === 'ACTIVE' && tenant.apiPort && tenant.webPort) {
+    // 2. Applique les nouvelles limites EN PATCHANT LE COMPOSE (si tenant ACTIVE).
+    //
+    // Le tenant tourne comme une stack docker compose (postgres/redis/minio/api/
+    // web/web-client). On NE recree donc JAMAIS via `docker run` (cela cassait la
+    // stack : volumes/network du projet compose perdus, services partiels). On
+    // reecrit les `cpus:`/`mem_limit:` du fichier compose avec le MEME split que
+    // le provisioning, puis `docker compose up -d` (recree uniquement les
+    // services dont les limites changent, env_file/volumes conserves).
+    if (tenant.status === 'ACTIVE') {
       const creds = {
         host: tenant.vps.host,
         port: tenant.vps.port,
         username: tenant.vps.username,
         sshKeyEncrypted: tenant.vps.sshKeyEncrypted,
       };
-      const apiName = `tenant-${tenant.slug}-api`;
-      const webName = `tenant-${tenant.slug}-web`;
-      const netName = `tenant-${tenant.slug}-net`;
-      const envFile = `${config.tenantEnvDir}/tenant-${tenant.slug}.env`;
-      const apiImage = `ghcr.io/${config.ghcr.namespace}/optipack-api:${tenant.currentVersion ?? 'latest'}`;
-      const webImage = `ghcr.io/${config.ghcr.namespace}/optipack-web:${tenant.currentVersion ?? 'latest'}`;
+      const composeFile = `${config.tenantEnvDir}/tenant-${tenant.slug}-compose.yml`;
+      const projectName = `tenant-${tenant.slug}`;
 
-      // Stop + remove + run avec nouvelles limites
-      const halfCpu = plan.cpuLimit / 2;
-      const apiMem = Math.floor(plan.memoryMb * 0.6);
-      const webMem = plan.memoryMb - apiMem;
+      // Repartition par service : source unique de verite partagee avec le
+      // provisioning (cf computeServiceLimits).
+      const svc = computeServiceLimits({ cpuLimit: plan.cpuLimit, memoryMb: plan.memoryMb });
+      const apiMem = svc.api.memoryMb;
+      const pgMem = svc.postgres.memoryMb;
+      const webMem = svc.web.memoryMb;
+      const wcMem = svc.webClient.memoryMb;
+      const minioMem = svc.minio.memoryMb;
+      const redisMem = svc.redis.memoryMb;
+      const apiCpu = svc.api.cpu;
+      const pgCpu = svc.postgres.cpu;
+      const webCpu = svc.web.cpu;
+      const wcCpu = svc.webClient.cpu;
+      const minioCpu = svc.minio.cpu;
+      const redisCpu = svc.redis.cpu;
 
-      await this.docker.remove(creds, apiName, true);
-      await this.docker.remove(creds, webName, true);
+      // awk : suit le service courant (cle YAML a 2 espaces) et reecrit ses
+      // lignes cpus:/mem_limit:. Ordre web-client teste avant web (web: ne
+      // matche pas web-client: car le ':' suit directement).
+      const awk =
+        `awk '` +
+        `/^  postgres:/{s="pg"} /^  redis:/{s="redis"} /^  minio:/{s="minio"} ` +
+        `/^  api:/{s="api"} /^  web-client:/{s="wc"} /^  web:/{s="web"} ` +
+        `/^    cpus:/{` +
+        `if(s=="pg")print "    cpus: ${pgCpu}";else if(s=="redis")print "    cpus: ${redisCpu}";` +
+        `else if(s=="minio")print "    cpus: ${minioCpu}";else if(s=="api")print "    cpus: ${apiCpu}";` +
+        `else if(s=="web")print "    cpus: ${webCpu}";else if(s=="wc")print "    cpus: ${wcCpu}";else print;next}` +
+        `/^    mem_limit:/{` +
+        `if(s=="pg")print "    mem_limit: ${pgMem}m";else if(s=="redis")print "    mem_limit: ${redisMem}m";` +
+        `else if(s=="minio")print "    mem_limit: ${minioMem}m";else if(s=="api")print "    mem_limit: ${apiMem}m";` +
+        `else if(s=="web")print "    mem_limit: ${webMem}m";else if(s=="wc")print "    mem_limit: ${wcMem}m";else print;next}` +
+        `{print}' ${composeFile} > ${composeFile}.tmp && mv ${composeFile}.tmp ${composeFile}`;
 
-      await this.docker.run(creds, {
-        name: apiName,
-        image: apiImage,
-        ports: { [tenant.apiPort]: 4000 },
-        envFile,
-        restart: 'unless-stopped',
-        network: netName,
-        cpuLimit: halfCpu,
-        memoryMb: apiMem,
-      });
-      await this.docker.run(creds, {
-        name: webName,
-        image: webImage,
-        ports: { [tenant.webPort]: 3000 },
-        env: {
-          TENANT_SLUG: tenant.slug,
-          NEXT_PUBLIC_API_URL: `https://api.${tenant.slug}.${process.env.OPS_BASE_DOMAIN ?? 'transitsoftservices.com'}/api/v1`,
-          INTERNAL_API_URL: `http://${apiName}:4000/api/v1`,
-        },
-        restart: 'unless-stopped',
-        network: netName,
-        cpuLimit: halfCpu,
-        memoryMb: webMem,
-      });
+      const patched = await this.ssh.exec(creds, awk);
+      if (patched.code !== 0) {
+        throw new BusinessError(`Patch des limites compose echoue : ${patched.stderr || patched.stdout}`);
+      }
+      await this.docker.composeUpExisting(creds, composeFile, projectName);
     }
 
     // 3. Marquer PlanChange comme applique
