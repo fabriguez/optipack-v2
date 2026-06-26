@@ -730,6 +730,104 @@ export class TenantWhatsAppSessionService extends EventEmitter {
     }
   }
 
+  /**
+   * Au demarrage de l'API : tente de restaurer les sessions WA precedemment
+   * connectees (LocalAuth re-hydrate sans QR). Si une session ne se reconnecte
+   * pas (ou etait deja deconnectee/bannie), on previent le proprietaire par
+   * email avec un lien pour reconfigurer. A appeler une fois au boot.
+   */
+  async restoreSessionsOnBoot(): Promise<void> {
+    let sessions: Array<{ organizationId: string; status: string }>;
+    try {
+      sessions = await prisma.tenantWhatsAppSession.findMany({
+        select: { organizationId: true, status: true },
+      });
+    } catch (err) {
+      logger.warn({ err }, 'WA boot restore: lecture des sessions echouee');
+      return;
+    }
+    for (const s of sessions) {
+      // En parallele, non bloquant pour le boot.
+      void this.restoreOne(s.organizationId, s.status).catch(() => {});
+    }
+  }
+
+  private async restoreOne(organizationId: string, prevStatus: string): Promise<void> {
+    if (prevStatus === 'CONNECTED') {
+      try {
+        await this.startSession(organizationId);
+        const ok = await this.waitReady(
+          organizationId,
+          Number(process.env.WA_BOOT_READY_TIMEOUT_MS ?? 90000),
+        );
+        if (ok) {
+          logger.info({ organizationId }, 'WA session restauree au boot');
+          return;
+        }
+      } catch (err) {
+        logger.warn({ err, organizationId }, 'WA boot restore: startSession a echoue');
+      }
+      // Pas de reconnexion -> session effectivement perdue.
+      await this.updateDbStatus(
+        organizationId,
+        'DISCONNECTED',
+        null,
+        null,
+        'Session WhatsApp perdue au redemarrage. Reconfiguration requise.',
+      ).catch(() => {});
+      await this.notifyReconfigure(organizationId).catch(() => {});
+    } else if (prevStatus !== 'BANNED') {
+      // Deja deconnectee avant le restart (hors ban, deja notifie) -> on previent.
+      await this.notifyReconfigure(organizationId).catch(() => {});
+    }
+  }
+
+  /** Resout a true sur 'ready', false sur 'disconnected' ou timeout. */
+  private waitReady(organizationId: string, ms: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = (v: boolean) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        this.off(`ready:${organizationId}`, onReady);
+        this.off(`disconnected:${organizationId}`, onDisc);
+        resolve(v);
+      };
+      const onReady = () => finish(true);
+      const onDisc = () => finish(false);
+      const timer = setTimeout(() => finish(false), ms);
+      this.once(`ready:${organizationId}`, onReady);
+      this.once(`disconnected:${organizationId}`, onDisc);
+    });
+  }
+
+  /** Email au proprietaire : WhatsApp deconnecte, lien pour reconfigurer. */
+  private async notifyReconfigure(organizationId: string): Promise<void> {
+    try {
+      const org = await prisma.organization.findUnique({
+        where: { id: organizationId },
+        select: { name: true, email: true, supportEmail: true },
+      });
+      const superAdminEmail = process.env.SUPER_ADMIN_EMAIL;
+      const tenantEmail = org?.supportEmail || org?.email;
+      const link = `${(process.env.WEB_URL ?? '').replace(/\/+$/, '')}/settings/whatsapp-personal`;
+      const subject = `[${org?.name ?? organizationId}] WhatsApp deconnecte — reconfiguration requise`;
+      const body =
+        `<p>La connexion WhatsApp de <strong>${org?.name ?? organizationId}</strong> n'est plus active ` +
+        `(perdue au redemarrage du service ou deconnectee).</p>` +
+        `<p>Les notifications WhatsApp ne partiront pas tant qu'elle n'est pas reconnectee. ` +
+        `Scannez le QR code depuis le dashboard :</p>` +
+        `<p><a href="${link}">${link}</a></p>`;
+      if (tenantEmail) await emailService.send(tenantEmail, subject, body, organizationId);
+      if (superAdminEmail && superAdminEmail !== tenantEmail) {
+        await emailService.send(superAdminEmail, subject, body, null);
+      }
+    } catch (err) {
+      logger.warn({ err, organizationId }, 'notifyReconfigure email failed');
+    }
+  }
+
   private async notifyBan(organizationId: string): Promise<void> {
     try {
       const org = await prisma.organization.findUnique({

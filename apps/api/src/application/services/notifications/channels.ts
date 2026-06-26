@@ -28,7 +28,7 @@ function buildNotifRow(args: {
   channel: NotificationChannel;
   title: string;
   message: string;
-  status: 'SENT' | 'FAILED';
+  status: 'SENT' | 'FAILED' | 'PENDING';
   recipient?: string | null;
   error?: string | null;
   provider?: string | null;
@@ -565,38 +565,52 @@ export async function deliverWhatsapp(
           const docs = attachments.filter((a) => a.type !== 'image');
           const mediaMode = await resolveWaMediaMode(organizationId);
 
-          let sentMain = false;
-          if (mediaMode === 'asset' && images.length > 0) {
-            sentMain = await tenantWaSessionService.sendMedia(organizationId, phone, images[0].url, {
-              caption: msgToSend,
-              filename: images[0].filename,
-            });
-            for (const img of images.slice(1)) {
-              await tenantWaSessionService.sendMedia(organizationId, phone, img.url, {
-                filename: img.filename,
-                caption: img.caption,
-              });
-            }
-          } else {
-            // Pas d'image a mettre en legende. En mode 'link' on ajoute les
-            // liens au texte ; en mode 'asset' les fichiers (docs) partent en
-            // media juste apres -> pas de lien dans le texte (sinon doublon).
-            const linkLines =
-              mediaMode === 'link' && attachments.length > 0
-                ? '\n\n' +
-                  attachments
-                    .map((a) => `${a.caption ? `${a.caption} : ` : ''}${a.url}`)
-                    .join('\n')
-                : '';
-            sentMain = await tenantWaSessionService.sendMessage(
+          // Cree la notif en PENDING AVANT l'envoi : elle apparait tout de suite
+          // dans le centre de notif (et reste PENDING tant que le rate limit fait
+          // patienter). On la passe ensuite a SENT ou FAILED.
+          const row = await prisma.notification.create({
+            data: buildNotifRow({
+              target: t,
               organizationId,
-              phone,
-              msgToSend + linkLines,
-            );
-          }
+              channel: 'WHATSAPP',
+              title: titleToSend,
+              message: msgToSend,
+              status: 'PENDING',
+              recipient: phone,
+              provider: 'whatsapp-web-js',
+              attachments: p.attachments,
+              metadata: p.metadata,
+            }),
+          });
 
-          if (sentMain) {
-            if (mediaMode === 'asset') {
+          let sentMain = false;
+          try {
+            if (mediaMode === 'asset' && images.length > 0) {
+              sentMain = await tenantWaSessionService.sendMedia(organizationId, phone, images[0].url, {
+                caption: msgToSend,
+                filename: images[0].filename,
+              });
+              for (const img of images.slice(1)) {
+                await tenantWaSessionService.sendMedia(organizationId, phone, img.url, {
+                  filename: img.filename,
+                  caption: img.caption,
+                });
+              }
+            } else {
+              const linkLines =
+                mediaMode === 'link' && attachments.length > 0
+                  ? '\n\n' +
+                    attachments
+                      .map((a) => `${a.caption ? `${a.caption} : ` : ''}${a.url}`)
+                      .join('\n')
+                  : '';
+              sentMain = await tenantWaSessionService.sendMessage(
+                organizationId,
+                phone,
+                msgToSend + linkLines,
+              );
+            }
+            if (sentMain && mediaMode === 'asset') {
               for (const doc of docs) {
                 await tenantWaSessionService.sendMedia(organizationId, phone, doc.url, {
                   filename: doc.filename,
@@ -605,27 +619,35 @@ export async function deliverWhatsapp(
                 });
               }
             }
-            const row = await prisma.notification.create({
-              data: buildNotifRow({
-                target: t,
-                organizationId,
-                channel: 'WHATSAPP',
-                title: titleToSend,
-                message: msgToSend,
-                status: 'SENT',
-                recipient: phone,
-                provider: 'whatsapp-web-js',
-                attachments: p.attachments,
-                metadata: p.metadata,
-              }),
+          } catch (err) {
+            sentMain = false;
+            logger.warn({ err, organizationId, phone }, 'WA personal send threw');
+          }
+
+          if (sentMain) {
+            await prisma.notification.update({
+              where: { id: row.id },
+              data: { status: 'SENT', sentAt: new Date() },
             });
             logChannelDelivery({ status: 'OK', channel: 'WHATSAPP', title: p.title, target: phone, organizationId, event: eventKind });
             return { channel: 'WHATSAPP', status: 'SENT', notificationId: row.id };
           }
+
+          // Echec (session figee / rate limit abandonne) : on MARQUE la notif
+          // FAILED (visible dans le centre) au lieu de la laisser PENDING ou de
+          // tomber en silence sur le provider chain.
+          const failMsg = 'Envoi WhatsApp echoue (session indisponible ou limite de debit depassee).';
+          await prisma.notification.update({
+            where: { id: row.id },
+            data: { status: 'FAILED', error: failMsg },
+          });
+          logChannelDelivery({ status: 'FAIL', channel: 'WHATSAPP', title: p.title, target: phone, organizationId, event: eventKind, error: failMsg });
+          return { channel: 'WHATSAPP', status: 'FAILED', notificationId: row.id, error: failMsg };
         }
       }
-    } catch {
-      // Fallback silencieux vers le provider chain
+    } catch (err) {
+      // Erreur inattendue cote session perso -> on retombe sur le provider chain.
+      logger.warn({ err, organizationId }, 'WA personal path error -> fallback chain');
     }
   }
 

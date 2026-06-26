@@ -17,12 +17,15 @@ services:
     entrypoint: ["/bin/sh", "/usr/local/bin/api-entrypoint.sh"]
     command: ["node", "dist/index.js"]
     restart: unless-stopped
+    # Total tenant principal vise : 4 Go RAM / 3 CPU. L'API porte le metier +
+    # Chromium/WhatsApp -> la plus grosse part (~45% RAM, 1.5 CPU).
     deploy:
       resources:
         limits:
-          memory: 512M
+          cpus: '1.5'
+          memory: 1844M
         reservations:
-          memory: 256M
+          memory: 768M
     depends_on:
       postgres:
         condition: service_healthy
@@ -48,7 +51,8 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          cpus: '0.3'
+          memory: 500M
         reservations:
           memory: 256M
     networks:
@@ -71,6 +75,7 @@ services:
     deploy:
       resources:
         limits:
+          cpus: '0.3'
           memory: 384M
         reservations:
           memory: 192M
@@ -98,9 +103,10 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          cpus: '0.5'
+          memory: 700M
         reservations:
-          memory: 256M
+          memory: 300M
     networks:
       - transitsoftservices
 
@@ -121,7 +127,8 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
+          cpus: '0.15'
+          memory: 368M
         reservations:
           memory: 128M
     networks:
@@ -143,9 +150,10 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          cpus: '0.25'
+          memory: 300M
         reservations:
-          memory: 256M
+          memory: 192M
     networks:
       - transitsoftservices
 
