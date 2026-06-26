@@ -148,17 +148,28 @@ export class TenantController {
   }
 
   /**
-   * Upload du logo d'un tenant (ops-admin Studio). Recoit une data URL image,
-   * la relaie a l'API du tenant qui l'ecrit dans son bucket public, et renvoie
-   * l'URL publique a stocker dans logoUrl.
+   * Upload du logo d'un tenant (ops-admin Studio). Recoit le fichier image BRUT
+   * (binaire, Content-Type image/*, parse par express.raw -> req.body Buffer),
+   * le relaie a l'API du tenant qui l'ecrit dans son bucket public, et renvoie
+   * l'URL publique a stocker dans logoUrl. Pas de base64.
    */
   static async uploadLogo(req: Request, res: Response, next: NextFunction) {
     try {
-      const { dataUrl } = (req.body ?? {}) as { dataUrl?: string };
-      if (!dataUrl || typeof dataUrl !== 'string' || !/^data:image\//i.test(dataUrl)) {
-        throw new BusinessError('dataUrl image requise');
+      const contentType = (req.headers['content-type'] || '').split(';')[0].trim();
+      const buffer = req.body as Buffer;
+      if (!/^image\//i.test(contentType)) {
+        throw new BusinessError('Content-Type image/* requis');
       }
-      const result = await container.resolve(TenantUseCases).uploadTenantLogo(req.params.id, dataUrl);
+      if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
+        throw new BusinessError('Fichier image vide ou manquant');
+      }
+      if (buffer.length > 5 * 1024 * 1024) {
+        throw new BusinessError('Logo trop volumineux (max 5 Mo)');
+      }
+      const result = await container.resolve(TenantUseCases).uploadTenantLogo(req.params.id, {
+        buffer,
+        contentType,
+      });
       await container.resolve(AuditLogger).log(req, {
         action: 'TENANT_UPDATED',
         entityType: 'Tenant',

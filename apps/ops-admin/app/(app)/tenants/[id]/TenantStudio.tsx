@@ -301,14 +301,15 @@ export function TenantStudio({ tenantId, initial, readOnly = false }: Props) {
           />
         </div>
 
-        <Field label="Logo (PNG, JPG, SVG - max 1 MB)">
+        <Field label="Logo (PNG, JPG, SVG - max 5 MB)">
           <LogoFileField
             value={form.logoUrl}
             onChange={(url) => update('logoUrl', url)}
-            onUpload={async (dataUrl) => {
+            onUpload={async (file) => {
               const res = await api.post<{ data: { url: string } }>(
                 `/tenants/${tenantId}/logo`,
-                { dataUrl },
+                file,
+                { headers: { 'Content-Type': file.type } },
               );
               return res.data.data.url;
             }}
@@ -717,13 +718,11 @@ function Field({
 }
 
 /**
- * Champ d'upload de logo. Le fichier est encode en data URL puis relaye a
- * l'orchestrator (`onUpload`), qui le pousse a l'API du tenant -> stocke dans
- * le bucket public MinIO. La valeur finale (`value`/`onChange`) est l'URL
+ * Champ d'upload de logo. Le fichier BRUT (binaire) est relaye a l'orchestrator
+ * (`onUpload`), qui le pousse a l'API du tenant -> stocke dans le bucket public
+ * MinIO. Aucun encodage base64. La valeur finale (`value`/`onChange`) est l'URL
  * publique directe, IDENTIQUE a celle produite par la page Personnalisation du
  * tenant -> logo unifie entre ops-admin et dashboard tenant.
- *
- * Limite stricte a 1 Mo (la data URL transite en JSON via l'orchestrator).
  */
 function LogoFileField({
   value,
@@ -732,8 +731,8 @@ function LogoFileField({
 }: {
   value: string | null;
   onChange: (url: string | null) => void;
-  /** Relaie la data URL et renvoie l'URL publique stockable. */
-  onUpload: (dataUrl: string) => Promise<string>;
+  /** Relaie le fichier brut et renvoie l'URL publique stockable. */
+  onUpload: (file: File) => Promise<string>;
 }) {
   const inputId = 'tenant-logo-upload';
   const [error, setError] = useState<string | null>(null);
@@ -745,19 +744,13 @@ function LogoFileField({
       setError('Format non supporte (image attendue).');
       return;
     }
-    if (file.size > 1024 * 1024) {
-      setError('Fichier trop volumineux (max 1 Mo).');
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Fichier trop volumineux (max 5 Mo).');
       return;
     }
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(file);
-    });
     setUploading(true);
     try {
-      const url = await onUpload(dataUrl);
+      const url = await onUpload(file);
       onChange(url);
     } catch (e: any) {
       setError(

@@ -39,19 +39,6 @@ function publicAssetUrl(req: Request, storage: StorageService, key: string): str
   return `${proto}://${host}${path}`;
 }
 
-/** Decode une data URL (`data:<mime>;base64,<payload>`) en buffer + mime. */
-function decodeDataUrl(dataUrl: string): { buffer: Buffer; contentType: string } | null {
-  const m = /^data:([^;,]+)?(;base64)?,(.*)$/is.exec(dataUrl);
-  if (!m) return null;
-  const contentType = m[1] || 'application/octet-stream';
-  const isBase64 = Boolean(m[2]);
-  const payload = m[3] ?? '';
-  const buffer = isBase64
-    ? Buffer.from(payload, 'base64')
-    : Buffer.from(decodeURIComponent(payload), 'utf-8');
-  return { buffer, contentType };
-}
-
 // PUBLIC : sert n'importe quel objet sous le prefixe public/ SANS auth (logos,
 // assets de marque). Le bucket autorise deja la lecture anonyme sur public/*
 // (cf minio.ts) ; cette route permet de servir l'asset meme sans sous-domaine
@@ -191,31 +178,24 @@ router.post('/public-image', authenticate, uploadImageMiddleware, async (req, re
   }
 });
 
-// OPS : upload du logo pousse par l'orchestrator (data URL JSON + service-token).
-// L'orchestrator relaie le fichier choisi dans l'ops-admin Studio jusqu'ici, car
-// l'orchestrator n'a pas d'object storage propre.
-router.post('/public-image/from-data', async (req, res, next) => {
+// OPS : upload du logo relaye par l'orchestrator (multipart `image` + service-token,
+// orgId en query). L'orchestrator relaie le fichier BINAIRE choisi dans l'ops-admin
+// Studio jusqu'ici (pas de base64), car l'orchestrator n'a pas d'object storage.
+router.post('/public-image/from-file', uploadImageMiddleware, async (req, res, next) => {
   try {
     if (!hasServiceToken(req)) {
       return res.status(401).json({ success: false, message: 'Service token invalide' });
     }
-    const { orgId, dataUrl } = (req.body ?? {}) as { orgId?: string; dataUrl?: string };
-    if (!orgId || !dataUrl) {
-      return res.status(400).json({ success: false, message: 'orgId et dataUrl requis' });
-    }
-    const decoded = decodeDataUrl(dataUrl);
-    if (!decoded || !/^image\//.test(decoded.contentType)) {
-      return res.status(400).json({ success: false, message: 'dataUrl image invalide' });
-    }
-    if (decoded.buffer.length > 2 * 1024 * 1024) {
-      return res.status(413).json({ success: false, message: 'Logo trop volumineux (max 2 Mo)' });
-    }
+    const file = (req as any).file as Express.Multer.File | undefined;
+    const orgId = (req.query.orgId as string | undefined) ?? (req.body?.orgId as string | undefined);
+    if (!orgId) return res.status(400).json({ success: false, message: 'orgId requis' });
+    if (!file) return res.status(400).json({ success: false, message: 'Aucun fichier fourni' });
     const storage = container.resolve(StorageService);
-    const ext = extFromMime(decoded.contentType);
+    const ext = extFromMime(file.mimetype);
     const key = `${StorageService.PUBLIC_PREFIX}logos/${orgId}-${Date.now()}.${ext}`;
-    await storage.uploadBuffer(key, decoded.buffer, decoded.contentType);
+    await storage.uploadBuffer(key, file.buffer, file.mimetype);
     const url = publicAssetUrl(req, storage, key);
-    res.json({ success: true, data: { url, key, contentType: decoded.contentType, size: decoded.buffer.length } });
+    res.json({ success: true, data: { url, key, contentType: file.mimetype, size: file.size } });
   } catch (err) {
     next(err);
   }

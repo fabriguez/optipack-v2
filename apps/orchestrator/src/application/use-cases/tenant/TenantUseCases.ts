@@ -384,12 +384,15 @@ export class TenantUseCases {
 
   /**
    * Upload du logo d'un tenant : l'orchestrator n'a pas d'object storage, il
-   * relaie donc la data URL choisie dans l'ops-admin Studio vers l'API du tenant
-   * (qui, elle, ecrit dans MinIO sous public/). Retourne l'URL publique a
-   * stocker dans logoUrl (identique a ce que produit la page Personnalisation
-   * cote tenant -> logo unifie entre les deux interfaces).
+   * relaie donc le fichier BINAIRE choisi dans l'ops-admin Studio vers l'API du
+   * tenant (multipart, pas de base64), qui ecrit dans MinIO sous public/.
+   * Retourne l'URL publique a stocker dans logoUrl (identique a ce que produit
+   * la page Personnalisation cote tenant -> logo unifie entre les 2 interfaces).
    */
-  async uploadTenantLogo(id: string, dataUrl: string): Promise<{ url: string }> {
+  async uploadTenantLogo(
+    id: string,
+    file: { buffer: Buffer; contentType: string },
+  ): Promise<{ url: string }> {
     const tenant = await prisma.tenant.findUnique({ where: { id } });
     if (!tenant) throw new NotFoundError('Tenant', id);
 
@@ -400,13 +403,20 @@ export class TenantUseCases {
       );
     }
 
-    const url = `https://${this.tenantApiHost(tenant)}/api/v1/uploads/public-image/from-data`;
+    const url =
+      `https://${this.tenantApiHost(tenant)}/api/v1/uploads/public-image/from-file` +
+      `?orgId=${encodeURIComponent(tenant.id)}`;
+    // FormData/Blob/fetch globaux (Node >= 18 via undici) -> envoi multipart natif.
+    // Le nom de fichier importe peu : l'API tenant derive l'extension du mimetype.
+    const form = new FormData();
+    form.append('image', new Blob([file.buffer], { type: file.contentType }), 'logo');
+
     let res: Awaited<ReturnType<typeof fetch>>;
     try {
       res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Service-Token': token },
-        body: JSON.stringify({ orgId: tenant.id, dataUrl }),
+        headers: { 'X-Service-Token': token },
+        body: form,
       });
     } catch (err) {
       throw new BusinessError(
