@@ -24,9 +24,21 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  // NE PAS forcer de fallback localhost ici : un seul build Next est partage
+  // entre tous les tenants et `env` est fige au build. Si on injectait
+  // 'http://localhost:4000', `process.env.NEXT_PUBLIC_SOCKET_URL` serait
+  // toujours defini cote client et masquerait la derivation runtime
+  // (getApiOrigin -> api.<tenant>) dans SocketProvider/baseUrl. On n'inline
+  // donc ces cles QUE si elles sont reellement fournies au build (override
+  // explicite) ; sinon elles restent undefined et la derivation host prend le
+  // relais.
   env: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1',
-    NEXT_PUBLIC_SOCKET_URL: process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:4000',
+    ...(process.env.NEXT_PUBLIC_API_URL
+      ? { NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL }
+      : {}),
+    ...(process.env.NEXT_PUBLIC_SOCKET_URL
+      ? { NEXT_PUBLIC_SOCKET_URL: process.env.NEXT_PUBLIC_SOCKET_URL }
+      : {}),
   },
   async headers() {
     return [

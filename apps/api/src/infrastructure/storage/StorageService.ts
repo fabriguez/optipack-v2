@@ -18,6 +18,28 @@ export interface UploadResult {
 @injectable()
 export class StorageService {
   /**
+   * Prefixe des objets a lecture publique anonyme. La policy bucket
+   * (cf config/minio.ts ensurePublicPrefixPolicy) autorise s3:GetObject
+   * anonyme uniquement sous ce prefixe.
+   */
+  static readonly PUBLIC_PREFIX = 'public/';
+
+  /**
+   * URL publique directe d'un objet sous le prefixe public/ (lecture anonyme,
+   * sans token ni proxy). Style chemin : `<publicBaseUrl>/<bucket>/<key>`
+   * (meme convention que les URLs presignees, cf NotificationHandler).
+   * Retourne null si MINIO_PUBLIC_BASE_URL n'est pas defini -> le caller
+   * retombe sur le proxy /api/v1/uploads/public-logo (qui stream les octets).
+   */
+  publicUrl(key: string): string | null {
+    const base = config.minio.publicBaseUrl;
+    if (!base) return null;
+    const origin = base.replace(/\/$/, '');
+    const safeKey = key.split('/').map(encodeURIComponent).join('/');
+    return `${origin}/${BUCKET}/${safeKey}`;
+  }
+
+  /**
    * Upload un buffer dans MinIO.
    * @param key chemin/cle dans le bucket (ex : "agencies/abc/photo.jpg")
    * @param buffer contenu binaire

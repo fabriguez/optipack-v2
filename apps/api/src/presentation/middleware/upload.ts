@@ -8,6 +8,7 @@ const ALLOWED_IMAGE_TYPES = new Set([
   'image/png',
   'image/webp',
   'image/gif',
+  'image/svg+xml',
 ]);
 
 const ALLOWED_DOCUMENT_TYPES = new Set<string>([
@@ -62,6 +63,8 @@ export function extFromMime(mime: string): string {
       return 'webp';
     case 'image/gif':
       return 'gif';
+    case 'image/svg+xml':
+      return 'svg';
     case 'application/pdf':
       return 'pdf';
     case 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':

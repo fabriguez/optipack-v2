@@ -6,6 +6,7 @@ import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard, AppCardHeader } from '@/components/ui/AppCard';
 import { AppInput } from '@/components/ui/AppInput';
 import { ImageUrlField } from '@/components/shared/ImageUrlField';
+import { uploadPublicImage } from '@/lib/api/uploads';
 import { AppButton } from '@/components/ui/AppButton';
 import { useTenantMeta } from '@/lib/providers/TenantProvider';
 import { organizationApi } from '@/lib/api/organization';
@@ -106,6 +107,7 @@ export default function BrandingSettingsPage() {
                   label="Logo de l'organisation"
                   value={logoUrl || null}
                   onChange={(url) => setLogoUrl(url ?? '')}
+                  uploadFn={uploadPublicImage}
                   height={140}
                   hint="Glissez le logo, choisissez un fichier ou utilisez la camera"
                 />

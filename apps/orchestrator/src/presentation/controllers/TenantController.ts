@@ -147,6 +147,30 @@ export class TenantController {
     }
   }
 
+  /**
+   * Upload du logo d'un tenant (ops-admin Studio). Recoit une data URL image,
+   * la relaie a l'API du tenant qui l'ecrit dans son bucket public, et renvoie
+   * l'URL publique a stocker dans logoUrl.
+   */
+  static async uploadLogo(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { dataUrl } = (req.body ?? {}) as { dataUrl?: string };
+      if (!dataUrl || typeof dataUrl !== 'string' || !/^data:image\//i.test(dataUrl)) {
+        throw new BusinessError('dataUrl image requise');
+      }
+      const result = await container.resolve(TenantUseCases).uploadTenantLogo(req.params.id, dataUrl);
+      await container.resolve(AuditLogger).log(req, {
+        action: 'TENANT_UPDATED',
+        entityType: 'Tenant',
+        entityId: req.params.id,
+        payload: { logoUploaded: true },
+      });
+      res.json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   static async freeze(req: Request, res: Response, next: NextFunction) {
     try {
       const tenant = await container.resolve(TenantUseCases).freeze(req.params.id);

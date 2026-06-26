@@ -24,6 +24,22 @@ export async function uploadImage(file: File): Promise<UploadResult> {
 }
 
 /**
+ * Upload d'une image PUBLIQUE (logo tenant) : stockee sous public/ (lecture
+ * anonyme), servie en direct sans token ni proxy. L'URL retournee est a stocker
+ * tel quel dans org.logoUrl -> affichee sur login/favicon/sidebar/site web.
+ */
+export async function uploadPublicImage(file: File): Promise<UploadResult> {
+  const formData = new FormData();
+  formData.append('image', file);
+  const res = await apiClient.post<{ success: boolean; data: UploadResult }>(
+    '/uploads/public-image',
+    formData,
+    { headers: { 'Content-Type': 'multipart/form-data' } },
+  );
+  return res.data.data;
+}
+
+/**
  * Upload generique d'un fichier (PDF, XLSX, Word, image, ...).
  * Utilise pour les pieces jointes de rapports journaliers, etc.
  */

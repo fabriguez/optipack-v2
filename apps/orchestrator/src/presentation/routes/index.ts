@@ -59,6 +59,8 @@ router.get('/tenants/:id', authenticateOps, enforceTenantParam(), TenantControll
 // Billing scope tenant : abonnement + paiements + plan (vue + paiement MoMo).
 router.get('/tenants/:id/billing', authenticateOps, enforceTenantParam(), BillingController.tenantBilling);
 router.patch('/tenants/:id', authenticateOps, requireGlobalOps, TenantController.update);
+// Upload du logo (data URL) -> relaye a l'API tenant (bucket public). Studio.
+router.post('/tenants/:id/logo', authenticateOps, requireGlobalOps, TenantController.uploadLogo);
 router.post('/tenants/:id/freeze', authenticateOps, requireGlobalOps, TenantController.freeze);
 router.post('/tenants/:id/unfreeze', authenticateOps, requireGlobalOps, TenantController.unfreeze);
 router.post('/tenants/:id/archive', authenticateOps, requireSuperAdmin, TenantController.archive);

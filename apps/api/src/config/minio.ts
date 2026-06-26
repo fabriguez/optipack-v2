@@ -10,6 +10,50 @@ export const minioClient = new Minio.Client({
   secretKey: config.minio.secretKey,
 });
 
+/** Prefixe des objets a lecture publique anonyme (cf StorageService.PUBLIC_PREFIX). */
+const PUBLIC_PREFIX = 'public/';
+
+/**
+ * Applique (idempotent) une bucket policy autorisant `s3:GetObject` anonyme
+ * sur `<bucket>/public/*` uniquement. On preserve toute policy existante non
+ * liee a notre statement (merge par Sid). Sans MINIO_PUBLIC_BASE_URL la policy
+ * reste utile (acces direct via l'endpoint), mais les URLs publiques ne seront
+ * generees que si publicBaseUrl est defini (cf StorageService.publicUrl).
+ */
+async function ensurePublicPrefixPolicy(bucketName: string): Promise<void> {
+  const SID = 'PublicReadPublicPrefix';
+  const statement = {
+    Sid: SID,
+    Effect: 'Allow',
+    Principal: { AWS: ['*'] },
+    Action: ['s3:GetObject'],
+    Resource: [`arn:aws:s3:::${bucketName}/${PUBLIC_PREFIX}*`],
+  };
+
+  let policy: { Version: string; Statement: any[] } = {
+    Version: '2012-10-17',
+    Statement: [],
+  };
+  try {
+    const existing = await minioClient.getBucketPolicy(bucketName);
+    if (existing) {
+      const parsed = JSON.parse(existing);
+      if (parsed?.Statement) {
+        policy = {
+          Version: parsed.Version || '2012-10-17',
+          Statement: parsed.Statement.filter((s: any) => s?.Sid !== SID),
+        };
+      }
+    }
+  } catch {
+    // Pas de policy existante (NoSuchBucketPolicy) -> on part d'une policy vide.
+  }
+
+  policy.Statement.push(statement);
+  await minioClient.setBucketPolicy(bucketName, JSON.stringify(policy));
+  logger.info({ bucket: bucketName, prefix: PUBLIC_PREFIX }, 'MinIO public/* read policy appliquee.');
+}
+
 /**
  * Verifie au demarrage :
  *  1. que le bucket existe (le cree sinon) ;
@@ -36,6 +80,16 @@ export async function ensureBucket(): Promise<void> {
       await minioClient.makeBucket(bucketName);
       logger.info({ ...cfg }, `MinIO bucket "${bucketName}" created`);
     }
+    // Lecture anonyme sur le prefixe public/ UNIQUEMENT (logos de tenant, etc.).
+    // Le reste du bucket (uploads/, tmp/...) reste prive. Permet de servir les
+    // assets publics en direct (s3.<domain>/<bucket>/public/...) sans proxy API
+    // ni token -> login page, favicon, site web, emails.
+    await ensurePublicPrefixPolicy(bucketName).catch((err: any) =>
+      logger.warn(
+        { err: { code: err?.code, message: err?.message }, bucket: bucketName },
+        'MinIO public/* policy non appliquee (les logos retomberont sur le proxy API).',
+      ),
+    );
   } catch (err: any) {
     logger.error(
       { err, ...cfg },

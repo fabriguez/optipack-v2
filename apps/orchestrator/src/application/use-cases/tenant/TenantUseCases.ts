@@ -374,6 +374,55 @@ export class TenantUseCases {
     }
   }
 
+  /** Host de l'API d'un tenant (meme regle que Caddy / syncTenantOrg). */
+  private tenantApiHost(t: { slug: string; customDomain: string | null; isMain?: boolean }): string {
+    const base = process.env.BASE_DOMAIN ?? 'transitsoftservices.com';
+    if (t.isMain) return `api.${base}`;
+    if (t.customDomain) return `api.${t.customDomain}`;
+    return `api.${t.slug}.${base}`;
+  }
+
+  /**
+   * Upload du logo d'un tenant : l'orchestrator n'a pas d'object storage, il
+   * relaie donc la data URL choisie dans l'ops-admin Studio vers l'API du tenant
+   * (qui, elle, ecrit dans MinIO sous public/). Retourne l'URL publique a
+   * stocker dans logoUrl (identique a ce que produit la page Personnalisation
+   * cote tenant -> logo unifie entre les deux interfaces).
+   */
+  async uploadTenantLogo(id: string, dataUrl: string): Promise<{ url: string }> {
+    const tenant = await prisma.tenant.findUnique({ where: { id } });
+    if (!tenant) throw new NotFoundError('Tenant', id);
+
+    const token = process.env.OPS_TENANT_PROXY_TOKEN ?? '';
+    if (!token) {
+      throw new BusinessError(
+        'OPS_TENANT_PROXY_TOKEN absent cote orchestrator -- upload logo impossible.',
+      );
+    }
+
+    const url = `https://${this.tenantApiHost(tenant)}/api/v1/uploads/public-image/from-data`;
+    let res: Awaited<ReturnType<typeof fetch>>;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Service-Token': token },
+        body: JSON.stringify({ orgId: tenant.id, dataUrl }),
+      });
+    } catch (err) {
+      throw new BusinessError(
+        `API du tenant injoignable (${(err as Error).message}). Le tenant doit etre provisionne et en ligne.`,
+      );
+    }
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new BusinessError(`Upload logo refuse par l'API tenant (HTTP ${res.status}) : ${body.slice(0, 200)}`);
+    }
+    const json = (await res.json().catch(() => null)) as { data?: { url?: string } } | null;
+    const resultUrl = json?.data?.url;
+    if (!resultUrl) throw new BusinessError("Reponse upload logo invalide (url absente).");
+    return { url: resultUrl };
+  }
+
   async freeze(id: string) {
     const tenant = await prisma.tenant.findUnique({ where: { id } });
     if (!tenant) throw new NotFoundError('Tenant', id);

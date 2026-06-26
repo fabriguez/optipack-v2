@@ -305,6 +305,13 @@ export function TenantStudio({ tenantId, initial, readOnly = false }: Props) {
           <LogoFileField
             value={form.logoUrl}
             onChange={(url) => update('logoUrl', url)}
+            onUpload={async (dataUrl) => {
+              const res = await api.post<{ data: { url: string } }>(
+                `/tenants/${tenantId}/logo`,
+                { dataUrl },
+              );
+              return res.data.data.url;
+            }}
           />
         </Field>
 
@@ -710,21 +717,27 @@ function Field({
 }
 
 /**
- * Champ d'upload de logo. Comme l'orchestrator n'a pas (encore) d'object
- * storage, on encode l'image en data URL base64 pour eviter d'ajouter
- * une infra. C'est viable pour un logo (typiquement <100 Ko).
+ * Champ d'upload de logo. Le fichier est encode en data URL puis relaye a
+ * l'orchestrator (`onUpload`), qui le pousse a l'API du tenant -> stocke dans
+ * le bucket public MinIO. La valeur finale (`value`/`onChange`) est l'URL
+ * publique directe, IDENTIQUE a celle produite par la page Personnalisation du
+ * tenant -> logo unifie entre ops-admin et dashboard tenant.
  *
- * Limite stricte a 1 Mo pour eviter de gonfler la BDD.
+ * Limite stricte a 1 Mo (la data URL transite en JSON via l'orchestrator).
  */
 function LogoFileField({
   value,
   onChange,
+  onUpload,
 }: {
   value: string | null;
   onChange: (url: string | null) => void;
+  /** Relaie la data URL et renvoie l'URL publique stockable. */
+  onUpload: (dataUrl: string) => Promise<string>;
 }) {
   const inputId = 'tenant-logo-upload';
   const [error, setError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   async function handleFile(file: File) {
     setError(null);
@@ -742,7 +755,18 @@ function LogoFileField({
       reader.onerror = () => reject(reader.error);
       reader.readAsDataURL(file);
     });
-    onChange(dataUrl);
+    setUploading(true);
+    try {
+      const url = await onUpload(dataUrl);
+      onChange(url);
+    } catch (e: any) {
+      setError(
+        e?.response?.data?.message ||
+          "Echec de l'upload (le tenant doit etre provisionne et en ligne).",
+      );
+    } finally {
+      setUploading(false);
+    }
   }
 
   return (
@@ -766,9 +790,19 @@ function LogoFileField({
         <div className="flex flex-col gap-1.5">
           <label
             htmlFor={inputId}
-            className="inline-flex cursor-pointer items-center gap-1 rounded-md border bg-white px-3 py-1.5 text-sm shadow-sm hover:bg-gray-50"
+            className={`inline-flex cursor-pointer items-center gap-1 rounded-md border bg-white px-3 py-1.5 text-sm shadow-sm hover:bg-gray-50 ${
+              uploading ? 'pointer-events-none opacity-60' : ''
+            }`}
           >
-            {value ? 'Remplacer' : 'Choisir un fichier'}
+            {uploading ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Envoi...
+              </>
+            ) : value ? (
+              'Remplacer'
+            ) : (
+              'Choisir un fichier'
+            )}
           </label>
           {value && (
             <button

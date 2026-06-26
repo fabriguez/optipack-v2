@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { ImageInput } from './ImageInput';
-import { uploadImage } from '@/lib/api/uploads';
+import { uploadImage, type UploadResult } from '@/lib/api/uploads';
 import { toast } from 'sonner';
 
 interface ImageUrlFieldProps {
@@ -17,6 +17,12 @@ interface ImageUrlFieldProps {
   cameraFacing?: 'user' | 'environment';
   className?: string;
   allowClear?: boolean;
+  /**
+   * Fonction d'upload a utiliser. Defaut : uploadImage (objet prive servi par
+   * /uploads/object). Passer uploadPublicImage pour un asset public (logo) qui
+   * doit s'afficher sans token (login, favicon, site web).
+   */
+  uploadFn?: (file: File) => Promise<UploadResult>;
 }
 
 /**
@@ -35,13 +41,14 @@ export function ImageUrlField({
   cameraFacing,
   className,
   allowClear = true,
+  uploadFn = uploadImage,
 }: ImageUrlFieldProps) {
   const [uploading, setUploading] = useState(false);
 
   const handleFile = async (file: File) => {
     setUploading(true);
     try {
-      const res = await uploadImage(file);
+      const res = await uploadFn(file);
       onChange(res.url);
     } catch (e: any) {
       toast.error(e?.response?.data?.message || "Echec de l'upload");
