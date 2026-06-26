@@ -5,6 +5,7 @@ import { paginationSchema, applyInvoiceDiscountSchema, type ApplyInvoiceDiscount
 import { prisma } from '../../../config/database';
 import { PDFService } from '../../../application/services/PDFService';
 import type { InvoiceData } from '../../../application/services/PDFService';
+import { loadPdfBranding } from '../../../application/services/PdfBrandingService';
 import { ExcelService } from '../../../infrastructure/excel/ExcelService';
 import { container } from '../../../container';
 import { StorageService } from '../../../infrastructure/storage/StorageService';
@@ -532,6 +533,7 @@ export async function buildPaymentReceiptPdfBuffer(
       ? { trackingNumber: payment.parcel.trackingNumber, designation: payment.parcel.designation }
       : null,
     receivedByName,
+    branding: await loadPdfBranding((payment as { organizationId?: string }).organizationId),
   });
 
   return { pdf, reference: payment.reference, clientId: payment.invoice.clientId };
@@ -661,6 +663,7 @@ async function __buildPdfFromInvoice(invoice: any): Promise<Buffer> {
           userName,
         };
       }),
+      branding: await loadPdfBranding((invoice as { organizationId?: string }).organizationId),
     };
 
     return PDFService.generateInvoicePDF(invoiceData);

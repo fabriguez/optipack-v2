@@ -30,8 +30,8 @@ export function NavMinimalCenter() {
           ))}
         </ul>
         <Link href="/" className="flex items-center gap-2 text-sm font-light tracking-[0.2em] skin-font-heading" style={{ color: 'var(--skin-foreground)' }}>
-          <BrandLogo className="h-7 w-auto max-w-[140px] object-contain" />
-          {orgName.toUpperCase()}
+          <BrandLogo className="h-9 w-auto max-w-[160px] object-contain" />
+          {!meta?.logoUrl?.trim() && orgName.toUpperCase()}
         </Link>
         <ul className="flex flex-1 justify-end gap-6">
           {RIGHT.map((l) => (

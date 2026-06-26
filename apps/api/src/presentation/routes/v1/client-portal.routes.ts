@@ -82,6 +82,7 @@ router.get('/parcels/:tracking/label', authenticateClient, async (req, res, next
     const { prisma: prismaModule } = await import('../../../config/database');
     const { QRCodeService } = await import('../../../application/services/QRCodeService');
     const { PDFService } = await import('../../../application/services/PDFService');
+    const { loadPdfBranding } = await import('../../../application/services/PdfBrandingService');
     const { clientId } = req.clientPortal!;
     const parcel = await prismaModule.parcel.findUnique({
       where: { trackingNumber: req.params.tracking },
@@ -127,6 +128,7 @@ router.get('/parcels/:tracking/label', authenticateClient, async (req, res, next
         groupReference: parcel.parcelGroup?.reference ?? null,
       },
       qr,
+      await loadPdfBranding((parcel as { organizationId?: string }).organizationId),
     );
     res.set({
       'Content-Type': 'application/pdf',

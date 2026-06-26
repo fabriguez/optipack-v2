@@ -291,31 +291,23 @@ function drawFooter(doc: PDFKit.PDFDocument, pageWidth: number, branding?: PDFBr
     .lineWidth(1)
     .stroke();
 
-  // Ligne 1 : tenant (si different de TransitSoftServices)
-  const tenantName = branding?.organizationName;
-  if (tenantName && tenantName.toLowerCase() !== 'transitsoftservices') {
-    const tenantBits = [tenantName];
-    if (branding?.organizationEmail) tenantBits.push(branding.organizationEmail);
-    if (branding?.organizationPhone) tenantBits.push(branding.organizationPhone);
+  // Pied de page white-label : on affiche le tenant (nom + contacts), JAMAIS
+  // la marque plateforme. Si le nom du tenant manque, on ne met rien plutot
+  // que de retomber sur "TransitSoftServices".
+  const tenantName = branding?.organizationName?.trim();
+  const tenantBits: string[] = [];
+  if (tenantName) tenantBits.push(tenantName);
+  if (branding?.organizationEmail) tenantBits.push(branding.organizationEmail);
+  if (branding?.organizationPhone) tenantBits.push(branding.organizationPhone);
+  if (tenantBits.length > 0) {
     doc
       .fontSize(8)
       .fillColor(COLORS.dark)
-      .text(tenantBits.join(' · '), 50, footerY + 6, {
+      .text(tenantBits.join(' · '), 50, footerY + 8, {
         align: 'center',
         width: pageWidth,
       });
   }
-
-  // Ligne 2 : signature TransitSoftServices (toujours)
-  doc
-    .fontSize(8)
-    .fillColor(COLORS.gray)
-    .text(
-      'Propulse par TransitSoftServices - Transit & Logistique',
-      50,
-      footerY + (tenantName && tenantName.toLowerCase() !== 'transitsoftservices' ? 20 : 8),
-      { align: 'center', width: pageWidth },
-    );
 }
 
 function drawDiscrepancyTable(
@@ -500,17 +492,25 @@ export class PDFService {
     const doc = new PDFDocument({ size: 'A4', margin: 50 });
     const pageWidth = doc.page.width - 100; // 50 margin each side
 
-    // --- Header ---
+    // --- Header brande (tenant) ---
+    const invPrimary = invoiceData.branding?.primaryColor || COLORS.primary;
     doc
       .rect(50, 40, pageWidth, 70)
-      .fill(COLORS.primary);
+      .fill(invPrimary);
 
+    let invNameX = 60;
+    if (invoiceData.branding?.logoBuffer) {
+      try {
+        doc.image(invoiceData.branding.logoBuffer, 60, 50, { fit: [50, 50] });
+        invNameX = 120;
+      } catch { /* logo invalide -> skip */ }
+    }
     doc
-      .fontSize(24)
+      .fontSize(20)
       .fillColor(COLORS.white)
-      .text('TRANSITSOFTSERVICES', 60, 52, { continued: true })
-      .fontSize(10)
-      .text('  Transit & Logistique', { baseline: 'alphabetic' });
+      .text((invoiceData.branding?.organizationName || 'OptiPack').toUpperCase(), invNameX, 58, {
+        width: 230,
+      });
 
     doc
       .fontSize(22)
@@ -887,7 +887,7 @@ export class PDFService {
     doc
       .fontSize(9)
       .fillColor(COLORS.gray)
-      .text('TransitSoftServices - Transit & Logistique', 50, footerY + 8, {
+      .text(invoiceData.branding?.organizationName || 'OptiPack', 50, footerY + 8, {
         align: 'center',
         width: pageWidth,
       });
@@ -1227,6 +1227,7 @@ export class PDFService {
       groupReference?: string | null;
     },
     qrBuffer: Buffer,
+    branding?: PDFBranding | null,
   ): Promise<Buffer> {
     const doc = new PDFDocument({ size: [283, 425], margin: 15 }); // ~100x150mm label
     const w = 283 - 30;
@@ -1284,11 +1285,22 @@ export class PDFService {
       topOffset += 18;
     }
 
-    // Header
-    doc.rect(15, topOffset, w, 28).fill(COLORS.primary);
+    // Header brande : barre couleur primaire du tenant + logo (si dispo) a
+    // gauche + nom du tenant centre. Fallback sur le nom generique.
+    const labelPrimary = branding?.primaryColor || COLORS.primary;
+    doc.rect(15, topOffset, w, 28).fill(labelPrimary);
+    let labelTextX = 18;
+    let labelTextW = w - 6;
+    if (branding?.logoBuffer) {
+      try {
+        doc.image(branding.logoBuffer, 19, topOffset + 4, { fit: [20, 20] });
+        labelTextX = 44;
+        labelTextW = w - 32;
+      } catch { /* logo invalide -> skip */ }
+    }
     doc.fontSize(12).fillColor(COLORS.white).text(
-      'TRANSITSOFTSERVICES',
-      18, topOffset + 7, { width: w - 6, align: 'center' },
+      (branding?.organizationName || 'OptiPack').toUpperCase(),
+      labelTextX, topOffset + 7, { width: labelTextW, align: 'center' },
     );
 
     // Badge "X/N" pour un colis appartenant a un groupe : carre blanc en haut
@@ -1398,7 +1410,7 @@ export class PDFService {
     // Footer line
     doc.moveTo(15, 395).lineTo(15 + w, 395).strokeColor(COLORS.primary).lineWidth(0.5).stroke();
     doc.fontSize(6).fillColor(COLORS.gray).text(
-      'TransitSoftServices - Transit & Logistique',
+      branding?.organizationName || 'OptiPack',
       15, 400, { width: w, align: 'center' },
     );
 

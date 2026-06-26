@@ -42,19 +42,22 @@ export function NavMagazineFloating() {
       >
         <Link href="/" className="flex items-center gap-2">
           {meta?.logoUrl?.trim() ? (
-            <BrandLogo className="h-7 w-auto max-w-[140px] object-contain" />
+            // Logo present : il porte la marque (pas de nom redondant a cote).
+            <BrandLogo className="h-9 w-auto max-w-[180px] object-contain" />
           ) : (
-            <span
-              className="h-7 w-7 rounded-full"
-              style={{
-                background: `linear-gradient(135deg, var(--skin-gradient-1), var(--skin-gradient-3))`,
-              }}
-              aria-hidden
-            />
+            <>
+              <span
+                className="h-7 w-7 rounded-full"
+                style={{
+                  background: `linear-gradient(135deg, var(--skin-gradient-1), var(--skin-gradient-3))`,
+                }}
+                aria-hidden
+              />
+              <span className="text-sm font-bold tracking-tight skin-font-heading" style={{ color: 'var(--skin-foreground)' }}>
+                {orgName}
+              </span>
+            </>
           )}
-          <span className="text-sm font-bold tracking-tight skin-font-heading" style={{ color: 'var(--skin-foreground)' }}>
-            {orgName}
-          </span>
         </Link>
         <ul className="hidden items-center gap-6 md:flex">
           {LINKS.map((l) => (

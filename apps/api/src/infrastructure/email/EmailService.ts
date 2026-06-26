@@ -442,12 +442,13 @@ class EmailService {
     organizationId?: string | null,
     phone?: string | null,
   ) {
+    const orgName = (await getBranding(organizationId))?.name?.trim() || 'votre espace';
     const idLines: string[] = [];
     if (email) idLines.push(`Email : <strong>${email}</strong>`);
     if (phone) idLines.push(`Telephone : <strong>${phone}</strong>`);
     idLines.push(`Mot de passe : <strong>${password}</strong>`);
     const content = [
-      heading('Votre compte portail TransitSoftServices'),
+      heading(`Votre compte portail ${orgName}`),
       paragraph(
         `Bonjour <strong>${employeeName}</strong>, votre compte personnel a ete cree. ` +
         'Vous pouvez desormais vous connecter au portail pour consulter votre profil, ' +
@@ -464,7 +465,7 @@ class EmailService {
       ),
       actionButton('Se connecter', `${config.webUrl}/login`),
     ].join('');
-    return this.send(to, 'Vos identifiants TransitSoftServices', content, organizationId, { event: 'EMPLOYEE_CREDENTIALS' });
+    return this.send(to, 'Vos identifiants', content, organizationId, { event: 'EMPLOYEE_CREDENTIALS' });
   }
 
   /**
@@ -508,8 +509,9 @@ class EmailService {
    * Envoie un lien de reinitialisation de mot de passe.
    */
   async sendWelcome(to: string, clientName: string, organizationId?: string | null) {
+    const orgName = (await getBranding(organizationId))?.name?.trim() || 'notre service';
     const content = [
-      heading('Bienvenue chez TransitSoftServices'),
+      heading(`Bienvenue chez ${orgName}`),
       paragraph(
         `Bonjour <strong>${clientName}</strong>, bienvenue dans notre service de transit. ` +
         'Votre compte a ete cree avec succes.',

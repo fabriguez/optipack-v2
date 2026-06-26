@@ -43,21 +43,24 @@ export function MarketingNav() {
       <nav className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link href="/" className="flex items-center gap-2">
           {meta?.logoUrl?.trim() ? (
-            <BrandLogo className="h-9 w-auto max-w-[150px] object-contain" />
+            // Logo present : il porte la marque a lui seul (pas de texte redondant).
+            <BrandLogo className="h-10 w-auto max-w-[180px] object-contain" />
           ) : (
-            <div
-              className="flex h-9 w-9 items-center justify-center skin-radius"
-              style={{ background: 'var(--skin-primary)' }}
-            >
-              <Package className="h-5 w-5 text-white" />
-            </div>
+            <>
+              <div
+                className="flex h-9 w-9 items-center justify-center skin-radius"
+                style={{ background: 'var(--skin-primary)' }}
+              >
+                <Package className="h-5 w-5 text-white" />
+              </div>
+              <span
+                className="text-lg font-bold tracking-tight skin-font-heading"
+                style={{ color: 'var(--skin-foreground)' }}
+              >
+                {orgName}
+              </span>
+            </>
           )}
-          <span
-            className="text-lg font-bold tracking-tight skin-font-heading"
-            style={{ color: 'var(--skin-foreground)' }}
-          >
-            {orgName}
-          </span>
         </Link>
 
         <ul className="hidden items-center gap-8 md:flex">

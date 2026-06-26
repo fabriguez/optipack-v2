@@ -6,6 +6,7 @@ import { createParcelSchema, createBatchParcelsSchema, paginationSchema } from '
 import { prisma } from '../../../config/database';
 import { QRCodeService } from '../../../application/services/QRCodeService';
 import { PDFService } from '../../../application/services/PDFService';
+import { loadPdfBranding } from '../../../application/services/PdfBrandingService';
 import { parcelScope, scopeCtx } from '../../../application/services/scope/agencyScope';
 
 const router = Router();
@@ -131,6 +132,7 @@ router.get('/:id/label', requirePermission('parcel.read'), async (req, res, next
         groupReference: parcel.parcelGroup?.reference ?? null,
       },
       qrBuffer,
+      await loadPdfBranding((parcel as { organizationId?: string }).organizationId),
     );
 
     res.set({

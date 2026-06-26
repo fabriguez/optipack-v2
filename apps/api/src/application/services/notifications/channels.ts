@@ -4,6 +4,7 @@ import { logChannelDelivery } from '../../../infrastructure/email/logging';
 import { realtimeService } from '../../../infrastructure/realtime/RealtimeService';
 import { createChildLogger } from '../../../config/logger';
 import { resolveTemplate } from './NotificationTemplateRenderer';
+import { notificationChannelConfigSchema, type WaMediaMode } from '@transitsoftservices/shared';
 import type {
   ChannelDeliveryResult,
   ExternalChannelProvider,
@@ -488,6 +489,30 @@ export const deliverPush = (t: NotificationTarget, p: NotificationPayload) =>
   deliverExternal('PUSH', pushProvider, t, p);
 
 /**
+ * Resout le mode d'envoi des pieces jointes WhatsApp pour un tenant.
+ * Priorite : config tenant (notificationConfig.waMediaMode) -> override env
+ * WA_MEDIA_MODE (compat : 'upload'/'base64' => asset) -> defaut 'asset' (media
+ * base64). 'asset' = vrai fichier envoye ; 'link' = lien dans le texte.
+ */
+async function resolveWaMediaMode(organizationId: string): Promise<WaMediaMode> {
+  try {
+    const org = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { notificationConfig: true },
+    });
+    const parsed = notificationChannelConfigSchema.safeParse(org?.notificationConfig ?? {});
+    const m = parsed.success ? parsed.data.waMediaMode : undefined;
+    if (m === 'asset' || m === 'link') return m;
+  } catch {
+    // ignore -> fallback env/defaut
+  }
+  const env = (process.env.WA_MEDIA_MODE ?? '').toLowerCase();
+  if (env === 'link') return 'link';
+  if (env === 'upload' || env === 'asset' || env === 'base64') return 'asset';
+  return 'asset';
+}
+
+/**
  * Livraison WhatsApp : essaie d'abord la session WhatsApp Web JS du tenant
  * (si CONNECTED), puis retombe sur le provider chain configuré (Twilio/Wapino/Meta).
  */
@@ -527,21 +552,21 @@ export async function deliverWhatsapp(
             : wrapMessage(tenantName, p.title, p.message, 'WHATSAPP').message;
           const titleToSend = customWa ? p.title : `[${tenantName}] ${p.title}`;
 
-          // Mode media WhatsApp Web JS :
-          //  - 'link' (defaut) : on N'UPLOADE PAS les fichiers. Envoyer un PDF/
-          //    image en base64 a travers la page puppeteer la fait FIGER
-          //    (Runtime.callFunctionOn timeout) -> tous les envois suivants,
-          //    meme texte, pendent. On ajoute les fichiers comme LIENS dans le
-          //    texte : fiable, et le client telecharge en 1 tap.
-          //  - 'upload' : ancien comportement (envoi des bytes). A reserver a une
-          //    session WA stable (WA_WEB_VERSION pinnee). Via WA_MEDIA_MODE=upload.
+          // Mode media WhatsApp Web JS (configurable par tenant, cf
+          // resolveWaMediaMode) :
+          //  - 'asset' (defaut) : on envoie les fichiers en MEDIA (telecharges
+          //    puis transmis en base64 via la session). Le destinataire recoit
+          //    le vrai fichier (image/PDF). Necessite une session WA stable
+          //    (Chromium + polices presentes, cf Dockerfile).
+          //  - 'link' : les fichiers sont ajoutes comme LIENS dans le texte.
+          //    Plus leger pour puppeteer si la session est instable.
           const attachments = p.attachments ?? [];
           const images = attachments.filter((a) => a.type === 'image');
           const docs = attachments.filter((a) => a.type !== 'image');
-          const mediaMode = (process.env.WA_MEDIA_MODE ?? 'link').toLowerCase();
+          const mediaMode = await resolveWaMediaMode(organizationId);
 
           let sentMain = false;
-          if (mediaMode === 'upload' && images.length > 0) {
+          if (mediaMode === 'asset' && images.length > 0) {
             sentMain = await tenantWaSessionService.sendMedia(organizationId, phone, images[0].url, {
               caption: msgToSend,
               filename: images[0].filename,
@@ -553,9 +578,11 @@ export async function deliverWhatsapp(
               });
             }
           } else {
-            // Mode lien (ou aucune image) : texte + liens des pieces jointes.
+            // Pas d'image a mettre en legende. En mode 'link' on ajoute les
+            // liens au texte ; en mode 'asset' les fichiers (docs) partent en
+            // media juste apres -> pas de lien dans le texte (sinon doublon).
             const linkLines =
-              attachments.length > 0
+              mediaMode === 'link' && attachments.length > 0
                 ? '\n\n' +
                   attachments
                     .map((a) => `${a.caption ? `${a.caption} : ` : ''}${a.url}`)
@@ -569,7 +596,7 @@ export async function deliverWhatsapp(
           }
 
           if (sentMain) {
-            if (mediaMode === 'upload') {
+            if (mediaMode === 'asset') {
               for (const doc of docs) {
                 await tenantWaSessionService.sendMedia(organizationId, phone, doc.url, {
                   filename: doc.filename,
