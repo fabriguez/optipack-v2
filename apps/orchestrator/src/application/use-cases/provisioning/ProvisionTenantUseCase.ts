@@ -237,11 +237,12 @@ export class ProvisionTenantUseCase {
       // (qui n'est resolvable que sur le meme host -> EAI_AGAIN sur un VPS
       // tenant distant).
       `ORCHESTRATOR_URL=${process.env.OPS_PUBLIC_API_URL || `https://ops.${BASE_DOMAIN}`}`,
-      // Version WhatsApp Web pinnee (catalogue wppconnect-team/wa-version). Sans
-      // pin, whatsapp-web.js charge la derniere version WA qui derive souvent ->
-      // page figee, QR jamais affiche. Surchargeable via l'env WA_WEB_VERSION
-      // de l'orchestrator.
-      `WA_WEB_VERSION=${process.env.WA_WEB_VERSION || '2.3000.1038370626-alpha'}`,
+      // Version WhatsApp Web a pinner. VIDE par defaut = on laisse
+      // whatsapp-web.js utiliser SA version testee (compatible avec la lib).
+      // Pinner une mauvaise version (ex alpha) provoque un LOGOUT juste apres le
+      // scan. Ne pinner (via l'env WA_WEB_VERSION de l'orchestrator) que si on
+      // sait que la version est compatible avec la lib whatsapp-web.js installee.
+      `WA_WEB_VERSION=${process.env.WA_WEB_VERSION ?? ''}`,
     ].join('\n');
 
     await log(`[provision] write env file ${envFile}`);

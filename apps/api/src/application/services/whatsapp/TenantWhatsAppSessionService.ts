@@ -131,6 +131,10 @@ export class TenantWhatsAppSessionService extends EventEmitter {
       }),
       puppeteer: {
         headless: true,
+        // WA_DEBUG=1 -> pipe la sortie stdio de Chromium (crash renderer, erreurs
+        // GPU/sandbox, logs internes) dans les logs du conteneur. Tres utile pour
+        // diagnostiquer un LOGOUT/crash post-scan.
+        dumpio: process.env.WA_DEBUG === '1',
         // protocolTimeout : delai max d'une commande CDP (Runtime.callFunctionOn).
         // Le defaut puppeteer (180s) etait depasse sous charge / page WA lente
         // sur container a faible RAM -> ProtocolError "callFunctionOn timed out".
@@ -222,6 +226,16 @@ export class TenantWhatsAppSessionService extends EventEmitter {
     // en pinnant WA_WEB_VERSION ou en ajoutant les polices Chromium).
     client.on('loading_screen', (percent: number, message: string) => {
       logger.info({ organizationId, percent, message }, 'WA loading screen');
+      this.hookPupPageConsole(organizationId, client);
+    });
+
+    // change_state : transitions d'etat WA (CONNECTED, OPENING, PAIRING,
+    // UNPAIRED, CONFLICT, DEPRECATED_VERSION, TIMEOUT...). C'est ICI qu'on voit
+    // POURQUOI ca se deconnecte apres le scan (ex: CONFLICT = autre session
+    // active ; DEPRECATED_VERSION = WA_WEB_VERSION incompatible -> LOGOUT).
+    client.on('change_state', (state: string) => {
+      logger.warn({ organizationId, state }, 'WA change_state');
+      this.hookPupPageConsole(organizationId, client);
     });
 
     // Watchdog : si NI 'qr' NI 'ready' n'arrivent dans le delai imparti, la page
@@ -302,6 +316,34 @@ export class TenantWhatsAppSessionService extends EventEmitter {
     this.limiters.delete(organizationId);
     await this.updateDbStatus(organizationId, 'DISCONNECTED', null, null, null);
     logger.info({ organizationId }, 'Session destroyed');
+  }
+
+  // Pages puppeteer deja instrumentees (evite d'attacher 2x les listeners).
+  private hookedPages = new WeakSet<object>();
+
+  /**
+   * Attache (une seule fois, si WA_DEBUG=1) les listeners console/erreur de la
+   * PAGE puppeteer WhatsApp Web -> on voit dans les logs du conteneur ce que la
+   * page logue/jette (utile pour comprendre un LOGOUT post-scan).
+   */
+  private hookPupPageConsole(organizationId: string, client: import('whatsapp-web.js').Client): void {
+    if (process.env.WA_DEBUG !== '1') return;
+    const page = (client as unknown as { pupPage?: any }).pupPage;
+    if (!page || this.hookedPages.has(page)) return;
+    this.hookedPages.add(page);
+    try {
+      page.on('console', (msg: { type?: () => string; text?: () => string }) => {
+        logger.info(
+          { organizationId, level: msg.type?.(), text: msg.text?.() },
+          'WA page console',
+        );
+      });
+      page.on('pageerror', (err: Error) => {
+        logger.warn({ organizationId, err: err?.message }, 'WA page error');
+      });
+    } catch {
+      /* best-effort */
+    }
   }
 
   /** Supprime tout le dossier d'auth d'un tenant (desappairage complet). */
