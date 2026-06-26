@@ -222,6 +222,13 @@ if (!process.env.OPS_DISABLE_TOKEN_SYNC) {
             // et INTERNAL_API_URL (requis pour que NextAuth appelle l API via
             // reseau Docker interne, sans hairpin NAT / TLS / Caddy).
             const internalApiUrl = `http://${apiName}:4000/api/v1`;
+            // URL publique de l'orchestrator pour les appels self-service du
+            // tenant (system.routes). Le nom docker "orchestrator" n'est pas
+            // resolvable sur un VPS tenant distant -> EAI_AGAIN. On force l'URL
+            // publique. Couvre les tenants provisiones avant ce fix.
+            const orchestratorUrl =
+              process.env.OPS_PUBLIC_API_URL ??
+              `https://ops.${process.env.OPS_BASE_DOMAIN ?? 'transitsoftservices.com'}`;
             const cmd = [
               `CHANGED=0`,
               `if ! grep -q "^OPS_TENANT_PROXY_TOKEN=" "${envFile}" 2>/dev/null; then`,
@@ -230,6 +237,17 @@ if (!process.env.OPS_DISABLE_TOKEN_SYNC) {
               `fi`,
               `if ! grep -q "^INTERNAL_API_URL=" "${envFile}" 2>/dev/null; then`,
               `  printf 'INTERNAL_API_URL=%s\\n' '${internalApiUrl}' >> "${envFile}"`,
+              `  CHANGED=1`,
+              `fi`,
+              // ORCHESTRATOR_URL : ajoute si absent, OU remplace une ancienne
+              // valeur docker-name (orchestrator:4020) par l'URL publique.
+              `if grep -q "^ORCHESTRATOR_URL=" "${envFile}" 2>/dev/null; then`,
+              `  if grep -q "^ORCHESTRATOR_URL=http://orchestrator" "${envFile}" 2>/dev/null; then`,
+              `    sed -i "s#^ORCHESTRATOR_URL=.*#ORCHESTRATOR_URL=${orchestratorUrl}#" "${envFile}"`,
+              `    CHANGED=1`,
+              `  fi`,
+              `else`,
+              `  printf 'ORCHESTRATOR_URL=%s\\n' '${orchestratorUrl}' >> "${envFile}"`,
               `  CHANGED=1`,
               `fi`,
               `if [ "$CHANGED" = "1" ]; then`,

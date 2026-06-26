@@ -230,6 +230,12 @@ export class ProvisionTenantUseCase {
       //   - POST  /api/v1/system/reset-owner-password (regeneration mot de passe)
       // Sans ce token, ces appels renvoient 503 "Service token non configure".
       `OPS_TENANT_PROXY_TOKEN=${process.env.OPS_TENANT_PROXY_TOKEN ?? ''}`,
+      // URL PUBLIQUE de l'orchestrator. Le tenant l'appelle pour les studios
+      // self-service (system.routes -> /ops/tenant-self/*). DOIT etre l'URL
+      // publique (https://ops.<domain>) et NON le nom docker "orchestrator"
+      // (qui n'est resolvable que sur le meme host -> EAI_AGAIN sur un VPS
+      // tenant distant).
+      `ORCHESTRATOR_URL=${process.env.OPS_PUBLIC_API_URL || `https://ops.${BASE_DOMAIN}`}`,
     ].join('\n');
 
     await log(`[provision] write env file ${envFile}`);

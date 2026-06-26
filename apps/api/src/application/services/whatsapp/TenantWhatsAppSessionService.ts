@@ -211,7 +211,56 @@ export class TenantWhatsAppSessionService extends EventEmitter {
       this.emit(`disconnected:${organizationId}`, msg);
     });
 
-    await client.initialize();
+    // Progression du chargement de WhatsApp Web (diagnostic : si ca reste
+    // bloque a un faible % -> bundle WA Web qui ne charge pas, souvent corrige
+    // en pinnant WA_WEB_VERSION ou en ajoutant les polices Chromium).
+    client.on('loading_screen', (percent: number, message: string) => {
+      logger.info({ organizationId, percent, message }, 'WA loading screen');
+    });
+
+    // Watchdog : si NI 'qr' NI 'ready' n'arrivent dans le delai imparti, la page
+    // WA Web est probablement figee (Chromium sans polices, version WA derivee,
+    // RAM insuffisante). On surface l'erreur au lieu de laisser le spinner
+    // tourner indefiniment cote UI.
+    const qrTimeoutMs = Number(process.env.WA_QR_TIMEOUT_MS ?? 90000);
+    const watchdog = setTimeout(() => {
+      void (async () => {
+        const st = await this.getStatus(organizationId).catch(() => null);
+        if (st && (st.status === 'CONNECTING')) {
+          logger.error({ organizationId }, 'WA QR watchdog: aucun QR/ready -> page figee');
+          await this.updateDbStatus(
+            organizationId,
+            'DISCONNECTED',
+            null,
+            null,
+            "WhatsApp Web n'a pas pu charger (timeout). Reessayez ; si le probleme persiste, definir WA_WEB_VERSION.",
+          ).catch(() => {});
+          try {
+            await this.clients.get(organizationId)?.destroy();
+          } catch { /* ignore */ }
+          this.clients.delete(organizationId);
+        }
+      })();
+    }, qrTimeoutMs);
+    // Annule le watchdog des qu'un QR ou un ready arrive.
+    this.once(`qr:${organizationId}`, () => clearTimeout(watchdog));
+    this.once(`ready:${organizationId}`, () => clearTimeout(watchdog));
+
+    // NON bloquant : un hang d'initialize ne doit pas figer l'appelant. Le QR
+    // arrive via l'event 'qr'. On capture toute erreur d'init pour la rendre
+    // visible (lastError) au lieu d'un spinner silencieux.
+    client.initialize().catch(async (err) => {
+      clearTimeout(watchdog);
+      this.clients.delete(organizationId);
+      await this.updateDbStatus(
+        organizationId,
+        'DISCONNECTED',
+        null,
+        null,
+        `Initialisation WhatsApp echouee: ${(err as Error)?.message ?? String(err)}`,
+      ).catch(() => {});
+      logger.error({ err, organizationId }, 'WA initialize failed');
+    });
   }
 
   /**
