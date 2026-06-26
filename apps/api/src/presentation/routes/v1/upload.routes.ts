@@ -18,15 +18,20 @@ function hasServiceToken(req: Request): boolean {
 
 /**
  * URL a stocker en org.logoUrl pour un objet public deja uploade.
- * - Si MINIO_PUBLIC_BASE_URL est defini -> URL directe s3 (sans proxy, sans token).
- * - Sinon -> URL absolue /uploads/object/<key> que le proxy public-logo sait
- *   resoudre (il stream aussi les cles `public/`).
+ * - Si MINIO_PUBLIC_BASE_URL est defini -> URL directe s3 (sans proxy, sans token,
+ *   necessite un sous-domaine s3 public avec cert valide).
+ * - Sinon -> URL absolue vers la route publique sans auth /api/v1/uploads/public/<rest>
+ *   (l'API stream l'octet, CORP cross-origin). Fallback robuste qui NE depend PAS
+ *   du sous-domaine s3. La cle est sous public/<rest> -> on n'expose que <rest>.
  */
 function publicAssetUrl(req: Request, storage: StorageService, key: string): string {
   const direct = storage.publicUrl(key);
   if (direct) return direct;
-  const safeKey = key.split('/').map(encodeURIComponent).join('/');
-  const path = `/api/v1/uploads/object/${safeKey}`;
+  const rest = key.startsWith(StorageService.PUBLIC_PREFIX)
+    ? key.slice(StorageService.PUBLIC_PREFIX.length)
+    : key;
+  const safeRest = rest.split('/').map(encodeURIComponent).join('/');
+  const path = `/api/v1/uploads/public/${safeRest}`;
   const apiBase = config.apiUrl && /^https?:\/\//i.test(config.apiUrl) ? config.apiUrl.replace(/\/$/, '') : '';
   if (apiBase) return `${apiBase}${path}`;
   const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'http';
@@ -46,6 +51,36 @@ function decodeDataUrl(dataUrl: string): { buffer: Buffer; contentType: string }
     : Buffer.from(decodeURIComponent(payload), 'utf-8');
   return { buffer, contentType };
 }
+
+// PUBLIC : sert n'importe quel objet sous le prefixe public/ SANS auth (logos,
+// assets de marque). Le bucket autorise deja la lecture anonyme sur public/*
+// (cf minio.ts) ; cette route permet de servir l'asset meme sans sous-domaine
+// s3 public / cert (fallback robuste). Le `*` capture la cle apres public/.
+// Borne stricte au prefixe public/ -> aucun acces aux objets prives uploads/.
+router.get('/public/*', async (req, res, next) => {
+  try {
+    const rest = (req.params as any)[0] ?? '';
+    let key: string;
+    try {
+      key = `${StorageService.PUBLIC_PREFIX}${decodeURIComponent(rest)}`;
+    } catch {
+      key = `${StorageService.PUBLIC_PREFIX}${rest}`;
+    }
+    if (!key.startsWith(StorageService.PUBLIC_PREFIX) || key.includes('..')) {
+      return res.status(404).end();
+    }
+    const storage = container.resolve(StorageService);
+    const obj = await storage.getObject(key);
+    if (!obj) return res.status(404).end();
+    res.setHeader('Content-Type', obj.contentType);
+    res.setHeader('Content-Length', String(obj.size));
+    res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    obj.stream.pipe(res);
+  } catch (err) {
+    next(err);
+  }
+});
 
 // PUBLIC : logo du tenant, sans auth. Affiche sur login page, emails, mobile,
 // tablette — tous contextes sans token. Seul le orgId (non secret) est expose.
