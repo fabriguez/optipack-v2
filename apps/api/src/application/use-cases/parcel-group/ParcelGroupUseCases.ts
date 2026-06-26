@@ -397,7 +397,7 @@ export class SendGroupInvoiceUseCase {
     }
     const invoice = group.invoice;
     const total = Number(invoice.totalAmount);
-    const url = `${config.webUrl}/invoices/${invoice.id}`;
+    const url = `${config.clientPortalUrl}/app/invoices/${invoice.id}`;
 
     await emailService.send(
       group.client.email,

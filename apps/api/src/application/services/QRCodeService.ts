@@ -34,11 +34,11 @@ export class QRCodeService {
     trackingNumber: string,
     _parcelId: string,
   ): Promise<Buffer> {
-    const url = `${getTrackingBaseUrl()}/tracking/${trackingNumber}`;
+    const url = `${getTrackingBaseUrl()}/track?q=${encodeURIComponent(trackingNumber)}`;
     return this.generateQRCode(url);
   }
 
   static buildTrackingUrl(trackingNumber: string): string {
-    return `${getTrackingBaseUrl()}/tracking/${trackingNumber}`;
+    return `${getTrackingBaseUrl()}/track?q=${encodeURIComponent(trackingNumber)}`;
   }
 }

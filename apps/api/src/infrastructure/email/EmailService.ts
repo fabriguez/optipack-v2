@@ -129,7 +129,7 @@ class EmailService {
       ),
       divider(),
       paragraph('Conservez votre numero de suivi pour suivre votre colis a tout moment.'),
-      actionButton('Suivre mon colis', `${config.webUrl}/tracking/${trackingNumber}`),
+      actionButton('Suivre mon colis', `${config.clientPortalUrl}/track?q=${encodeURIComponent(trackingNumber)}`),
     ].join('');
     return this.send(to, `Colis enregistre - ${trackingNumber}`, content, organizationId, {
       event: 'PARCEL_CREATED',
@@ -168,7 +168,7 @@ class EmailService {
       isDelivered
         ? paragraph('Votre colis a ete livre. Merci pour votre confiance.')
         : paragraph('Vous pouvez suivre votre colis en temps reel.'),
-      actionButton('Voir les details', `${config.webUrl}/tracking/${trackingNumber}`),
+      actionButton('Voir les details', `${config.clientPortalUrl}/track?q=${encodeURIComponent(trackingNumber)}`),
     ].join('');
 
     return this.send(to, `Colis ${label.toLowerCase()} - ${trackingNumber}`, content, organizationId, { event: `PARCEL_${newStatus}` });
@@ -193,7 +193,7 @@ class EmailService {
       ),
       divider(),
       paragraph('Le depart du conteneur sera notifie sous peu.'),
-      actionButton('Suivre mon colis', `${config.webUrl}/tracking/${trackingNumber}`),
+      actionButton('Suivre mon colis', `${config.clientPortalUrl}/track?q=${encodeURIComponent(trackingNumber)}`),
     ].join('');
     return this.send(to, `Colis charge - ${trackingNumber}`, content, organizationId, { event: 'PARCEL_LOADED' });
   }
@@ -229,7 +229,7 @@ class EmailService {
         : action === 'not_found'
         ? 'Notre equipe enquete et vous tiendra informe.'
         : 'Consultez votre espace pour voir les modifications.'),
-      actionButton('Voir mon colis', `${config.webUrl}/tracking/${trackingNumber}`),
+      actionButton('Voir mon colis', `${config.clientPortalUrl}/track?q=${encodeURIComponent(trackingNumber)}`),
     ].join('');
     return this.send(to, `${title} - ${trackingNumber}`, content, organizationId, { event: `PARCEL_${action.toUpperCase()}` });
   }
@@ -275,7 +275,7 @@ class EmailService {
       ),
       divider(),
       paragraph('Vous pouvez la consulter et la regler depuis votre espace client.'),
-      actionButton('Voir ma facture', `${config.webUrl}/invoices`),
+      actionButton('Voir ma facture', `${config.clientPortalUrl}/app/invoices`),
     ].join('');
     return this.send(to, `Facture ${reference}`, content, organizationId, { event: 'INVOICE_CREATED' });
   }
@@ -300,7 +300,7 @@ class EmailService {
       ),
       divider(),
       paragraph('Pensez a verifier les details de l\'ajustement.'),
-      actionButton('Consulter', `${config.webUrl}/invoices`),
+      actionButton('Consulter', `${config.clientPortalUrl}/app/invoices`),
     ].join('');
     return this.send(to, `Facture mise a jour ${reference}`, content, organizationId, { event: 'INVOICE_UPDATED' });
   }
@@ -375,7 +375,7 @@ class EmailService {
       ),
       divider(),
       paragraph('Veuillez recuperer votre colis au plus vite pour eviter des frais supplementaires.'),
-      actionButton("Contacter l'agence", `${config.webUrl}/agencies`),
+      actionButton("Contacter l'agence", `${config.clientPortalUrl}/agencies`),
     ].join('');
 
     return this.send(to, `Penalite de stockage - ${trackingNumber}`, content, organizationId, { event: 'PENALTY_APPLIED' });
@@ -401,7 +401,7 @@ class EmailService {
       ),
       divider(),
       paragraph('Cumulez des points a chaque envoi et utilisez-les pour vos prochains colis.'),
-      actionButton('Voir mon solde', `${config.webUrl}/loyalty`),
+      actionButton('Voir mon solde', `${config.clientPortalUrl}/app/loyalty`),
     ].join('');
     return this.send(to, `Points fidelite : ${positive ? '+' : ''}${delta}`, content, organizationId, { event: 'LOYALTY_UPDATED' });
   }
@@ -519,7 +519,7 @@ class EmailService {
       highlightBlock('Votre espace client', 'Actif'),
       divider(),
       paragraph('Vous pouvez desormais suivre vos colis, consulter vos factures et contacter notre support.'),
-      actionButton('Acceder a mon espace', config.webUrl),
+      actionButton('Acceder a mon espace', `${config.clientPortalUrl}/login`),
     ].join('');
 
     return this.send(to, 'Bienvenue', content, organizationId, { event: 'WELCOME' });

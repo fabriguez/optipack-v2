@@ -1310,7 +1310,7 @@ function registerHandlers() {
         points: String(points || 0),
         delta: String(delta || 0),
         reason: reason || '',
-        loyaltyUrl: `${config.webUrl}/loyalty`,
+        loyaltyUrl: `${config.clientPortalUrl}/app/loyalty`,
       };
 
       const email = await getClientEmail(clientId);
@@ -1326,7 +1326,7 @@ function registerHandlers() {
           `Points de fidelite mis a jour\n\n` +
           `Variation : ${positive ? '+' : ''}${delta || 0} pts\nNouveau solde : ${points || 0} pts\n` +
           (reason ? `Motif : ${reason}\n` : '') +
-          `\nCumulez des points a chaque envoi.\nVoir mon solde : ${config.webUrl}/loyalty`;
+          `\nCumulez des points a chaque envoi.\nVoir mon solde : ${config.clientPortalUrl}/app/loyalty`;
         await dispatchExternal(
           { clientId, agencyId: agencyId || event.agencyId, organizationId },
           { title, message: waMsg, metadata: { points, delta, reason }, kind: 'CLIENT_LOYALTY_UPDATED', templateVariables: loyaltyVars },
