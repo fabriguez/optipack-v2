@@ -115,6 +115,12 @@ export class TenantWhatsAppSessionService extends EventEmitter {
 
     await this.updateDbStatus(organizationId, 'CONNECTING', null, null, null);
 
+    // Nettoie un verrou Chromium residuel d'un crash/restart/destroy precedent.
+    // Sans ca, le launch echoue avec "browser already running" (verrou
+    // SingletonLock orphelin dans le userDataDir). Sur ce chemin on a deja
+    // verifie qu'aucun client n'est suivi pour ce tenant -> safe.
+    await this.clearBrowserLock(organizationId);
+
     // Import dynamique pour éviter crash si puppeteer non dispo en dev
     const { Client, LocalAuth } = await import('whatsapp-web.js');
 
@@ -268,18 +274,65 @@ export class TenantWhatsAppSessionService extends EventEmitter {
    */
   async destroySession(organizationId: string): Promise<void> {
     const client = this.clients.get(organizationId);
+    this.clients.delete(organizationId);
     if (client) {
+      // On NE fait PAS logout() d'abord : logout() evalue dans la page WA et
+      // peut hang (~180s, ProtocolError) si la page est figee, laissant un
+      // Chromium ZOMBIE qui garde le verrou du userDataDir -> "browser already
+      // running" au prochain start. destroy() tue le navigateur ; on borne le
+      // temps et on force le kill du process au pire.
       try {
-        await client.logout();
-        await client.destroy();
+        await this.withTimeout(() => client.destroy(), 20000, 'WA destroy');
       } catch (err) {
-        logger.warn({ err, organizationId }, 'Error during logout');
+        logger.warn({ err, organizationId }, 'WA destroy timeout -> kill force du navigateur');
+        try {
+          (client as unknown as {
+            pupBrowser?: { process?: () => { kill: (sig: string) => void } | null };
+          }).pupBrowser?.process?.()?.kill('SIGKILL');
+        } catch {
+          /* ignore */
+        }
       }
-      this.clients.delete(organizationId);
     }
+    // Disconnect = DESAPPAIRAGE complet : on supprime le dossier d'auth du
+    // tenant. Sinon LocalAuth restaure une session potentiellement corrompue/
+    // figee au prochain start (-> blocage apres scan). Apres ca, la prochaine
+    // connexion repart sur un QR neuf et propre.
+    await this.removeSessionDir(organizationId);
     this.limiters.delete(organizationId);
     await this.updateDbStatus(organizationId, 'DISCONNECTED', null, null, null);
     logger.info({ organizationId }, 'Session destroyed');
+  }
+
+  /** Supprime tout le dossier d'auth d'un tenant (desappairage complet). */
+  private async removeSessionDir(organizationId: string): Promise<void> {
+    try {
+      const fs = await import('node:fs/promises');
+      const dir = path.join(this.authDir, `session-${organizationId}`);
+      await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+    } catch {
+      /* best-effort */
+    }
+  }
+
+  /**
+   * Supprime les verrous singleton Chromium du userDataDir d'un tenant. A
+   * appeler avant un (re)launch ou apres un kill force, sinon puppeteer refuse
+   * de demarrer avec "The browser is already running ... Use a different
+   * userDataDir or stop the running browser first.".
+   */
+  private async clearBrowserLock(organizationId: string): Promise<void> {
+    try {
+      const fs = await import('node:fs/promises');
+      const dir = path.join(this.authDir, `session-${organizationId}`);
+      await Promise.all(
+        ['SingletonLock', 'SingletonCookie', 'SingletonSocket'].map((f) =>
+          fs.rm(path.join(dir, f), { force: true }).catch(() => {}),
+        ),
+      );
+    } catch {
+      /* best-effort */
+    }
   }
 
   /**
@@ -523,11 +576,19 @@ export class TenantWhatsAppSessionService extends EventEmitter {
       logger.warn({ organizationId }, 'WA session figee -> recyclage (destroy + re-init sans QR)');
       if (client) {
         try {
-          await client.destroy();
+          await this.withTimeout(() => client.destroy(), 20000, 'WA recycle destroy');
         } catch (err) {
-          logger.warn({ err, organizationId }, 'WA recycle: destroy a echoue (ignore)');
+          logger.warn({ err, organizationId }, 'WA recycle: destroy timeout/echec -> kill force');
+          try {
+            (client as unknown as {
+              pupBrowser?: { process?: () => { kill: (sig: string) => void } | null };
+            }).pupBrowser?.process?.()?.kill('SIGKILL');
+          } catch {
+            /* ignore */
+          }
         }
       }
+      // startSession nettoie le verrou residuel avant de relancer.
       await this.startSession(organizationId);
       logger.info({ organizationId }, 'WA session recyclee');
     } catch (err) {
