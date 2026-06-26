@@ -14,6 +14,39 @@ import {
 import { tenantEmailDispatcher } from '../../../infrastructure/email/TenantEmailDispatcher';
 import { realtimeService } from '../../../infrastructure/realtime/RealtimeService';
 import { emailService } from '../../../infrastructure/email/EmailService';
+import { logger } from '../../../config/logger';
+
+// Orchestrator (detenteur du Tenant cote ops-admin). Meme convention que
+// system.routes : push-back tenant -> ops via service token partage.
+const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL ?? 'http://orchestrator:4020';
+const SERVICE_TOKEN = process.env.OPS_TENANT_PROXY_TOKEN ?? '';
+
+/**
+ * Pousse (fire-and-forget) le branding edite cote tenant vers l'orchestrator
+ * pour que l'ops-admin Studio reflete le changement (le Tenant ops et
+ * l'Organization tenant peuvent sinon diverger). Non bloquant : si
+ * l'orchestrator est injoignable, la sauvegarde tenant reste valide.
+ */
+function pushBrandingToOps(
+  orgId: string,
+  fields: { name?: string; logoUrl?: string | null; primaryColor?: string; secondaryColor?: string; accentColor?: string },
+): void {
+  if (!SERVICE_TOKEN) return;
+  const payload: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(fields)) {
+    if (v !== undefined) payload[k] = v;
+  }
+  if (Object.keys(payload).length === 0) return;
+  void fetch(`${ORCHESTRATOR_URL}/ops/tenant-self/studio?tenantId=${encodeURIComponent(orgId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'X-Service-Token': SERVICE_TOKEN },
+    body: JSON.stringify(payload),
+  })
+    .then((r) => {
+      if (!r.ok) logger.warn({ orgId, status: r.status }, '[branding] push-back ops echec');
+    })
+    .catch((err) => logger.warn({ orgId, err: (err as Error).message }, '[branding] orchestrator injoignable'));
+}
 
 /** Strip secrets before returning email config to clients. */
 function publicEmailConfig(cfg: EmailConfig | null | undefined): EmailConfigPublic | null {
@@ -331,6 +364,14 @@ router.patch(
       });
 
       emailService.invalidateBranding(updated.id);
+      // Reflet cote ops-admin : pousse le branding modifie vers l'orchestrator.
+      pushBrandingToOps(updated.id, {
+        name: updated.name,
+        logoUrl: updated.logoUrl,
+        primaryColor: updated.primaryColor,
+        secondaryColor: updated.secondaryColor,
+        accentColor: updated.accentColor,
+      });
       try {
         realtimeService.toOrganization(updated.id, 'tenant:meta:updated', {
           organizationId: updated.id,
