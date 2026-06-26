@@ -4,7 +4,11 @@ import { prisma } from '../../../config/database';
 import { BusinessError, NotFoundError } from '../../../domain/errors/BusinessError';
 
 const router = Router();
-router.use(authenticate);
+// IMPORTANT : ne PAS faire `router.use(authenticate)` ici. Ce router est monte
+// SANS prefixe de path (router.use(attachmentRoutes)) dans v1/index.ts, donc un
+// middleware global s'appliquerait a TOUTES les requetes qui le traversent (y
+// compris les routes publiques montees apres, ex: /uploads/public-logo) -> 401
+// fantome. On applique donc `authenticate` route par route ci-dessous.
 
 /**
  * Routes generiques pour 3 types d'attachements : Expense, Disbursement, Debt.
@@ -98,24 +102,24 @@ function buildHandlers(type: AttachmentType) {
 
 // Lecture : authenticate seul pour l'instant (scoping objet a venir).
 const expenseHandlers = buildHandlers('expense');
-router.get('/expenses/:id/attachments', expenseHandlers.list);
-router.post('/expenses/:id/attachments', requirePermission('expense.create'), expenseHandlers.add);
-router.delete('/expenses/:id/attachments/:attId', requirePermission('expense.create'), expenseHandlers.remove);
+router.get('/expenses/:id/attachments', authenticate, expenseHandlers.list);
+router.post('/expenses/:id/attachments', authenticate, requirePermission('expense.create'), expenseHandlers.add);
+router.delete('/expenses/:id/attachments/:attId', authenticate, requirePermission('expense.create'), expenseHandlers.remove);
 
 const disbursementHandlers = buildHandlers('disbursement');
-router.get('/disbursements/:id/attachments', disbursementHandlers.list);
-router.post('/disbursements/:id/attachments', requirePermission('disbursement.create'), disbursementHandlers.add);
-router.delete('/disbursements/:id/attachments/:attId', requirePermission('disbursement.create'), disbursementHandlers.remove);
+router.get('/disbursements/:id/attachments', authenticate, disbursementHandlers.list);
+router.post('/disbursements/:id/attachments', authenticate, requirePermission('disbursement.create'), disbursementHandlers.add);
+router.delete('/disbursements/:id/attachments/:attId', authenticate, requirePermission('disbursement.create'), disbursementHandlers.remove);
 
 const debtHandlers = buildHandlers('debt');
-router.get('/debts/:id/attachments', debtHandlers.list);
-router.post('/debts/:id/attachments', requirePermission('debt.update'), debtHandlers.add);
-router.delete('/debts/:id/attachments/:attId', requirePermission('debt.update'), debtHandlers.remove);
+router.get('/debts/:id/attachments', authenticate, debtHandlers.list);
+router.post('/debts/:id/attachments', authenticate, requirePermission('debt.update'), debtHandlers.add);
+router.delete('/debts/:id/attachments/:attId', authenticate, requirePermission('debt.update'), debtHandlers.remove);
 
 // Transferts de fonds : justificatifs portes par la permission d'initiation.
 const fundTransferHandlers = buildHandlers('fund-transfer');
-router.get('/fund-transfers/:id/attachments', fundTransferHandlers.list);
-router.post('/fund-transfers/:id/attachments', requirePermission('transfer.initiate'), fundTransferHandlers.add);
-router.delete('/fund-transfers/:id/attachments/:attId', requirePermission('transfer.initiate'), fundTransferHandlers.remove);
+router.get('/fund-transfers/:id/attachments', authenticate, fundTransferHandlers.list);
+router.post('/fund-transfers/:id/attachments', authenticate, requirePermission('transfer.initiate'), fundTransferHandlers.add);
+router.delete('/fund-transfers/:id/attachments/:attId', authenticate, requirePermission('transfer.initiate'), fundTransferHandlers.remove);
 
 export default router;
