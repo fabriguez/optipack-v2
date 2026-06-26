@@ -392,7 +392,7 @@ function registerHandlers() {
 
     const organizationId = await resolveEventOrg(event, payload);
     const clientName = await getClientName(clientId);
-    const trackingUrl = `${config.webUrl}/tracking/${trackingNumber || ''}`;
+    const trackingUrl = `${config.clientPortalUrl}/track?q=${encodeURIComponent(trackingNumber || '')}`;
     const priceStr = price ? Number(price).toLocaleString('fr-FR') + ' XAF' : '';
 
     await createNotification({
@@ -528,7 +528,7 @@ function registerHandlers() {
       metadata: { trackingNumber, newStatus, kind: meta.kind } as Prisma.InputJsonValue,
     });
 
-    const trackUrl = `${config.webUrl}/tracking/${trackingNumber || ''}`;
+    const trackUrl = `${config.clientPortalUrl}/track?q=${encodeURIComponent(trackingNumber || '')}`;
     const templateVars = {
       trackingNumber: trackingNumber || '',
       designation: designation || '',
@@ -597,7 +597,7 @@ function registerHandlers() {
       trackingNumber: trackingNumber || '',
       designation: designation || '',
       agencyName: agencyName || '',
-      trackingUrl: `${config.webUrl}/tracking/${trackingNumber || ''}`,
+      trackingUrl: `${config.clientPortalUrl}/track?q=${encodeURIComponent(trackingNumber || '')}`,
     };
 
     await createNotification({
@@ -648,7 +648,7 @@ function registerHandlers() {
       agencyName: agencyName || '',
       paymentMethod: methodLabels[paymentMethod] || paymentMethod || '',
       remainingBalance: String(remainingBalance || '0'),
-      invoiceUrl: `${config.webUrl}/invoices`,
+      invoiceUrl: `${config.clientPortalUrl}/app/invoices`,
     };
 
     await createNotification({
@@ -896,7 +896,7 @@ function registerHandlers() {
       estimatedArrivalDate: estimatedArrivalDate
         ? new Date(estimatedArrivalDate).toLocaleDateString('fr-FR')
         : '',
-      trackingUrl: `${config.webUrl}/tracking/${trackingNumber || ''}`,
+      trackingUrl: `${config.clientPortalUrl}/track?q=${encodeURIComponent(trackingNumber || '')}`,
     };
 
     const email = await getClientEmail(clientId);
@@ -951,7 +951,7 @@ function registerHandlers() {
       trackingNumber: trackingNumber || '',
       designation: designation || '',
       containerName: containerName || '',
-      trackingUrl: `${config.webUrl}/tracking/${trackingNumber || ''}`,
+      trackingUrl: `${config.clientPortalUrl}/track?q=${encodeURIComponent(trackingNumber || '')}`,
     };
 
     const email = await getClientEmail(clientId);
@@ -969,7 +969,7 @@ function registerHandlers() {
           `Colis charge\n\n` +
           `Designation : ${designation || '-'}\nN° suivi : ${trackingNumber || '-'}\n` +
           `Conteneur : ${containerName || '-'}\n\n` +
-          `Le depart du conteneur sera notifie sous peu.\n\nSuivre : ${config.webUrl}/tracking/${trackingNumber || ''}`,
+          `Le depart du conteneur sera notifie sous peu.\n\nSuivre : ${config.clientPortalUrl}/track?q=${encodeURIComponent(trackingNumber || '')}`,
         kind: 'PARCEL_LOADED',
         templateVariables: templateVars,
       },
@@ -1009,7 +1009,7 @@ function registerHandlers() {
       designation: designation || '',
       action: action || '',
       agencyName: agencyName || '',
-      trackingUrl: `${config.webUrl}/tracking/${trackingNumber || ''}`,
+      trackingUrl: `${config.clientPortalUrl}/track?q=${encodeURIComponent(trackingNumber || '')}`,
     };
 
     const email = await getClientEmail(clientId);
@@ -1035,7 +1035,7 @@ function registerHandlers() {
       const waMsg =
         `${title}\n\n` +
         `Designation : ${designation || '-'}\nN° suivi : ${trackingNumber || '-'}\nAgence : ${agencyName || '-'}\n\n` +
-        `${statusDetail}\n\nSuivre : ${config.webUrl}/tracking/${trackingNumber || ''}`;
+        `${statusDetail}\n\nSuivre : ${config.clientPortalUrl}/track?q=${encodeURIComponent(trackingNumber || '')}`;
       await dispatchExternal(
         { clientId, agencyId: agencyId || event.agencyId, organizationId },
         { title, message: waMsg, kind: 'PARCEL_UNLOADED', templateVariables: templateVars },
@@ -1169,7 +1169,7 @@ function registerHandlers() {
           reference: reference || '',
           totalAmount: Number(totalAmount || 0).toLocaleString(),
           currency: currency || 'XAF',
-          invoiceUrl: `${config.webUrl}/invoices`,
+          invoiceUrl: `${config.clientPortalUrl}/app/invoices`,
         };
 
         const email = await getClientEmail(clientId);
@@ -1186,7 +1186,7 @@ function registerHandlers() {
             message:
               `Nouvelle facture\n\n` +
               `Reference : ${reference || '-'}\nMontant : ${Number(totalAmount || 0).toLocaleString()} ${currency || 'XAF'}\n\n` +
-              `Consultez et reglez votre facture depuis votre espace : ${config.webUrl}/invoices`,
+              `Consultez et reglez votre facture depuis votre espace : ${config.clientPortalUrl}/app/invoices`,
             metadata: { invoiceId, reference, totalAmount },
             kind: 'INVOICE_CREATED',
             templateVariables: invTemplateVars,
@@ -1229,7 +1229,7 @@ function registerHandlers() {
       reference: reference || '',
       totalAmount: Number(totalAmount || 0).toLocaleString(),
       currency: currency || 'XAF',
-      invoiceUrl: `${config.webUrl}/invoices`,
+      invoiceUrl: `${config.clientPortalUrl}/app/invoices`,
     };
 
     const email = await getClientEmail(clientId);
@@ -1277,7 +1277,7 @@ function registerHandlers() {
         message:
           `Facture entierement reglee\n\n` +
           `Reference : ${reference || '-'}\nMontant total : ${Number(totalAmount || 0).toLocaleString()} ${currency || 'XAF'}\n\n` +
-          `Merci pour votre paiement. Consultez votre espace : ${config.webUrl}/invoices`,
+          `Merci pour votre paiement. Consultez votre espace : ${config.clientPortalUrl}/app/invoices`,
         metadata: { reference, totalAmount },
         kind: 'INVOICE_PAID',
         attachments: invoicePaidAttachments.length > 0 ? invoicePaidAttachments : undefined,

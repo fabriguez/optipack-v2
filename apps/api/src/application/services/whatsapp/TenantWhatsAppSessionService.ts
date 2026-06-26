@@ -402,21 +402,20 @@ export class TenantWhatsAppSessionService extends EventEmitter {
       session.minDelaySeconds * 1000,
     );
 
-    const check = limiter.canSend();
-    if (!check.ok) {
-      logger.warn({ organizationId, waitMs: check.waitMs }, 'WA rate limit hit');
-      return false;
-    }
-
     try {
       const chatId = phone.replace(/[^0-9]/g, '') + '@c.us';
-      await this.enqueueSend(organizationId, async () => {
+      // Rate limit gere DANS la file serialisee : on ATTEND le slot (borne) au
+      // lieu de dropper le message. consume() apres l'envoi -> lastSentAt a jour.
+      const sent = await this.enqueueSend(organizationId, async () => {
+        if (!(await this.waitForSlot(limiter, organizationId, 'text'))) return false;
         if (!(await this.isPageResponsive(client))) {
           throw new Error('WA page non reactive (getState timeout)');
         }
         await this.withSendTimeout(() => client.sendMessage(chatId, message));
+        limiter.consume();
+        return true;
       });
-      limiter.consume();
+      if (!sent) return false;
       this.sendFailures.delete(organizationId);
       return true;
     } catch (err) {
@@ -448,6 +447,40 @@ export class TenantWhatsAppSessionService extends EventEmitter {
 
   private withSendTimeout<T>(fn: () => Promise<T>): Promise<T> {
     return this.withTimeout(fn, Number(process.env.WA_SEND_TIMEOUT_MS ?? 60000), 'WA send');
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((r) => setTimeout(r, ms));
+  }
+
+  /**
+   * Attend qu'un slot d'envoi se libere (min-delay entre messages / quota
+   * horaire) au lieu de DROPPER l'envoi. Borne par WA_RATE_WAIT_MAX_MS (defaut
+   * 30s) : si l'attente requise depasse ce plafond (ex quota horaire epuise),
+   * on abandonne. A appeler DANS la file serialisee (enqueueSend) pour que
+   * lastSentAt soit a jour entre deux envois du meme tenant.
+   */
+  private async waitForSlot(
+    limiter: RateLimiter,
+    organizationId: string,
+    kind: string,
+  ): Promise<boolean> {
+    const maxWaitMs = Number(process.env.WA_RATE_WAIT_MAX_MS ?? 30000);
+    let waited = 0;
+    for (;;) {
+      const c = limiter.canSend();
+      if (c.ok) return true;
+      const w = c.waitMs ?? 1000;
+      if (waited + w > maxWaitMs) {
+        logger.warn(
+          { organizationId, kind, waitMs: w, waited },
+          'WA rate limit: attente trop longue -> envoi abandonne',
+        );
+        return false;
+      }
+      await this.sleep(w);
+      waited += w;
+    }
   }
 
   private withTimeout<T>(fn: () => Promise<T>, ms: number, label: string): Promise<T> {
@@ -505,12 +538,6 @@ export class TenantWhatsAppSessionService extends EventEmitter {
       session.rateLimitPerHour,
       session.minDelaySeconds * 1000,
     );
-    const check = limiter.canSend();
-    if (!check.ok) {
-      logger.warn({ organizationId, waitMs: check.waitMs }, 'WA rate limit hit (media)');
-      return false;
-    }
-
     try {
       const { MessageMedia } = await import('whatsapp-web.js');
       const res = await fetch(url);
@@ -526,7 +553,10 @@ export class TenantWhatsAppSessionService extends EventEmitter {
         opts?.filename ?? 'fichier',
       );
       const chatId = phone.replace(/[^0-9]/g, '') + '@c.us';
-      await this.enqueueSend(organizationId, async () => {
+      // Rate limit DANS la file serialisee : on ATTEND le slot (borne) au lieu
+      // de dropper le media (sinon une PJ envoyee juste apres le texte se perd).
+      const sent = await this.enqueueSend(organizationId, async () => {
+        if (!(await this.waitForSlot(limiter, organizationId, 'media'))) return false;
         if (!(await this.isPageResponsive(client))) {
           throw new Error('WA page non reactive (getState timeout)');
         }
@@ -536,8 +566,10 @@ export class TenantWhatsAppSessionService extends EventEmitter {
             sendMediaAsDocument: opts?.asDocument ?? false,
           }),
         );
+        limiter.consume();
+        return true;
       });
-      limiter.consume();
+      if (!sent) return false;
       this.sendFailures.delete(organizationId);
       return true;
     } catch (err) {
