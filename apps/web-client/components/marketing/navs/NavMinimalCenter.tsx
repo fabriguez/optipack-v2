@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useTenantMeta } from '@/lib/providers/TenantMetaProvider';
+import { BrandLogo } from '@/components/marketing/BrandLogo';
 
 /**
  * Nav Minimal (pastel) : nom centre, 3 liens espaces a gauche/droite,
@@ -28,7 +29,8 @@ export function NavMinimalCenter() {
             </li>
           ))}
         </ul>
-        <Link href="/" className="text-sm font-light tracking-[0.2em] skin-font-heading" style={{ color: 'var(--skin-foreground)' }}>
+        <Link href="/" className="flex items-center gap-2 text-sm font-light tracking-[0.2em] skin-font-heading" style={{ color: 'var(--skin-foreground)' }}>
+          <BrandLogo className="h-7 w-auto max-w-[140px] object-contain" />
           {orgName.toUpperCase()}
         </Link>
         <ul className="flex flex-1 justify-end gap-6">

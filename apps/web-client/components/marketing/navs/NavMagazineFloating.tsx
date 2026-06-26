@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { motion, useScroll, useTransform } from 'framer-motion';
 import { Menu, X, ArrowRight } from 'lucide-react';
 import { useTenantMeta } from '@/lib/providers/TenantMetaProvider';
+import { BrandLogo } from '@/components/marketing/BrandLogo';
 
 /**
  * Nav Magazine (sunset) : floating pill au-dessus du hero. Quand on scroll,
@@ -40,13 +41,17 @@ export function NavMagazineFloating() {
         }}
       >
         <Link href="/" className="flex items-center gap-2">
-          <span
-            className="h-7 w-7 rounded-full"
-            style={{
-              background: `linear-gradient(135deg, var(--skin-gradient-1), var(--skin-gradient-3))`,
-            }}
-            aria-hidden
-          />
+          {meta?.logoUrl?.trim() ? (
+            <BrandLogo className="h-7 w-auto max-w-[140px] object-contain" />
+          ) : (
+            <span
+              className="h-7 w-7 rounded-full"
+              style={{
+                background: `linear-gradient(135deg, var(--skin-gradient-1), var(--skin-gradient-3))`,
+              }}
+              aria-hidden
+            />
+          )}
           <span className="text-sm font-bold tracking-tight skin-font-heading" style={{ color: 'var(--skin-foreground)' }}>
             {orgName}
           </span>

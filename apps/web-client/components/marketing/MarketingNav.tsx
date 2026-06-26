@@ -5,6 +5,7 @@ import { motion, useScroll, useTransform } from 'framer-motion';
 import { Package, ArrowRight, Menu, X } from 'lucide-react';
 import { useState } from 'react';
 import { useTenantMeta } from '@/lib/providers/TenantMetaProvider';
+import { BrandLogo } from '@/components/marketing/BrandLogo';
 
 const LINKS = [
   { href: '/#journey', label: 'Le voyage' },
@@ -41,12 +42,16 @@ export function MarketingNav() {
       </motion.div>
       <nav className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link href="/" className="flex items-center gap-2">
-          <div
-            className="flex h-9 w-9 items-center justify-center skin-radius"
-            style={{ background: 'var(--skin-primary)' }}
-          >
-            <Package className="h-5 w-5 text-white" />
-          </div>
+          {meta?.logoUrl?.trim() ? (
+            <BrandLogo className="h-9 w-auto max-w-[150px] object-contain" />
+          ) : (
+            <div
+              className="flex h-9 w-9 items-center justify-center skin-radius"
+              style={{ background: 'var(--skin-primary)' }}
+            >
+              <Package className="h-5 w-5 text-white" />
+            </div>
+          )}
           <span
             className="text-lg font-bold tracking-tight skin-font-heading"
             style={{ color: 'var(--skin-foreground)' }}

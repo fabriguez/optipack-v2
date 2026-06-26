@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { Menu, X } from 'lucide-react';
 import { useTenantMeta } from '@/lib/providers/TenantMetaProvider';
+import { BrandLogo } from '@/components/marketing/BrandLogo';
 
 /**
  * Nav Editorial (midnight) : barre verticale fixe a gauche (desktop),
@@ -27,7 +28,8 @@ export function NavEditorialVertical() {
       {/* Mobile top bar */}
       <header className="fixed inset-x-0 top-0 z-50 flex h-14 items-center justify-between border-b px-4 lg:hidden"
         style={{ background: 'var(--skin-background)', borderColor: 'var(--skin-border)' }}>
-        <Link href="/" className="text-xs font-black uppercase tracking-[0.3em]" style={{ color: 'var(--skin-foreground)' }}>
+        <Link href="/" className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.3em]" style={{ color: 'var(--skin-foreground)' }}>
+          <BrandLogo className="h-7 w-auto max-w-[140px] object-contain" />
           {orgName}
         </Link>
         <button onClick={() => setOpen((v) => !v)} aria-label="Menu" style={{ color: 'var(--skin-foreground)' }}>
