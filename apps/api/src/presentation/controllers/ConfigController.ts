@@ -227,12 +227,19 @@ export class ConfigController {
   // ── Helpers ──────────────────────────────────────────────
 
   /**
-   * Resolve organizationId from the user's first agency.
+   * Resout l'organizationId. Priorite au champ porte par le JWT (present pour
+   * TOUS les users, y compris owner/SUPER_ADMIN sans agence). On ne retombe sur
+   * la 1ere agence que pour d'eventuels vieux tokens sans organizationId.
+   * Avant : on derivait uniquement de agencyIds[0] -> un owner sans agence
+   * faisait planter /config en 500 ("Utilisateur sans agence assignee").
    */
   private static async getOrganizationId(req: Request): Promise<string> {
-    const agencyIds = req.user!.agencyIds;
+    const orgId = req.user?.organizationId;
+    if (orgId) return orgId;
+
+    const agencyIds = req.user?.agencyIds ?? [];
     if (!agencyIds.length) {
-      throw new Error('Utilisateur sans agence assignee');
+      throw new Error('Utilisateur sans organisation ni agence assignee');
     }
 
     const agency = await prisma.agency.findUnique({

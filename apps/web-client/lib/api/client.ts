@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getApiBaseUrl } from './baseUrl';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
 
@@ -10,6 +11,10 @@ export const apiClient = axios.create({
 });
 
 apiClient.interceptors.request.use((config) => {
+  // Multi-tenant : derive l'URL de l'API du host courant a l'execution (le
+  // baseURL fige au build pointe sur une URL generique). Cote navigateur
+  // <slug>.<base> -> api.<slug>.<base>. SSR/localhost -> NEXT_PUBLIC_API_URL.
+  config.baseURL = getApiBaseUrl();
   if (typeof window !== 'undefined') {
     const token = localStorage.getItem(TOKEN_KEY);
     if (token) config.headers.Authorization = `Bearer ${token}`;
