@@ -229,6 +229,10 @@ if (!process.env.OPS_DISABLE_TOKEN_SYNC) {
             const orchestratorUrl =
               process.env.OPS_PUBLIC_API_URL ??
               `https://ops.${process.env.OPS_BASE_DOMAIN ?? 'transitsoftservices.com'}`;
+            // Version WhatsApp Web pinnee (cf provisioning). Replace-or-add :
+            // bumper WA_WEB_VERSION cote orchestrator propage a tous les tenants
+            // au prochain boot.
+            const waWebVersion = process.env.WA_WEB_VERSION || '2.3000.1038370626-alpha';
             const cmd = [
               `CHANGED=0`,
               `if ! grep -q "^OPS_TENANT_PROXY_TOKEN=" "${envFile}" 2>/dev/null; then`,
@@ -248,6 +252,16 @@ if (!process.env.OPS_DISABLE_TOKEN_SYNC) {
               `  fi`,
               `else`,
               `  printf 'ORCHESTRATOR_URL=%s\\n' '${orchestratorUrl}' >> "${envFile}"`,
+              `  CHANGED=1`,
+              `fi`,
+              // WA_WEB_VERSION : replace-or-add (la valeur orchestrator fait foi).
+              `if grep -q "^WA_WEB_VERSION=" "${envFile}" 2>/dev/null; then`,
+              `  if ! grep -q "^WA_WEB_VERSION=${waWebVersion}$" "${envFile}" 2>/dev/null; then`,
+              `    sed -i "s#^WA_WEB_VERSION=.*#WA_WEB_VERSION=${waWebVersion}#" "${envFile}"`,
+              `    CHANGED=1`,
+              `  fi`,
+              `else`,
+              `  printf 'WA_WEB_VERSION=%s\\n' '${waWebVersion}' >> "${envFile}"`,
               `  CHANGED=1`,
               `fi`,
               `if [ "$CHANGED" = "1" ]; then`,

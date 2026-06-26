@@ -222,7 +222,7 @@ export class TenantWhatsAppSessionService extends EventEmitter {
     // WA Web est probablement figee (Chromium sans polices, version WA derivee,
     // RAM insuffisante). On surface l'erreur au lieu de laisser le spinner
     // tourner indefiniment cote UI.
-    const qrTimeoutMs = Number(process.env.WA_QR_TIMEOUT_MS ?? 90000);
+    const qrTimeoutMs = Number(process.env.WA_QR_TIMEOUT_MS ?? 180000);
     const watchdog = setTimeout(() => {
       void (async () => {
         const st = await this.getStatus(organizationId).catch(() => null);
