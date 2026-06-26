@@ -6,6 +6,7 @@ import { DockerService, DOCKER_SERVICE } from '../../../infrastructure/docker/Do
 import { SSHService, SSH_SERVICE } from '../../../infrastructure/ssh/SSHService';
 import { CapacityService } from '../../services/CapacityService';
 import { computeServiceLimits } from '../../services/resourceLimits';
+import { ProvisioningJobLogger } from '../provisioning/ProvisioningJobLogger';
 import { BusinessError, NotFoundError } from '../../../domain/errors/BusinessError';
 
 export const requestUpgradeSchema = z.object({
@@ -38,6 +39,7 @@ export class UpgradeTenantPlanUseCase {
     @inject(DOCKER_SERVICE) private docker: DockerService,
     @inject(SSH_SERVICE) private ssh: SSHService,
     private capacity: CapacityService,
+    private jobLogger: ProvisioningJobLogger,
   ) {}
 
   /**
@@ -97,11 +99,54 @@ export class UpgradeTenantPlanUseCase {
     });
 
     if (applyNow) {
-      await this.applyPlanChange(change.id);
-      return { ...change, status: 'active', requiresPayment: false };
+      // Applique en arriere-plan via un JOB tracke (logs visibles cote ops-admin
+      // sur /tenants/:id/jobs/:jobId). On ne bloque pas la requete HTTP avec le
+      // SSH + compose up (qui peut durer).
+      const jobId = await this.startApplyJob(change.id);
+      return { ...change, status: 'active', requiresPayment: false, jobId };
     }
 
     return { ...change, requiresPayment: true, plan: toPlan };
+  }
+
+  /**
+   * Cree un ProvisioningJob (type PLAN_CHANGE) et lance l'application des
+   * limites en arriere-plan, en streamant les logs dans le job. Retourne le
+   * jobId immediatement pour que l'UI suive la progression.
+   */
+  async startApplyJob(planChangeId: string): Promise<string> {
+    const change = await prisma.planChange.findUnique({
+      where: { id: planChangeId },
+      select: { tenantId: true, toPlan: { select: { code: true, name: true } } },
+    });
+    if (!change) throw new NotFoundError('PlanChange', planChangeId);
+
+    const job = await prisma.provisioningJob.create({
+      data: {
+        tenantId: change.tenantId,
+        type: 'PLAN_CHANGE',
+        payload: { planChangeId },
+        status: 'running',
+        startedAt: new Date(),
+      },
+    });
+
+    // Fire-and-forget : l'UI poll /tenants/:id/jobs/:jobId pour les logs.
+    void (async () => {
+      try {
+        await this.jobLogger.append(job.id, `Changement de plan -> ${change.toPlan?.name ?? change.toPlan?.code ?? '?'}`);
+        await this.applyPlanChange(planChangeId, (m) => {
+          void this.jobLogger.append(job.id, m);
+        });
+        await this.jobLogger.append(job.id, 'Changement de plan applique avec succes.');
+        await this.jobLogger.setStatus(job.id, 'succeeded');
+      } catch (err) {
+        await this.jobLogger.append(job.id, `ERREUR: ${(err as Error)?.message ?? String(err)}`);
+        await this.jobLogger.setStatus(job.id, 'failed');
+      }
+    })();
+
+    return job.id;
   }
 
   /**
@@ -109,7 +154,7 @@ export class UpgradeTenantPlanUseCase {
    * - Update tenant.resourcePlanId
    * - Restart les containers avec les nouvelles limites
    */
-  async applyPlanChange(planChangeId: string): Promise<void> {
+  async applyPlanChange(planChangeId: string, log: (msg: string) => void = () => {}): Promise<void> {
     const change = await prisma.planChange.findUnique({
       where: { id: planChangeId },
       include: { toPlan: true, tenant: { include: { vps: true } } },
@@ -120,6 +165,7 @@ export class UpgradeTenantPlanUseCase {
 
     const tenant = change.tenant;
     const plan = change.toPlan;
+    log(`Plan cible: ${plan.name} (${plan.cpuLimit} CPU, ${plan.memoryMb} MB RAM, ${plan.diskQuotaGb} GB)`);
 
     // 1. Update tenant
     await prisma.tenant.update({
@@ -150,6 +196,7 @@ export class UpgradeTenantPlanUseCase {
       };
       const composeFile = `${config.tenantEnvDir}/tenant-${tenant.slug}-compose.yml`;
       const projectName = `tenant-${tenant.slug}`;
+      log('Patch des limites cpus/mem_limit dans le compose...');
 
       // Repartition par service : source unique de verite partagee avec le
       // provisioning (cf computeServiceLimits).
@@ -188,7 +235,11 @@ export class UpgradeTenantPlanUseCase {
       if (patched.code !== 0) {
         throw new BusinessError(`Patch des limites compose echoue : ${patched.stderr || patched.stdout}`);
       }
+      log('Redeploiement docker compose up -d (recree les services dont les limites changent)...');
       await this.docker.composeUpExisting(creds, composeFile, projectName);
+      log('Stack tenant redeployee avec les nouvelles limites.');
+    } else {
+      log(`Tenant non ACTIVE (${tenant.status}) : limites enregistrees, pas de redeploiement.`);
     }
 
     // 3. Marquer PlanChange comme applique

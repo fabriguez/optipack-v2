@@ -154,8 +154,9 @@ export class BillingUseCases {
       const change = await prisma.planChange.findUnique({ where: { id: opts.planChangeId } });
       if (!change) throw new NotFoundError('PlanChange', opts.planChangeId);
       tenantId = change.tenantId;
-      await this.upgradeUseCase.applyPlanChange(change.id);
-      logger.info({ planChangeId: change.id }, '[billing] plan change applied');
+      // Applique via un JOB tracke (logs visibles cote ops-admin). Non bloquant.
+      await this.upgradeUseCase.startApplyJob(change.id);
+      logger.info({ planChangeId: change.id }, '[billing] plan change apply job started');
     }
 
     if (!tenantId) throw new BusinessError('tenantId ou planChangeId requis');

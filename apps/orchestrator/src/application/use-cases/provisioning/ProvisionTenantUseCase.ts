@@ -284,14 +284,14 @@ export class ProvisionTenantUseCase {
     // ports:) -- l'API tenant s'y connecte via le network interne du
     // compose.
     //
-    // Repartition CPU/RAM sur 6 services (split tres approximatif --
-    // postgres + api sont les plus gourmands) :
-    //   api          : 30% RAM, 1/3 CPU
-    //   postgres     : 25% RAM, 1/4 CPU
-    //   web          : 15% RAM, 1/8 CPU
-    //   web-client   : 15% RAM, 1/8 CPU
-    //   minio        : 10% RAM, 1/12 CPU
-    //   redis        :  5% RAM, 1/16 CPU
+    // Repartition CPU/RAM sur 6 services (cf computeServiceLimits, source unique).
+    // L'API porte le metier + Chromium/WhatsApp -> la plus grosse part :
+    //   api          : 45% RAM, 1/2 CPU
+    //   postgres     : 17% RAM, 1/6 CPU
+    //   web          : 12% RAM, 1/8 CPU
+    //   web-client   :  9% RAM, 1/8 CPU
+    //   minio        :  7% RAM, 1/12 CPU
+    //   redis        : reste, 1/16 CPU
     // Repartition par service : source unique de verite partagee avec le
     // changement de plan (cf computeServiceLimits).
     const svc = computeServiceLimits({ cpuLimit: limits.cpuLimit, memoryMb: limits.memoryMb });

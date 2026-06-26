@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -51,6 +52,7 @@ function fmtMoney(amount: number | string, currency: string): string {
 }
 
 export function TenantBilling({ tenantId }: { tenantId: string }) {
+  const router = useRouter();
   const qc = useQueryClient();
   const [months, setMonths] = useState(1);
   const [operator, setOperator] = useState<'mtn' | 'orange'>('mtn');
@@ -89,8 +91,17 @@ export function TenantBilling({ tenantId }: { tenantId: string }) {
   // Changement de plan : cree un PlanChange en attente de paiement.
   const changePlan = useMutation({
     mutationFn: async (toPlanCode: string) =>
-      (await api.post(`/tenants/${tenantId}/upgrade`, { toPlanCode })).data?.data,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['tenant-billing', tenantId] }),
+      (await api.post(`/tenants/${tenantId}/upgrade`, { toPlanCode })).data?.data as {
+        jobId?: string;
+        requiresPayment?: boolean;
+      },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ['tenant-billing', tenantId] });
+      // Application immediate (ops global / downgrade) -> un job a ete lance :
+      // on redirige vers ses logs en temps reel. Sinon (paiement requis) on
+      // reste sur la page billing pour regler.
+      if (data?.jobId) router.push(`/tenants/${tenantId}/jobs/${data.jobId}`);
+    },
   });
 
   if (billing.isLoading) return <p className="text-xs text-gray-400">Chargement...</p>;

@@ -35,22 +35,26 @@ const round3 = (n: number): number => Number(n.toFixed(3));
 /**
  * Calcule les limites par service a partir des totaux du plan.
  *
- * RAM : api 30%, postgres 25%, web 15%, web-client 15%, minio 10%, redis = reste
+ * L'API est le service le plus gourmand (logique metier + Chromium/WhatsApp Web
+ * via puppeteer) -> elle recoit la plus grosse part RAM ET CPU. Postgres etait
+ * surdimensionne (25% RAM = 1 Go sur un plan 4 Go) -> reduit.
+ *
+ * RAM : api 45%, postgres 17%, web 12%, web-client 9%, minio 7%, redis = reste
  *       (plancher 64 Mo).
- * CPU : api /3, postgres /4, web /8, web-client /8, minio /12, redis /16
- *       (plancher 0.05).
+ * CPU : api 1/2, postgres 1/6, web 1/8, web-client 1/8, minio 1/12, redis 1/16
+ *       (plancher 0.05). (cpus = plafond, pas reservation -> leger overcommit OK.)
  */
 export function computeServiceLimits({ cpuLimit, memoryMb }: TenantResourceTotals): TenantServiceLimits {
-  const apiMem = Math.floor(memoryMb * 0.3);
-  const pgMem = Math.floor(memoryMb * 0.25);
-  const webMem = Math.floor(memoryMb * 0.15);
-  const wcMem = Math.floor(memoryMb * 0.15);
-  const minioMem = Math.floor(memoryMb * 0.1);
+  const apiMem = Math.floor(memoryMb * 0.45);
+  const pgMem = Math.floor(memoryMb * 0.17);
+  const webMem = Math.floor(memoryMb * 0.12);
+  const wcMem = Math.floor(memoryMb * 0.09);
+  const minioMem = Math.floor(memoryMb * 0.07);
   const redisMem = Math.max(64, memoryMb - apiMem - pgMem - webMem - wcMem - minioMem);
 
   return {
-    api: { cpu: round3(cpuLimit / 3), memoryMb: apiMem },
-    postgres: { cpu: round3(cpuLimit / 4), memoryMb: pgMem },
+    api: { cpu: round3(cpuLimit / 2), memoryMb: apiMem },
+    postgres: { cpu: round3(cpuLimit / 6), memoryMb: pgMem },
     web: { cpu: round3(cpuLimit / 8), memoryMb: webMem },
     webClient: { cpu: round3(cpuLimit / 8), memoryMb: wcMem },
     minio: { cpu: round3(cpuLimit / 12), memoryMb: minioMem },
