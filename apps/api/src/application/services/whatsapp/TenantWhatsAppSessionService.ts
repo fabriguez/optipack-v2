@@ -59,11 +59,19 @@ class RateLimiter {
   }
 }
 
-export type WaSessionStatus = 'DISCONNECTED' | 'QR_READY' | 'CONNECTING' | 'CONNECTED' | 'BANNED';
+export type WaSessionStatus =
+  | 'DISCONNECTED'
+  | 'QR_READY'
+  | 'CONNECTING'
+  | 'SYNCING'
+  | 'CONNECTED'
+  | 'BANNED';
 
 export interface WaSessionState {
   status: WaSessionStatus;
   qrCode: string | null;
+  /** Progression du chargement WA Web (0-100) pendant SYNCING, sinon null. */
+  loadingPercent: number | null;
   connectedPhone: string | null;
   lastError: string | null;
 }
@@ -90,6 +98,9 @@ export class TenantWhatsAppSessionService extends EventEmitter {
   // puppeteer ; des sendMessage concurrents -> commandes CDP entrelacees ->
   // hang/timeout. On enchaine les envois d'un meme tenant.
   private sendQueues = new Map<string, Promise<unknown>>();
+  // Dernier statut connu par tenant (miroir memoire du champ DB) : permet a
+  // isBooting() de repondre sans I/O pendant la livraison.
+  private currentStatus = new Map<string, WaSessionStatus>();
 
   private constructor() {
     super();
@@ -195,8 +206,24 @@ export class TenantWhatsAppSessionService extends EventEmitter {
         await this.updateDbStatus(organizationId, 'CONNECTED', null, phone, null);
         this.emit(`ready:${organizationId}`, phone);
         logger.info({ organizationId, phone }, 'WhatsApp session connected');
+        // La session est REELLEMENT prete (chats synchronises) : on ecoule les
+        // notifs WhatsApp restees PENDING pendant la phase de chargement.
+        void this.flushPendingWhatsapp(organizationId);
       } catch (err) {
         logger.warn({ err }, 'Error on ready event');
+      }
+    });
+
+    // Scan reussi : WA Web va maintenant synchroniser les chats avant d'etre
+    // pret. On passe en SYNCING (0%) pour que le backoffice montre le chargement
+    // au lieu de rester sur le QR / "connexion en cours".
+    client.on('authenticated', async () => {
+      try {
+        await this.updateDbStatus(organizationId, 'SYNCING', null, null, null, 0);
+        this.emit(`syncing:${organizationId}`, 0);
+        logger.info({ organizationId }, 'WA authenticated -> syncing');
+      } catch (err) {
+        logger.warn({ err, organizationId }, 'Error on authenticated event');
       }
     });
 
@@ -227,6 +254,11 @@ export class TenantWhatsAppSessionService extends EventEmitter {
     client.on('loading_screen', (percent: number, message: string) => {
       logger.info({ organizationId, percent, message }, 'WA loading screen');
       this.hookPupPageConsole(organizationId, client);
+      // Surface la progression dans le backoffice (SYNCING + %). L'admin voit
+      // ainsi le niveau de chargement, pas juste "connecte" une fois fini.
+      const pct = Number.isFinite(percent) ? Math.max(0, Math.min(100, Math.round(percent))) : 0;
+      void this.updateDbStatus(organizationId, 'SYNCING', null, null, null, pct).catch(() => {});
+      this.emit(`syncing:${organizationId}`, pct);
     });
 
     // change_state : transitions d'etat WA (CONNECTED, OPENING, PAIRING,
@@ -262,8 +294,9 @@ export class TenantWhatsAppSessionService extends EventEmitter {
         }
       })();
     }, qrTimeoutMs);
-    // Annule le watchdog des qu'un QR ou un ready arrive.
+    // Annule le watchdog des qu'un QR, un debut de sync ou un ready arrive.
     this.once(`qr:${organizationId}`, () => clearTimeout(watchdog));
+    this.once(`syncing:${organizationId}`, () => clearTimeout(watchdog));
     this.once(`ready:${organizationId}`, () => clearTimeout(watchdog));
 
     // NON bloquant : un hang d'initialize ne doit pas figer l'appelant. Le QR
@@ -585,11 +618,12 @@ export class TenantWhatsAppSessionService extends EventEmitter {
   async getStatus(organizationId: string): Promise<WaSessionState> {
     const session = await prisma.tenantWhatsAppSession.findUnique({
       where: { organizationId },
-      select: { status: true, qrCode: true, connectedPhone: true, lastError: true },
+      select: { status: true, qrCode: true, loadingPercent: true, connectedPhone: true, lastError: true },
     });
     return {
       status: (session?.status as WaSessionStatus) ?? 'DISCONNECTED',
       qrCode: session?.qrCode ?? null,
+      loadingPercent: session?.loadingPercent ?? null,
       connectedPhone: session?.connectedPhone ?? null,
       lastError: session?.lastError ?? null,
     };
@@ -606,9 +640,36 @@ export class TenantWhatsAppSessionService extends EventEmitter {
     logger.info({ organizationId, perHour, minDelaySeconds }, 'Rate limit updated');
   }
 
-  /** Vérifie si une session CONNECTED existe pour ce tenant (pour le provider). */
+  /** Vérifie qu'un client WA est suivi pour ce tenant (démarrage/sync/connecté). */
   isConnected(organizationId: string): boolean {
     return this.clients.has(organizationId);
+  }
+
+  /**
+   * True tant qu'une session est en train de se connecter (CONNECTING) ou de
+   * synchroniser ses chats (SYNCING) : la livraison WhatsApp doit alors garder
+   * la notif en PENDING (elle partira au 'ready') plutôt que d'échouer ou de
+   * basculer sur le provider chain.
+   */
+  isBooting(organizationId: string): boolean {
+    if (!this.clients.has(organizationId)) return false;
+    const s = this.currentStatus.get(organizationId);
+    return s === 'CONNECTING' || s === 'SYNCING';
+  }
+
+  /**
+   * Écoule les notifications WhatsApp restées PENDING pour ce tenant (émises
+   * pendant que la session se synchronisait). Délégué à la couche channels qui
+   * détient la logique d'envoi (texte + pièces jointes) — import dynamique pour
+   * éviter une dépendance circulaire statique.
+   */
+  private async flushPendingWhatsapp(organizationId: string): Promise<void> {
+    try {
+      const { flushPendingWhatsapp } = await import('../notifications/channels');
+      await flushPendingWhatsapp(organizationId);
+    } catch (err) {
+      logger.warn({ err, organizationId }, 'WA flush pending failed');
+    }
   }
 
   // ── Privé ──────────────────────────────────────────────────────────────────
@@ -685,7 +746,11 @@ export class TenantWhatsAppSessionService extends EventEmitter {
     qrCode: string | null,
     connectedPhone: string | null,
     lastError: string | null,
+    // Progression de chargement (SYNCING). null par defaut => remis a zero des
+    // qu'on quitte la phase de synchronisation.
+    loadingPercent: number | null = null,
   ): Promise<void> {
+    this.currentStatus.set(organizationId, status);
     try {
       await prisma.tenantWhatsAppSession.upsert({
         where: { organizationId },
@@ -693,6 +758,7 @@ export class TenantWhatsAppSessionService extends EventEmitter {
           organizationId,
           status,
           qrCode,
+          loadingPercent,
           connectedPhone,
           lastError,
           connectedAt: status === 'CONNECTED' ? new Date() : undefined,
@@ -700,6 +766,7 @@ export class TenantWhatsAppSessionService extends EventEmitter {
         update: {
           status,
           qrCode,
+          loadingPercent,
           connectedPhone,
           lastError,
           ...(status === 'CONNECTED' ? { connectedAt: new Date() } : {}),

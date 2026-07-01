@@ -15,6 +15,7 @@ const STATUS_LABELS: Record<WaSessionStatus, string> = {
   DISCONNECTED: 'Déconnecté',
   QR_READY: 'En attente de scan',
   CONNECTING: 'Connexion en cours...',
+  SYNCING: 'Synchronisation en cours...',
   CONNECTED: 'Connecté',
   BANNED: 'Banni',
 };
@@ -23,6 +24,7 @@ const STATUS_COLORS: Record<WaSessionStatus, string> = {
   DISCONNECTED: 'text-gray-500',
   QR_READY: 'text-amber-600',
   CONNECTING: 'text-blue-600',
+  SYNCING: 'text-blue-600',
   CONNECTED: 'text-emerald-600',
   BANNED: 'text-red-600',
 };
@@ -36,7 +38,9 @@ export default function WhatsAppPersonalPage() {
     queryFn: whatsappPersonalApi.getStatus,
     refetchInterval: (query) => {
       const s = query.state.data?.status;
-      return s === 'QR_READY' || s === 'CONNECTING' ? 3000 : false;
+      // Poll pendant tout le cycle de connexion (scan -> synchro -> prêt) pour
+      // suivre la progression du chargement en direct.
+      return s === 'QR_READY' || s === 'CONNECTING' || s === 'SYNCING' ? 2000 : false;
     },
   });
 
@@ -83,7 +87,8 @@ export default function WhatsAppPersonalPage() {
 
   const status = state?.status ?? 'DISCONNECTED';
   const isConnected = status === 'CONNECTED';
-  const isActiveSession = ['QR_READY', 'CONNECTING', 'CONNECTED'].includes(status);
+  const isActiveSession = ['QR_READY', 'CONNECTING', 'SYNCING', 'CONNECTED'].includes(status);
+  const loadingPercent = state?.loadingPercent ?? null;
 
   return (
     <div className="space-y-5 p-4 sm:p-6">
@@ -112,6 +117,8 @@ export default function WhatsAppPersonalPage() {
               <Wifi className="h-8 w-8 text-emerald-500" />
             ) : status === 'BANNED' ? (
               <AlertTriangle className="h-8 w-8 text-red-500" />
+            ) : status === 'SYNCING' || status === 'CONNECTING' ? (
+              <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
             ) : (
               <WifiOff className="h-8 w-8 text-gray-400" />
             )}
@@ -177,6 +184,30 @@ export default function WhatsAppPersonalPage() {
           <div className="mt-4 flex items-center gap-2 text-sm text-blue-600">
             <Loader2 className="h-4 w-4 animate-spin" />
             Initialisation de la session en cours...
+          </div>
+        )}
+
+        {status === 'SYNCING' && (
+          <div className="mt-6 rounded-xl border border-blue-100 bg-blue-50 p-4">
+            <div className="flex items-center justify-between text-sm font-medium text-blue-700">
+              <span className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Chargement de WhatsApp
+              </span>
+              {loadingPercent !== null && <span>{loadingPercent}%</span>}
+            </div>
+            <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-blue-100">
+              <div
+                className="h-full rounded-full bg-blue-500 transition-all duration-500"
+                style={{ width: `${loadingPercent ?? 5}%` }}
+              />
+            </div>
+            <p className="mt-3 text-xs text-blue-600">
+              Numéro scanné. Synchronisation des conversations en cours — la session
+              n&apos;est pas encore prête à envoyer. Les notifications WhatsApp émises
+              maintenant sont mises en attente et partiront automatiquement dès que le
+              chargement sera terminé.
+            </p>
           </div>
         )}
 

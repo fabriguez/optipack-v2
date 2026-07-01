@@ -62,7 +62,9 @@ export interface NotificationPayload {
 
 export interface ChannelDeliveryResult {
   channel: NotificationChannel;
-  status: 'SENT' | 'FAILED' | 'SKIPPED';
+  // PENDING : accepté mais pas encore envoyé (ex. session WhatsApp perso en
+  // cours de synchronisation) — sera émis quand la session sera prête.
+  status: 'SENT' | 'FAILED' | 'SKIPPED' | 'PENDING';
   notificationId?: string;
   error?: string;
 }

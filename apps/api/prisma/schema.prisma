@@ -3110,6 +3110,12 @@ model TenantWhatsAppSession {
   status           WhatsAppSessionStatus   @default(DISCONNECTED)
   /** QR code base64 (null une fois connecté). */
   qrCode           String?                 @db.Text
+  /**
+   * Progression du chargement WhatsApp Web (0-100) pendant l'état SYNCING :
+   * après le scan, WA Web synchronise les chats avant d'être prêt à envoyer.
+   * null hors de cette phase.
+   */
+  loadingPercent   Int?
   /** Numéro WhatsApp connecté (format E.164). */
   connectedPhone   String?
   /** Quota messages/heure (défaut : 50). */
@@ -3130,6 +3136,10 @@ enum WhatsAppSessionStatus {
   DISCONNECTED
   QR_READY
   CONNECTING
+  // Scanné : WhatsApp Web synchronise les chats (voir loadingPercent) avant
+  // d'être réellement prêt. Les notifs émises pendant cette phase restent
+  // PENDING et partent quand la session passe CONNECTED.
+  SYNCING
   CONNECTED
   BANNED
 }

@@ -115,11 +115,19 @@ export const notificationConfigApi = {
 
 // ── WhatsApp Personnel ─────────────────────────────────────
 
-export type WaSessionStatus = 'DISCONNECTED' | 'QR_READY' | 'CONNECTING' | 'CONNECTED' | 'BANNED';
+export type WaSessionStatus =
+  | 'DISCONNECTED'
+  | 'QR_READY'
+  | 'CONNECTING'
+  | 'SYNCING'
+  | 'CONNECTED'
+  | 'BANNED';
 
 export interface WaSessionState {
   status: WaSessionStatus;
   qrCode: string | null;
+  /** Progression du chargement WhatsApp Web (0-100) pendant SYNCING, sinon null. */
+  loadingPercent: number | null;
   connectedPhone: string | null;
   lastError: string | null;
 }
