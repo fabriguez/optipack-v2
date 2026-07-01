@@ -11,6 +11,7 @@ import { prisma } from '../../../config/database';
 import { LoyaltyConfigService } from '../../services/LoyaltyConfigService';
 import { GroupInvoiceService } from '../../services/GroupInvoiceService';
 import { StorageChargeService } from '../../services/StorageChargeService';
+import { AccountingAccountService } from '../../services/AccountingAccountService';
 
 function tierFor(
   points: number,
@@ -32,6 +33,7 @@ export class RecordPaymentUseCase {
     private loyaltyConfig: LoyaltyConfigService,
     private groupInvoice: GroupInvoiceService,
     private storageCharges: StorageChargeService,
+    private accountingAccounts: AccountingAccountService,
   ) {}
 
   async execute(input: RecordPaymentInput, userId: string): Promise<any> {
@@ -42,6 +44,14 @@ export class RecordPaymentUseCase {
     if (invoice.status === 'PAID') {
       throw new BusinessError('Cette facture est deja soldee');
     }
+
+    // Garantit le plan comptable du tenant AVANT toute mutation. Le posting au
+    // journal (etape 7) connecte des AccountingAccount par code ; si le tenant
+    // n'a pas de plan comptable, le create throw APRES que le paiement, la
+    // facture et la caisse ont deja ete committes (pas de transaction
+    // englobante) -> paiement partiel + 404. Idempotent (no-op si deja present).
+    const orgId = await this.resolveOrganizationId(input.agencyId);
+    if (orgId) await this.accountingAccounts.ensureCoreAccounts(orgId);
 
     // Paiement d'une facture AGREGAT de groupe : on ne paye pas la facture
     // agregat directement (elle n'a pas de colis lies). On distribue le
@@ -335,6 +345,19 @@ export class RecordPaymentUseCase {
       invoiceStatus: newStatus,
       invoiceBalance: Math.max(0, newBalance),
     };
+  }
+
+  /** Resolution de l'organisation d'une agence (cache memoire en process). */
+  private agencyOrgCache = new Map<string, string | null>();
+  private async resolveOrganizationId(agencyId: string): Promise<string | null> {
+    if (this.agencyOrgCache.has(agencyId)) return this.agencyOrgCache.get(agencyId)!;
+    const a = await prisma.agency.findUnique({
+      where: { id: agencyId },
+      select: { organizationId: true },
+    });
+    const orgId = a?.organizationId ?? null;
+    this.agencyOrgCache.set(agencyId, orgId);
+    return orgId;
   }
 
   /** Resolution simple du nom d'agence (cache memoire en process). */

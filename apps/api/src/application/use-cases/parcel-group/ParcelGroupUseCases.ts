@@ -110,7 +110,15 @@ export class CreateParcelGroupUseCase {
       where: { clientId: input.clientId, isActive: true },
     });
 
-    return prisma.$transaction(async (tx) => {
+    // Evenements PARCEL_CREATED a emettre APRES commit (les handlers de notif
+    // lisent la DB ; emettre dans la tx risquerait de notifier avant commit).
+    const parcelCreatedEvents: Array<{
+      type: typeof DomainEvents.PARCEL_CREATED;
+      payload: Record<string, unknown>;
+      timestamp: Date;
+    }> = [];
+
+    const result = await prisma.$transaction(async (tx) => {
       // Sequence basee sur timestamp ms pour eviter les collisions de
       // reference quand plusieurs requetes creent des groupes/factures en
       // parallele (count() n'est pas atomique entre transactions).
@@ -205,6 +213,27 @@ export class CreateParcelGroupUseCase {
           },
         });
         createdParcels.push(parcel);
+
+        // Notif client "colis enregistre" (parite avec CreateParcelUseCase /
+        // CreateBatchParcelsUseCase, qui emettaient deja cet evenement).
+        parcelCreatedEvents.push({
+          type: DomainEvents.PARCEL_CREATED,
+          payload: {
+            parcelId: parcel.id,
+            trackingNumber: parcel.trackingNumber,
+            clientId: input.clientId,
+            organizationId: input.organizationId,
+            agencyId: resolvedAgencyId,
+            designation: parcel.designation,
+            destination: derivedDestination,
+            weight: p.weight ? Number(p.weight) : null,
+            volume: p.volume ? Number(p.volume) : null,
+            transitType: route?.type ?? null,
+            invoiceId: parcelInvoice.id,
+            price,
+          },
+          timestamp: new Date(),
+        });
       }
 
       // Facture agregat du groupe : montants = somme des factures membres.
@@ -233,6 +262,17 @@ export class CreateParcelGroupUseCase {
         },
       });
     });
+
+    // Emission apres commit (fire-and-forget, comme les autres flux de creation).
+    for (const ev of parcelCreatedEvents) {
+      try {
+        eventBus.emit(ev);
+      } catch {
+        // non bloquant
+      }
+    }
+
+    return result;
   }
 }
 
@@ -251,10 +291,12 @@ export class AddParcelToGroupUseCase {
 
     // Prix : PricingService si route + dimension, sinon prix fourni.
     let price = parcel.price ?? 0;
+    let transitType: string | null = null;
     const routeId = parcel.transitRouteId ?? null;
     if (routeId && client && (parcel.weight || parcel.volume)) {
       const route = await prisma.transitRoute.findUnique({ where: { id: routeId } });
       if (route) {
+        transitType = route.type;
         const partner = await prisma.partnerPricing.findFirst({
           where: {
             clientId: group.clientId,
@@ -310,6 +352,31 @@ export class AddParcelToGroupUseCase {
 
     // Resync facture agregat du groupe (nouveau colis -> total + eleve).
     await this.groupInvoice.sync(groupId);
+
+    // Notif client "colis enregistre" (parite avec les autres flux de creation).
+    try {
+      eventBus.emit({
+        type: DomainEvents.PARCEL_CREATED,
+        payload: {
+          parcelId: created.id,
+          trackingNumber: created.trackingNumber,
+          clientId: group.clientId,
+          organizationId,
+          agencyId: group.agencyId,
+          designation: created.designation,
+          destination: created.destination,
+          weight: parcel.weight ? Number(parcel.weight) : null,
+          volume: parcel.volume ? Number(parcel.volume) : null,
+          transitType,
+          invoiceId: created.invoiceId,
+          price,
+        },
+        timestamp: new Date(),
+      });
+    } catch {
+      // non bloquant
+    }
+
     return created;
   }
 }

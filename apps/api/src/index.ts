@@ -142,6 +142,21 @@ async function start(): Promise<void> {
     registerDailyReportRegenHandler();
     registerRealtimeParcelHandlers();
 
+    // Self-heal du plan comptable : garantit que chaque organisation dispose
+    // des comptes requis pour le posting au journal (paiement, decaissement,
+    // transfert...). Repare un tenant provisionne sans plan comptable des ce
+    // demarrage. Non bloquant.
+    void (async () => {
+      try {
+        const { AccountingAccountService } = await import(
+          './application/services/AccountingAccountService'
+        );
+        await new AccountingAccountService().ensureAllOrganizations();
+      } catch (err) {
+        logger.warn({ err }, 'ensureAllOrganizations plan comptable a echoue (ignore)');
+      }
+    })();
+
     // Start cron jobs
     startCronJobs();
 

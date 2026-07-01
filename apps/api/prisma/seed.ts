@@ -5,6 +5,7 @@ dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { seedPermissionsAndPositions, migrateLegacyRolePositions } from './seed/permissions.seed';
+import { DEFAULT_CHART_OF_ACCOUNTS } from '../src/domain/accounting/chart-of-accounts';
 const prisma = new PrismaClient();
 
 // UUIDs fixes pour le seed (idempotent)
@@ -98,17 +99,9 @@ async function main() {
     console.log(`Agency: ${agency.name} + Warehouse`);
   }
 
-  const accounts = [
-    { code: '101000', name: 'Caisse', type: 'ASSET' as const },
-    { code: '102000', name: 'Banque', type: 'ASSET' as const },
-    { code: '301000', name: 'Creances Clients', type: 'ASSET' as const },
-    { code: '401000', name: 'Dettes Fournisseurs', type: 'LIABILITY' as const },
-    { code: '501000', name: 'Capital', type: 'EQUITY' as const },
-    { code: '601000', name: 'Revenus Transport', type: 'REVENUE' as const },
-    { code: '602000', name: 'Revenus Penalites', type: 'REVENUE' as const },
-    { code: '701000', name: 'Charges Exploitation', type: 'EXPENSE' as const },
-    { code: '702000', name: 'Salaires', type: 'EXPENSE' as const },
-  ];
+  // Plan comptable : source de vérité partagée avec le self-heal runtime
+  // (AccountingAccountService), cf src/domain/accounting/chart-of-accounts.ts.
+  const accounts = DEFAULT_CHART_OF_ACCOUNTS;
 
   for (const acc of accounts) {
     await prisma.accountingAccount.upsert({
