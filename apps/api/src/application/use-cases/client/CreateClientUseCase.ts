@@ -24,15 +24,24 @@ export class CreateClientUseCase {
       }
     }
 
-    const existing = await this.clientRepo.findByPhone(input.phone);
-    if (existing) {
-      throw new ConflictError('Un client avec ce numero de telephone existe deja');
+    // Telephone et email sont tous deux optionnels ; le schema garantit qu'au
+    // moins un des deux est fourni. On normalise en null quand absent.
+    const phone = input.phone?.trim() || null;
+    const email = input.email?.trim() || null;
+
+    // Unicite telephone : uniquement si un telephone est fourni (plusieurs
+    // clients sans telephone -> plusieurs NULL, autorises).
+    if (phone) {
+      const existing = await this.clientRepo.findByPhone(phone);
+      if (existing) {
+        throw new ConflictError('Un client avec ce numero de telephone existe deja');
+      }
     }
 
     // Email unique : refuse les doublons (les clients sans email ne sont pas
     // concernes -- plusieurs NULL autorises).
-    if (input.email) {
-      const emailClash = await prisma.client.findUnique({ where: { email: input.email } });
+    if (email) {
+      const emailClash = await prisma.client.findUnique({ where: { email } });
       if (emailClash) {
         throw new ConflictError('Un client avec cet email existe deja');
       }
@@ -40,8 +49,8 @@ export class CreateClientUseCase {
 
     const client = await this.clientRepo.create({
       fullName: input.fullName,
-      phone: input.phone,
-      email: input.email || null,
+      phone,
+      email,
       address: input.address || null,
       organizationId,
       emergencyContactName: input.emergencyContactName?.trim() || null,

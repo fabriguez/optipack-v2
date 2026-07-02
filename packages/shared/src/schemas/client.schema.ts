@@ -8,9 +8,14 @@ export const ClientType = {
 } as const;
 export type ClientType = (typeof ClientType)[keyof typeof ClientType];
 
-export const createClientSchema = z.object({
+// Base (sans contrainte croisee) : sert a deriver createClientSchema (avec
+// refine) et updateClientSchema (partial). `.partial()` n'existe que sur un
+// ZodObject, donc la base ne doit PAS porter le `.refine()`.
+const clientBaseSchema = z.object({
   fullName: z.string().min(2, 'Le nom doit contenir au moins 2 caracteres'),
-  phone: z.string().min(8, 'Numero de telephone invalide'),
+  // Telephone et email sont tous deux OPTIONNELS individuellement ; la regle
+  // "au moins un des deux" est appliquee par le refine ci-dessous.
+  phone: z.string().min(8, 'Numero de telephone invalide').optional().or(z.literal('')),
   email: z.string().email('Email invalide').optional().or(z.literal('')),
   address: z.string().optional().or(z.literal('')),
   // Agence d'enregistrement optionnelle. Un client appartient a l'organisation,
@@ -31,7 +36,18 @@ export const createClientSchema = z.object({
   emergencyContactRelation: z.string().trim().max(60).optional().or(z.literal('')),
 });
 
-export const updateClientSchema = createClientSchema.partial();
+// Au moins un identifiant de contact (telephone OU email) requis a la creation.
+const hasPhoneOrEmail = (d: { phone?: string; email?: string }): boolean =>
+  !!d.phone?.trim() || !!d.email?.trim();
+
+export const createClientSchema = clientBaseSchema.refine(hasPhoneOrEmail, {
+  message: 'Renseignez au moins un telephone ou un email',
+  path: ['phone'],
+});
+
+// Update : champs optionnels (patch partiel). La contrainte "au moins un" n'est
+// pas rejouee ici : un patch qui ne touche ni phone ni email est valide.
+export const updateClientSchema = clientBaseSchema.partial();
 
 // Tarification partenaire : la route est desormais OBLIGATOIRE a la creation.
 // Son `type` (AIR/SEA/LAND) determine le champ requis (kg / m3). La coherence

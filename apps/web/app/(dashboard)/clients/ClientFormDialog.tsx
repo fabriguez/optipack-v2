@@ -289,6 +289,9 @@ export function ClientFormDialog({ open, onClose, defaultAgency, client }: Clien
             )}
           />
           <AppInput label="Email" type="email" {...register('email')} error={errors.email?.message} />
+          <p className="text-xs text-gray-500 sm:col-span-2 -mt-1">
+            Renseignez au moins un telephone ou un email.
+          </p>
           <AppInput label="N. CNI / Identite" {...register('idNumber' as any)} />
           <AppInput label="Adresse" {...register('address')} error={errors.address?.message} className="sm:col-span-2" />
 

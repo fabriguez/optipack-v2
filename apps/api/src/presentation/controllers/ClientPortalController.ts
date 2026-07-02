@@ -67,7 +67,7 @@ const CLIENT_PASSWORD_CHANGED_MESSAGE =
 async function notifyClientPasswordChanged(client: {
   id: string;
   email: string | null;
-  phone: string;
+  phone: string | null;
   organizationId: string;
 }) {
   try {
@@ -181,7 +181,8 @@ function parseDateRangeQuery(
 
 interface ClientJwtPayload {
   clientId: string;
-  phone: string;
+  // Nullable : un client peut etre identifie par email uniquement (sans phone).
+  phone: string | null;
   type: 'client';
 }
 

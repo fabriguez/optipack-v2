@@ -37,7 +37,7 @@ export interface ProvisionPortalResult {
 export async function provisionClientPortalAccess(params: {
   clientId: string;
   fullName: string;
-  phone: string;
+  phone: string | null;
   email?: string | null;
   isPortalActive?: boolean | null;
   organizationId?: string | null;
@@ -45,6 +45,10 @@ export async function provisionClientPortalAccess(params: {
   const email = params.email?.trim();
   if (!email) return { provisioned: false, reason: 'no-email' };
   if (params.isPortalActive) return { provisioned: false, reason: 'already-active' };
+
+  // Identifiant de connexion affiche dans les identifiants : le telephone s'il
+  // existe, sinon l'email (le login accepte les deux).
+  const loginIdentifier = params.phone?.trim() || email;
 
   try {
     const password = generatePortalPassword();
@@ -54,7 +58,7 @@ export async function provisionClientPortalAccess(params: {
       data: { passwordHash, isPortalActive: true },
     });
     emailService
-      .sendClientPortalCredentials(email, params.fullName, params.phone, password, params.organizationId ?? null, email)
+      .sendClientPortalCredentials(email, params.fullName, loginIdentifier, password, params.organizationId ?? null, email)
       .catch((err) => {
         // eslint-disable-next-line no-console
         console.warn('[ClientPortalAccess] envoi mail identifiants echoue:', (err as Error).message);
@@ -64,7 +68,7 @@ export async function provisionClientPortalAccess(params: {
     const waMessage =
       `Bonjour ${params.fullName} ! Votre espace client est pret.\n\n` +
       `Identifiants de connexion :\n` +
-      `• Telephone : ${params.phone}\n` +
+      `• Identifiant : ${loginIdentifier}\n` +
       `• Mot de passe : ${password}\n\n` +
       `Connectez-vous sur : ${config.clientPortalUrl}/login\n\n` +
       `Pour votre securite, changez votre mot de passe apres la premiere connexion.`;

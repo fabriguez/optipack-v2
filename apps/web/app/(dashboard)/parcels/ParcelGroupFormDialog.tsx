@@ -8,7 +8,8 @@ import { AppDialog } from '@/components/ui/AppDialog';
 import { AppInput } from '@/components/ui/AppInput';
 import { AppTextarea } from '@/components/ui/AppTextarea';
 import { AppButton } from '@/components/ui/AppButton';
-import { AppSearchSelect } from '@/components/ui/AppSearchSelect';
+import { AppSearchSelect, type SearchOption } from '@/components/ui/AppSearchSelect';
+import { ClientQuickCreateDialog } from './ClientQuickCreateDialog';
 import { AppSelect } from '@/components/ui/AppSelect';
 import { AppSwitch } from '@/components/ui/AppSwitch';
 import { searchers, toSearchOption } from '@/lib/api/searchers';
@@ -122,6 +123,22 @@ export function ParcelGroupFormDialog({ open, onClose, defaultAgency }: Props) {
   // Scan QR : on memorise quel index de colis est en cours de scan.
   const [scanTarget, setScanTarget] = useState<number | null>(null);
   const [contextCollapsed, setContextCollapsed] = useState(false);
+
+  // Creation rapide inline d'un client (expediteur ou destinataire d'un colis)
+  // depuis n'importe quel selecteur du formulaire. Un seul dialog partage : on
+  // memorise le libelle, le nom pre-rempli et le resolver de la promesse
+  // renvoyee a AppSearchSelect (qui selectionne l'option creee au resolve).
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [quickName, setQuickName] = useState('');
+  const [quickLabel, setQuickLabel] = useState<'client' | 'destinataire'>('client');
+  const [quickResolve, setQuickResolve] = useState<((opt: SearchOption | null) => void) | null>(null);
+  const openQuickCreate = (entityLabel: 'client' | 'destinataire', query: string) =>
+    new Promise<SearchOption | null>((resolve) => {
+      setQuickLabel(entityLabel);
+      setQuickName(query);
+      setQuickResolve(() => resolve);
+      setQuickOpen(true);
+    });
 
   // Charge la route de transit selectionnee pour deriver :
   //  - le `groupMassMode` : AIR -> weight, SEA -> volume, LAND -> both ;
@@ -374,7 +391,9 @@ export function ParcelGroupFormDialog({ open, onClose, defaultAgency }: Props) {
               onChange={(v) => setClientId(v ?? '')}
               search={searchers.clients}
               required
-              placeholder="Rechercher un client..."
+              placeholder="Rechercher ou creer un client..."
+              createLabel="Creer le client"
+              onCreate={(query) => openQuickCreate('client', query)}
             />
             <AppSearchSelect
               label="Magasin de depart"
@@ -462,6 +481,7 @@ export function ParcelGroupFormDialog({ open, onClose, defaultAgency }: Props) {
                 onRemove={() => removeParcel(i)}
                 onToggleCollapse={() => updateParcel(i, { collapsed: !p.collapsed })}
                 onOpenScanner={() => setScanTarget(i)}
+                onCreateRecipient={(query) => openQuickCreate('destinataire', query)}
               />
             ))}
           </div>
@@ -480,6 +500,23 @@ export function ParcelGroupFormDialog({ open, onClose, defaultAgency }: Props) {
         }}
         title="Scanner le code fournisseur"
       />
+
+      <ClientQuickCreateDialog
+        open={quickOpen}
+        entityLabel={quickLabel}
+        initialName={quickName}
+        defaultAgencyId={defaultAgency?.id ?? null}
+        onClose={() => {
+          if (quickResolve) quickResolve(null);
+          setQuickResolve(null);
+          setQuickOpen(false);
+        }}
+        onCreated={(opt) => {
+          if (quickResolve) quickResolve(opt);
+          setQuickResolve(null);
+          setQuickOpen(false);
+        }}
+      />
     </AppDialog>
   );
 }
@@ -492,6 +529,7 @@ interface ParcelCardProps {
   onRemove: () => void;
   onToggleCollapse: () => void;
   onOpenScanner: () => void;
+  onCreateRecipient: (query: string) => Promise<SearchOption | null>;
 }
 
 function ParcelCard({
@@ -502,6 +540,7 @@ function ParcelCard({
   onRemove,
   onToggleCollapse,
   onOpenScanner,
+  onCreateRecipient,
 }: ParcelCardProps) {
   const summary = parcel.designation || `Colis ${index + 1}`;
 
@@ -669,7 +708,9 @@ function ParcelCard({
                 value={parcel.recipientId || null}
                 onChange={(v) => onChange({ recipientId: v ?? '' })}
                 search={searchers.recipients}
-                placeholder="Selectionner un destinataire (optionnel)"
+                placeholder="Selectionner ou creer un destinataire"
+                createLabel="Creer le destinataire"
+                onCreate={onCreateRecipient}
               />
               <AppSearchSelect
                 label="Agence de destination"

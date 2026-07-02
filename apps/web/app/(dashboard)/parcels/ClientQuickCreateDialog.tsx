@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { createClientSchema, type CreateClientInput } from '@transitsoftservices/shared';
@@ -17,19 +17,38 @@ import { toast } from 'sonner';
 interface Props {
   open: boolean;
   onClose: () => void;
-  /** Nom pre-rempli depuis la recherche du SearchSelect */
+  /** Nom pre-rempli depuis la recherche du SearchSelect. */
   initialName?: string;
-  /** Appele apres creation reussie : retourne l'option correspondant au nouveau destinataire/client. */
-  onCreated?: (recipient: SearchOption) => void;
+  /** Agence pre-selectionnee (ex : deduite du contexte du formulaire colis). */
+  defaultAgencyId?: string | null;
+  /**
+   * Libelle de l'entite cree, pour adapter titre / bouton / toast selon le
+   * contexte d'appel ('client' pour l'expediteur, 'destinataire' pour le
+   * recepteur). Dans les deux cas on cree un Client (tables fusionnees).
+   */
+  entityLabel?: string;
+  /** Appele apres creation reussie : retourne l'option du nouveau client. */
+  onCreated?: (client: SearchOption) => void;
 }
 
 /**
- * Dialog de creation rapide d'un destinataire.
- * Cree un Client (la table recipients a fusionne avec clients) qui peut donc
- * etre utilise comme destinataire ET comme expediteur ulterieurement.
+ * Dialog de creation rapide d'un client (expediteur ou destinataire).
+ * La table recipients a fusionne avec clients : un client cree ici peut donc
+ * servir d'expediteur ET de destinataire. Version allegee (champs essentiels)
+ * pour un ajout inline depuis un selecteur, sans quitter le formulaire colis.
  */
-export function RecipientQuickCreateDialog({ open, onClose, initialName, onCreated }: Props) {
+export function ClientQuickCreateDialog({
+  open,
+  onClose,
+  initialName,
+  defaultAgencyId,
+  entityLabel = 'client',
+  onCreated,
+}: Props) {
+  const formId = useId();
   const [submitting, setSubmitting] = useState(false);
+  const cap = entityLabel.charAt(0).toUpperCase() + entityLabel.slice(1);
+
   const {
     register,
     handleSubmit,
@@ -48,13 +67,13 @@ export function RecipientQuickCreateDialog({ open, onClose, initialName, onCreat
         phone: '',
         email: '',
         address: '',
-        agencyId: '',
+        agencyId: defaultAgencyId || '',
         clientType: 'INDIVIDUAL',
         loyaltyTier: 'STANDARD',
         isActive: true,
       });
     }
-  }, [open, initialName, reset]);
+  }, [open, initialName, defaultAgencyId, reset]);
 
   const onSubmit = async (data: CreateClientInput) => {
     setSubmitting(true);
@@ -62,13 +81,13 @@ export function RecipientQuickCreateDialog({ open, onClose, initialName, onCreat
       const res = await clientsApi.create(data);
       const c = res.data;
       if (c) {
-        toast.success('Destinataire cree');
+        toast.success(`${cap} cree`);
         onCreated?.(toSearchOption.client(c));
         reset();
         onClose();
       }
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || 'Erreur lors de la creation du destinataire');
+      toast.error(e?.response?.data?.message || `Erreur lors de la creation du ${entityLabel}`);
     }
     setSubmitting(false);
   };
@@ -77,23 +96,23 @@ export function RecipientQuickCreateDialog({ open, onClose, initialName, onCreat
     <AppDialog
       open={open}
       onClose={onClose}
-      title="Nouveau destinataire"
+      title={`Nouveau ${entityLabel}`}
       size="md"
       footer={
         <>
           <AppButton variant="ghost" type="button" onClick={onClose} disabled={submitting}>
             Annuler
           </AppButton>
-          <AppButton type="submit" form="recipient-quick-form" loading={submitting}>
-            Creer le destinataire
+          <AppButton type="submit" form={formId} loading={submitting}>
+            Creer le {entityLabel}
           </AppButton>
         </>
       }
     >
-      <form id="recipient-quick-form" onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      <form id={formId} onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <p className="text-xs text-gray-500">
-          Le destinataire est ajoute a la liste des clients et pourra aussi etre utilise comme
-          expediteur plus tard.
+          Le {entityLabel} est ajoute a la liste des clients et pourra etre utilise comme
+          expediteur ou destinataire. Renseignez au moins un telephone ou un email.
         </p>
 
         <AppInput label="Nom complet" {...register('fullName')} error={errors.fullName?.message} />
@@ -145,7 +164,6 @@ export function RecipientQuickCreateDialog({ open, onClose, initialName, onCreat
             />
           )}
         />
-
       </form>
     </AppDialog>
   );

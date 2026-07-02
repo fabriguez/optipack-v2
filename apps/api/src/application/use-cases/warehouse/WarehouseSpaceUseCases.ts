@@ -17,7 +17,11 @@ export class ListWarehouseSpacesUseCase {
     const spaces = await prisma.warehouseSpace.findMany({
       where: { warehouseId },
       orderBy: { name: 'asc' },
-      include: { _count: { select: { parcels: true } } },
+      // Occupation = colis PHYSIQUEMENT presents dans la zone. Un colis remis
+      // au client (livre) / perdu / parti reste lie a sa zone (historique) mais
+      // a isPresent=false : sans ce filtre la zone continuait d'afficher 3 apres
+      // une remise au lieu de 2.
+      include: { _count: { select: { parcels: { where: { isPresent: true } } } } },
     });
     return spaces.map((s) => ({
       ...s,
@@ -48,7 +52,10 @@ export class UpsertWarehouseSpacesUseCase {
       // Suppression des spaces retires (sauf s'ils ont des colis)
       for (const e of existing) {
         if (!keepIds.has(e.id)) {
-          const c = await tx.parcel.count({ where: { spaceId: e.id } });
+          // On ne bloque la suppression que si des colis sont ENCORE presents
+          // dans la zone ; les colis livres/partis (isPresent=false) ne doivent
+          // pas empecher de supprimer une zone vide.
+          const c = await tx.parcel.count({ where: { spaceId: e.id, isPresent: true } });
           if (c > 0) {
             // On le desactive plutot que de supprimer
             await tx.warehouseSpace.update({
@@ -85,7 +92,11 @@ export class UpsertWarehouseSpacesUseCase {
       return tx.warehouseSpace.findMany({
         where: { warehouseId },
         orderBy: { name: 'asc' },
-        include: { _count: { select: { parcels: true } } },
+        // Occupation = colis PHYSIQUEMENT presents dans la zone. Un colis remis
+      // au client (livre) / perdu / parti reste lie a sa zone (historique) mais
+      // a isPresent=false : sans ce filtre la zone continuait d'afficher 3 apres
+      // une remise au lieu de 2.
+      include: { _count: { select: { parcels: { where: { isPresent: true } } } } },
       });
     });
   }

@@ -14,7 +14,7 @@ import { AppSwitch } from '@/components/ui/AppSwitch';
 import { useCreateParcel, useUpdateParcel } from '@/lib/hooks/useParcels';
 import { searchers, toSearchOption } from '@/lib/api/searchers';
 import { ParcelCategoryValues } from '@transitsoftservices/shared';
-import { RecipientQuickCreateDialog } from './RecipientQuickCreateDialog';
+import { ClientQuickCreateDialog } from './ClientQuickCreateDialog';
 import { QRScannerDialog } from '@/components/shared/QRScannerDialog';
 import { scanSound } from '@/lib/utils/scanSound';
 import { Camera } from 'lucide-react';
@@ -73,6 +73,10 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
   const [recipientCreateOpen, setRecipientCreateOpen] = useState(false);
   const [recipientCreateName, setRecipientCreateName] = useState('');
   const [recipientCreatePromise, setRecipientCreatePromise] = useState<((opt: SearchOption | null) => void) | null>(null);
+  // Creation inline d'un expediteur (client) depuis le selecteur "Client".
+  const [clientCreateOpen, setClientCreateOpen] = useState(false);
+  const [clientCreateName, setClientCreateName] = useState('');
+  const [clientCreatePromise, setClientCreatePromise] = useState<((opt: SearchOption | null) => void) | null>(null);
   // Images : pending = nouveaux fichiers a uploader apres save ; removed = images
   // existantes a supprimer apres save.
   const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
@@ -372,7 +376,15 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
                 error={errors.clientId?.message}
                 required
                 disabled={!!defaultClient}
-                placeholder="Selectionner un client"
+                placeholder="Selectionner ou creer un client"
+                createLabel="Creer le client"
+                onCreate={(query) =>
+                  new Promise<SearchOption | null>((resolve) => {
+                    setClientCreateName(query);
+                    setClientCreatePromise(() => resolve);
+                    setClientCreateOpen(true);
+                  })
+                }
               />
             )}
           />
@@ -588,8 +600,9 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
 
       </form>
 
-      <RecipientQuickCreateDialog
+      <ClientQuickCreateDialog
         open={recipientCreateOpen}
+        entityLabel="destinataire"
         initialName={recipientCreateName}
         onClose={() => {
           if (recipientCreatePromise) recipientCreatePromise(null);
@@ -601,6 +614,23 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
           setSelectedRecipient(opt);
           setRecipientCreatePromise(null);
           setRecipientCreateOpen(false);
+        }}
+      />
+
+      <ClientQuickCreateDialog
+        open={clientCreateOpen}
+        entityLabel="client"
+        initialName={clientCreateName}
+        onClose={() => {
+          if (clientCreatePromise) clientCreatePromise(null);
+          setClientCreatePromise(null);
+          setClientCreateOpen(false);
+        }}
+        onCreated={(opt) => {
+          if (clientCreatePromise) clientCreatePromise(opt);
+          setSelectedClient(opt);
+          setClientCreatePromise(null);
+          setClientCreateOpen(false);
         }}
       />
 
