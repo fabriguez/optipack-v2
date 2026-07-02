@@ -21,6 +21,8 @@ const logger = createChildLogger('DailyReportRegen');
  * post-cloture vont dans le rapport du jour suivant comme attendu.
  *
  * Idempotent (upsert sur agencyId+date). Best-effort : echec ne bloque rien.
+ * Les rapports CLOSED ne sont jamais reecrits : DailyReportService.generate
+ * retourne le payload fige sans regen (verrou immutabilite, pas de force ici).
  *
  * Optimisation : debounce 2s par agencyId+date pour grouper les rafales
  * d'evenements (creation batch de colis, etc.).

@@ -3,6 +3,7 @@ import { prisma } from '../../../config/database';
 import { CASH_REGISTER_REPOSITORY, type ICashRegisterRepository } from '../../interfaces/ICashRegisterRepository';
 import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 import { DailyReportService } from '../../services/DailyReportService';
+import { startOfDayInTimezone } from '../../../domain/utils/timezone';
 
 /**
  * Cloture automatique de fin de journee.
@@ -103,17 +104,6 @@ export class AutoCloseCashRegistersUseCase {
 
     return { closed, checked: agencies.length, reported };
   }
-}
-
-function startOfDayInTimezone(date: Date, timeZone: string): Date {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(date);
-  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? 0);
-  return new Date(Date.UTC(get('year'), get('month') - 1, get('day'), 0, 0, 0, 0));
 }
 
 function nowInTimezone(timeZone: string): Date {

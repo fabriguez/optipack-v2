@@ -1,6 +1,7 @@
 import { injectable } from 'tsyringe';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../../config/database';
+import { startOfDayInTimezone } from '../../domain/utils/timezone';
 
 type RouteKey = string;
 
@@ -113,7 +114,11 @@ function aggregateParcels(items: ParcelLite[]) {
  */
 @injectable()
 export class DailyReportService {
-  async generate(agencyId: string, date: Date): Promise<{ id: string; payload: any }> {
+  async generate(
+    agencyId: string,
+    date: Date,
+    opts?: { force?: boolean },
+  ): Promise<{ id: string; payload: any }> {
     // Resolution du jour calendaire dans le fuseau de l'agence + snap au
     // prochain jour ouvrable si necessaire. Generer un rapport pour un jour
     // non-ouvre (ex: dimanche) -> redirige vers le prochain jour ouvre (lundi).
@@ -145,6 +150,20 @@ export class DailyReportService {
 
     const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
 
+    // Verrou immutabilite : un rapport CLOSED est un snapshot definitif fige a
+    // la cloture. Regen refusee (on retourne le payload existant) sauf force
+    // explicite (endpoint manuel) -- la reecriture est alors tracee en
+    // passant le rapport en AMENDED (cf upsert final). Sans ce verrou, le
+    // DailyReportRegenHandler ecrasait les rapports historiques avec l'etat
+    // courant (sections snapshot non fenetrees : stock, flux entrees).
+    const existing = await prisma.agencyDailyReport.findUnique({
+      where: { agencyId_date: { agencyId, date: dayStart } },
+      select: { id: true, status: true, payload: true },
+    });
+    if (existing?.status === 'CLOSED' && !opts?.force) {
+      return { id: existing.id, payload: existing.payload };
+    }
+
     // Fenetre = session caisse si existante, sinon jour calendaire.
     // On match aussi en bornant la date au jour entier pour tolerer les
     // ecarts de stockage @db.Date (Prisma peut stocker en UTC).
@@ -153,7 +172,22 @@ export class DailyReportService {
       include: { closedBy: { select: { firstName: true, lastName: true } } },
     });
 
-    const windowStart = cashRegister?.createdAt ?? dayStart;
+    // Fenetres contigues : la fenetre demarre a la CLOTURE de la caisse
+    // precedente quand elle existe (et non a la creation de la caisse du
+    // jour, qui n'intervient qu'a la premiere action de caisse). Evite la
+    // zone morte [cloture veille -> ouverture caisse] ou les evenements
+    // colis (scans, mises en stock) n'apparaissaient dans aucun rapport.
+    const prevRegister = cashRegister
+      ? await prisma.agencyCashRegister.findFirst({
+          where: { agencyId, date: { lt: dayStart }, closedAt: { not: null } },
+          orderBy: { date: 'desc' },
+          select: { closedAt: true },
+        })
+      : null;
+    const windowStart =
+      cashRegister && prevRegister?.closedAt && prevRegister.closedAt < cashRegister.createdAt
+        ? prevRegister.closedAt
+        : cashRegister?.createdAt ?? dayStart;
     const windowEnd = cashRegister?.closedAt ?? new Date();
     const windowFilter = { gte: windowStart, lt: windowEnd };
 
@@ -232,6 +266,11 @@ export class DailyReportService {
     const advanceByRouteAndMethod: Record<string, PaymentRouteMethodAgg> = {};
     const recetteByRouteAndMethod: Record<string, PaymentRouteMethodAgg> = {};
     let paymentsTotal = 0;
+    // Ventilation par canal : guichet (agent encaisseur -> caisse physique)
+    // vs en ligne (receivedByUserId NULL, fonds chez le provider, jamais en
+    // caisse). Explique l'ecart paymentsTotal vs cashRegister.totalEntries.
+    let paymentsCounterTotal = 0;
+    let paymentsOnlineTotal = 0;
     let advancesTotal = 0;
     let recetteTotal = 0;
 
@@ -305,6 +344,8 @@ export class DailyReportService {
       const parcelsCtx = pay.parcel ? [pay.parcel] : pay.invoice?.parcels ?? [];
       const amount = Number(pay.amount);
       paymentsTotal += amount;
+      if (pay.receivedByUserId) paymentsCounterTotal += amount;
+      else paymentsOnlineTotal += amount;
 
       // 1) Section 1 : entrees par type transit + methode (sur le paiement
       //    entier, route majoritaire ou "Mixte").
@@ -764,6 +805,37 @@ export class DailyReportService {
     //     donc on ne compte que les disbursements "purs" (non issus d'une
     //     expense) pour eviter le double-comptage.
     // ------------------------------------------------------------------
+    // Regularisations : paiements ANNULES (voides) pendant la fenetre, quel
+    // que soit leur jour d'encaissement. La sortie caisse correspondante est
+    // faite au moment du void (VoidPaymentUseCase -> addExit sur la caisse
+    // courante) : cette liste explique donc les sorties de regularisation du
+    // jour sans reecrire le rapport du jour d'encaissement (immutable).
+    const voidedInWindow = await prisma.payment.findMany({
+      where: { agencyId, isVoided: true, voidedAt: windowFilter },
+      select: {
+        id: true,
+        reference: true,
+        amount: true,
+        paymentMethod: true,
+        createdAt: true,
+        voidedAt: true,
+        voidReason: true,
+        voidedBy: { select: { firstName: true, lastName: true } },
+      },
+      orderBy: { voidedAt: 'asc' },
+    });
+    const voidedPaymentsList = voidedInWindow.map((p) => ({
+      id: p.id,
+      reference: p.reference,
+      amount: Number(p.amount),
+      paymentMethod: p.paymentMethod,
+      receivedAt: p.createdAt.toISOString(),
+      voidedAt: p.voidedAt ? p.voidedAt.toISOString() : null,
+      reason: p.voidReason ?? null,
+      voidedBy: p.voidedBy ? `${p.voidedBy.firstName} ${p.voidedBy.lastName}` : null,
+    }));
+    const voidedPaymentsTotal = voidedPaymentsList.reduce((s, p) => s + p.amount, 0);
+
     const cashSnapshot = cashRegister
       ? {
           id: cashRegister.id,
@@ -874,22 +946,33 @@ export class DailyReportService {
       fundTransfersInTotal: incomingTransfersTotal,
 
       paymentsTotal,
+      // Ventilation guichet / en ligne : seul `counter` doit se rapprocher de
+      // cashRegister.totalEntries (les paiements en ligne ne passent pas par
+      // la caisse physique).
+      paymentsByChannel: {
+        counter: paymentsCounterTotal,
+        online: paymentsOnlineTotal,
+      },
+      // Paiements annules pendant la fenetre (sortie caisse de regularisation).
+      voidedPayments: voidedPaymentsList,
+      voidedPaymentsTotal,
       totalParcels: flowIn.count,
       totalRemainingAmount: 0,
     };
 
-    // Upsert : un rapport unique par agence/jour. Regen interdite si CLOSED
-    // (verrouillage cote controller -- ici on accepte pour la 1ere generation
-    // automatique au moment de la cloture caisse).
-    const existing = await prisma.agencyDailyReport.findUnique({
-      where: { agencyId_date: { agencyId, date: dayStart } },
-    });
-
+    // Upsert : un rapport unique par agence/jour. Un rapport CLOSED est
+    // bloque en debut de methode ; s'il a ete regenere en force, la
+    // reecriture est tracee en passant le statut a AMENDED. L'observation
+    // est preservee (update partiel).
     const payloadJson = payload as unknown as Prisma.InputJsonValue;
     const saved = existing
       ? await prisma.agencyDailyReport.update({
           where: { id: existing.id },
-          data: { payload: payloadJson, generatedAt: new Date() },
+          data: {
+            payload: payloadJson,
+            generatedAt: new Date(),
+            ...(existing.status === 'CLOSED' && { status: 'AMENDED' }),
+          },
         })
       : await prisma.agencyDailyReport.create({
           data: { agencyId, date: dayStart, payload: payloadJson },
@@ -900,20 +983,3 @@ export class DailyReportService {
 }
 
 export const DAILY_REPORT_SERVICE = Symbol.for('DailyReportService');
-
-/**
- * Calcule le JOUR CALENDAIRE de la date passee dans le fuseau de l'agence,
- * et retourne un Date a UTC midnight de ce jour. Stocke comme @db.Date par
- * Prisma -> conserve la portion date intacte. Evite les decalages quand le
- * serveur est en UTC et le fuseau agence en UTC+1 (cas Cameroun).
- */
-function startOfDayInTimezone(date: Date, timeZone: string): Date {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(date);
-  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? 0);
-  return new Date(Date.UTC(get('year'), get('month') - 1, get('day'), 0, 0, 0, 0));
-}

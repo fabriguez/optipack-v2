@@ -233,12 +233,12 @@ export class AgencyController {
   static async generateDailyReport(req: Request, res: Response, next: NextFunction) {
     try {
       const date = req.body?.date ? new Date(req.body.date) : new Date();
-      // Regeneration toujours permise (y compris CLOSED) : le payload est
-      // ecrase avec les dernieres donnees. Le statut CLOSED/observation sont
-      // preserves par DailyReportService.generate (update partiel : payload
-      // seulement, pas le status).
+      // Regen manuelle : forcee, y compris sur un rapport CLOSED -- mais la
+      // reecriture d'un CLOSED est tracee (le rapport passe en AMENDED).
+      // Les regens automatiques (DailyReportRegenHandler, cloture caisse)
+      // n'utilisent pas force et sont donc bloquees sur les CLOSED.
       const svc = container.resolve(DailyReportService);
-      const result = await svc.generate(req.params.id, date);
+      const result = await svc.generate(req.params.id, date, { force: true });
       res.status(201).json({ success: true, data: result });
     } catch (err) {
       next(err);

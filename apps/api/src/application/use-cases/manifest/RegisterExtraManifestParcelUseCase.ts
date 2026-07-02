@@ -75,6 +75,13 @@ export class RegisterExtraManifestParcelUseCase {
 
     const trackingNumber = `EXTRA-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 
+    // Meme regle que UnloadParcelUseCase : RECEIVED seulement si le colis est
+    // decharge a son agence de destination finale. Un extra trouve dans un
+    // conteneur en transit intermediaire (destination fournie != agence
+    // d'arrivee) est en attente de re-acheminement -> IN_STOCK.
+    const reachedFinalDestination = destAgency.id === container.arrivalAgencyId;
+    const finalStatus = reachedFinalDestination ? 'RECEIVED' : 'IN_STOCK';
+
     const parcel = await prisma.parcel.create({
       data: {
         organizationId: warehouse.agency.organizationId,
@@ -94,7 +101,7 @@ export class RegisterExtraManifestParcelUseCase {
         observation:
           (input.observation ?? '') +
           ' [Colis trouve physiquement dans le conteneur, non enregistre prealablement]',
-        status: 'RECEIVED',
+        status: finalStatus,
         isPresent: true,
         clientId: input.clientId,
         recipientId: input.recipientId ?? null,
@@ -127,7 +134,7 @@ export class RegisterExtraManifestParcelUseCase {
       parcelId: parcel.id,
       action: 'REGISTERED_AS_EXTRA',
       statusBefore: null,
-      statusAfter: 'RECEIVED',
+      statusAfter: finalStatus,
       isPresentAfter: true,
       warehouseId: warehouse.id,
       userId,

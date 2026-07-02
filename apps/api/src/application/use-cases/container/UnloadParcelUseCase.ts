@@ -210,7 +210,7 @@ export class UnloadParcelUseCase {
       parcelId,
       action: `UNLOADED_${action.toUpperCase()}`,
       statusBefore: parcel.status,
-      statusAfter: action === 'not_found' ? 'LOST' : 'RECEIVED',
+      statusAfter: action === 'not_found' ? 'LOST' : finalStatus,
       isPresentAfter: action !== 'not_found',
       containerId,
       warehouseId: action === 'not_found' ? null : warehouseId,

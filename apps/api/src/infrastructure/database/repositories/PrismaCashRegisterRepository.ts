@@ -3,6 +3,12 @@ import type { AgencyCashRegister, Prisma } from '@prisma/client';
 import type { ICashRegisterRepository } from '../../../application/interfaces/ICashRegisterRepository';
 import { prisma } from '../../../config/database';
 import { eventBus, DomainEvents } from '../../events/EventBus';
+import { startOfDayInTimezone } from '../../../domain/utils/timezone';
+
+/** Normalise une date en UTC midnight (convention @db.Date du projet). */
+function toUtcDateOnly(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
 
 @injectable()
 export class PrismaCashRegisterRepository implements ICashRegisterRepository {
@@ -11,11 +17,8 @@ export class PrismaCashRegisterRepository implements ICashRegisterRepository {
   }
 
   async findOpenByAgency(agencyId: string, date: Date): Promise<AgencyCashRegister | null> {
-    const dateOnly = new Date(date);
-    dateOnly.setHours(0, 0, 0, 0);
-
     return prisma.agencyCashRegister.findUnique({
-      where: { agencyId_date: { agencyId, date: dateOnly } },
+      where: { agencyId_date: { agencyId, date: toUtcDateOnly(date) } },
     });
   }
 
@@ -24,8 +27,16 @@ export class PrismaCashRegisterRepository implements ICashRegisterRepository {
     // ouvrable de l'agence, on bascule sur le prochain jour ouvrable. Cela
     // garantit que toute action post-fermeture (incl. week-end) atterrit
     // dans le rapport du prochain jour d'ouverture.
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    //
+    // "Aujourd'hui" = jour calendaire dans le FUSEAU DE L'AGENCE, encode en
+    // UTC midnight (meme convention que DailyReportService/AutoClose et le
+    // stockage @db.Date). L'ancien minuit local serveur decalait la date de
+    // caisse d'un jour selon le fuseau du serveur.
+    const agency = await prisma.agency.findUnique({
+      where: { id: agencyId },
+      select: { timezone: true },
+    });
+    const today = startOfDayInTimezone(new Date(), agency?.timezone || 'Africa/Douala');
 
     const todayRegister = await this.findOpenByAgency(agencyId, today);
     if (todayRegister && !todayRegister.isClosed) return todayRegister;
@@ -55,7 +66,9 @@ export class PrismaCashRegisterRepository implements ICashRegisterRepository {
       select: { dayOfWeek: true },
     });
     if (hours.length === 0) return true;
-    const dow = date.getDay();
+    // Les dates de jour sont encodees UTC midnight du jour agence -> le jour
+    // de semaine se lit en UTC.
+    const dow = date.getUTCDay();
     return hours.some((h) => h.dayOfWeek === dow);
   }
 
@@ -64,8 +77,7 @@ export class PrismaCashRegisterRepository implements ICashRegisterRepository {
    * de cloture de la caisse precedente comme solde d'ouverture.
    */
   private async openOrGetForDate(agencyId: string, date: Date): Promise<AgencyCashRegister> {
-    const dateOnly = new Date(date);
-    dateOnly.setHours(0, 0, 0, 0);
+    const dateOnly = toUtcDateOnly(date);
 
     const existing = await this.findOpenByAgency(agencyId, dateOnly);
     if (existing) return existing;
@@ -98,18 +110,16 @@ export class PrismaCashRegisterRepository implements ICashRegisterRepository {
     });
     const openDays = new Set(hours.map((h) => h.dayOfWeek));
 
-    const candidate = new Date(fromDate);
-    candidate.setHours(0, 0, 0, 0);
+    const candidate = toUtcDateOnly(fromDate);
     for (let i = 1; i <= 7; i++) {
-      candidate.setDate(candidate.getDate() + 1);
-      if (openDays.size === 0 || openDays.has(candidate.getDay())) {
+      candidate.setUTCDate(candidate.getUTCDate() + 1);
+      if (openDays.size === 0 || openDays.has(candidate.getUTCDay())) {
         return candidate;
       }
     }
     // Defensive fallback : J+1
-    const fallback = new Date(fromDate);
-    fallback.setDate(fallback.getDate() + 1);
-    fallback.setHours(0, 0, 0, 0);
+    const fallback = toUtcDateOnly(fromDate);
+    fallback.setUTCDate(fallback.getUTCDate() + 1);
     return fallback;
   }
 
