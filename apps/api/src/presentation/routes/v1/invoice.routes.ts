@@ -9,6 +9,7 @@ import { loadPdfBranding } from '../../../application/services/PdfBrandingServic
 import { ExcelService } from '../../../infrastructure/excel/ExcelService';
 import { container } from '../../../container';
 import { StorageService } from '../../../infrastructure/storage/StorageService';
+import { safeFetch } from '../../../infrastructure/http/safeFetch';
 import { StorageChargeService } from '../../../application/services/StorageChargeService';
 import { invoiceScope, scopeCtx } from '../../../application/services/scope/agencyScope';
 import { applyFieldPolicy, INVOICE_FIELD_POLICY } from '../../serializers/fieldPolicy';
@@ -93,7 +94,8 @@ async function loadRawImage(url: string): Promise<Buffer | null> {
   // Cas 2 : URL absolue http(s) externe (legacy / preuve client). Fetch direct.
   if (/^https?:\/\//i.test(url)) {
     try {
-      const r = await fetch(url);
+      // safeFetch : bloque les URLs pointant vers des hotes internes (SSRF).
+      const r = await safeFetch(url);
       if (!r.ok) return null;
       const ab = await r.arrayBuffer();
       return Buffer.from(ab);

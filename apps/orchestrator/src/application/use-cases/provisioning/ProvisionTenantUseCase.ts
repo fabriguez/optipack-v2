@@ -534,14 +534,17 @@ true`;
     // #1B5E20,` non quote, SyntaxError au parse Node. Solution propre : on
     // ecrit le script dans /tmp via heredoc puis on l'execute -- plus aucun
     // probleme d'echappement.
-    // Mot de passe owner : genere aleatoire (16 chars URL-safe). Affiche en
-    // clair dans les logs du job une seule fois -- admin doit le noter ou
-    // le copier depuis le JobLogsViewer. Apres, seul un reset via
-    // POST /tenants/:id/reset-owner-password peut regenerer un nouveau pwd.
+    // Mot de passe owner : genere aleatoire (16 chars URL-safe). Le mot de
+    // passe NE DOIT JAMAIS etre logue (les logs du job sont persistes et
+    // visibles dans le dashboard ops + docker logs). Il n'est pas recuperable
+    // apres provisioning : l'admin doit utiliser un reset via
+    // POST /tenants/:id/reset-owner-password pour regenerer un nouveau pwd.
+    // SECURITE : si le mot de passe doit etre transmis a l'operateur, cela
+    // DOIT se faire hors-bande (canal securise / reset), jamais via ces logs.
     const ownerPassword = randomBytes(12).toString('base64url');
     await log(`[provision] seed initial Organization + admin owner`);
     await log(
-      `[provision] OWNER CREDENTIALS : email=${tenant.ownerEmail} password=${ownerPassword} (NOTE-LE : non recuperable apres ce log)`,
+      `[provision] OWNER CREDENTIALS : email=${tenant.ownerEmail} -- mot de passe genere (non logue pour raisons de securite ; a recuperer via reset owner password ou canal securise)`,
     );
     const seedPayload = {
       id: tenant.id,
@@ -644,8 +647,11 @@ rm -f ${tmpScript} ${tmpData}
     // regler ses factures (Mobile Money). Idempotent (1 compte / tenant).
     try {
       const billing = await TenantUseCases.createOrResetBillingUser(tenant.id);
+      // SECURITE : ne jamais loguer billing.password (logs persistes/dashboard).
+      // Le mot de passe doit etre transmis hors-bande (canal securise) ou
+      // regenere via un reset depuis la vue tenant.
       await log(
-        `[provision] BILLING USER : email=${billing.email} password=${billing.password} (NOTE-LE : non recuperable apres ce log)`,
+        `[provision] BILLING USER : email=${billing.email} -- mot de passe genere (non logue pour raisons de securite ; a recuperer via reset depuis la vue tenant ou canal securise)`,
       );
     } catch (e) {
       // Non bloquant : un super-admin peut le (re)generer via la vue tenant.

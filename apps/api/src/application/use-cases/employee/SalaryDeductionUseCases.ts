@@ -30,8 +30,10 @@ export class CreateSalaryDeductionUseCase {
 
 @injectable()
 export class CancelSalaryDeductionUseCase {
-  async execute(deductionId: string, reason: string, _userId: string) {
-    const item = await prisma.salaryDeduction.findUnique({ where: { id: deductionId } });
+  async execute(deductionId: string, reason: string, _userId: string, organizationId: string) {
+    const item = await prisma.salaryDeduction.findFirst({
+      where: { id: deductionId, employee: { agency: { organizationId } } },
+    });
     if (!item) throw new NotFoundError('Retenue', deductionId);
     if (item.status !== 'PENDING') {
       throw new BusinessError('Seules les retenues en attente peuvent etre annulees.');

@@ -10,9 +10,9 @@ export class UpdateTransitRouteUseCase {
     @inject(TRANSIT_ROUTE_REPOSITORY) private transitRepo: ITransitRouteRepository,
   ) {}
 
-  async execute(id: string, input: UpdateTransitRouteInput) {
+  async execute(id: string, input: UpdateTransitRouteInput, organizationId: string) {
     const route = await this.transitRepo.findById(id);
-    if (!route) {
+    if (!route || route.organizationId !== organizationId) {
       throw new NotFoundError('Route de transit', id);
     }
     const updated = await this.transitRepo.update(id, input);

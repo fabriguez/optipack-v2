@@ -9,9 +9,9 @@ export class DeleteTransitRouteUseCase {
     @inject(TRANSIT_ROUTE_REPOSITORY) private transitRepo: ITransitRouteRepository,
   ) {}
 
-  async execute(id: string) {
+  async execute(id: string, organizationId: string) {
     const route = await this.transitRepo.findById(id);
-    if (!route) {
+    if (!route || route.organizationId !== organizationId) {
       throw new NotFoundError('Route de transit', id);
     }
     await this.transitRepo.delete(id);

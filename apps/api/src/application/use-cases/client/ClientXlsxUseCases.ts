@@ -41,7 +41,7 @@ export class ExportClientsXlsxUseCase {
     });
 
     const wb = new ExcelJS.Workbook();
-    wb.creator = 'TransitSoftServices';
+    wb.creator = 'Export';
     wb.created = new Date();
     const ws = wb.addWorksheet('Clients', { views: [{ state: 'frozen', ySplit: 1 }] });
     ws.columns = COLUMNS.map((c) => ({ header: c.header, key: c.key, width: c.width }));

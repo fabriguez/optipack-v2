@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { prisma } from '../../config/database';
-import { BusinessError } from '../../domain/errors/BusinessError';
+import { BusinessError, NotFoundError } from '../../domain/errors/BusinessError';
+import { getOrgId } from '../middleware/tenantGuard';
 
 type Scope = 'GLOBAL' | 'AGENCY' | 'EMPLOYEE';
 

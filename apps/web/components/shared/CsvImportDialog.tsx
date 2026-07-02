@@ -210,7 +210,7 @@ export function CsvImportDialog({
     try {
       const ExcelJS = (await import('exceljs')).default;
       const wb = new ExcelJS.Workbook();
-      wb.creator = 'TransitSoftServices';
+      wb.creator = 'Export';
       wb.created = new Date();
       const sheetName = (templateFileName ?? title).slice(0, 31).replace(/[\\/?*[\]:]/g, '_');
       const ws = wb.addWorksheet(sheetName);

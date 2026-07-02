@@ -39,9 +39,9 @@ export class RequestEmployeeLeaveUseCase {
 
 @injectable()
 export class ValidateEmployeeLeaveUseCase {
-  async execute(leaveId: string, decision: 'APPROVED' | 'REJECTED', userId: string, comment?: string) {
-    const leave = await prisma.employeeLeave.findUnique({
-      where: { id: leaveId },
+  async execute(leaveId: string, decision: 'APPROVED' | 'REJECTED', userId: string, organizationId: string, comment?: string) {
+    const leave = await prisma.employeeLeave.findFirst({
+      where: { id: leaveId, employee: { agency: { organizationId } } },
       include: { employee: true },
     });
     if (!leave) throw new NotFoundError('Demande conge', leaveId);
@@ -126,8 +126,10 @@ export class ListAgencyPendingLeavesUseCase {
 
 @injectable()
 export class CancelEmployeeLeaveUseCase {
-  async execute(leaveId: string) {
-    const leave = await prisma.employeeLeave.findUnique({ where: { id: leaveId } });
+  async execute(leaveId: string, organizationId: string) {
+    const leave = await prisma.employeeLeave.findFirst({
+      where: { id: leaveId, employee: { agency: { organizationId } } },
+    });
     if (!leave) throw new NotFoundError('Conge', leaveId);
     if (leave.status === 'CANCELLED') return leave;
     return prisma.employeeLeave.update({
@@ -145,8 +147,10 @@ export class CancelEmployeeLeaveUseCase {
  */
 @injectable()
 export class EndEmployeeLeaveEarlyUseCase {
-  async execute(leaveId: string, endDate: Date, userId: string, reason?: string) {
-    const leave = await prisma.employeeLeave.findUnique({ where: { id: leaveId } });
+  async execute(leaveId: string, endDate: Date, userId: string, organizationId: string, reason?: string) {
+    const leave = await prisma.employeeLeave.findFirst({
+      where: { id: leaveId, employee: { agency: { organizationId } } },
+    });
     if (!leave) throw new NotFoundError('Conge', leaveId);
     if (leave.status !== 'APPROVED') {
       throw new BusinessError('Seuls les conges APPROVED peuvent etre cloturees anticipement');

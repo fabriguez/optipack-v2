@@ -46,7 +46,7 @@ export class AgencyController {
   static async getById(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(GetAgencyUseCase);
-      const agency = await useCase.execute(req.params.id);
+      const agency = await useCase.execute(req.params.id, getOrgId(req));
       res.json({ success: true, data: agency });
     } catch (err) {
       next(err);
@@ -56,7 +56,7 @@ export class AgencyController {
   static async update(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(UpdateAgencyUseCase);
-      const agency = await useCase.execute(req.params.id, req.body);
+      const agency = await useCase.execute(req.params.id, req.body, getOrgId(req));
       res.json({ success: true, data: agency });
     } catch (err) {
       next(err);
@@ -66,7 +66,7 @@ export class AgencyController {
   static async delete(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(DeleteAgencyUseCase);
-      await useCase.execute(req.params.id);
+      await useCase.execute(req.params.id, getOrgId(req));
       res.json({ success: true, message: 'Agence desactivee' });
     } catch (err) {
       next(err);
@@ -91,7 +91,7 @@ export class AgencyController {
   static async createCharge(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(CreateAgencyChargeUseCase);
-      const charge = await useCase.execute(req.params.id, req.body, req.user!.userId);
+      const charge = await useCase.execute(req.params.id, req.body, req.user!.userId, getOrgId(req));
       res.status(201).json({ success: true, data: charge });
     } catch (err) {
       next(err);
@@ -101,7 +101,7 @@ export class AgencyController {
   static async updateCharge(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(UpdateAgencyChargeUseCase);
-      const charge = await useCase.execute(req.params.chargeId, req.body);
+      const charge = await useCase.execute(req.params.chargeId, req.body, getOrgId(req));
       res.json({ success: true, data: charge });
     } catch (err) {
       next(err);
@@ -111,7 +111,7 @@ export class AgencyController {
   static async deleteCharge(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(DeleteAgencyChargeUseCase);
-      await useCase.execute(req.params.chargeId);
+      await useCase.execute(req.params.chargeId, getOrgId(req));
       res.json({ success: true, message: 'Charge desactivee ou supprimee' });
     } catch (err) {
       next(err);
@@ -121,7 +121,7 @@ export class AgencyController {
   static async payCharge(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(PayAgencyChargeUseCase);
-      const expense = await useCase.execute(req.params.chargeId, req.body, req.user!.userId);
+      const expense = await useCase.execute(req.params.chargeId, req.body, req.user!.userId, getOrgId(req));
       res.status(201).json({ success: true, data: expense });
     } catch (err) {
       next(err);
@@ -139,7 +139,7 @@ export class AgencyController {
         return res.status(400).json({ success: false, message: 'Aucun fichier fourni' });
       }
       const useCase = container.resolve(UploadAgencyImageUseCase);
-      const agency = await useCase.execute(req.params.id, file);
+      const agency = await useCase.execute(req.params.id, file, getOrgId(req));
       res.json({ success: true, data: agency });
     } catch (err) {
       next(err);
@@ -149,7 +149,7 @@ export class AgencyController {
   static async deleteImage(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(DeleteAgencyImageUseCase);
-      const agency = await useCase.execute(req.params.id);
+      const agency = await useCase.execute(req.params.id, getOrgId(req));
       res.json({ success: true, data: agency });
     } catch (err) {
       next(err);
@@ -221,9 +221,15 @@ export class AgencyController {
     try {
       const item = await prisma.agencyDailyReport.findUnique({
         where: { id: req.params.reportId },
-        include: { attachments: true, closedByUser: { select: { id: true, firstName: true, lastName: true } } },
+        include: {
+          attachments: true,
+          closedByUser: { select: { id: true, firstName: true, lastName: true } },
+          agency: { select: { organizationId: true } },
+        },
       });
-      if (!item) throw new NotFoundError('Rapport journalier', req.params.reportId);
+      if (!item || item.agency.organizationId !== getOrgId(req)) {
+        throw new NotFoundError('Rapport journalier', req.params.reportId);
+      }
       res.json({ success: true, data: item });
     } catch (err) {
       next(err);
@@ -259,6 +265,13 @@ export class AgencyController {
     try {
       const observation = (req.body?.observation as string | undefined) ?? null;
       const status = req.body?.status as 'CLOSED' | 'AMENDED' | undefined;
+      const existing = await prisma.agencyDailyReport.findUnique({
+        where: { id: req.params.reportId },
+        include: { agency: { select: { organizationId: true } } },
+      });
+      if (!existing || existing.agency.organizationId !== getOrgId(req)) {
+        throw new NotFoundError('Rapport journalier', req.params.reportId);
+      }
       const updated = await prisma.agencyDailyReport.update({
         where: { id: req.params.reportId },
         data: {
@@ -284,9 +297,12 @@ export class AgencyController {
         include: {
           attachments: { orderBy: { createdAt: 'asc' } },
           closedByUser: { select: { firstName: true, lastName: true } },
+          agency: { select: { organizationId: true } },
         },
       });
-      if (!report) throw new NotFoundError('Rapport journalier', req.params.reportId);
+      if (!report || report.agency.organizationId !== getOrgId(req)) {
+        throw new NotFoundError('Rapport journalier', req.params.reportId);
+      }
 
       // Recupere le logo organisation depuis MinIO si dispo (le payload n'a
       // que l'URL ; le PDF a besoin du buffer pour l'embarquer).
@@ -365,8 +381,13 @@ export class AgencyController {
     try {
       const att = await prisma.agencyDailyReportAttachment.findUnique({
         where: { id: req.params.attachmentId },
+        include: { report: { select: { agency: { select: { organizationId: true } } } } },
       });
-      if (!att || att.reportId !== req.params.reportId) {
+      if (
+        !att ||
+        att.reportId !== req.params.reportId ||
+        att.report.agency.organizationId !== getOrgId(req)
+      ) {
         return res.status(404).json({ success: false, message: 'Piece jointe introuvable' });
       }
       const caption = typeof req.body?.caption === 'string' ? req.body.caption.trim() : null;
@@ -384,8 +405,13 @@ export class AgencyController {
     try {
       const att = await prisma.agencyDailyReportAttachment.findUnique({
         where: { id: req.params.attachmentId },
+        include: { report: { select: { agency: { select: { organizationId: true } } } } },
       });
-      if (!att || att.reportId !== req.params.reportId) {
+      if (
+        !att ||
+        att.reportId !== req.params.reportId ||
+        att.report.agency.organizationId !== getOrgId(req)
+      ) {
         return res.status(404).json({ success: false, message: 'Piece jointe introuvable' });
       }
       await prisma.agencyDailyReportAttachment.delete({ where: { id: att.id } });
@@ -411,8 +437,13 @@ export class AgencyController {
 
   static async addChargeDocument(req: Request, res: Response, next: NextFunction) {
     try {
-      const charge = await prisma.agencyCharge.findUnique({ where: { id: req.params.chargeId } });
-      if (!charge) throw new NotFoundError('Charge', req.params.chargeId);
+      const charge = await prisma.agencyCharge.findUnique({
+        where: { id: req.params.chargeId },
+        include: { agency: { select: { organizationId: true } } },
+      });
+      if (!charge || charge.agency.organizationId !== getOrgId(req)) {
+        throw new NotFoundError('Charge', req.params.chargeId);
+      }
 
       const { url, storageKey, fileName, contentType, size, caption } = req.body as {
         url: string;
@@ -456,8 +487,15 @@ export class AgencyController {
 
   static async deleteChargeDocument(req: Request, res: Response, next: NextFunction) {
     try {
-      const doc = await prisma.agencyChargeDocument.findUnique({ where: { id: req.params.documentId } });
-      if (!doc || doc.chargeId !== req.params.chargeId) {
+      const doc = await prisma.agencyChargeDocument.findUnique({
+        where: { id: req.params.documentId },
+        include: { charge: { select: { agency: { select: { organizationId: true } } } } },
+      });
+      if (
+        !doc ||
+        doc.chargeId !== req.params.chargeId ||
+        doc.charge.agency.organizationId !== getOrgId(req)
+      ) {
         return res.status(404).json({ success: false, message: 'Document introuvable' });
       }
       await prisma.agencyChargeDocument.delete({ where: { id: doc.id } });
@@ -506,7 +544,7 @@ export class AgencyController {
     try {
       const useCase = container.resolve(SetAgencyOpeningHoursUseCase);
       const hours = Array.isArray(req.body?.hours) ? req.body.hours : [];
-      const result = await useCase.execute(req.params.id, hours);
+      const result = await useCase.execute(req.params.id, hours, getOrgId(req));
       res.json({ success: true, data: result });
     } catch (err) {
       next(err);

@@ -244,7 +244,7 @@ function drawBrandedHeader(
     .fillColor(COLORS.white)
     .font('Helvetica-Bold')
     .fontSize(16)
-    .text((branding.organizationName || 'OptiPack').toUpperCase(), textX, 18, {
+    .text((branding.organizationName || '').toUpperCase(), textX, 18, {
       width: pageWidth - (textX - leftX),
     });
 
@@ -508,7 +508,7 @@ export class PDFService {
     doc
       .fontSize(20)
       .fillColor(COLORS.white)
-      .text((invoiceData.branding?.organizationName || 'OptiPack').toUpperCase(), invNameX, 58, {
+      .text((invoiceData.branding?.organizationName || '').toUpperCase(), invNameX, 58, {
         width: 230,
       });
 
@@ -887,7 +887,7 @@ export class PDFService {
     doc
       .fontSize(9)
       .fillColor(COLORS.gray)
-      .text(invoiceData.branding?.organizationName || 'OptiPack', 50, footerY + 8, {
+      .text(invoiceData.branding?.organizationName || '', 50, footerY + 8, {
         align: 'center',
         width: pageWidth,
       });
@@ -1299,7 +1299,7 @@ export class PDFService {
       } catch { /* logo invalide -> skip */ }
     }
     doc.fontSize(12).fillColor(COLORS.white).text(
-      (branding?.organizationName || 'OptiPack').toUpperCase(),
+      (branding?.organizationName || '').toUpperCase(),
       labelTextX, topOffset + 7, { width: labelTextW, align: 'center' },
     );
 
@@ -1410,7 +1410,7 @@ export class PDFService {
     // Footer line
     doc.moveTo(15, 395).lineTo(15 + w, 395).strokeColor(COLORS.primary).lineWidth(0.5).stroke();
     doc.fontSize(6).fillColor(COLORS.gray).text(
-      branding?.organizationName || 'OptiPack',
+      branding?.organizationName || '',
       15, 400, { width: w, align: 'center' },
     );
 

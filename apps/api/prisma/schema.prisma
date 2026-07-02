@@ -115,6 +115,8 @@ model Organization {
   notificationTemplates   TenantNotificationTemplate[]
   // Session WhatsApp personnel du tenant (whatsapp-web.js).
   whatsAppSession         TenantWhatsAppSession?
+  // Plannings de travail (horaires RH) scopes a l'organisation.
+  workSchedules           WorkSchedule[]
 
   @@map("organizations")
 }
@@ -3383,13 +3385,19 @@ model WorkSchedule {
   // Fuseau horaire IANA pour l'interpretation des heures (heritage agence si NULL).
   timezone    String?
   isActive    Boolean  @default(true)
+  // Isolation multi-tenant. NULLABLE pour l'instant : les lignes existantes n'ont
+  // pas d'organisation, une colonne NOT NULL casserait la migration/backfill.
+  // A rendre obligatoire (String, sans ?) apres le backfill des lignes existantes.
+  organizationId String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  organization Organization? @relation(fields: [organizationId], references: [id])
   days      WorkScheduleDay[]
   agencies  Agency[]          @relation("AgencyWorkSchedule")
   employees Employee[]        @relation("EmployeeSchedule")
 
+  @@index([organizationId])
   @@map("work_schedules")
 }
 

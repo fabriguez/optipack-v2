@@ -346,11 +346,28 @@ function ReportDetails({
         totalVolume={payload.flow?.in?.totalVolume}
       />
       <RouteMassVolume
-        title="Flux du jour - Sorties (colis charges / expedies)"
+        title="Flux du jour - Sorties (colis ayant quitte l'agence)"
         data={payload.flow?.out?.byRoute}
         totalWeight={payload.flow?.out?.totalWeight}
         totalVolume={payload.flow?.out?.totalVolume}
       />
+      {/* Ventilation des sorties : remises client vs departs en transit */}
+      {payload.flow?.out?.byType && (
+        <>
+          <RouteMassVolume
+            title="Sorties - Remis aux clients"
+            data={payload.flow.out.byType.handedOver?.byRoute}
+            totalWeight={payload.flow.out.byType.handedOver?.totalWeight}
+            totalVolume={payload.flow.out.byType.handedOver?.totalVolume}
+          />
+          <RouteMassVolume
+            title="Sorties - Partis en transit (charges en conteneur)"
+            data={payload.flow.out.byType.toTransit?.byRoute}
+            totalWeight={payload.flow.out.byType.toTransit?.totalWeight}
+            totalVolume={payload.flow.out.byType.toTransit?.totalVolume}
+          />
+        </>
+      )}
 
       {/* Conteneurs recus / envoyes */}
       <ContainerList title="Conteneurs recus du jour" containers={payload.receivedContainers} dateLabel="Arrive le" dateField="arrivalDate" manifestVariant="received" />

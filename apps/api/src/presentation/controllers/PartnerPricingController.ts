@@ -87,9 +87,15 @@ export class PartnerPricingController {
 
       const existing = await prisma.partnerPricing.findUnique({
         where: { id },
-        include: { transitRoute: { select: { type: true } } },
+        include: {
+          transitRoute: { select: { type: true } },
+          client: { select: { organizationId: true } },
+        },
       });
-      if (!existing) throw new NotFoundError('Tarification partenaire', id);
+      // Anti-IDOR : la tarification doit appartenir a l'org de l'appelant.
+      if (!existing || existing.client.organizationId !== scopeCtx(req).orgId) {
+        throw new NotFoundError('Tarification partenaire', id);
+      }
 
       // Revalide la combinaison kg/m3 selon le type de la route, en tenant
       // compte des valeurs deja en base pour les champs non fournis.
@@ -118,7 +124,16 @@ export class PartnerPricingController {
 
   static async remove(req: Request, res: Response, next: NextFunction) {
     try {
-      const deleted = await prisma.partnerPricing.delete({ where: { id: req.params.id } });
+      const { id } = req.params;
+      // Anti-IDOR : la tarification doit appartenir a l'org de l'appelant.
+      const existing = await prisma.partnerPricing.findUnique({
+        where: { id },
+        include: { client: { select: { organizationId: true } } },
+      });
+      if (!existing || existing.client.organizationId !== scopeCtx(req).orgId) {
+        throw new NotFoundError('Tarification partenaire', id);
+      }
+      const deleted = await prisma.partnerPricing.delete({ where: { id } });
       realtimeService.toClient(deleted.clientId, 'client:tariffs:updated', {});
       realtimeService.toClient(deleted.clientId, 'client:profile:updated', {});
       res.json({ success: true });

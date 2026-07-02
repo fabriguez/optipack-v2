@@ -8,12 +8,17 @@ import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessErr
  */
 @injectable()
 export class DeleteAgencyChargeUseCase {
-  async execute(chargeId: string) {
+  async execute(chargeId: string, organizationId: string) {
     const charge = await prisma.agencyCharge.findUnique({
       where: { id: chargeId },
-      include: { _count: { select: { expenses: true } } },
+      include: {
+        _count: { select: { expenses: true } },
+        agency: { select: { organizationId: true } },
+      },
     });
-    if (!charge) throw new NotFoundError('Charge', chargeId);
+    if (!charge || charge.agency.organizationId !== organizationId) {
+      throw new NotFoundError('Charge', chargeId);
+    }
 
     if ((charge as any).isAutoManaged) {
       throw new BusinessError(

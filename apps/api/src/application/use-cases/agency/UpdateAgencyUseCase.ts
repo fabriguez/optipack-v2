@@ -10,9 +10,9 @@ export class UpdateAgencyUseCase {
     @inject(AGENCY_REPOSITORY) private agencyRepo: IAgencyRepository,
   ) {}
 
-  async execute(id: string, input: UpdateAgencyInput) {
+  async execute(id: string, input: UpdateAgencyInput, organizationId: string) {
     const agency = await this.agencyRepo.findById(id);
-    if (!agency) {
+    if (!agency || agency.organizationId !== organizationId) {
       throw new NotFoundError('Agence', id);
     }
 

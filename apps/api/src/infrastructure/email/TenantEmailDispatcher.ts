@@ -18,7 +18,7 @@ import type {
  *  1. Tenant a un emailConfig.provider == 'resend' + credentials valides
  *     -> ResendProvider avec sa propre cle API et son sender domain.
  *  2. Sinon (pas de config OU provider == 'shared' OU credentials invalides) :
- *     a. Si RESEND_API_KEY defini en env -> Resend partage OptiPack.
+ *     a. Si RESEND_API_KEY defini en env -> Resend partage plateforme.
  *     b. Sinon -> SharedSmtpProvider (nodemailer SMTP).
  *
  * Pourquoi cette cascade : le "tenant principal" (sans emailConfig) tombait
@@ -160,7 +160,7 @@ class TenantEmailDispatcher {
     }
   }
 
-  /** Provider "shared" OptiPack : Resend env > SMTP. */
+  /** Provider "shared" plateforme : Resend env > SMTP. */
   private resolveSharedProvider(): TenantEmailProvider {
     return sharedResend ?? sharedSmtp;
   }

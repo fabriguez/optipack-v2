@@ -17,6 +17,10 @@ export class PaymentController {
       // Scope agence : la facture cible doit etre dans le scope du caissier.
       const bodyInvoiceId = (req.body as { invoiceId?: string })?.invoiceId;
       if (bodyInvoiceId) await invoiceScope.assert(bodyInvoiceId, scopeCtx(req));
+      // SECURITE (integrite financiere) : l'agence d'imputation est derivee
+      // cote serveur depuis invoice.agencyId dans RecordPaymentUseCase ; on ne
+      // fait jamais confiance a body.agencyId (attribution d'encaissement a une
+      // agence arbitraire, credit caisse + ecriture journal frauduleux).
       const useCase = container.resolve(RecordPaymentUseCase);
       const result = await useCase.execute(req.body, req.user!.userId);
       // Realtime : notifie le client proprietaire de la facture

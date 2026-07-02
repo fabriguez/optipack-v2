@@ -10,9 +10,11 @@ export class VoidHeadOfficeDisbursementUseCase {
     @inject(HEAD_OFFICE_CASH_REGISTER_REPOSITORY) private hqRegisterRepo: IHeadOfficeCashRegisterRepository,
   ) {}
 
-  async execute(id: string, reason: string, userId: string) {
+  async execute(id: string, reason: string, userId: string, organizationId: string) {
     const disbursement = await prisma.headOfficeDisbursementVoucher.findUnique({ where: { id } });
-    if (!disbursement) throw new NotFoundError('Bon de decaissement siege', id);
+    if (!disbursement || disbursement.organizationId !== organizationId) {
+      throw new NotFoundError('Bon de decaissement siege', id);
+    }
     if (disbursement.isVoided) throw new BusinessError('Ce bon est deja annule.');
 
     const amount = Number(disbursement.amount);

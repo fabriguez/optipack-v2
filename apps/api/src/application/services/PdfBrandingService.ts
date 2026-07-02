@@ -1,6 +1,7 @@
 import { container } from '../../container';
 import { prisma } from '../../config/database';
 import { StorageService } from '../../infrastructure/storage/StorageService';
+import { safeFetch } from '../../infrastructure/http/safeFetch';
 import { createChildLogger } from '../../config/logger';
 import type { PDFBranding } from './PDFService';
 
@@ -72,10 +73,10 @@ export async function fetchLogoBuffer(logoUrl: string | null | undefined): Promi
   // 3. URL externe absolue (ou proxy public-logo) : fetch direct.
   if (/^https?:\/\//i.test(logoUrl)) {
     try {
-      const res = await fetch(logoUrl);
+      const res = await safeFetch(logoUrl);
       if (res.ok) return Buffer.from(await res.arrayBuffer());
     } catch (err) {
-      logger.warn({ err, logoUrl }, 'fetchLogoBuffer: fetch externe echoue');
+      logger.warn({ err, logoUrl }, 'fetchLogoBuffer: fetch externe echoue (ou URL bloquee SSRF)');
     }
   }
   return null;

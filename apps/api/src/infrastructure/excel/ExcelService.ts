@@ -72,7 +72,8 @@ export class ExcelService {
           data[col.key] = '';
         } else {
           const raw = row[col.key];
-          data[col.key] = col.format ? col.format(raw, row) : this.flatten(raw);
+          const value = col.format ? col.format(raw, row) : this.flatten(raw);
+          data[col.key] = this.neutralizeCell(value);
         }
       }
       ws.addRow(data);
@@ -221,6 +222,20 @@ export class ExcelService {
     if (ct.includes('png')) return 'png';
     if (ct.includes('gif')) return 'gif';
     return null;
+  }
+
+  /**
+   * Neutralise l'injection de formule (CSV/Excel injection). Si une valeur
+   * textuelle commence par un caractere declencheur de formule (`=`, `+`, `-`,
+   * `@`, tabulation, retour chariot), on la prefixe d'une apostrophe simple
+   * afin qu'un tableur l'interprete comme du texte litteral et non une formule.
+   * N'affecte que les chaines : les nombres, dates, booleens, null/undefined et
+   * objets formule intentionnels de l'app sont laisses intacts.
+   */
+  private neutralizeCell<T>(value: T): T | string {
+    if (typeof value !== 'string' || value.length === 0) return value;
+    if (/^[=+\-@\t\r]/.test(value)) return `'${value}`;
+    return value;
   }
 
   private flatten(value: any): string {

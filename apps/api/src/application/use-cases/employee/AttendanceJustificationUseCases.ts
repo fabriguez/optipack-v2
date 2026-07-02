@@ -19,11 +19,13 @@ interface SubmitInput {
 
 @injectable()
 export class SubmitAttendanceJustificationUseCase {
-  async execute(input: SubmitInput, userId: string) {
+  async execute(input: SubmitInput, userId: string, organizationId: string) {
     if (!input.text || input.text.trim().length < 3) {
       throw new BusinessError('Texte de justification requis (min. 3 caracteres)');
     }
-    const att = await prisma.attendance.findUnique({ where: { id: input.attendanceId } });
+    const att = await prisma.attendance.findFirst({
+      where: { id: input.attendanceId, employee: { agency: { organizationId } } },
+    });
     if (!att) throw new NotFoundError('Pointage', input.attendanceId);
 
     // Une justification ne s'applique qu'a un retard ou une absence.
@@ -61,10 +63,14 @@ export class ReviewAttendanceJustificationUseCase {
     justificationId: string,
     decision: 'APPROVED' | 'REJECTED',
     userId: string,
+    organizationId: string,
     comment?: string,
   ) {
-    const j = await prisma.attendanceJustification.findUnique({
-      where: { id: justificationId },
+    const j = await prisma.attendanceJustification.findFirst({
+      where: {
+        id: justificationId,
+        attendance: { employee: { agency: { organizationId } } },
+      },
     });
     if (!j) throw new NotFoundError('Justification', justificationId);
     if (j.status !== 'PENDING') {

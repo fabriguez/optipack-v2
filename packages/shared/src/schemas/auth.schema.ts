@@ -24,6 +24,9 @@ export const registerSchema = z
     lastName: z.string().min(2, 'Le nom doit contenir au moins 2 caracteres'),
     phone: z.string().min(8, 'Numero de telephone invalide'),
   })
+  // .strict() : rejette tout champ inconnu (ex. organizationId injecte par un
+  // client malveillant). L'organizationId est derive du user authentifie cote API.
+  .strict()
   .refine((data) => data.password === data.confirmPassword, {
     message: 'Les mots de passe ne correspondent pas',
     path: ['confirmPassword'],

@@ -702,12 +702,13 @@ router.patch(
 
       const existing = (await prisma.organization.findUnique({
         where: { id: orgId },
-        select: { mobileAppConfig: true },
-      })) as { mobileAppConfig: MobileAppConfig | null } | null;
+        select: { mobileAppConfig: true, name: true },
+      })) as { mobileAppConfig: MobileAppConfig | null; name: string | null } | null;
 
       const merged: MobileAppConfig = {
         mode: 'shared',
-        appName: 'OptiPack',
+        // Nom d'app par defaut = nom du tenant (30 chars max, contrainte store).
+        appName: existing?.name?.trim().slice(0, 30) || 'Application',
         buildStatus: 'idle',
         ...(existing?.mobileAppConfig ?? {}),
         ...parsed.data,

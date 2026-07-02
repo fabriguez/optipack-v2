@@ -5,9 +5,14 @@ import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessErr
 
 @injectable()
 export class UpdateAgencyChargeUseCase {
-  async execute(chargeId: string, input: UpdateAgencyChargeInput) {
-    const charge = await prisma.agencyCharge.findUnique({ where: { id: chargeId } });
-    if (!charge) throw new NotFoundError('Charge', chargeId);
+  async execute(chargeId: string, input: UpdateAgencyChargeInput, organizationId: string) {
+    const charge = await prisma.agencyCharge.findUnique({
+      where: { id: chargeId },
+      include: { agency: { select: { organizationId: true } } },
+    });
+    if (!charge || charge.agency.organizationId !== organizationId) {
+      throw new NotFoundError('Charge', chargeId);
+    }
 
     if ((charge as any).isAutoManaged) {
       throw new BusinessError(

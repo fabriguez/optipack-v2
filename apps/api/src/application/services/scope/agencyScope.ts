@@ -81,10 +81,20 @@ interface CountDelegate {
   count(args: { where: AnyWhere }): Promise<number>;
 }
 
+/**
+ * Filtre org par defaut : la plupart des modeles portent un scalaire
+ * `organizationId`. Les modeles qui atteignent l'org via relation passent un
+ * `buildOrgWhere` explicite (cf. resolvers plus bas).
+ */
+function defaultOrgWhere<TWhere extends AnyWhere>(orgId: string): TWhere {
+  return { organizationId: orgId } as unknown as TWhere;
+}
+
 function makeScope<TWhere extends AnyWhere>(
   resource: string,
   delegate: () => CountDelegate,
   buildRestriction: (agencyIds: string[]) => TWhere,
+  buildOrgWhere: (orgId: string) => TWhere = defaultOrgWhere,
 ): ScopeResolver<TWhere> {
   const restriction = (ctx: ScopeCtx): TWhere | undefined => {
     if (ctx.unrestricted) return undefined;
@@ -97,12 +107,23 @@ function makeScope<TWhere extends AnyWhere>(
       return restriction(ctx);
     },
     async assert(id, ctx) {
+      // Sans contexte org (route hors `authenticate`) : on ne peut pas scoper.
+      if (!ctx.orgId) return;
+      // L'isolation TENANT (organizationId) est un invariant DUR : toujours
+      // appliquee, quel que soit le mode (log/enforce) et le role (y compris
+      // ADMIN). Seule la restriction AGENCE reste soumise au mode shadow.
+      const org = buildOrgWhere(ctx.orgId);
       const r = restriction(ctx);
-      if (!r) return;
-      // L'enregistrement existe-t-il DANS le scope ? (id inexistant -> le flux
-      // nominal repondra 404 de toute facon, le throw ici reste correct.)
-      const inScope = await delegate().count({ where: { id, AND: [r] } });
+      const and = r ? [org, r] : [org];
+      const inScope = await delegate().count({ where: { id, AND: and } });
       if (inScope > 0) return;
+      // Hors scope. L'enregistrement est-il au moins dans l'org de l'appelant ?
+      const inOrg = r ? await delegate().count({ where: { id, AND: [org] } }) : 0;
+      if (!r || inOrg === 0) {
+        // Hors org (autre tenant) ou inexistant -> refus dur, toujours 404.
+        throw new NotFoundError(resource, id);
+      }
+      // Dans l'org mais hors du jeu d'agences : soumis au mode shadow.
       if (!scopeEnforced()) {
         // eslint-disable-next-line no-console
         console.warn(
@@ -113,16 +134,27 @@ function makeScope<TWhere extends AnyWhere>(
       throw new NotFoundError(resource, id);
     },
     async assertMany(ids, ctx) {
-      const r = restriction(ctx);
-      if (!r || ids.length === 0) return;
+      if (!ctx.orgId || ids.length === 0) return;
+      const org = buildOrgWhere(ctx.orgId);
       const unique = Array.from(new Set(ids));
-      const inScope = await delegate().count({ where: { id: { in: unique }, AND: [r] } });
+      const r = restriction(ctx);
+      const and = r ? [org, r] : [org];
+      const inScope = await delegate().count({ where: { id: { in: unique }, AND: and } });
       if (inScope === unique.length) return;
-      if (!scopeEnforced()) {
-        // eslint-disable-next-line no-console
-        console.warn(
-          `[SCOPE-DENY] user=${ctx.userId} resource=${resource} batch=${unique.length} inScope=${inScope}`,
-        );
+      // Au moins un id hors du scope courant. Verifie l'appartenance a l'org.
+      const inOrg = await delegate().count({ where: { id: { in: unique }, AND: [org] } });
+      if (inOrg < unique.length) {
+        // Au moins un id hors org (autre tenant) ou inexistant -> refus dur.
+        throw new NotFoundError(resource, ids.join(','));
+      }
+      // Tous dans l'org mais certains hors agence : soumis au mode shadow.
+      if (!r || !scopeEnforced()) {
+        if (r) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[SCOPE-DENY] user=${ctx.userId} resource=${resource} batch=${unique.length} inScope=${inScope}`,
+          );
+        }
         return;
       }
       throw new NotFoundError(resource, ids.join(','));
@@ -171,6 +203,7 @@ export const manifestScope = makeScope<Prisma.ShippingManifestWhereInput>(
       OR: [{ departureAgencyId: { in: ids } }, { arrivalAgencyId: { in: ids } }],
     },
   }),
+  (orgId) => ({ container: { organizationId: orgId } }),
 );
 
 /** Entrepot : agence directe. */
@@ -178,6 +211,7 @@ export const warehouseScope = makeScope<Prisma.WarehouseWhereInput>(
   'Warehouse',
   () => prisma.warehouse,
   (ids) => ({ agencyId: { in: ids } }),
+  (orgId) => ({ agency: { organizationId: orgId } }),
 );
 
 /**
@@ -208,6 +242,7 @@ export const employeeScope = makeScope<Prisma.EmployeeWhereInput>(
       { agencyAssignments: { some: { agencyId: { in: ids } } } },
     ],
   }),
+  (orgId) => ({ agency: { organizationId: orgId } }),
 );
 
 /** Groupe de colis : agence directe. */
@@ -235,12 +270,14 @@ export const cashRegisterScope = makeScope<Prisma.AgencyCashRegisterWhereInput>(
   'AgencyCashRegister',
   () => prisma.agencyCashRegister,
   (ids) => ({ agencyId: { in: ids } }),
+  (orgId) => ({ agency: { organizationId: orgId } }),
 );
 
 export const disbursementScope = makeScope<Prisma.DisbursementVoucherWhereInput>(
   'DisbursementVoucher',
   () => prisma.disbursementVoucher,
   (ids) => ({ agencyId: { in: ids } }),
+  (orgId) => ({ agency: { organizationId: orgId } }),
 );
 
 export const expenseScope = makeScope<Prisma.ExpenseWhereInput>(
@@ -248,18 +285,21 @@ export const expenseScope = makeScope<Prisma.ExpenseWhereInput>(
   () => prisma.expense,
   // Depense siege (headOfficeCashRegisterId) : reservee a l'admin -> exclue ici.
   (ids) => ({ agencyId: { in: ids } }),
+  (orgId) => ({ agency: { organizationId: orgId } }),
 );
 
 export const penaltyScope = makeScope<Prisma.PenaltyWhereInput>(
   'Penalty',
   () => prisma.penalty,
   (ids) => ({ agencyId: { in: ids } }),
+  (orgId) => ({ agency: { organizationId: orgId } }),
 );
 
 export const journalEntryScope = makeScope<Prisma.JournalEntryWhereInput>(
   'JournalEntry',
   () => prisma.journalEntry,
   (ids) => ({ agencyId: { in: ids } }),
+  (orgId) => ({ agency: { organizationId: orgId } }),
 );
 
 export const fundTransferScope = makeScope<Prisma.FundTransferWhereInput>(
@@ -267,6 +307,13 @@ export const fundTransferScope = makeScope<Prisma.FundTransferWhereInput>(
   () => prisma.fundTransfer,
   (ids) => ({
     OR: [{ sourceAgencyId: { in: ids } }, { destinationAgencyId: { in: ids } }],
+  }),
+  (orgId) => ({
+    OR: [
+      { sourceOrganizationId: orgId },
+      { sourceAgency: { organizationId: orgId } },
+      { destinationAgency: { organizationId: orgId } },
+    ],
   }),
 );
 

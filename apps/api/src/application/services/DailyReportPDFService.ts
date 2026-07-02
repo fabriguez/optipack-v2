@@ -98,7 +98,7 @@ export class DailyReportPDFService {
         } catch { /* skip */ }
       }
       doc.fillColor(white).font('Helvetica-Bold').fontSize(16)
-        .text((org.name || 'OptiPack').toUpperCase(), leftX + 64, 22, { width: pageWidth - 64 });
+        .text((org.name || '').toUpperCase(), leftX + 64, 22, { width: pageWidth - 64 });
       doc.font('Helvetica').fontSize(9).fillColor(white)
         .text(`Agence : ${agency.name ?? '-'} (${agency.code ?? '-'})`, leftX + 64, 44, { width: pageWidth - 64 });
       doc.text(`${agency.address ?? ''} ${agency.city ? '- ' + agency.city : ''}`.trim(), leftX + 64, 58, { width: pageWidth - 64 });
@@ -124,7 +124,7 @@ export class DailyReportPDFService {
       doc.moveTo(leftX, y).lineTo(leftX + pageWidth, y).strokeColor(primary).lineWidth(0.8).stroke();
       doc.fillColor(gray).font('Helvetica').fontSize(8)
         .text(
-          [org.name, org.email, org.phone].filter(Boolean).join(' - ') || 'OptiPack',
+          [org.name, org.email, org.phone].filter(Boolean).join(' - ') || '',
           leftX, y + 6, { width: pageWidth, align: 'center' },
         );
       doc.text(`Page ${pageNum} / ${pageCount}`, leftX, y + 20, { width: pageWidth, align: 'center' });
@@ -294,7 +294,13 @@ export class DailyReportPDFService {
     };
     const flow = p.flow ?? { in: p.registeredByRoute ? { byRoute: p.registeredByRoute, ...p.registeredTotal } : null, out: null };
     renderFlowSide('Entrees (colis enregistres / receptionnes)', flow.in);
-    renderFlowSide('Sorties (colis charges / expedies)', flow.out);
+    renderFlowSide('Sorties (colis ayant quitte l\'agence)', flow.out);
+    // Ventilation des sorties par type (payloads recents uniquement).
+    const outByType = flow.out?.byType;
+    if (outByType) {
+      renderFlowSide('Dont remis aux clients', outByType.handedOver);
+      renderFlowSide('Dont partis en transit (charges en conteneur)', outByType.toTransit);
+    }
 
     // ------------------------------------------------------------------
     // V. Conteneurs recus

@@ -156,8 +156,8 @@ export class TaraMoneyProvider implements IPaymentProvider {
     cfg: PaymentProviderConfig,
   ): boolean {
     const secret = cfg.credentials?.webhookSecret ?? '';
-    // Sans secret configure : accepter (compte non verifie, pas de signature active).
-    if (!secret) return true;
+    // Sans secret configure : refuser (fail closed, coherent avec les autres providers).
+    if (!secret) return false;
     const sig = (headers['x-tara-signature'] as string | undefined) ?? '';
     if (!sig) return false;
     const expected = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');

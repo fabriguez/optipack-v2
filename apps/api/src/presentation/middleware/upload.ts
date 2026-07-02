@@ -3,12 +3,13 @@ import multer from 'multer';
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5 MB
 const MAX_DOCUMENT_SIZE = 25 * 1024 * 1024; // 25 MB pour pdf/xlsx/word/...
 
+// NOTE securite : image/svg+xml est volontairement EXCLU. Un SVG peut contenir
+// du <script> et, servi inline, provoque un stored-XSS. On ne l'accepte pas.
 const ALLOWED_IMAGE_TYPES = new Set([
   'image/jpeg',
   'image/png',
   'image/webp',
   'image/gif',
-  'image/svg+xml',
 ]);
 
 const ALLOWED_DOCUMENT_TYPES = new Set<string>([
@@ -53,6 +54,27 @@ export const uploadDocumentMiddleware = multer({
   },
 }).single('file');
 
+/**
+ * Types image dont le rendu inline par le navigateur est sur (pas de script
+ * executable). Tout autre content-type servi depuis le storage (svg, html, pdf,
+ * ...) doit forcer `Content-Disposition: attachment` pour eviter qu'une
+ * navigation top-level execute du script (stored-XSS).
+ */
+const SAFE_INLINE_IMAGE_TYPES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/gif',
+]);
+
+/** True si le content-type peut etre servi inline sans risque d'execution de script. */
+export function isSafeInlineImage(contentType: string | undefined | null): boolean {
+  if (!contentType) return false;
+  // Normalise : retire un eventuel parametre (ex "image/png; charset=...").
+  const base = contentType.split(';')[0]!.trim().toLowerCase();
+  return SAFE_INLINE_IMAGE_TYPES.has(base);
+}
+
 export function extFromMime(mime: string): string {
   switch (mime) {
     case 'image/jpeg':
@@ -63,8 +85,6 @@ export function extFromMime(mime: string): string {
       return 'webp';
     case 'image/gif':
       return 'gif';
-    case 'image/svg+xml':
-      return 'svg';
     case 'application/pdf':
       return 'pdf';
     case 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
