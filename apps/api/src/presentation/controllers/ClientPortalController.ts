@@ -208,7 +208,7 @@ export function authenticateClient(
   const token = authHeader.substring(7);
 
   try {
-    const payload = jwt.verify(token, config.jwt.secret) as ClientJwtPayload;
+    const payload = jwt.verify(token, config.jwt.secret, { algorithms: ['HS256'] }) as ClientJwtPayload;
 
     if (payload.type !== 'client') {
       return next(new AuthenticationError('Token invalide'));
