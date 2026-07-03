@@ -181,6 +181,14 @@ export class ProvisionTenantUseCase {
     // pas (premier provision), on genere de nouvelles valeurs aleatoires.
     const existingEnv = await this.readExistingEnv(creds, envFile);
     const jwtSecret = existingEnv?.JWT_SECRET || randomBytes(32).toString('hex');
+    // L'API (>= beta-1.0.291) refuse de demarrer en production si
+    // JWT_REFRESH_SECRET est absent, placeholder, ou egal a JWT_SECRET.
+    // On reutilise la valeur existante si elle est valide, sinon on regenere.
+    const existingRefresh = existingEnv?.JWT_REFRESH_SECRET;
+    const jwtRefreshSecret =
+      existingRefresh && existingRefresh !== jwtSecret && existingRefresh !== 'change-me-refresh'
+        ? existingRefresh
+        : randomBytes(32).toString('hex');
     const authSecret = existingEnv?.AUTH_SECRET || randomBytes(32).toString('hex');
     const pgUser = existingEnv?.POSTGRES_USER || `tenant_${tenant.slug.replace(/-/g, '_')}`;
     const pgPass = existingEnv?.POSTGRES_PASSWORD || randomBytes(24).toString('hex');
@@ -199,6 +207,7 @@ export class ProvisionTenantUseCase {
       `DATABASE_URL=postgresql://${pgUser}:${pgPass}@postgres:5432/${dbName}?schema=public`,
       `REDIS_URL=redis://redis:6379`,
       `JWT_SECRET=${jwtSecret}`,
+      `JWT_REFRESH_SECRET=${jwtRefreshSecret}`,
       `AUTH_SECRET=${authSecret}`,
       `JWT_ACCESS_EXPIRY=15m`,
       `JWT_REFRESH_EXPIRY=7d`,

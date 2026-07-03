@@ -146,8 +146,32 @@ export class UpdateTenantUseCase {
       // dossier prisma/migrations (schema synchronise via db push) : migrate
       // deploy seul est un no-op, donc on enchaine db push (idempotent) qui
       // applique reellement les nouvelles colonnes/tables.
-      await log('[update] step 5: prisma migrate deploy + db push (container temp)');
+      // 4bis. Self-heal du .env tenant : l'API >= beta-1.0.291 refuse de
+      // demarrer en production si JWT_REFRESH_SECRET est absent, placeholder
+      // ou egal a JWT_SECRET (fail-fast securite). Les tenants provisionnes
+      // avant cette version n'ont pas cette variable -> crash-loop au step 6
+      // puis rollback systematique. On injecte une valeur forte si besoin.
+      // Effet de bord accepte : les refresh tokens emis avec l'ancien secret
+      // par defaut deviennent invalides (re-login a l'expiration de l'access
+      // token), les sessions actives ne cassent pas immediatement.
+      await log('[update] step 4bis: verification JWT_REFRESH_SECRET dans le .env tenant');
       const envFile = `${config.tenantEnvDir}/tenant-${slug}.env`;
+      const healSecret =
+        `JS=$(grep -m1 '^JWT_SECRET=' ${envFile} | cut -d= -f2-); ` +
+        `JRS=$(grep -m1 '^JWT_REFRESH_SECRET=' ${envFile} | cut -d= -f2-); ` +
+        `if [ -z "$JRS" ] || [ "$JRS" = "$JS" ] || [ "$JRS" = "change-me-refresh" ]; then ` +
+        `sed -i '/^JWT_REFRESH_SECRET=/d' ${envFile}; ` +
+        `echo "JWT_REFRESH_SECRET=$(openssl rand -hex 32)" >> ${envFile}; ` +
+        `echo healed; fi`;
+      const heal = await this.ssh.exec(creds, healSecret);
+      if (heal.code !== 0) {
+        throw new Error(`Verification JWT_REFRESH_SECRET echouee : ${heal.stderr || heal.stdout}`);
+      }
+      if (heal.stdout.includes('healed')) {
+        await log('[update] step 4bis: JWT_REFRESH_SECRET genere et ajoute au .env');
+      }
+
+      await log('[update] step 5: prisma migrate deploy + db push (container temp)');
       const dbSyncMode = process.env.OPS_TENANT_DB_SYNC ?? 'push';
       const prismaResolve =
         'if command -v prisma >/dev/null 2>&1; then PRISMA=prisma; ' +
