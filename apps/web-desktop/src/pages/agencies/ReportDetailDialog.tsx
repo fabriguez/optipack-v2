@@ -30,6 +30,12 @@ const EXIT_LABELS: Record<string, string> = {
   REMISE_ET_TRANSIT: 'Remis + reparti en transit',
 };
 
+const ENTRY_LABELS: Record<string, string> = {
+  ENREGISTRE: 'Enregistre (depot client)',
+  RECEPTIONNE: 'Receptionne (arrive a destination)',
+  MIS_EN_STOCK: 'Mis en stock (dechargement)',
+};
+
 const dt = (v?: string | null) => (v ? new Date(v).toLocaleString('fr-FR') : '-');
 const kg = (v: any) => `${Number(v ?? 0).toFixed(2)} kg`;
 const m3 = (v: any) => `${Number(v ?? 0).toFixed(3)} m3`;
@@ -298,22 +304,22 @@ export function buildDetailSpecs(payload: any): Record<string, DetailSpec> {
       title: 'Flux du jour - Entrees',
       window: win,
       logic: [
-        "Photo (snapshot) au moment de la generation du rapport : tous les colis actuellement en statut IN_STOCK ou RECEIVED dans un magasin de l'agence.",
-        "Ce n'est pas un cumul des mouvements du jour mais un etat a l'instant T ; une fois le rapport cloture, cette photo reste figee.",
-        '"Present depuis" = date de la derniere entree du colis dans son statut actuel (arrivee en stock / reception) ; "Enregistre le" = date de creation du colis dans le systeme.',
+        "Cumul des colis ENTRES dans l'agence pendant la journee du rapport (fenetre = plage horaire de l'agence / session caisse), d'apres l'historique des colis.",
+        "Un colis entre quand un evenement le fait atterrir dans un magasin de l'agence : Enregistre (creation en magasin), Receptionne (arrive a destination, statut RECEIVED), Mis en stock (dechargement -> IN_STOCK).",
+        "Un colis n'est compte qu'une seule fois : premier evenement d'entree de la journee.",
         'Le compteur "colis recus" en tete du rapport correspond a ce nombre.',
       ],
       count: d ? (d.flowIn ?? []).length : payload?.flow?.in?.count ?? null,
       table: d ? (
         <DetailTable
-          head={['Colis', 'Route', 'Statut', 'Enregistre le', 'Present depuis', 'Poids', 'Volume', 'Prix']}
+          head={['Colis', 'Route', "Type d'entree", 'Entre le', 'Statut actuel', 'Poids', 'Volume', 'Prix']}
           truncatedCount={trunc.flowIn}
           rows={(d.flowIn ?? []).map((p: any) => [
             <span key="t" className="font-mono text-[11px]">{p.trackingNumber ?? '-'}</span>,
             `${p.routeName ?? 'Sans route'}${p.routeType ? ` (${p.routeType})` : ''}`,
+            ENTRY_LABELS[p.entryType] ?? p.entryType ?? '-',
+            dt(p.enteredAt),
             p.status ?? '-',
-            dt(p.registeredAt),
-            dt(p.presentSince),
             kg(p.weight),
             m3(p.volume),
             formatAmount(p.price ?? 0),

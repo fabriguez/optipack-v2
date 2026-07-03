@@ -131,7 +131,7 @@ function ReportRow({
           <div>
             <p className="text-sm font-medium">Rapport du {formatDate(date)}</p>
             <p className="text-xs text-gray-500">
-              {payload.totalParcels ?? 0} colis recus &middot; reste a payer {formatAmount(payload.totalRemainingAmount ?? 0)}
+              {payload.totalParcels ?? 0} colis recus
               {report._count?.attachments ? ` · ${report._count.attachments} piece(s) jointe(s)` : ''}
             </p>
           </div>
@@ -346,7 +346,7 @@ function ReportDetails({
 
       {/* Masse / volume colis enregistres */}
       <RouteMassVolume
-        title="Flux du jour - Entrees (colis enregistres / receptionnes)"
+        title="Flux du jour - Entrees (colis entres dans l'agence)"
         data={payload.flow?.in?.byRoute ?? payload.registeredByRoute}
         totalWeight={payload.flow?.in?.totalWeight}
         totalVolume={payload.flow?.in?.totalVolume}

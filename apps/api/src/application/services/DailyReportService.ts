@@ -169,7 +169,7 @@ export class DailyReportService {
     // explicite (endpoint manuel) -- la reecriture est alors tracee en
     // passant le rapport en AMENDED (cf upsert final). Sans ce verrou, le
     // DailyReportRegenHandler ecrasait les rapports historiques avec l'etat
-    // courant (sections snapshot non fenetrees : stock, flux entrees).
+    // courant (section snapshot non fenetree : etat de stock).
     const existing = await prisma.agencyDailyReport.findUnique({
       where: { agencyId_date: { agencyId, date: dayStart } },
       select: { id: true, status: true, payload: true },
@@ -461,55 +461,52 @@ export class DailyReportService {
     }
 
     // ------------------------------------------------------------------
-    // 2) Flux IN : colis actuellement IN_STOCK ou RECEIVED dans l'agence.
-    //    Definition metier : "le flux des entrees, ce sont les colis IN_STOCK
-    //    et RECEIVED dans l'agence". Snapshot a l'instant T (windowEnd).
+    // 2) Flux IN : CUMUL des entrees pendant la journee du rapport (fenetre
+    //    = plage horaire de l'agence / session caisse). Un colis "entre"
+    //    quand un evenement d'historique le fait atterrir dans un magasin de
+    //    l'agence : enregistrement (creation en magasin), reception a
+    //    destination (RECEIVED), mise en stock (dechargement -> IN_STOCK).
+    //    Dedup par colis : premier evenement de la fenetre. Le compteur
+    //    "colis recus" du rapport (totalParcels) suit cette definition.
     // ------------------------------------------------------------------
-    const flowInRawParcels = await prisma.parcel.findMany({
+    const flowInHistories = await prisma.parcelHistory.findMany({
       where: {
-        isDeleted: false,
-        status: { in: ['IN_STOCK', 'RECEIVED'] },
-        warehouse: { agencyId },
+        createdAt: windowFilter,
+        AND: [
+          {
+            OR: [
+              { statusAfter: 'IN_STOCK', NOT: { statusBefore: 'IN_STOCK' } },
+              { statusAfter: 'RECEIVED', NOT: { statusBefore: 'RECEIVED' } },
+            ],
+          },
+          {
+            // Fallback legacy : historiques ecrits sans warehouseId -> on
+            // matche via le magasin courant du colis.
+            OR: [
+              { warehouse: { agencyId } },
+              { warehouseId: null, parcel: { warehouse: { agencyId } } },
+            ],
+          },
+        ],
       },
+      orderBy: { createdAt: 'asc' },
       select: {
-        id: true,
-        trackingNumber: true,
-        status: true,
+        statusBefore: true,
+        statusAfter: true,
         createdAt: true,
-        weight: true,
-        volume: true,
-        price: true,
-        declaredValue: true,
-        transitRoute: { select: { id: true, name: true, type: true } },
+        parcel: {
+          select: {
+            id: true,
+            trackingNumber: true,
+            status: true,
+            weight: true,
+            volume: true,
+            price: true,
+            transitRoute: { select: { id: true, name: true, type: true } },
+          },
+        },
       },
     });
-
-    // Date d'entree dans le statut courant (IN_STOCK/RECEIVED) de chaque
-    // colis du snapshot : derniere transition vers ce statut dans l'historique.
-    // Affichee dans la popup details ("present depuis").
-    const statusEnteredAt = new Map<string, Date>();
-    if (flowInRawParcels.length > 0) {
-      const statusByParcel = new Map(flowInRawParcels.map((p) => [p.id, p.status]));
-      const snapshotHistories = await prisma.parcelHistory.findMany({
-        where: {
-          parcelId: { in: flowInRawParcels.map((p) => p.id) },
-          statusAfter: { in: ['IN_STOCK', 'RECEIVED'] },
-        },
-        select: { parcelId: true, statusAfter: true, createdAt: true },
-        orderBy: { createdAt: 'asc' },
-      });
-      for (const h of snapshotHistories) {
-        // asc + overwrite -> on garde la DERNIERE entree dans le statut courant.
-        if (h.statusAfter === statusByParcel.get(h.parcelId)) {
-          statusEnteredAt.set(h.parcelId, h.createdAt);
-        }
-      }
-    }
-
-    const flowInHistories = flowInRawParcels.map((p) => ({
-      action: 'SNAPSHOT' as const,
-      parcel: p,
-    }));
 
     // Flux OUT : colis SORTIS de l'agence aujourd'hui, ventile par type :
     //  - Remise client : HANDED_OVER + UNTRACKED_HANDED_OVER (colis trouve
@@ -553,10 +550,22 @@ export class DailyReportService {
       },
     });
 
-    // Dedup par parcelId.
+    // Dedup par parcelId. Premier evenement de la fenetre = type + heure
+    // d'entree affiches dans la popup details.
     const flowInParcelsMap = new Map<string, ParcelLite>();
+    const flowInEntryMap = new Map<string, { at: Date; entryType: string }>();
     for (const h of flowInHistories) {
-      if (!flowInParcelsMap.has(h.parcel.id)) flowInParcelsMap.set(h.parcel.id, h.parcel);
+      if (flowInParcelsMap.has(h.parcel.id)) continue;
+      flowInParcelsMap.set(h.parcel.id, h.parcel);
+      flowInEntryMap.set(h.parcel.id, {
+        at: h.createdAt,
+        entryType:
+          h.statusBefore == null
+            ? 'ENREGISTRE'
+            : h.statusAfter === 'RECEIVED'
+            ? 'RECEPTIONNE'
+            : 'MIS_EN_STOCK',
+      });
     }
     // Global (compat) + par type de sortie. Un meme colis remis ET charge le
     // meme jour (cas anormal) compte une fois dans le global, une fois par type.
@@ -588,10 +597,10 @@ export class DailyReportService {
       volume: Number(p.volume ?? 0),
       price: Number(p.price ?? 0),
     });
-    const flowInDetail = flowInRawParcels.map((p) => ({
+    const flowInDetail = Array.from(flowInParcelsMap.values()).map((p) => ({
       ...parcelDetailRow(p),
-      registeredAt: p.createdAt.toISOString(),
-      presentSince: statusEnteredAt.get(p.id)?.toISOString() ?? null,
+      entryType: flowInEntryMap.get(p.id)?.entryType ?? null,
+      enteredAt: flowInEntryMap.get(p.id)?.at.toISOString() ?? null,
     }));
     const flowOutDetail = Array.from(flowOutParcelsMap.values()).map((p) => ({
       ...parcelDetailRow(p),
@@ -815,9 +824,47 @@ export class DailyReportService {
     //    Une fois le rapport CLOSED, la regen est refusee (cf controller)
     //    donc ce snapshot reste fige au moment de la cloture.
     // ------------------------------------------------------------------
-    // Meme snapshot que le flux entrees (criteres identiques) : on reutilise
-    // flowInRawParcels au lieu de requeter une seconde fois.
-    const currentStock = flowInRawParcels;
+    const currentStock = await prisma.parcel.findMany({
+      where: {
+        isDeleted: false,
+        status: { in: ['IN_STOCK', 'RECEIVED'] },
+        warehouse: { agencyId },
+      },
+      select: {
+        id: true,
+        trackingNumber: true,
+        status: true,
+        createdAt: true,
+        weight: true,
+        volume: true,
+        price: true,
+        declaredValue: true,
+        transitRoute: { select: { id: true, name: true, type: true } },
+      },
+    });
+
+    // Date d'entree dans le statut courant (IN_STOCK/RECEIVED) de chaque
+    // colis du snapshot : derniere transition vers ce statut dans
+    // l'historique. Affichee dans la popup details ("present depuis").
+    const statusEnteredAt = new Map<string, Date>();
+    if (currentStock.length > 0) {
+      const statusByParcel = new Map(currentStock.map((p) => [p.id, p.status]));
+      const snapshotHistories = await prisma.parcelHistory.findMany({
+        where: {
+          parcelId: { in: currentStock.map((p) => p.id) },
+          statusAfter: { in: ['IN_STOCK', 'RECEIVED'] },
+        },
+        select: { parcelId: true, statusAfter: true, createdAt: true },
+        orderBy: { createdAt: 'asc' },
+      });
+      for (const h of snapshotHistories) {
+        // asc + overwrite -> on garde la DERNIERE entree dans le statut courant.
+        if (h.statusAfter === statusByParcel.get(h.parcelId)) {
+          statusEnteredAt.set(h.parcelId, h.createdAt);
+        }
+      }
+    }
+
     const stockStateDetail = currentStock.map((p) => ({
       ...parcelDetailRow(p),
       declaredValue: p.declaredValue != null ? Number(p.declaredValue) : null,

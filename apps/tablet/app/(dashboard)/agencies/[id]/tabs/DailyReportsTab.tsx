@@ -71,7 +71,7 @@ export function DailyReportsTab({ agencyId }: { agencyId: string }) {
                         <Text style={{ fontSize: 14, fontWeight: '600', color: colors.gray[900] }}>{formatDate(r.date)}</Text>
                         <Badge variant={st.v}>{st.l}</Badge>
                       </View>
-                      <Text style={{ fontSize: 12, color: colors.gray[400] }}>{p.totalParcels ?? 0} colis recus · reste {formatAmount(Number(p.totalRemainingAmount ?? 0))}</Text>
+                      <Text style={{ fontSize: 12, color: colors.gray[400] }}>{p.totalParcels ?? 0} colis recus</Text>
                     </View>
                   </View>
                   {r._count?.attachments > 0 && <Text style={{ fontSize: 12, color: colors.gray[400] }}>{r._count.attachments} pieces</Text>}
