@@ -46,6 +46,13 @@ export class UpsertLoyaltyTierConfigsUseCase {
 
     return prisma.$transaction(async (tx) => {
       const existing = await tx.loyaltyTierConfig.findMany({ where: { organizationId } });
+      const existingIds = new Set(existing.map((e) => e.id));
+      // Anti-IDOR : tout id fourni doit appartenir a un tier de l'organisation.
+      for (const t of tiers) {
+        if (t.id && !existingIds.has(t.id)) {
+          throw new NotFoundError('Tier', t.id);
+        }
+      }
       const keepIds = new Set(tiers.filter((t) => t.id).map((t) => t.id as string));
       // Suppression de ceux retires
       for (const e of existing) {
@@ -89,8 +96,8 @@ export class UpsertLoyaltyTierConfigsUseCase {
 
 @injectable()
 export class DeleteLoyaltyTierConfigUseCase {
-  async execute(id: string) {
-    const item = await prisma.loyaltyTierConfig.findUnique({ where: { id } });
+  async execute(id: string, organizationId: string) {
+    const item = await prisma.loyaltyTierConfig.findFirst({ where: { id, organizationId } });
     if (!item) throw new NotFoundError('Tier', id);
     await prisma.loyaltyTierConfig.delete({ where: { id } });
   }

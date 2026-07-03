@@ -1,7 +1,7 @@
 /**
  * Provider abstraction for transactional email. Each tenant can pick its own
  * provider via Organization.emailConfig. If none is set, we fall back to the
- * shared OptiPack sender (existing SMTP transport).
+ * shared platform sender (existing SMTP transport).
  */
 
 import type { EmailProvider } from '@transitsoftservices/shared';

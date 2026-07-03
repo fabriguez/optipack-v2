@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { prisma } from '../../config/database';
-import { BusinessError } from '../../domain/errors/BusinessError';
+import { BusinessError, NotFoundError } from '../../domain/errors/BusinessError';
+import { getOrgId } from '../middleware/tenantGuard';
 
 type Scope = 'GLOBAL' | 'AGENCY' | 'EMPLOYEE';
 
@@ -53,6 +54,16 @@ export class HolidayController {
       if (scope === 'AGENCY' && !agencyId) throw new BusinessError('agencyId requis pour scope AGENCY');
       if (scope === 'EMPLOYEE' && !employeeId) throw new BusinessError('employeeId requis pour scope EMPLOYEE');
 
+      // Verifie que agencyId/employeeId fournis appartiennent bien au tenant courant
+      if (agencyId) {
+        const agency = await prisma.agency.findFirst({ where: { id: agencyId, organizationId: orgId } });
+        if (!agency) throw new NotFoundError('Agence', agencyId);
+      }
+      if (employeeId) {
+        const employee = await prisma.employee.findFirst({ where: { id: employeeId, agency: { organizationId: orgId } } });
+        if (!employee) throw new NotFoundError('Employe', employeeId);
+      }
+
       const item = await prisma.holiday.create({
         data: {
           organizationId: orgId,
@@ -74,7 +85,10 @@ export class HolidayController {
 
   static async delete(req: Request, res: Response, next: NextFunction) {
     try {
-      await prisma.holiday.delete({ where: { id: req.params.id } });
+      const { count } = await prisma.holiday.deleteMany({
+        where: { id: req.params.id, organizationId: getOrgId(req) },
+      });
+      if (count === 0) throw new NotFoundError('Jour ferie', req.params.id);
       res.json({ success: true });
     } catch (err) {
       next(err);

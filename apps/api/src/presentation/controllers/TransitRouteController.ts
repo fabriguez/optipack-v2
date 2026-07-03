@@ -54,7 +54,7 @@ export class TransitRouteController {
   static async update(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(UpdateTransitRouteUseCase);
-      const route = await useCase.execute(req.params.id, req.body);
+      const route = await useCase.execute(req.params.id, req.body, getOrgId(req));
       res.json({ success: true, data: route });
     } catch (err) {
       next(err);
@@ -64,7 +64,7 @@ export class TransitRouteController {
   static async delete(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(DeleteTransitRouteUseCase);
-      await useCase.execute(req.params.id);
+      await useCase.execute(req.params.id, getOrgId(req));
       res.json({ success: true, message: 'Route de transit desactivee' });
     } catch (err) {
       next(err);

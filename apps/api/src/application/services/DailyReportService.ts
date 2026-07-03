@@ -416,17 +416,24 @@ export class DailyReportService {
       parcel: p,
     }));
 
-    // Flux OUT : colis SORTIS de l'agence aujourd'hui.
-    //  - HANDED_OVER avec warehouse de l'agence (remise client : pickup).
-    //  - LOADED_INTO_CONTAINER avec container.departureAgencyId = agence.
-    //  - Transfert emis = LOADED_INTO_CONTAINER (couvert ci-dessus).
+    // Flux OUT : colis SORTIS de l'agence aujourd'hui, ventile par type :
+    //  - Remise client : HANDED_OVER + UNTRACKED_HANDED_OVER (colis trouve
+    //    remis hors enregistrement prealable) avec warehouse de l'agence.
+    //    Fallback legacy : anciens historiques HANDED_OVER ecrits sans
+    //    warehouseId -> on matche via le magasin courant du colis (la remise
+    //    ne deconnecte pas la relation warehouse).
+    //  - Parti en transit : LOADED_INTO_CONTAINER avec
+    //    container.departureAgencyId = agence (couvre aussi les transferts).
     const flowOutHistories = await prisma.parcelHistory.findMany({
       where: {
         createdAt: windowFilter,
         OR: [
           {
-            action: 'HANDED_OVER',
-            warehouse: { agencyId },
+            action: { in: ['HANDED_OVER', 'UNTRACKED_HANDED_OVER'] },
+            OR: [
+              { warehouse: { agencyId } },
+              { warehouseId: null, parcel: { warehouse: { agencyId } } },
+            ],
           },
           {
             action: 'LOADED_INTO_CONTAINER',
@@ -453,13 +460,21 @@ export class DailyReportService {
     for (const h of flowInHistories) {
       if (!flowInParcelsMap.has(h.parcel.id)) flowInParcelsMap.set(h.parcel.id, h.parcel);
     }
+    // Global (compat) + par type de sortie. Un meme colis remis ET charge le
+    // meme jour (cas anormal) compte une fois dans le global, une fois par type.
     const flowOutParcelsMap = new Map<string, ParcelLite>();
+    const handedOverMap = new Map<string, ParcelLite>();
+    const toTransitMap = new Map<string, ParcelLite>();
     for (const h of flowOutHistories) {
       if (!flowOutParcelsMap.has(h.parcel.id)) flowOutParcelsMap.set(h.parcel.id, h.parcel);
+      const bucket = h.action === 'LOADED_INTO_CONTAINER' ? toTransitMap : handedOverMap;
+      if (!bucket.has(h.parcel.id)) bucket.set(h.parcel.id, h.parcel);
     }
 
     const flowIn = aggregateParcels(Array.from(flowInParcelsMap.values()));
     const flowOut = aggregateParcels(Array.from(flowOutParcelsMap.values()));
+    const flowOutHandedOver = aggregateParcels(Array.from(handedOverMap.values()));
+    const flowOutToTransit = aggregateParcels(Array.from(toTransitMap.values()));
 
     // ------------------------------------------------------------------
     // 3) Conteneurs RECUS (arrivalAgencyId = agence, actualArrivalDate dans
@@ -528,10 +543,18 @@ export class DailyReportService {
 
     const parcelsByContainer = new Map<string, typeof parcelsForContainers>();
     for (const p of parcelsForContainers) {
-      const cid = p.containerId ?? p.lastContainerId;
-      if (!cid) continue;
-      if (!parcelsByContainer.has(cid)) parcelsByContainer.set(cid, []);
-      parcelsByContainer.get(cid)!.push(p);
+      // Un colis decharge du conteneur A (lastContainerId=A) puis recharge le
+      // MEME JOUR dans le conteneur B (containerId=B, re-acheminement transit)
+      // doit compter dans LES DEUX : recu via A, envoye via B. L'ancien
+      // `containerId ?? lastContainerId` le retirait du conteneur recu A,
+      // qui affichait alors moins de colis que reellement decharges.
+      const cids = new Set(
+        [p.containerId, p.lastContainerId].filter(Boolean) as string[],
+      );
+      for (const cid of cids) {
+        if (!parcelsByContainer.has(cid)) parcelsByContainer.set(cid, []);
+        parcelsByContainer.get(cid)!.push(p);
+      }
     }
 
     const summarizeContainer = (
@@ -887,6 +910,24 @@ export class DailyReportService {
           count: flowOut.count,
           totalWeight: flowOut.totalWeight,
           totalVolume: flowOut.totalVolume,
+          // Ventilation des sorties : remises client vs departs en transit.
+          // totalPrice inclus (valeur des colis sortis).
+          byType: {
+            handedOver: {
+              byRoute: flowOutHandedOver.byRoute,
+              count: flowOutHandedOver.count,
+              totalWeight: flowOutHandedOver.totalWeight,
+              totalVolume: flowOutHandedOver.totalVolume,
+              totalPrice: flowOutHandedOver.totalPrice,
+            },
+            toTransit: {
+              byRoute: flowOutToTransit.byRoute,
+              count: flowOutToTransit.count,
+              totalWeight: flowOutToTransit.totalWeight,
+              totalVolume: flowOutToTransit.totalVolume,
+              totalPrice: flowOutToTransit.totalPrice,
+            },
+          },
         },
       },
       // Compat ascendante : ancien champ = entrees du flux.

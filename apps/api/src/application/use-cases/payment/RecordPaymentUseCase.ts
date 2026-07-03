@@ -41,6 +41,14 @@ export class RecordPaymentUseCase {
     const invoice = await this.invoiceRepo.findById(input.invoiceId);
     if (!invoice) throw new NotFoundError('Facture', input.invoiceId);
 
+    // SECURITE (integrite financiere) : l'agence d'imputation du paiement est
+    // celle de la FACTURE, jamais celle fournie par le client. Un body.agencyId
+    // arbitraire permettrait sinon d'attribuer un encaissement (crediter la
+    // caisse, poster au journal) a n'importe quelle agence. On derive donc
+    // agencyId cote serveur depuis invoice.agencyId et on l'utilise pour le
+    // Payment, la caisse, le journal et les evenements.
+    const agencyId = invoice.agencyId;
+
     if (invoice.status === 'PAID') {
       throw new BusinessError('Cette facture est deja soldee');
     }
@@ -50,7 +58,7 @@ export class RecordPaymentUseCase {
     // n'a pas de plan comptable, le create throw APRES que le paiement, la
     // facture et la caisse ont deja ete committes (pas de transaction
     // englobante) -> paiement partiel + 404. Idempotent (no-op si deja present).
-    const orgId = await this.resolveOrganizationId(input.agencyId);
+    const orgId = await this.resolveOrganizationId(agencyId);
     if (orgId) await this.accountingAccounts.ensureCoreAccounts(orgId);
 
     // Paiement d'une facture AGREGAT de groupe : on ne paye pas la facture
@@ -120,7 +128,7 @@ export class RecordPaymentUseCase {
       paymentMethod: input.paymentMethod,
       transactionReference: input.transactionReference ?? null,
       invoice: { connect: { id: input.invoiceId } },
-      agency: { connect: { id: input.agencyId } },
+      agency: { connect: { id: agencyId } },
       receivedBy: { connect: { id: userId } },
       ...(input.parcelId && { parcel: { connect: { id: input.parcelId } } }),
       ...(input.attachments && input.attachments.length > 0 && {
@@ -197,7 +205,7 @@ export class RecordPaymentUseCase {
     }
 
     // 6. Update cash register (auto)
-    const cashRegister = await this.cashRegisterRepo.findOrCreateForToday(input.agencyId);
+    const cashRegister = await this.cashRegisterRepo.findOrCreateForToday(agencyId);
     await this.cashRegisterRepo.addEntry(cashRegister.id, input.amount);
 
     // 7. Create journal entry (double-entry bookkeeping). Reference race-safe :
@@ -228,7 +236,7 @@ export class RecordPaymentUseCase {
           description: `Paiement ${reference} - Facture ${invoice.reference}`,
           sourceType: 'PAYMENT',
           sourceId: payment.id,
-          agency: { connect: { id: input.agencyId } },
+          agency: { connect: { id: agencyId } },
           createdBy: { connect: { id: userId } },
           lines: journalLines,
         });
@@ -244,7 +252,7 @@ export class RecordPaymentUseCase {
         description: `Paiement ${reference} - Facture ${invoice.reference}`,
         sourceType: 'PAYMENT',
         sourceId: payment.id,
-        agency: { connect: { id: input.agencyId } },
+        agency: { connect: { id: agencyId } },
         createdBy: { connect: { id: userId } },
         lines: journalLines,
       });
@@ -301,13 +309,13 @@ export class RecordPaymentUseCase {
     // 9. Emit event. Payload enrichi pour les templates email/SMS :
     // sans invoiceRef/paymentMethod/remainingBalance/agencyName le mail
     // "Paiement recu" affichait des cellules vides.
-    const agencyName = await this.resolveAgencyName(input.agencyId);
+    const agencyName = await this.resolveAgencyName(agencyId);
     eventBus.emit({
       type: DomainEvents.PAYMENT_RECEIVED,
       payload: {
         paymentId: payment.id,
         invoiceId: invoice.id,
-        agencyId: input.agencyId,
+        agencyId,
         amount: input.amount,
         newInvoiceStatus: newStatus,
         clientId: invoice.clientId,
@@ -330,7 +338,7 @@ export class RecordPaymentUseCase {
           invoiceId: invoice.id,
           reference: invoice.reference,
           clientId: invoice.clientId,
-          agencyId: input.agencyId,
+          agencyId,
           organizationId: (invoice as any).organizationId ?? null,
           totalAmount: invoice.netAmount,
           currency: (invoice as any).currency ?? 'XAF',

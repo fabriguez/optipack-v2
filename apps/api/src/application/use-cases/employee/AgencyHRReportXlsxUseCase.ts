@@ -62,7 +62,7 @@ export class AgencyHRReportXlsxUseCase {
     });
 
     const wb = new ExcelJS.Workbook();
-    wb.creator = 'TransitSoftServices';
+    wb.creator = 'Export';
     wb.created = new Date();
 
     // ----- Sheet 1 : Synthese -----

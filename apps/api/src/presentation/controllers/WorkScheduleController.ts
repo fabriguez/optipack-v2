@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { prisma } from '../../config/database';
 import { BusinessError, NotFoundError } from '../../domain/errors/BusinessError';
+import { getOrgId } from '../middleware/tenantGuard';
 
 interface DayInput {
   dayOfWeek: number;
@@ -11,9 +12,10 @@ interface DayInput {
 }
 
 export class WorkScheduleController {
-  static async list(_req: Request, res: Response, next: NextFunction) {
+  static async list(req: Request, res: Response, next: NextFunction) {
     try {
       const items = await prisma.workSchedule.findMany({
+        where: { organizationId: getOrgId(req) },
         include: {
           days: { orderBy: { dayOfWeek: 'asc' } },
           _count: { select: { agencies: true, employees: true } },
@@ -28,8 +30,8 @@ export class WorkScheduleController {
 
   static async getById(req: Request, res: Response, next: NextFunction) {
     try {
-      const item = await prisma.workSchedule.findUnique({
-        where: { id: req.params.id },
+      const item = await prisma.workSchedule.findFirst({
+        where: { id: req.params.id, organizationId: getOrgId(req) },
         include: { days: { orderBy: { dayOfWeek: 'asc' } } },
       });
       if (!item) throw new NotFoundError('Planning', req.params.id);
@@ -54,6 +56,7 @@ export class WorkScheduleController {
           name: name.trim(),
           description: description?.trim() ?? null,
           timezone: timezone ?? null,
+          organizationId: getOrgId(req),
           days: days
             ? { create: days.map((d) => sanitizeDay(d)) }
             : undefined,
@@ -70,6 +73,11 @@ export class WorkScheduleController {
   static async setDays(req: Request, res: Response, next: NextFunction) {
     try {
       const days = (req.body.days as DayInput[]) ?? [];
+      const schedule = await prisma.workSchedule.findFirst({
+        where: { id: req.params.id, organizationId: getOrgId(req) },
+        select: { id: true },
+      });
+      if (!schedule) throw new NotFoundError('WorkSchedule', req.params.id);
       await prisma.$transaction([
         prisma.workScheduleDay.deleteMany({ where: { scheduleId: req.params.id } }),
         prisma.workScheduleDay.createMany({
@@ -89,6 +97,11 @@ export class WorkScheduleController {
   static async update(req: Request, res: Response, next: NextFunction) {
     try {
       const { name, description, timezone, isActive } = req.body;
+      const existing = await prisma.workSchedule.findFirst({
+        where: { id: req.params.id, organizationId: getOrgId(req) },
+        select: { id: true },
+      });
+      if (!existing) throw new NotFoundError('WorkSchedule', req.params.id);
       const item = await prisma.workSchedule.update({
         where: { id: req.params.id },
         data: {
@@ -106,11 +119,11 @@ export class WorkScheduleController {
 
   static async delete(req: Request, res: Response, next: NextFunction) {
     try {
-      const usage = await prisma.workSchedule.findUnique({
-        where: { id: req.params.id },
+      const usage = await prisma.workSchedule.findFirst({
+        where: { id: req.params.id, organizationId: getOrgId(req) },
         include: { _count: { select: { agencies: true, employees: true } } },
       });
-      if (!usage) throw new NotFoundError('Planning', req.params.id);
+      if (!usage) throw new NotFoundError('WorkSchedule', req.params.id);
       const count = (usage._count.agencies ?? 0) + (usage._count.employees ?? 0);
       if (count > 0) {
         throw new BusinessError(`${count} entite(s) utilisent ce planning`);
@@ -126,6 +139,20 @@ export class WorkScheduleController {
   static async assignToAgency(req: Request, res: Response, next: NextFunction) {
     try {
       const { agencyId, scheduleId } = req.params;
+      const orgId = getOrgId(req);
+      const agency = await prisma.agency.findFirst({
+        where: { id: agencyId, organizationId: orgId },
+        select: { id: true },
+      });
+      if (!agency) throw new NotFoundError('Agency', agencyId);
+      // Verifie que le planning cible appartient aussi au tenant courant.
+      if (scheduleId !== 'null') {
+        const schedule = await prisma.workSchedule.findFirst({
+          where: { id: scheduleId, organizationId: orgId },
+          select: { id: true },
+        });
+        if (!schedule) throw new NotFoundError('WorkSchedule', scheduleId);
+      }
       const item = await prisma.agency.update({
         where: { id: agencyId },
         data: { workScheduleId: scheduleId === 'null' ? null : scheduleId },
@@ -140,6 +167,20 @@ export class WorkScheduleController {
   static async assignToEmployee(req: Request, res: Response, next: NextFunction) {
     try {
       const { employeeId, scheduleId } = req.params;
+      const orgId = getOrgId(req);
+      const employee = await prisma.employee.findFirst({
+        where: { id: employeeId, agency: { organizationId: orgId } },
+        select: { id: true },
+      });
+      if (!employee) throw new NotFoundError('Employee', employeeId);
+      // Verifie que le planning cible appartient aussi au tenant courant.
+      if (scheduleId !== 'null') {
+        const schedule = await prisma.workSchedule.findFirst({
+          where: { id: scheduleId, organizationId: orgId },
+          select: { id: true },
+        });
+        if (!schedule) throw new NotFoundError('WorkSchedule', scheduleId);
+      }
       const item = await prisma.employee.update({
         where: { id: employeeId },
         data: { scheduleId: scheduleId === 'null' ? null : scheduleId },

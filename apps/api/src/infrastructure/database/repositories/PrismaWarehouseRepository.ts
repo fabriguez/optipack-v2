@@ -3,6 +3,19 @@ import type { Warehouse, Prisma } from '@prisma/client';
 import type { IWarehouseRepository } from '../../../application/interfaces/IWarehouseRepository';
 import type { PaginationInput, PaginatedResponse } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
+import { safeOrderBy } from '../../../domain/utils/safeOrderBy';
+
+// Colonnes scalaires triables (allowlist anti sort-injection).
+const WAREHOUSE_SORTABLE = [
+  'id',
+  'name',
+  'location',
+  'storageFreeDays',
+  'storageDailyRate',
+  'isActive',
+  'createdAt',
+  'updatedAt',
+];
 
 @injectable()
 export class PrismaWarehouseRepository implements IWarehouseRepository {
@@ -38,7 +51,7 @@ export class PrismaWarehouseRepository implements IWarehouseRepository {
         where,
         skip,
         take: limit,
-        orderBy: sortBy ? { [sortBy]: sortOrder } : { createdAt: 'desc' },
+        orderBy: safeOrderBy(sortBy, sortOrder, WAREHOUSE_SORTABLE, 'createdAt'),
         include: {
           agency: { select: { id: true, name: true, code: true, imageUrl: true, city: true } },
           // Compteur aligne avec le listing detail (page magasin) :
@@ -99,7 +112,7 @@ export class PrismaWarehouseRepository implements IWarehouseRepository {
         where,
         skip,
         take: limit,
-        orderBy: sortBy ? { [sortBy]: sortOrder } : { createdAt: 'desc' },
+        orderBy: safeOrderBy(sortBy, sortOrder, WAREHOUSE_SORTABLE, 'createdAt'),
         include: {
           agency: { select: { id: true, name: true, code: true, imageUrl: true, city: true } },
           // Compteur aligne avec le listing detail (page magasin) :

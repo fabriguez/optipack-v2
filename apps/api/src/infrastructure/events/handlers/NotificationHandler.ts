@@ -7,6 +7,7 @@ import { emailService } from '../../email/EmailService';
 import { createChildLogger } from '../../../config/logger';
 import { realtimeService } from '../../realtime/RealtimeService';
 import { notificationService } from '../../../application/services/notifications/NotificationService';
+import { safeFetch } from '../../http/safeFetch';
 import { resolveTemplate } from '../../../application/services/notifications/NotificationTemplateRenderer';
 import type {
   NotificationAttachment,
@@ -125,8 +126,13 @@ type EmailAttachment = { filename: string; content: Buffer; contentType?: string
  */
 async function fetchUrlBuffer(url: string): Promise<{ buffer: Buffer; contentType: string } | null> {
   try {
-    const target = url.startsWith('/') ? `${config.apiUrl}${url}` : url;
-    const res = await fetch(target);
+    const isRelative = url.startsWith('/');
+    // URL relative -> notre propre API (base de confiance) : fetch direct.
+    // URL absolue (potentiellement fournie par un tiers) : passe par le garde
+    // SSRF pour bloquer les cibles internes (127.0.0.1, metadata cloud, 302...).
+    const res = isRelative
+      ? await fetch(`${config.apiUrl}${url}`)
+      : await safeFetch(url);
     if (!res.ok) return null;
     return {
       buffer: Buffer.from(await res.arrayBuffer()),

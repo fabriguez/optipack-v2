@@ -33,7 +33,7 @@ function unitForType(type: 'AIR' | 'SEA' | 'LAND'): 'kg' | 'm3' {
 function optionalClientId(authHeader?: string): string | null {
   if (!authHeader?.startsWith('Bearer ')) return null;
   try {
-    const payload = jwt.verify(authHeader.substring(7), config.jwt.secret) as {
+    const payload = jwt.verify(authHeader.substring(7), config.jwt.secret, { algorithms: ['HS256'] }) as {
       type?: string;
       clientId?: string;
     };

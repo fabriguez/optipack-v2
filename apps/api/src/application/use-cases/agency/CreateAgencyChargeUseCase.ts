@@ -11,9 +11,11 @@ interface CreateInput extends CreateAgencyChargeInput {
 
 @injectable()
 export class CreateAgencyChargeUseCase {
-  async execute(agencyId: string, input: CreateInput, userId?: string) {
+  async execute(agencyId: string, input: CreateInput, userId: string | undefined, organizationId: string) {
     const agency = await prisma.agency.findUnique({ where: { id: agencyId } });
-    if (!agency) throw new NotFoundError('Agence', agencyId);
+    if (!agency || agency.organizationId !== organizationId) {
+      throw new NotFoundError('Agence', agencyId);
+    }
 
     // SALARY est gere automatiquement (PayrollChargeService) : pas de creation manuelle.
     if (input.type === 'SALARY') {

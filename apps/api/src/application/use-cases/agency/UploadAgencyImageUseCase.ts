@@ -15,12 +15,14 @@ function absoluteApiUrl(path: string): string {
 export class UploadAgencyImageUseCase {
   constructor(private storage: StorageService) {}
 
-  async execute(agencyId: string, file: Express.Multer.File) {
+  async execute(agencyId: string, file: Express.Multer.File, organizationId: string) {
     const agency = await prisma.agency.findUnique({
       where: { id: agencyId },
-      select: { id: true, imageKey: true },
+      select: { id: true, imageKey: true, organizationId: true },
     });
-    if (!agency) throw new NotFoundError('Agence', agencyId);
+    if (!agency || agency.organizationId !== organizationId) {
+      throw new NotFoundError('Agence', agencyId);
+    }
     if (!file) throw new BusinessError('Aucun fichier fourni');
 
     const ext = extFromMime(file.mimetype);

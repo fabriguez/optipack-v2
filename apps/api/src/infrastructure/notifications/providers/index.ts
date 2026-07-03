@@ -137,7 +137,9 @@ function makeAfricasTalkingSmsProvider(): ExternalChannelProvider {
 function makeVonageSmsProvider(): ExternalChannelProvider {
   const apiKey = process.env.VONAGE_API_KEY ?? '';
   const apiSecret = process.env.VONAGE_API_SECRET ?? '';
-  const from = process.env.VONAGE_FROM ?? 'OptiPack';
+  // Sender ID a configurer par env (idealement le nom du tenant) : pas de
+  // marque plateforme par defaut sur les SMS des tenants.
+  const from = process.env.VONAGE_FROM ?? '';
   const enabled = !!apiKey && !!apiSecret;
   if (!enabled) {
     logger.warn('Vonage SMS provider non active : VONAGE_API_KEY/SECRET manquant(s)');

@@ -4,6 +4,7 @@ import { logChannelDelivery } from '../../../infrastructure/email/logging';
 import { realtimeService } from '../../../infrastructure/realtime/RealtimeService';
 import { createChildLogger } from '../../../config/logger';
 import { resolveTemplate } from './NotificationTemplateRenderer';
+import { safeFetch } from '../../../infrastructure/http/safeFetch';
 import { notificationChannelConfigSchema, type WaMediaMode } from '@transitsoftservices/shared';
 import type {
   ChannelDeliveryResult,
@@ -71,7 +72,7 @@ async function toEmailAttachments(
   const out: Array<{ filename: string; content: Buffer; contentType?: string }> = [];
   for (const att of attachments) {
     try {
-      const res = await fetch(att.url);
+      const res = await safeFetch(att.url);
       if (!res.ok) continue;
       out.push({
         filename: att.filename,
@@ -79,7 +80,7 @@ async function toEmailAttachments(
         contentType: res.headers.get('content-type') || undefined,
       });
     } catch (err) {
-      logger.warn({ err, filename: att.filename }, 'Email attachment fetch failed (ignored)');
+      logger.warn({ err, filename: att.filename }, 'Email attachment fetch failed or blocked (SSRF) (ignored)');
     }
   }
   return out.length > 0 ? out : undefined;

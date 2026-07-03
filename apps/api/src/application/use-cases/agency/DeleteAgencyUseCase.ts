@@ -9,9 +9,9 @@ export class DeleteAgencyUseCase {
     @inject(AGENCY_REPOSITORY) private agencyRepo: IAgencyRepository,
   ) {}
 
-  async execute(id: string) {
+  async execute(id: string, organizationId: string) {
     const agency = await this.agencyRepo.findById(id);
-    if (!agency) {
+    if (!agency || agency.organizationId !== organizationId) {
       throw new NotFoundError('Agence', id);
     }
 

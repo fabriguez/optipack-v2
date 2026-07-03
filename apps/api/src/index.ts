@@ -95,7 +95,7 @@ io.use((socket, next) => {
     return next();
   }
   try {
-    const payload = jwt.verify(token, config.jwt.secret) as JwtPayload & { clientId?: string };
+    const payload = jwt.verify(token, config.jwt.secret, { algorithms: ['HS256'] }) as JwtPayload & { clientId?: string };
     socket.data.auth = payload;
   } catch {
     socket.data.auth = null;

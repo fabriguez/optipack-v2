@@ -56,7 +56,7 @@ export class LoyaltyController {
   static async deleteTier(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(DeleteLoyaltyTierConfigUseCase);
-      await useCase.execute(req.params.id);
+      await useCase.execute(req.params.id, req.user!.organizationId);
       res.json({ success: true });
     } catch (err) {
       next(err);

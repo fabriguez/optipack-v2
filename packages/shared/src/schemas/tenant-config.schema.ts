@@ -17,7 +17,7 @@ export type EmailDkimStatus = z.infer<typeof emailDkimStatusSchema>;
 /** Full config as stored. Secrets present. */
 export const emailConfigSchema = z.object({
   provider: emailProviderSchema.default('shared'),
-  /** e.g. "no-reply@acme.com". If absent and provider='shared', we use OptiPack's default sender. */
+  /** e.g. "no-reply@acme.com". If absent and provider='shared', we use the platform's shared sender. */
   senderEmail: z.string().email().optional(),
   /** Display name in the From header. */
   senderName: z.string().min(1).max(80).optional(),
@@ -73,8 +73,8 @@ export type MobileAppBuildStatus = z.infer<typeof mobileAppBuildStatusSchema>;
 
 export const mobileAppConfigSchema = z.object({
   mode: mobileAppModeSchema.default('shared'),
-  /** Display name on the home screen + store. */
-  appName: z.string().min(1).max(30).default('OptiPack'),
+  /** Display name on the home screen + store. Real default (tenant name) is resolved API-side. */
+  appName: z.string().min(1).max(30).default('Application'),
   /** Icon (1024x1024 PNG recommended). */
   iconUrl: z.string().url().optional(),
   /** Splash screen (2732x2732 PNG recommended). */

@@ -3,6 +3,24 @@ import type { Container, Prisma } from '@prisma/client';
 import type { IContainerRepository, ContainerWithRelations } from '../../../application/interfaces/IContainerRepository';
 import type { PaginationInput, PaginatedResponse } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
+import { safeOrderBy } from '../../../domain/utils/safeOrderBy';
+
+// Colonnes scalaires triables (allowlist anti sort-injection).
+const CONTAINER_SORTABLE = [
+  'id',
+  'designation',
+  'type',
+  'status',
+  'carrierCost',
+  'capacity',
+  'currentLoad',
+  'loadingDate',
+  'departureDate',
+  'estimatedArrivalDate',
+  'actualArrivalDate',
+  'createdAt',
+  'updatedAt',
+];
 
 const CONTAINER_INCLUDE = {
   departureAgency: { select: { id: true, name: true, code: true, imageUrl: true, city: true } },
@@ -114,7 +132,7 @@ export class PrismaContainerRepository implements IContainerRepository {
         where,
         skip,
         take: limit,
-        orderBy: sortBy ? { [sortBy]: sortOrder } : { createdAt: 'desc' },
+        orderBy: safeOrderBy(sortBy, sortOrder, CONTAINER_SORTABLE, 'createdAt'),
         include: CONTAINER_INCLUDE,
       }),
       prisma.container.count({ where }),

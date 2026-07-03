@@ -40,9 +40,12 @@ export const config = {
   },
 
   permissions: {
-    // 'log' (shadow) : les refus de permission sont logges mais laissent passer.
-    // 'enforce' : les refus bloquent (403). Cf. PERMISSIONS-PLAN.md etape 8.
-    enforce: (process.env.PERMISSIONS_ENFORCE || 'log') as 'log' | 'enforce',
+    // 'enforce' (defaut securise) : les refus de permission bloquent (403) et le
+    // filtrage agence est actif. 'log' (shadow) : refus logges mais laisses
+    // passer -- reserve au pre-prod. Cf. PERMISSIONS-PLAN.md etape 8.
+    // NB : l'isolation TENANT (organizationId) est de toute facon un invariant
+    // dur applique independamment de ce flag (cf. agencyScope.assert).
+    enforce: (process.env.PERMISSIONS_ENFORCE || 'enforce') as 'log' | 'enforce',
   },
 
   smtp: {
@@ -73,3 +76,28 @@ export const config = {
     apiSecret: process.env.STREAM_API_SECRET || '',
   },
 } as const;
+
+/**
+ * Fail-fast securite : en production, refuser de demarrer avec des secrets
+ * absents ou laisses a leur valeur placeholder. Un JWT_SECRET previsible =
+ * forge universelle de tokens. En dev, les defauts restent tolerels.
+ */
+if (config.env === 'production') {
+  const PLACEHOLDERS = new Set(['change-me-in-production', 'change-me-refresh']);
+  const failures: string[] = [];
+  if (!process.env.JWT_SECRET || PLACEHOLDERS.has(config.jwt.secret)) {
+    failures.push('JWT_SECRET');
+  }
+  if (!process.env.JWT_REFRESH_SECRET || PLACEHOLDERS.has(config.jwt.refreshSecret)) {
+    failures.push('JWT_REFRESH_SECRET');
+  }
+  if (config.jwt.secret === config.jwt.refreshSecret) {
+    failures.push('JWT_SECRET==JWT_REFRESH_SECRET (doivent differer)');
+  }
+  if (failures.length > 0) {
+    throw new Error(
+      `[config] Secrets invalides en production : ${failures.join(', ')}. ` +
+        'Definir des valeurs fortes et distinctes (openssl rand -hex 32).',
+    );
+  }
+}

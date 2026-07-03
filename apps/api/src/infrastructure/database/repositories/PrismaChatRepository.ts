@@ -3,6 +3,11 @@ import type { ChatConversation, ChatMessage, Prisma } from '@prisma/client';
 import type { IChatRepository } from '../../../application/interfaces/IChatRepository';
 import type { PaginationInput, PaginatedResponse } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
+import { safeOrderBy } from '../../../domain/utils/safeOrderBy';
+
+// Colonnes scalaires triables (allowlist anti sort-injection).
+const CONVERSATION_SORTABLE = ['id', 'status', 'createdAt', 'closedAt'];
+const MESSAGE_SORTABLE = ['id', 'createdAt', 'readAt'];
 
 @injectable()
 export class PrismaChatRepository implements IChatRepository {
@@ -55,7 +60,7 @@ export class PrismaChatRepository implements IChatRepository {
         where,
         skip,
         take: limit,
-        orderBy: sortBy ? { [sortBy]: sortOrder } : { createdAt: 'desc' },
+        orderBy: safeOrderBy(sortBy, sortOrder, CONVERSATION_SORTABLE, 'createdAt'),
         include: {
           client: { select: { id: true, fullName: true, phone: true } },
           assignedUser: {
@@ -115,7 +120,7 @@ export class PrismaChatRepository implements IChatRepository {
         where,
         skip,
         take: limit,
-        orderBy: sortBy ? { [sortBy]: sortOrder } : { createdAt: 'asc' },
+        orderBy: safeOrderBy(sortBy, sortOrder ?? 'asc', MESSAGE_SORTABLE, 'createdAt'),
         include: {
           senderUser: { select: { id: true, firstName: true, lastName: true, email: true } },
           senderClient: { select: { id: true, fullName: true, phone: true } },

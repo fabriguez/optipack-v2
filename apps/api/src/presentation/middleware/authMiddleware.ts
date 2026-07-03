@@ -24,7 +24,7 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
   const token = authHeader.substring(7);
 
   try {
-    const payload = jwt.verify(token, config.jwt.secret) as JwtPayload;
+    const payload = jwt.verify(token, config.jwt.secret, { algorithms: ['HS256'] }) as JwtPayload;
     req.user = payload;
 
     // Étape 7 : rejette les tokens dont la version des permissions est perimee.
@@ -73,7 +73,7 @@ export function authenticateUserOrClient(req: Request, _res: Response, next: Nex
   }
   const token = authHeader.substring(7);
   try {
-    const payload = jwt.verify(token, config.jwt.secret) as JwtPayload & { type?: string };
+    const payload = jwt.verify(token, config.jwt.secret, { algorithms: ['HS256'] }) as JwtPayload & { type?: string };
     if (payload?.type === 'client') {
       // Token portail client : pas de role/org, on l'expose via req.clientPortal.
       (req as { clientPortal?: unknown }).clientPortal = payload;

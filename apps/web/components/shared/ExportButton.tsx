@@ -28,7 +28,7 @@ export function ExportButton({ data, columns, fileName, sheetName }: ExportButto
     try {
       const ExcelJS = (await import('exceljs')).default;
       const workbook = new ExcelJS.Workbook();
-      workbook.creator = 'TransitSoftServices';
+      workbook.creator = 'Export';
       workbook.created = new Date();
       // Excel limite les noms d'onglet a 31 caracteres et interdit certains symboles.
       const safeSheetName = (sheetName ?? fileName)

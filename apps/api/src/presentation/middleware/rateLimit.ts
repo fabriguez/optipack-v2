@@ -68,6 +68,15 @@ function makeLimiter(opts: { prefix: string; windowMs: number; max: number }) {
   });
 }
 
+// Endpoints d'auth (login/register/refresh) : 10 tentatives / 15 min par IP.
+// Defense contre le credential-stuffing / brute-force et la creation de comptes
+// en masse. Fail-open comme les autres (cf. RedisRateLimitStore).
+export const authLimiter = makeLimiter({
+  prefix: 'auth',
+  windowMs: 15 * 60_000,
+  max: 10,
+});
+
 // Demande de code : 5 envois / 15 min par IP (anti-spam SMS/email).
 export const forgotPasswordLimiter = makeLimiter({
   prefix: 'forgot-pwd',

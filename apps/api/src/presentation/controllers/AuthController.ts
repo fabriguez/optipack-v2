@@ -11,17 +11,17 @@ import {
 } from '../../application/use-cases/auth/PasswordUseCases';
 import { AuthenticationError } from '../../domain/errors/BusinessError';
 
-// Phase 0.2 : multi-tenant. Le seed initial du tenant cree son premier admin avec
-// un organizationId fourni. Les invitations ulterieures viennent d'un user authentifie
-// qui partage son organizationId au nouveau user.
+// Phase 0.2 : multi-tenant. La creation de compte staff est reservee a un
+// utilisateur authentifie (middleware `authenticate` sur la route). Le nouveau
+// user est TOUJOURS rattache a l'organizationId du caller authentifie, jamais a
+// une valeur fournie dans le body : cela empeche la creation de comptes dans un
+// tenant arbitraire (privilege escalation cross-tenant).
 export class AuthController {
   static async register(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(RegisterUseCase);
-      // organizationId : prio body (seed orchestrator), sinon user authentifie, sinon erreur.
-      const orgId =
-        (req.body?.organizationId as string | undefined) ||
-        req.user?.organizationId;
+      // organizationId derive EXCLUSIVEMENT du user authentifie (jamais du body).
+      const orgId = req.user?.organizationId;
       if (!orgId) {
         throw new AuthenticationError('organizationId requis pour creer un user');
       }

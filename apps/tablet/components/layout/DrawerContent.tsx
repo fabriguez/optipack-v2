@@ -13,6 +13,7 @@ interface DrawerContentComponentProps {
 }
 import { navSections, type NavItem, type NavSection } from '@/lib/nav/nav-config';
 import { useAuth } from '@/lib/auth/AuthContext';
+import { useTenant } from '@/lib/tenant/TenantContext';
 import { usePermission, useIsTenantAdmin } from '@/lib/hooks/usePermission';
 import { useSidebar } from '@/lib/sidebar/SidebarContext';
 import { colors } from '@/lib/theme/colors';
@@ -98,6 +99,7 @@ function NavLink({ item, active, collapsed, onPress }: { item: NavItem; active: 
 export function DrawerContent(props: DrawerContentComponentProps) {
   const { user, logout } = useAuth();
   const { collapsed, toggle } = useSidebar();
+  const { meta } = useTenant();
   const [loggingOut, setLoggingOut] = useState(false);
   const currentRouteName = props.state.routes[props.state.index]?.name;
 
@@ -127,7 +129,9 @@ export function DrawerContent(props: DrawerContentComponentProps) {
       >
         {!collapsed && (
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 18, fontWeight: '700', color: colors.white }}>TransitSoftServices</Text>
+            <Text style={{ fontSize: 18, fontWeight: '700', color: colors.white }} numberOfLines={1}>
+              {meta?.name ?? ''}
+            </Text>
             {user && (
               <Text style={{ fontSize: 12, color: colors.sidebar.muted, marginTop: 4 }} numberOfLines={1}>
                 {user.email}

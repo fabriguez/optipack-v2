@@ -15,9 +15,11 @@ export interface OpeningHourInput {
  */
 @injectable()
 export class SetAgencyOpeningHoursUseCase {
-  async execute(agencyId: string, hours: OpeningHourInput[]) {
+  async execute(agencyId: string, hours: OpeningHourInput[], organizationId: string) {
     const agency = await prisma.agency.findUnique({ where: { id: agencyId } });
-    if (!agency) throw new NotFoundError('Agence', agencyId);
+    if (!agency || agency.organizationId !== organizationId) {
+      throw new NotFoundError('Agence', agencyId);
+    }
 
     for (const h of hours) {
       if (h.dayOfWeek < 0 || h.dayOfWeek > 6) {

@@ -3,6 +3,24 @@ import type { TransitRoute, Prisma } from '@prisma/client';
 import type { ITransitRouteRepository } from '../../../application/interfaces/ITransitRouteRepository';
 import type { PaginationInput, PaginatedResponse } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
+import { safeOrderBy } from '../../../domain/utils/safeOrderBy';
+
+// Colonnes scalaires triables (allowlist anti sort-injection).
+const TRANSIT_ROUTE_SORTABLE = [
+  'id',
+  'name',
+  'type',
+  'departureCity',
+  'departureCountry',
+  'arrivalCity',
+  'arrivalCountry',
+  'pricePerKg',
+  'pricePerVolume',
+  'estimatedDurationDays',
+  'isActive',
+  'createdAt',
+  'updatedAt',
+];
 
 @injectable()
 export class PrismaTransitRouteRepository implements ITransitRouteRepository {
@@ -46,7 +64,7 @@ export class PrismaTransitRouteRepository implements ITransitRouteRepository {
         where,
         skip,
         take: limit,
-        orderBy: sortBy ? { [sortBy]: sortOrder } : { createdAt: 'desc' },
+        orderBy: safeOrderBy(sortBy, sortOrder, TRANSIT_ROUTE_SORTABLE, 'createdAt'),
       }),
       prisma.transitRoute.count({ where }),
     ]);

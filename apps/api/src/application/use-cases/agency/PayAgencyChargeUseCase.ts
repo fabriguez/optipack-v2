@@ -37,12 +37,14 @@ export class PayAgencyChargeUseCase {
     @inject(CASH_REGISTER_REPOSITORY) private cashRegisterRepo: ICashRegisterRepository,
   ) {}
 
-  async execute(chargeId: string, input: PayInput, userId: string) {
+  async execute(chargeId: string, input: PayInput, userId: string, organizationId: string) {
     const charge = await prisma.agencyCharge.findUnique({
       where: { id: chargeId },
-      include: { agency: { select: { id: true, name: true } } },
+      include: { agency: { select: { id: true, name: true, organizationId: true } } },
     });
-    if (!charge) throw new NotFoundError('Charge', chargeId);
+    if (!charge || charge.agency.organizationId !== organizationId) {
+      throw new NotFoundError('Charge', chargeId);
+    }
     if (!charge.isActive) {
       throw new BusinessError('Cette charge est inactive et ne peut pas etre payee.');
     }
@@ -56,11 +58,21 @@ export class PayAgencyChargeUseCase {
     //  - si cashRegisterId fourni, on l'utilise (n'importe quelle caisse, meme d'une autre agence)
     //  - sinon, caisse du jour de l'agence proprietaire de la charge (eventuelle bascule next-day)
     let cashRegister = input.cashRegisterId
-      ? await prisma.agencyCashRegister.findUnique({ where: { id: input.cashRegisterId } })
+      ? await prisma.agencyCashRegister.findUnique({
+          where: { id: input.cashRegisterId },
+          include: { agency: { select: { organizationId: true } } },
+        })
       : await this.cashRegisterRepo.findOrCreateForToday(charge.agencyId);
 
     if (!cashRegister) {
       throw new NotFoundError('Caisse', input.cashRegisterId ?? '(default)');
+    }
+    // Si une caisse explicite est fournie, elle doit appartenir au meme tenant.
+    if (
+      input.cashRegisterId &&
+      (cashRegister as { agency?: { organizationId: string } }).agency?.organizationId !== organizationId
+    ) {
+      throw new NotFoundError('Caisse', input.cashRegisterId);
     }
 
     if (cashRegister.isClosed) {

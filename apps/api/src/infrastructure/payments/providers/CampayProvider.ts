@@ -102,8 +102,12 @@ export class CampayProvider implements IPaymentProvider {
     const secret = cfg.credentials?.webhookSecret ?? '';
     if (!secret) return false;
     const sig = (headers['x-campay-signature'] as string | undefined) ?? '';
+    if (!sig) return false;
     const expected = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
-    return sig === expected;
+    const sigBuf = Buffer.from(sig, 'hex');
+    const expBuf = Buffer.from(expected, 'hex');
+    if (sigBuf.length !== expBuf.length) return false;
+    return crypto.timingSafeEqual(sigBuf, expBuf);
   }
 
   parseWebhook(body: unknown, _cfg: PaymentProviderConfig): PollResult & { externalRef: string } {

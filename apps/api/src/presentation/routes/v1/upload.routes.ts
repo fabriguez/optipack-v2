@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { Request } from 'express';
 import { UploadController } from '../../controllers/UploadController';
 import { authenticate, authenticateUserOrClient } from '../../middleware/authMiddleware';
-import { uploadImageMiddleware, uploadDocumentMiddleware, extFromMime } from '../../middleware/upload';
+import { uploadImageMiddleware, uploadDocumentMiddleware, extFromMime, isSafeInlineImage } from '../../middleware/upload';
 import { prisma } from '../../../config/database';
 import { container } from '../../../container';
 import { config } from '../../../config';
@@ -63,6 +63,10 @@ router.get('/public/*', async (req, res, next) => {
     res.setHeader('Content-Length', String(obj.size));
     res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    if (!isSafeInlineImage(obj.contentType)) {
+      res.setHeader('Content-Disposition', 'attachment');
+    }
     obj.stream.pipe(res);
   } catch (err) {
     next(err);
@@ -95,6 +99,12 @@ router.get('/public-logo/:orgId', async (req, res, next) => {
       res.setHeader('Content-Length', String(buf.length));
       res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');
       res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      // Le content-type provient de la data URL (controle utilisateur) : on force
+      // le telechargement si ce n'est pas un format image sur (svg/html -> XSS).
+      if (!isSafeInlineImage(contentType)) {
+        res.setHeader('Content-Disposition', 'attachment');
+      }
       return res.end(buf);
     }
 
@@ -136,6 +146,10 @@ router.get('/public-logo/:orgId', async (req, res, next) => {
     res.setHeader('Content-Length', String(obj.size));
     res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    if (!isSafeInlineImage(obj.contentType)) {
+      res.setHeader('Content-Disposition', 'attachment');
+    }
     obj.stream.pipe(res);
   } catch (err) {
     next(err);

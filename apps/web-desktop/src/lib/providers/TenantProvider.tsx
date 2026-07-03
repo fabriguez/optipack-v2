@@ -43,7 +43,9 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api/v1';
 const FALLBACK_META: TenantMeta = {
   id: 'fallback',
   slug: null,
-  name: 'TransitSoftServices',
+  // Pas de marque plateforme dans l'app tenant : nom vide tant que le
+  // tenant-meta n'est pas charge (evite le flash "TransitSoftServices").
+  name: '',
   logoUrl: null,
   primaryColor: '#1B5E20',
   secondaryColor: '#4CAF50',
@@ -96,7 +98,7 @@ function applyTheme(meta: TenantMeta) {
       document.documentElement.style.setProperty('--color-sidebar-hover', palette[800]);
       document.documentElement.style.setProperty('--color-sidebar-active', palette[700]);
       document.documentElement.style.setProperty('--color-sidebar-muted', palette[200]);
-      document.title = meta.name || 'TransitSoftServices';
+      document.title = meta.name || 'Espace de gestion';
     }
     return;
   }

@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { container } from '../../container';
 import { StorageService } from '../../infrastructure/storage/StorageService';
-import { extFromMime } from '../middleware/upload';
+import { extFromMime, isSafeInlineImage } from '../middleware/upload';
 import { config } from '../../config';
 import { prisma } from '../../config/database';
 import { createChildLogger } from '../../config/logger';
@@ -153,6 +153,15 @@ export class UploadController {
       res.setHeader('Content-Length', String(obj.size));
       res.setHeader('Cache-Control', 'public, max-age=86400');
       res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      // Securite : empeche le sniffing MIME (helmet le pose globalement, mais on
+      // le reaffirme ici car on pipe des octets bruts).
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      // Securite : seuls les formats image surs sont servis inline. Tout autre
+      // content-type (svg, html, ...) est force en telechargement pour eviter
+      // qu'une navigation top-level execute du script (stored-XSS).
+      if (!isSafeInlineImage(obj.contentType)) {
+        res.setHeader('Content-Disposition', 'attachment');
+      }
       obj.stream.pipe(res);
     } catch (err) {
       next(err);

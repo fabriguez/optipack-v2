@@ -208,6 +208,9 @@ export class HandoverParcelUseCase {
       statusBefore: parcel.status,
       statusAfter: 'DELIVERED',
       isPresentAfter: false,
+      // Magasin d'ou le colis est remis : indispensable au rapport journalier
+      // (flux de sortie filtre par warehouse.agencyId).
+      warehouseId: parcel.warehouseId ?? undefined,
       userId,
       comment: [
         `Remis a ${receiver.fullName}`,
@@ -310,6 +313,7 @@ export class HandoverUntrackedParcelUseCase {
       statusBefore: null,
       statusAfter: 'DELIVERED',
       isPresentAfter: false,
+      warehouseId: input.warehouseId,
       userId,
       comment: [
         'Colis trouve physiquement, non enregistre dans le systeme',

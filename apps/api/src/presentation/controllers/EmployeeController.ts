@@ -60,6 +60,7 @@ import { AgencyHRReportXlsxUseCase } from '../../application/use-cases/employee/
 import { EMPLOYEE_REPOSITORY } from '../../application/interfaces/IEmployeeRepository';
 import { NotFoundError } from '../../domain/errors/BusinessError';
 import { employeeScope, scopeCtx } from '../../application/services/scope/agencyScope';
+import { getOrgId } from '../middleware/tenantGuard';
 
 function monthStart(): Date {
   const d = new Date();
@@ -392,6 +393,7 @@ export class EmployeeController {
         req.params.deductionId,
         req.body?.reason,
         req.user!.userId,
+        getOrgId(req),
       );
       res.json({ success: true, data: item });
     } catch (err) {
@@ -429,7 +431,7 @@ export class EmployeeController {
   static async deleteDocument(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(DeleteEmployeeDocumentUseCase);
-      const result = await useCase.execute(req.params.documentId);
+      const result = await useCase.execute(req.params.documentId, getOrgId(req));
       res.json({ success: true, data: result });
     } catch (err) {
       next(err);
@@ -555,6 +557,7 @@ export class EmployeeController {
         req.params.leaveId,
         req.body?.decision === 'REJECTED' ? 'REJECTED' : 'APPROVED',
         req.user!.userId,
+        getOrgId(req),
         req.body?.comment,
       );
       res.json({ success: true, data: item });
@@ -566,7 +569,7 @@ export class EmployeeController {
   static async cancelLeave(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(CancelEmployeeLeaveUseCase);
-      const item = await useCase.execute(req.params.leaveId);
+      const item = await useCase.execute(req.params.leaveId, getOrgId(req));
       res.json({ success: true, data: item });
     } catch (err) {
       next(err);
@@ -580,6 +583,7 @@ export class EmployeeController {
         req.params.leaveId,
         new Date(req.body.endDate),
         req.user!.userId,
+        getOrgId(req),
         req.body?.reason,
       );
       res.json({ success: true, data: item });
@@ -612,6 +616,7 @@ export class EmployeeController {
       const item = await useCase.execute(
         { attendanceId: req.params.attendanceId, ...req.body },
         req.user!.userId,
+        getOrgId(req),
       );
       res.status(201).json({ success: true, data: item });
     } catch (err) {
@@ -626,6 +631,7 @@ export class EmployeeController {
         req.params.justificationId,
         req.body.decision,
         req.user!.userId,
+        getOrgId(req),
         req.body?.comment,
       );
       res.json({ success: true, data: item });

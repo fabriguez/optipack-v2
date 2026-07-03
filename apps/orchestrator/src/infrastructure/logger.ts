@@ -13,6 +13,20 @@ const useJson = process.env.LOG_FORMAT === 'json';
 
 export const logger = pino({
   level: config.env === 'production' ? 'info' : 'debug',
+  // Redaction defense-en-profondeur : masque les secrets qui passeraient par
+  // les champs structures du logger. NB : la string libre `msg` n'est PAS
+  // couverte -- ne jamais interpoler un secret dans un message de log.
+  redact: [
+    'password',
+    '*.password',
+    'token',
+    '*.token',
+    'secret',
+    '*.secret',
+    'req.headers.authorization',
+    'ownerPassword',
+    'billing.password',
+  ],
   transport: useJson
     ? undefined
     : {

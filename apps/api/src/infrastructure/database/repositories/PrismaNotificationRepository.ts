@@ -8,6 +8,19 @@ import type {
 } from '../../../application/interfaces/INotificationRepository';
 import type { PaginationInput, PaginatedResponse } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
+import { safeOrderBy } from '../../../domain/utils/safeOrderBy';
+
+// Colonnes scalaires triables (allowlist anti sort-injection).
+const NOTIFICATION_SORTABLE = [
+  'id',
+  'title',
+  'type',
+  'status',
+  'eventKind',
+  'sentAt',
+  'readAt',
+  'createdAt',
+];
 
 const NOTIFICATION_INCLUDE = {
   agency: { select: { id: true, name: true } },
@@ -65,7 +78,7 @@ export class PrismaNotificationRepository implements INotificationRepository {
         where,
         skip,
         take: limit,
-        orderBy: sortBy ? { [sortBy]: sortOrder } : { createdAt: 'desc' },
+        orderBy: safeOrderBy(sortBy, sortOrder, NOTIFICATION_SORTABLE, 'createdAt'),
         include: NOTIFICATION_INCLUDE,
       }),
       prisma.notification.count({ where }),
@@ -91,7 +104,7 @@ export class PrismaNotificationRepository implements INotificationRepository {
         where,
         skip,
         take: limit,
-        orderBy: sortBy ? { [sortBy]: sortOrder } : { createdAt: 'desc' },
+        orderBy: safeOrderBy(sortBy, sortOrder, NOTIFICATION_SORTABLE, 'createdAt'),
         include: NOTIFICATION_INCLUDE,
       }),
       prisma.notification.count({ where }),
@@ -130,7 +143,7 @@ export class PrismaNotificationRepository implements INotificationRepository {
         where,
         skip,
         take: limit,
-        orderBy: sortBy ? { [sortBy]: sortOrder } : { createdAt: 'desc' },
+        orderBy: safeOrderBy(sortBy, sortOrder, NOTIFICATION_SORTABLE, 'createdAt'),
         include: NOTIFICATION_INCLUDE,
       }),
       prisma.notification.count({ where }),
@@ -165,7 +178,7 @@ export class PrismaNotificationRepository implements INotificationRepository {
         where,
         skip,
         take: limit,
-        orderBy: sortBy ? { [sortBy]: sortOrder } : { createdAt: 'desc' },
+        orderBy: safeOrderBy(sortBy, sortOrder, NOTIFICATION_SORTABLE, 'createdAt'),
         include: NOTIFICATION_INCLUDE,
       }),
       prisma.notification.count({ where }),

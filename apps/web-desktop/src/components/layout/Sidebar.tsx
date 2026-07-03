@@ -223,7 +223,7 @@ export function Sidebar() {
               )
             )}
             <span className="text-lg font-bold text-white tracking-tight truncate">
-              {meta?.name ?? 'TransitSoftServices'}
+              {meta?.name ?? ''}
             </span>
           </div>
         )}

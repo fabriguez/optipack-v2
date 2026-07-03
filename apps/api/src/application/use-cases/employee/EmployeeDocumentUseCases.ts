@@ -51,8 +51,10 @@ export class ListEmployeeDocumentsUseCase {
 
 @injectable()
 export class DeleteEmployeeDocumentUseCase {
-  async execute(documentId: string) {
-    const doc = await prisma.employeeDocument.findUnique({ where: { id: documentId } });
+  async execute(documentId: string, organizationId: string) {
+    const doc = await prisma.employeeDocument.findFirst({
+      where: { id: documentId, employee: { agency: { organizationId } } },
+    });
     if (!doc) throw new NotFoundError('Document', documentId);
     await prisma.employeeDocument.delete({ where: { id: documentId } });
     return { id: documentId };
