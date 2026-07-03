@@ -43,6 +43,45 @@ export class AutoCloseCashRegistersUseCase {
       const localDow = local.getDay();
       const localTime = formatHHMM(local);
 
+      // Date "aujourd'hui" dans le fuseau de l'agence (pour matcher caisse).
+      const localDayStart = startOfDayInTimezone(new Date(), tz);
+
+      // Caisses restees ouvertes sur des jours PASSES (y compris jours fermes
+      // type dimanche, jamais couverts par la cloture horaire ci-dessous) :
+      // cloture d'office. Sans ce balayage, une caisse datee d'un jour ferme
+      // (heritee d'un bug) restait ouverte indefiniment.
+      const staleRegisters = await prisma.agencyCashRegister.findMany({
+        where: { agencyId: agency.id, isClosed: false, date: { lt: localDayStart } },
+      });
+      for (const stale of staleRegisters) {
+        await this.cashRegisterRepo.update(stale.id, {
+          isClosed: true,
+          closedAt: new Date(),
+          closingBalance: stale.currentBalance,
+          notes:
+            (stale.notes ? stale.notes + '\n' : '') +
+            'Cloture automatique : caisse restee ouverte apres son jour.',
+        });
+        eventBus.emit({
+          type: DomainEvents.CASH_REGISTER_CLOSED,
+          payload: {
+            registerId: stale.id,
+            agencyId: agency.id,
+            closingBalance: Number(stale.currentBalance),
+            auto: true,
+          },
+          timestamp: new Date(),
+          userId: undefined,
+        });
+        closed += 1;
+        try {
+          await this.reportService.generate(agency.id, stale.date);
+          reported += 1;
+        } catch {
+          // Best-effort
+        }
+      }
+
       const hoursForDay = (agency.openingHours as Array<{
         dayOfWeek: number;
         closeTime: string;
@@ -56,9 +95,6 @@ export class AutoCloseCashRegistersUseCase {
         '00:00',
       );
       if (localTime < latestClose) continue;
-
-      // Date "aujourd'hui" dans le fuseau de l'agence (pour matcher caisse).
-      const localDayStart = startOfDayInTimezone(new Date(), tz);
 
       // Tente de fermer la caisse ouverte d'aujourd'hui (si existante).
       const register = await prisma.agencyCashRegister.findFirst({

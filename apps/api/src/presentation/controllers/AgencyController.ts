@@ -211,7 +211,16 @@ export class AgencyController {
         take: 60,
         include: { _count: { select: { attachments: true } } },
       });
-      res.json({ success: true, data: items });
+      // Le bloc `details` (listes item par item) peut peser lourd : on
+      // l'exclut de la liste, il est servi par le GET d'un rapport seul.
+      const data = items.map((r) => {
+        if (r.payload && typeof r.payload === 'object' && 'details' in (r.payload as any)) {
+          const { details: _details, ...rest } = r.payload as any;
+          return { ...r, payload: rest };
+        }
+        return r;
+      });
+      res.json({ success: true, data });
     } catch (err) {
       next(err);
     }

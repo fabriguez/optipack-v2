@@ -10,8 +10,21 @@ import { ImageInput } from '@/components/shared/ImageInput';
 import { uploadImage, uploadFile } from '@/lib/api/uploads';
 import { openAuthedFile } from '@/components/shared/AuthedImage';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
-import { ChevronDown, ChevronRight, FileText, Lock, Mail, Paperclip, Printer, RefreshCw, Save, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, FileText, Lock, Mail, Paperclip, Printer, RefreshCw, Save } from 'lucide-react';
 import { toast } from 'sonner';
+import {
+  AttachmentRow,
+  ContainerList,
+  FundTransfersSection,
+  KV,
+  NonImageAttachmentInput,
+  PaymentBreakdown,
+  RouteMassVolume,
+  Section,
+  Stat,
+  type Attachment,
+} from './reportSections';
+import { buildDetailSpecs } from './ReportDetailDialog';
 
 interface DailyReport {
   id: string;
@@ -26,17 +39,6 @@ interface DailyReport {
   _count?: { attachments: number };
   emailedAt?: string | null;
   emailSentTo?: Array<{ email: string; name: string; role: string; sentAt: string; ok: boolean; error?: string }> | null;
-}
-
-interface Attachment {
-  id: string;
-  url: string;
-  storageKey: string | null;
-  fileName: string | null;
-  contentType: string | null;
-  size: number | null;
-  caption: string | null;
-  createdAt: string;
 }
 
 interface Props {
@@ -171,6 +173,9 @@ function ReportDetails({
 
   const report = (data?.data as DailyReport) ?? initialReport;
   const payload = report.payload || {};
+  // Specs des popups "Voir les details" : regle de calcul + elements pris en
+  // compte pour chaque section (payload.details, servi par le GET individuel).
+  const specs = buildDetailSpecs(payload);
 
   const saveObservation = async (status?: 'CLOSED' | 'AMENDED') => {
     setSavingObs(true);
@@ -305,20 +310,21 @@ function ReportDetails({
 
       {/* Synthese chiffres */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat label="Recettes" value={'+' + formatAmount(payload.recetteTotal ?? 0)} positive />
-        <Stat label="Paiements en avance" value={'+' + formatAmount(payload.advancesTotal ?? 0)} />
-        <Stat label="Depenses" value={'-' + formatAmount(payload.expensesTotal ?? 0)} negative />
+        <Stat label="Recettes" value={'+' + formatAmount(payload.recetteTotal ?? 0)} positive detail={specs.recette} />
+        <Stat label="Paiements en avance" value={'+' + formatAmount(payload.advancesTotal ?? 0)} detail={specs.avances} />
+        <Stat label="Depenses" value={'-' + formatAmount(payload.expensesTotal ?? 0)} negative detail={specs.expenses} />
         <Stat
           label="Solde caisse"
           value={formatAmount(payload.cashRegister?.closingBalance ?? payload.cashRegister?.currentBalance ?? 0)}
           positive={Number(payload.cashRegister?.closingBalance ?? payload.cashRegister?.currentBalance ?? 0) >= 0}
           negative={Number(payload.cashRegister?.closingBalance ?? payload.cashRegister?.currentBalance ?? 0) < 0}
+          detail={specs.cash}
         />
       </div>
 
       {/* Entrees par mode transit + methode */}
       {payload.entriesByTransitMethod && Object.keys(payload.entriesByTransitMethod).length > 0 && (
-        <Section title="Entrees du jour par mode de transit et de paiement">
+        <Section title="Entrees du jour par mode de transit et de paiement" detail={specs.entries}>
           <table className="w-full text-xs">
             <thead className="text-left text-gray-500">
               <tr><th className="py-1">Mode transit</th><th className="py-1">Methodes</th><th className="py-1 text-right">Total</th></tr>
@@ -337,8 +343,8 @@ function ReportDetails({
       )}
 
       {/* Recettes vs Paiements en avance */}
-      <PaymentBreakdown title="Recettes (paiements sur colis arrives a destination)" data={payload.recetteByRouteAndMethod} total={payload.recetteTotal} positive />
-      <PaymentBreakdown title="Paiements en avance (colis pas encore arrives a destination)" data={payload.advancesByRouteAndMethod} total={payload.advancesTotal} />
+      <PaymentBreakdown title="Recettes (paiements sur colis arrives a destination)" data={payload.recetteByRouteAndMethod} total={payload.recetteTotal} positive detail={specs.recette} />
+      <PaymentBreakdown title="Paiements en avance (colis pas encore arrives a destination)" data={payload.advancesByRouteAndMethod} total={payload.advancesTotal} detail={specs.avances} />
 
       {/* Masse / volume colis enregistres */}
       <RouteMassVolume
@@ -346,12 +352,14 @@ function ReportDetails({
         data={payload.flow?.in?.byRoute ?? payload.registeredByRoute}
         totalWeight={payload.flow?.in?.totalWeight}
         totalVolume={payload.flow?.in?.totalVolume}
+        detail={specs.flowIn}
       />
       <RouteMassVolume
         title="Flux du jour - Sorties (colis ayant quitte l'agence)"
         data={payload.flow?.out?.byRoute}
         totalWeight={payload.flow?.out?.totalWeight}
         totalVolume={payload.flow?.out?.totalVolume}
+        detail={specs.flowOut}
       />
       {/* Ventilation des sorties : remises client vs departs en transit */}
       {payload.flow?.out?.byType && (
@@ -361,28 +369,31 @@ function ReportDetails({
             data={payload.flow.out.byType.handedOver?.byRoute}
             totalWeight={payload.flow.out.byType.handedOver?.totalWeight}
             totalVolume={payload.flow.out.byType.handedOver?.totalVolume}
+            detail={specs.flowOutHandedOver}
           />
           <RouteMassVolume
             title="Sorties - Partis en transit (charges en conteneur)"
             data={payload.flow.out.byType.toTransit?.byRoute}
             totalWeight={payload.flow.out.byType.toTransit?.totalWeight}
             totalVolume={payload.flow.out.byType.toTransit?.totalVolume}
+            detail={specs.flowOutToTransit}
           />
         </>
       )}
 
       {/* Conteneurs recus / envoyes */}
-      <ContainerList title="Conteneurs recus du jour" containers={payload.receivedContainers} dateLabel="Arrive le" dateField="arrivalDate" manifestVariant="received" />
-      <ContainerList title="Conteneurs envoyes du jour" containers={payload.sentContainers} dateLabel="Parti le" dateField="departureDate" manifestVariant="sent" />
+      <ContainerList title="Conteneurs recus du jour" containers={payload.receivedContainers} dateLabel="Arrive le" dateField="arrivalDate" manifestVariant="received" detail={specs.containersReceived} />
+      <ContainerList title="Conteneurs envoyes du jour" containers={payload.sentContainers} dateLabel="Parti le" dateField="departureDate" manifestVariant="sent" detail={specs.containersSent} />
 
       {/* Mouvements stock */}
-      <RouteMassVolume title="Entrees en stock par route" data={payload.stockIn?.byRoute} totalWeight={payload.stockIn?.totalWeight} totalVolume={payload.stockIn?.totalVolume} />
-      <RouteMassVolume title="Sorties de stock par route" data={payload.stockOut?.byRoute} totalWeight={payload.stockOut?.totalWeight} totalVolume={payload.stockOut?.totalVolume} />
+      <RouteMassVolume title="Entrees en stock par route" data={payload.stockIn?.byRoute} totalWeight={payload.stockIn?.totalWeight} totalVolume={payload.stockIn?.totalVolume} detail={specs.stockIn} />
+      <RouteMassVolume title="Sorties de stock par route" data={payload.stockOut?.byRoute} totalWeight={payload.stockOut?.totalWeight} totalVolume={payload.stockOut?.totalVolume} detail={specs.stockOut} />
       <RouteMassVolume
         title={`Etat de stock actuel - valeur totale ${formatAmount(payload.stockState?.totalValue ?? 0)}`}
         data={payload.stockState?.byRoute}
         totalWeight={payload.stockState?.totalWeight}
         totalVolume={payload.stockState?.totalVolume}
+        detail={specs.stockState}
       />
 
       {/* Transferts de fonds */}
@@ -391,11 +402,12 @@ function ReportDetails({
         incoming={payload.fundTransfersIn}
         outTotal={payload.fundTransfersOutTotal}
         inTotal={payload.fundTransfersInTotal}
+        detail={specs.transfers}
       />
 
       {/* Inventaires */}
       {Array.isArray(payload.inventories) && payload.inventories.length > 0 && (
-        <Section title="Inventaire(s) du jour">
+        <Section title="Inventaire(s) du jour" detail={specs.inventories}>
           <table className="w-full text-xs">
             <thead className="text-left text-gray-500">
               <tr><th>Magasin</th><th>Statut</th><th className="text-right">Attendus</th><th className="text-right">Scannes</th><th className="text-right">Manquants</th></tr>
@@ -417,7 +429,7 @@ function ReportDetails({
 
       {/* Solde caisse */}
       {payload.cashRegister && (
-        <Section title="Solde caisse">
+        <Section title="Solde caisse" detail={specs.cash}>
           <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
             <KV label="Ouverture" value={formatAmount(payload.cashRegister.openingBalance ?? 0)} />
             <KV label="Entrees" value={'+' + formatAmount(payload.cashRegister.totalEntries ?? 0)} positive />
@@ -493,276 +505,5 @@ function ReportDetails({
         )}
       </div>
     </div>
-  );
-}
-
-function Stat({ label, value, positive, negative }: { label: string; value: string; positive?: boolean; negative?: boolean }) {
-  return (
-    <div className="rounded-xl bg-gray-50 p-3">
-      <p className="text-[11px] uppercase tracking-wider text-gray-500">{label}</p>
-      <p className={`mt-1 text-base font-bold ${positive ? 'text-green-600' : negative ? 'text-red-600' : 'text-gray-900'}`}>{value}</p>
-    </div>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">{title}</p>
-      <div className="rounded-xl border border-gray-100 bg-white p-3">{children}</div>
-    </div>
-  );
-}
-
-function KV({ label, value, positive, negative, bold }: { label: string; value: string; positive?: boolean; negative?: boolean; bold?: boolean }) {
-  return (
-    <div className="rounded-lg bg-gray-50 px-2 py-1.5">
-      <p className="text-[10px] uppercase tracking-wider text-gray-500">{label}</p>
-      <p className={`mt-0.5 text-sm ${bold ? 'font-bold' : 'font-medium'} ${positive ? 'text-green-600' : negative ? 'text-red-600' : 'text-gray-900'}`}>{value}</p>
-    </div>
-  );
-}
-
-function PaymentBreakdown({ title, data, total, positive }: { title: string; data: Record<string, any> | undefined; total: number | undefined; positive?: boolean }) {
-  const rows = Object.values(data ?? {});
-  if (rows.length === 0) return null;
-  return (
-    <Section title={title}>
-      <table className="w-full text-xs">
-        <thead className="text-left text-gray-500">
-          <tr><th className="py-1">Route</th><th className="py-1">Methodes</th><th className="py-1 text-right">Total</th></tr>
-        </thead>
-        <tbody className="divide-y divide-gray-50">
-          {rows.map((r: any) => (
-            <tr key={r.routeId ?? r.routeName}>
-              <td className="py-1.5">{r.routeName} {r.type ? `(${r.type})` : ''}</td>
-              <td className="py-1.5 text-gray-600">{Object.entries(r.methods as Record<string, number>).map(([m, v]) => `${m}: ${formatAmount(v)}`).join(' / ')}</td>
-              <td className={`py-1.5 text-right font-medium ${positive ? 'text-green-600' : 'text-primary-700'}`}>{formatAmount(r.total)}</td>
-            </tr>
-          ))}
-          <tr>
-            <td colSpan={2} className="pt-2 text-right text-xs font-semibold text-gray-600">Total</td>
-            <td className={`pt-2 text-right text-sm font-bold ${positive ? 'text-green-600' : 'text-primary-700'}`}>{formatAmount(total ?? 0)}</td>
-          </tr>
-        </tbody>
-      </table>
-    </Section>
-  );
-}
-
-function RouteMassVolume({ title, data, totalWeight, totalVolume }: { title: string; data: Record<string, any> | undefined; totalWeight?: number; totalVolume?: number }) {
-  const rows = Object.values(data ?? {});
-  if (rows.length === 0) return null;
-  return (
-    <Section title={title}>
-      <table className="w-full text-xs">
-        <thead className="text-left text-gray-500">
-          <tr><th className="py-1">Route</th><th className="py-1 text-right">Colis</th><th className="py-1 text-right">Masse</th><th className="py-1 text-right">Volume</th>{rows[0] && 'totalPrice' in (rows[0] as any) && <th className="py-1 text-right">Valeur</th>}</tr>
-        </thead>
-        <tbody className="divide-y divide-gray-50">
-          {rows.map((r: any) => (
-            <tr key={r.routeId ?? r.routeName}>
-              <td className="py-1.5">{r.routeName} {r.type ? `(${r.type})` : ''}</td>
-              <td className="py-1.5 text-right">{r.count}</td>
-              <td className="py-1.5 text-right">{Number(r.totalWeight ?? 0).toFixed(2)} kg</td>
-              <td className="py-1.5 text-right">{Number(r.totalVolume ?? 0).toFixed(3)} m3</td>
-              {'totalPrice' in r && <td className="py-1.5 text-right text-primary-700">{formatAmount(r.totalPrice ?? 0)}</td>}
-            </tr>
-          ))}
-          {(totalWeight != null || totalVolume != null) && (
-            <tr>
-              <td colSpan={2} className="pt-2 text-right text-xs font-semibold text-gray-600">Total</td>
-              <td className="pt-2 text-right text-sm font-bold">{Number(totalWeight ?? 0).toFixed(2)} kg</td>
-              <td className="pt-2 text-right text-sm font-bold">{Number(totalVolume ?? 0).toFixed(3)} m3</td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </Section>
-  );
-}
-
-function ContainerList({ title, containers, dateLabel, dateField, manifestVariant }: { title: string; containers: any[] | undefined; dateLabel: string; dateField: string; manifestVariant: 'sent' | 'received' }) {
-  if (!containers || containers.length === 0) return null;
-
-  const openManifestPDF = async (path: string, filename: string) => {
-    try {
-      const res = await apiClient.get(path, { responseType: 'blob' });
-      const blob = new Blob([res.data], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    } catch {
-      toast.error('Echec du telechargement du bordereau');
-    }
-  };
-
-  return (
-    <Section title={title}>
-      <div className="space-y-3">
-        {containers.map((c: any) => {
-          const manifests = (c.manifests ?? []) as Array<{ id: string; number: string; type: 'DISPATCH' | 'RECEPTION' }>;
-          const hasComparison = manifestVariant === 'received' && c.hasComparison;
-          return (
-            <div key={c.id} className="rounded-lg bg-gray-50 p-2">
-              <p className="text-xs font-semibold text-gray-800">
-                {c.designation} <span className="text-gray-500">- {c.type} - {c.routeName}</span>
-              </p>
-              <p className="text-[11px] text-gray-500">{dateLabel} {c[dateField] ? new Date(c[dateField]).toLocaleString('fr-FR') : '-'} - {c.parcels} colis - {Number(c.totalWeight ?? 0).toFixed(2)} kg - {Number(c.totalVolume ?? 0).toFixed(3)} m3</p>
-              {Object.keys(c.byRoute ?? {}).length > 0 && (
-                <table className="mt-1 w-full text-[11px]">
-                  <tbody className="divide-y divide-gray-100">
-                    {Object.values(c.byRoute as Record<string, any>).map((r: any) => (
-                      <tr key={r.routeId ?? r.routeName}>
-                        <td className="py-1 pl-2">{r.routeName} {r.type ? `(${r.type})` : ''}</td>
-                        <td className="py-1 text-right">{r.count}</td>
-                        <td className="py-1 text-right">{Number(r.totalWeight).toFixed(2)} kg</td>
-                        <td className="py-1 text-right">{Number(r.totalVolume).toFixed(3)} m3</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-              {(manifests.length > 0 || hasComparison) && (
-                <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                  {manifests.map((m) => (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onClick={() => openManifestPDF(`/manifests/${m.id}/pdf`, `${m.number}.pdf`)}
-                      className="inline-flex items-center gap-1 rounded-md border border-primary-200 bg-white px-2 py-0.5 text-[11px] font-medium text-primary-700 hover:bg-primary-50"
-                    >
-                      <FileText className="h-3 w-3" />
-                      {m.type === 'DISPATCH' ? "Bordereau d'envoi" : 'Bordereau de reception'}
-                    </button>
-                  ))}
-                  {hasComparison && (
-                    <button
-                      type="button"
-                      onClick={() => openManifestPDF(`/manifests/comparison/${c.id}/pdf`, `comparaison-${c.designation}.pdf`)}
-                      className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-white px-2 py-0.5 text-[11px] font-medium text-amber-700 hover:bg-amber-50"
-                    >
-                      <FileText className="h-3 w-3" />
-                      Bordereau de comparaison
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </Section>
-  );
-}
-
-function FundTransfersSection({ outgoing, incoming, outTotal, inTotal }: { outgoing?: any[]; incoming?: any[]; outTotal?: number; inTotal?: number }) {
-  const out = outgoing ?? [];
-  const inn = incoming ?? [];
-  if (out.length === 0 && inn.length === 0) return null;
-  const renderTable = (rows: any[], direction: 'OUT' | 'IN') => (
-    <table className="w-full text-xs">
-      <thead className="text-left text-gray-500">
-        <tr>
-          <th className="py-1">Reference</th>
-          <th className="py-1">{direction === 'OUT' ? 'Destination' : 'Source'}</th>
-          <th className="py-1">Methode</th>
-          <th className="py-1">Statut</th>
-          <th className="py-1 text-right">Montant</th>
-        </tr>
-      </thead>
-      <tbody className="divide-y divide-gray-50">
-        {rows.map((t) => (
-          <tr key={t.id}>
-            <td className="py-1.5 font-mono text-[11px]">{t.reference}</td>
-            <td className="py-1.5">{t.counterpart}</td>
-            <td className="py-1.5 text-gray-600">{t.transferMethod}</td>
-            <td className="py-1.5"><AppBadge variant={t.status === 'CONFIRMED' ? 'success' : t.status === 'PENDING' ? 'warning' : 'default'}>{t.status}</AppBadge></td>
-            <td className={`py-1.5 text-right font-medium ${direction === 'OUT' ? 'text-red-600' : 'text-green-600'}`}>
-              {direction === 'OUT' ? '-' : '+'}{formatAmount(t.amount)}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-  return (
-    <>
-      {out.length > 0 && (
-        <Section title={`Transferts de fonds sortants (${formatAmount(outTotal ?? 0)})`}>
-          {renderTable(out, 'OUT')}
-        </Section>
-      )}
-      {inn.length > 0 && (
-        <Section title={`Transferts de fonds entrants (${formatAmount(inTotal ?? 0)})`}>
-          {renderTable(inn, 'IN')}
-        </Section>
-      )}
-    </>
-  );
-}
-
-function AttachmentRow({ att, onOpen, onSaveCaption, onDelete }: { att: Attachment; onOpen: () => void; onSaveCaption: (c: string) => void; onDelete: () => void }) {
-  const [caption, setCaption] = useState(att.caption ?? '');
-  const [editing, setEditing] = useState(false);
-  return (
-    <li className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-xs">
-      <div className="flex items-center justify-between gap-2">
-        <button
-          type="button"
-          onClick={onOpen}
-          className="flex flex-1 items-center gap-2 truncate text-primary-700 hover:underline"
-        >
-          <FileText className="h-3.5 w-3.5 shrink-0" />
-          <span className="truncate">{att.caption || att.fileName || 'piece-jointe'}</span>
-          {att.fileName && att.caption && <span className="text-gray-400 truncate">({att.fileName})</span>}
-        </button>
-        <button type="button" onClick={() => setEditing((v) => !v)} className="rounded-lg px-2 py-1 text-gray-500 hover:bg-gray-100">Libelle</button>
-        <button type="button" onClick={onDelete} className="rounded-lg p-1 text-red-500 hover:bg-red-50" aria-label="Supprimer">
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
-      </div>
-      {editing && (
-        <div className="mt-2 flex items-center gap-2">
-          <input
-            type="text"
-            value={caption}
-            onChange={(e) => setCaption(e.target.value)}
-            placeholder="Libelle (ex: Facture electricite mars)"
-            className="flex-1 rounded-lg border border-gray-200 px-2 py-1 text-xs focus:border-primary-500 focus:outline-none"
-          />
-          <button
-            type="button"
-            onClick={() => { onSaveCaption(caption); setEditing(false); }}
-            className="rounded-lg bg-primary-700 px-2 py-1 text-xs font-medium text-white hover:bg-primary-900"
-          >
-            Sauver
-          </button>
-        </div>
-      )}
-    </li>
-  );
-}
-
-function NonImageAttachmentInput({ onUpload, uploading }: { onUpload: (f: File) => void; uploading: boolean }) {
-  return (
-    <label className="flex h-full cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-200 p-6 text-center text-xs text-gray-500 hover:border-primary-300 hover:bg-primary-50/40">
-      <Paperclip className="mb-2 h-5 w-5 text-gray-400" />
-      <span>Ajouter PDF / XLSX / Word / autre</span>
-      {uploading && <span className="mt-1 text-primary-600">Upload en cours...</span>}
-      <input
-        type="file"
-        accept=".pdf,.xlsx,.xls,.doc,.docx,.csv,.txt"
-        className="hidden"
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) onUpload(f);
-          e.target.value = '';
-        }}
-      />
-    </label>
   );
 }

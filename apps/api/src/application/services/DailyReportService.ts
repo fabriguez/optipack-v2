@@ -1,7 +1,7 @@
 import { injectable } from 'tsyringe';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../../config/database';
-import { startOfDayInTimezone } from '../../domain/utils/timezone';
+import { startOfDayInTimezone, utcInstantForLocalTime } from '../../domain/utils/timezone';
 
 type RouteKey = string;
 
@@ -132,23 +132,37 @@ export class DailyReportService {
     // Snap au prochain jour ouvrable de l'agence.
     const openingHours = await prisma.agencyOpeningHours.findMany({
       where: { agencyId, isOpen: true },
-      select: { dayOfWeek: true },
+      select: { dayOfWeek: true, openTime: true, closeTime: true },
     });
+    // Calcule le dayOfWeek de dayStart dans le fuseau agence.
+    const dowFmt = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short' });
+    const dowMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+    const dowOf = (d: Date) => dowMap[dowFmt.format(d).slice(0, 3)] ?? d.getUTCDay();
     if (openingHours.length > 0) {
       const openDays = new Set(openingHours.map((h) => h.dayOfWeek));
-      // Calcule le dayOfWeek de dayStart dans le fuseau agence.
-      const dowFmt = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short' });
-      const dowMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
-      let dow = dowMap[dowFmt.format(dayStart).slice(0, 3)] ?? dayStart.getUTCDay();
+      let dow = dowOf(dayStart);
       let safety = 0;
       while (!openDays.has(dow) && safety < 7) {
         dayStart = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
-        dow = dowMap[dowFmt.format(dayStart).slice(0, 3)] ?? dayStart.getUTCDay();
+        dow = dowOf(dayStart);
         safety += 1;
       }
     }
 
     const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+
+    // Plage horaire de l'agence pour le jour retenu -> bornes planifiees en
+    // UTC. La "journee" du rapport est celle definie par le programme de
+    // l'agence (ouverture -> fermeture), pas le jour calendaire brut.
+    const dayHours = openingHours.filter((h) => h.dayOfWeek === dowOf(dayStart));
+    let scheduleStartUtc: Date | null = null;
+    let scheduleEndUtc: Date | null = null;
+    if (dayHours.length > 0) {
+      const minOpen = dayHours.reduce((a, h) => (h.openTime < a ? h.openTime : a), dayHours[0].openTime);
+      const maxClose = dayHours.reduce((a, h) => (h.closeTime > a ? h.closeTime : a), dayHours[0].closeTime);
+      scheduleStartUtc = utcInstantForLocalTime(dayStart, minOpen, tz);
+      scheduleEndUtc = utcInstantForLocalTime(dayStart, maxClose, tz);
+    }
 
     // Verrou immutabilite : un rapport CLOSED est un snapshot definitif fige a
     // la cloture. Regen refusee (on retourne le payload existant) sauf force
@@ -172,24 +186,40 @@ export class DailyReportService {
       include: { closedBy: { select: { firstName: true, lastName: true } } },
     });
 
-    // Fenetres contigues : la fenetre demarre a la CLOTURE de la caisse
-    // precedente quand elle existe (et non a la creation de la caisse du
-    // jour, qui n'intervient qu'a la premiere action de caisse). Evite la
-    // zone morte [cloture veille -> ouverture caisse] ou les evenements
-    // colis (scans, mises en stock) n'apparaissaient dans aucun rapport.
-    const prevRegister = cashRegister
-      ? await prisma.agencyCashRegister.findFirst({
-          where: { agencyId, date: { lt: dayStart }, closedAt: { not: null } },
-          orderBy: { date: 'desc' },
-          select: { closedAt: true },
-        })
-      : null;
+    // Fenetre du rapport = journee TELLE QUE DEFINIE PAR LA PLAGE HORAIRE DE
+    // L'AGENCE, rattachee a la session de caisse quand elle existe.
+    //
+    // Debut : cloture de la caisse precedente quand elle existe (fenetres
+    // contigues, pas de zone morte [cloture veille -> ouverture caisse] ni de
+    // trou sur les jours fermes type dimanche). Sinon creation de la caisse
+    // du jour, sinon ouverture planifiee (openTime), sinon minuit.
+    //
+    // Fin : cloture de la caisse du jour si cloturee ; sinon maintenant si la
+    // caisse est encore ouverte ; sans caisse : fermeture planifiee
+    // (closeTime) si deja passee, sinon maintenant. Post-cloture = jour
+    // ouvrable suivant (regle metier).
+    const prevRegister = await prisma.agencyCashRegister.findFirst({
+      where: { agencyId, date: { lt: dayStart }, closedAt: { not: null } },
+      orderBy: { date: 'desc' },
+      select: { closedAt: true },
+    });
+    const nowTs = new Date();
+    const sessionStart = cashRegister?.createdAt ?? scheduleStartUtc ?? dayStart;
     const windowStart =
-      cashRegister && prevRegister?.closedAt && prevRegister.closedAt < cashRegister.createdAt
+      prevRegister?.closedAt && prevRegister.closedAt < sessionStart
         ? prevRegister.closedAt
-        : cashRegister?.createdAt ?? dayStart;
-    const windowEnd = cashRegister?.closedAt ?? new Date();
+        : sessionStart;
+    const windowEnd = cashRegister
+      ? cashRegister.closedAt ?? nowTs
+      : scheduleEndUtc && scheduleEndUtc < nowTs
+      ? scheduleEndUtc
+      : nowTs;
     const windowFilter = { gte: windowStart, lt: windowEnd };
+    const windowSource = cashRegister
+      ? 'CASH_SESSION'
+      : scheduleEndUtc
+      ? 'AGENCY_SCHEDULE'
+      : 'CALENDAR_DAY';
 
     const agency = await prisma.agency.findUnique({
       where: { id: agencyId },
@@ -235,6 +265,7 @@ export class DailyReportService {
             parcels: {
               select: {
                 id: true,
+                trackingNumber: true,
                 price: true,
                 status: true,
                 warehouseId: true,
@@ -248,6 +279,7 @@ export class DailyReportService {
         parcel: {
           select: {
             id: true,
+            trackingNumber: true,
             price: true,
             status: true,
             warehouseId: true,
@@ -273,6 +305,9 @@ export class DailyReportService {
     let paymentsOnlineTotal = 0;
     let advancesTotal = 0;
     let recetteTotal = 0;
+    // Details item par item pour la popup "Voir les details" du frontend :
+    // chaque paiement avec sa ventilation recette/avance par colis + raison.
+    const paymentsDetails: any[] = [];
 
     // Classification basee sur la TIMING : un paiement est une recette si
     // son createdAt est posterieur a la date a laquelle le colis est passe
@@ -362,11 +397,26 @@ export class DailyReportService {
       entriesByTransitMethod[transitType].total += amount;
 
       // 8/9) Prorata recette / avance.
+      const shareRows: any[] = [];
+      const pushPaymentDetail = (computation: string) =>
+        paymentsDetails.push({
+          id: pay.id,
+          reference: pay.reference,
+          amount,
+          method: pay.paymentMethod,
+          channel: pay.receivedByUserId ? 'GUICHET' : 'EN_LIGNE',
+          createdAt: pay.createdAt.toISOString(),
+          transitType,
+          computation,
+          parcels: shareRows,
+        });
+
       if (parcelsCtx.length === 0) {
         // Paiement sans colis ctx (ne devrait pas arriver) : tout en avance.
         const route = { id: null, name: 'Sans route', type: null };
         advancesTotal += amount;
         bumpPayBucket(advanceByRouteAndMethod, route, pay.paymentMethod, amount);
+        pushPaymentDetail('SANS_COLIS');
         continue;
       }
 
@@ -382,14 +432,32 @@ export class DailyReportService {
         const route = routeOf(p);
         // Recette = paiement effectue APRES reception du colis
         // (payment.createdAt >= receivedAt). Sinon = avance.
-        if (isPaymentAfterReception(p.id, pay.createdAt)) {
+        const currentStatus = parcelStatusMap.get(p.id) ?? null;
+        const receivedAt = receivedAtByParcel.get(p.id) ?? null;
+        const isRecette = isPaymentAfterReception(p.id, pay.createdAt);
+        if (isRecette) {
           recetteTotal += share;
           bumpPayBucket(recetteByRouteAndMethod, route, pay.paymentMethod, share);
         } else {
           advancesTotal += share;
           bumpPayBucket(advanceByRouteAndMethod, route, pay.paymentMethod, share);
         }
+        shareRows.push({
+          trackingNumber: p.trackingNumber,
+          routeName: route.name,
+          price: Number(p.price ?? 0),
+          status: currentStatus,
+          receivedAt: receivedAt ? receivedAt.toISOString() : null,
+          share,
+          bucket: isRecette ? 'RECETTE' : 'AVANCE',
+          reason: isRecette
+            ? 'PAYE_APRES_RECEPTION'
+            : currentStatus !== 'RECEIVED' && currentStatus !== 'DELIVERED'
+            ? 'NON_RECEPTIONNE'
+            : 'PAYE_AVANT_RECEPTION',
+        });
       }
+      pushPaymentDetail(equalSplit ? 'EGALITAIRE' : 'PRORATA');
     }
 
     // ------------------------------------------------------------------
@@ -405,12 +473,39 @@ export class DailyReportService {
       },
       select: {
         id: true,
+        trackingNumber: true,
+        status: true,
+        createdAt: true,
         weight: true,
         volume: true,
         price: true,
+        declaredValue: true,
         transitRoute: { select: { id: true, name: true, type: true } },
       },
     });
+
+    // Date d'entree dans le statut courant (IN_STOCK/RECEIVED) de chaque
+    // colis du snapshot : derniere transition vers ce statut dans l'historique.
+    // Affichee dans la popup details ("present depuis").
+    const statusEnteredAt = new Map<string, Date>();
+    if (flowInRawParcels.length > 0) {
+      const statusByParcel = new Map(flowInRawParcels.map((p) => [p.id, p.status]));
+      const snapshotHistories = await prisma.parcelHistory.findMany({
+        where: {
+          parcelId: { in: flowInRawParcels.map((p) => p.id) },
+          statusAfter: { in: ['IN_STOCK', 'RECEIVED'] },
+        },
+        select: { parcelId: true, statusAfter: true, createdAt: true },
+        orderBy: { createdAt: 'asc' },
+      });
+      for (const h of snapshotHistories) {
+        // asc + overwrite -> on garde la DERNIERE entree dans le statut courant.
+        if (h.statusAfter === statusByParcel.get(h.parcelId)) {
+          statusEnteredAt.set(h.parcelId, h.createdAt);
+        }
+      }
+    }
+
     const flowInHistories = flowInRawParcels.map((p) => ({
       action: 'SNAPSHOT' as const,
       parcel: p,
@@ -443,9 +538,12 @@ export class DailyReportService {
       },
       select: {
         action: true,
+        createdAt: true,
         parcel: {
           select: {
             id: true,
+            trackingNumber: true,
+            status: true,
             weight: true,
             volume: true,
             price: true,
@@ -465,8 +563,12 @@ export class DailyReportService {
     const flowOutParcelsMap = new Map<string, ParcelLite>();
     const handedOverMap = new Map<string, ParcelLite>();
     const toTransitMap = new Map<string, ParcelLite>();
+    // Premiere heure de sortie de chaque colis (popup details).
+    const flowOutAtMap = new Map<string, Date>();
     for (const h of flowOutHistories) {
       if (!flowOutParcelsMap.has(h.parcel.id)) flowOutParcelsMap.set(h.parcel.id, h.parcel);
+      const prevAt = flowOutAtMap.get(h.parcel.id);
+      if (!prevAt || h.createdAt < prevAt) flowOutAtMap.set(h.parcel.id, h.createdAt);
       const bucket = h.action === 'LOADED_INTO_CONTAINER' ? toTransitMap : handedOverMap;
       if (!bucket.has(h.parcel.id)) bucket.set(h.parcel.id, h.parcel);
     }
@@ -475,6 +577,32 @@ export class DailyReportService {
     const flowOut = aggregateParcels(Array.from(flowOutParcelsMap.values()));
     const flowOutHandedOver = aggregateParcels(Array.from(handedOverMap.values()));
     const flowOutToTransit = aggregateParcels(Array.from(toTransitMap.values()));
+
+    // Ligne de detail colis pour la popup "Voir les details".
+    const parcelDetailRow = (p: any) => ({
+      trackingNumber: p.trackingNumber ?? null,
+      routeName: p.transitRoute?.name ?? 'Sans route',
+      routeType: p.transitRoute?.type ?? null,
+      status: p.status ?? null,
+      weight: Number(p.weight ?? 0),
+      volume: Number(p.volume ?? 0),
+      price: Number(p.price ?? 0),
+    });
+    const flowInDetail = flowInRawParcels.map((p) => ({
+      ...parcelDetailRow(p),
+      registeredAt: p.createdAt.toISOString(),
+      presentSince: statusEnteredAt.get(p.id)?.toISOString() ?? null,
+    }));
+    const flowOutDetail = Array.from(flowOutParcelsMap.values()).map((p) => ({
+      ...parcelDetailRow(p),
+      exitedAt: flowOutAtMap.get(p.id)?.toISOString() ?? null,
+      exitType:
+        toTransitMap.has(p.id) && handedOverMap.has(p.id)
+          ? 'REMISE_ET_TRANSIT'
+          : toTransitMap.has(p.id)
+          ? 'PARTI_TRANSIT'
+          : 'REMIS_CLIENT',
+    }));
 
     // ------------------------------------------------------------------
     // 3) Conteneurs RECUS (arrivalAgencyId = agence, actualArrivalDate dans
@@ -532,6 +660,7 @@ export class DailyReportService {
           },
           select: {
             id: true,
+            trackingNumber: true,
             containerId: true,
             lastContainerId: true,
             weight: true,
@@ -612,6 +741,18 @@ export class DailyReportService {
     const receivedContainersList = receivedContainers.map(summarizeContainer);
     const sentContainersList = sentContainers.map(summarizeContainer);
 
+    // Liste des colis comptes dans chaque conteneur (pour la popup details).
+    const containerParcelsDetail: Record<string, any[]> = {};
+    for (const [cid, list] of parcelsByContainer) {
+      containerParcelsDetail[cid] = list.map((p) => ({
+        trackingNumber: p.trackingNumber,
+        routeName: p.transitRoute?.name ?? 'Sans route',
+        weight: Number(p.weight ?? 0),
+        volume: Number(p.volume ?? 0),
+        stillLoaded: p.containerId === cid,
+      }));
+    }
+
     // ------------------------------------------------------------------
     // 5) Mouvements de stock : transitions STRICTES vers/depuis IN_STOCK
     //    dans un magasin de l'agence (via ParcelHistory.statusBefore /
@@ -630,9 +771,11 @@ export class DailyReportService {
       select: {
         statusBefore: true,
         statusAfter: true,
+        createdAt: true,
         parcel: {
           select: {
             id: true,
+            trackingNumber: true,
             weight: true,
             volume: true,
             price: true,
@@ -644,9 +787,23 @@ export class DailyReportService {
 
     const stockInParcels: ParcelLite[] = [];
     const stockOutParcels: ParcelLite[] = [];
+    const stockInDetail: any[] = [];
+    const stockOutDetail: any[] = [];
     for (const h of stockHistories) {
-      if (h.statusAfter === 'IN_STOCK' && h.statusBefore !== 'IN_STOCK') stockInParcels.push(h.parcel);
-      if (h.statusBefore === 'IN_STOCK' && h.statusAfter !== 'IN_STOCK') stockOutParcels.push(h.parcel);
+      const transitionRow = () => ({
+        ...parcelDetailRow(h.parcel),
+        statusBefore: h.statusBefore,
+        statusAfter: h.statusAfter,
+        at: h.createdAt.toISOString(),
+      });
+      if (h.statusAfter === 'IN_STOCK' && h.statusBefore !== 'IN_STOCK') {
+        stockInParcels.push(h.parcel);
+        stockInDetail.push(transitionRow());
+      }
+      if (h.statusBefore === 'IN_STOCK' && h.statusAfter !== 'IN_STOCK') {
+        stockOutParcels.push(h.parcel);
+        stockOutDetail.push(transitionRow());
+      }
     }
     const stockInAgg = aggregateParcels(stockInParcels);
     const stockOutAgg = aggregateParcels(stockOutParcels);
@@ -658,20 +815,15 @@ export class DailyReportService {
     //    Une fois le rapport CLOSED, la regen est refusee (cf controller)
     //    donc ce snapshot reste fige au moment de la cloture.
     // ------------------------------------------------------------------
-    const currentStock = await prisma.parcel.findMany({
-      where: {
-        isDeleted: false,
-        status: { in: ['IN_STOCK', 'RECEIVED'] },
-        warehouse: { agencyId },
-      },
-      select: {
-        weight: true,
-        volume: true,
-        price: true,
-        declaredValue: true,
-        transitRoute: { select: { id: true, name: true, type: true } },
-      },
-    });
+    // Meme snapshot que le flux entrees (criteres identiques) : on reutilise
+    // flowInRawParcels au lieu de requeter une seconde fois.
+    const currentStock = flowInRawParcels;
+    const stockStateDetail = currentStock.map((p) => ({
+      ...parcelDetailRow(p),
+      declaredValue: p.declaredValue != null ? Number(p.declaredValue) : null,
+      registeredAt: p.createdAt.toISOString(),
+      presentSince: statusEnteredAt.get(p.id)?.toISOString() ?? null,
+    }));
 
     const stockStateAgg = aggregateParcels(
       currentStock.map((p) => ({
@@ -802,6 +954,18 @@ export class DailyReportService {
     }));
     const expensesTotal = expenses.reduce((s, e) => s + Number(e.amount), 0);
 
+    const disbursementsList = disbursements.map((d) => ({
+      id: d.id,
+      reference: d.reference,
+      reason: d.reason,
+      description: d.description ?? null,
+      orderer: d.orderer,
+      amount: Number(d.amount),
+      isVoided: d.isVoided,
+      linkedToExpense: !!d.expense,
+      createdAt: d.createdAt.toISOString(),
+    }));
+
     const disbursementsByCategory: Record<string, { count: number; total: number; voided: number }> = {};
     let disbursementsTotal = 0;
     let disbursementsVoided = 0;
@@ -879,9 +1043,46 @@ export class DailyReportService {
 
     const profit = recetteTotal - expensesTotal - disbursementsTotalDedup;
 
+    // ------------------------------------------------------------------
+    // Details "explicabilite" : listes item par item qui justifient chaque
+    // agregat du rapport (popup "Voir les details" cote frontend). Les
+    // listes sont plafonnees pour ne pas faire exploser le JSON stocke ;
+    // `truncated` indique le nombre de lignes omises par section. Ce bloc
+    // est retire de la reponse du endpoint LISTE (payload allege), il n'est
+    // servi que par le GET d'un rapport individuel.
+    // ------------------------------------------------------------------
+    const DETAIL_CAP = 1000;
+    const truncated: Record<string, number> = {};
+    const cap = (key: string, arr: any[]) => {
+      if (arr.length <= DETAIL_CAP) return arr;
+      truncated[key] = arr.length - DETAIL_CAP;
+      return arr.slice(0, DETAIL_CAP);
+    };
+    const details = {
+      version: 1,
+      window: {
+        start: windowStart.toISOString(),
+        end: windowEnd.toISOString(),
+        source: windowSource,
+        scheduleStart: scheduleStartUtc ? scheduleStartUtc.toISOString() : null,
+        scheduleEnd: scheduleEndUtc ? scheduleEndUtc.toISOString() : null,
+        cashOpenedAt: cashRegister ? cashRegister.createdAt.toISOString() : null,
+        cashClosedAt: cashRegister?.closedAt ? cashRegister.closedAt.toISOString() : null,
+      },
+      payments: cap('payments', paymentsDetails),
+      flowIn: cap('flowIn', flowInDetail),
+      flowOut: cap('flowOut', flowOutDetail),
+      stockIn: cap('stockIn', stockInDetail),
+      stockOut: cap('stockOut', stockOutDetail),
+      stockState: cap('stockState', stockStateDetail),
+      containerParcels: containerParcelsDetail,
+      disbursements: disbursementsList,
+      truncated,
+    };
+
     const payload = {
       generatedAt: new Date().toISOString(),
-      window: { start: windowStart.toISOString(), end: windowEnd.toISOString() },
+      window: { start: windowStart.toISOString(), end: windowEnd.toISOString(), source: windowSource },
       organization: agency?.organization ?? null,
       agency: agency
         ? {
@@ -999,6 +1200,8 @@ export class DailyReportService {
       voidedPaymentsTotal,
       totalParcels: flowIn.count,
       totalRemainingAmount: 0,
+
+      details,
     };
 
     // Upsert : un rapport unique par agence/jour. Un rapport CLOSED est

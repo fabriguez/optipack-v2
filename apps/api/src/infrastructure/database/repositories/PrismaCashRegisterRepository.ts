@@ -38,6 +38,18 @@ export class PrismaCashRegisterRepository implements ICashRegisterRepository {
     });
     const today = startOfDayInTimezone(new Date(), agency?.timezone || 'Africa/Douala');
 
+    // Jour ferme (ex : dimanche) : AUCUN mouvement ne doit atterrir sur une
+    // caisse datee de ce jour, meme si une caisse (heritee d'un bug ou d'une
+    // ancienne version) existe deja a cette date. On bascule directement sur
+    // le prochain jour ouvrable du programme de l'agence. Les caisses
+    // residuelles restees ouvertes sur un jour ferme sont cloturees d'office
+    // par AutoCloseCashRegistersUseCase.
+    const openDay = await this.isAgencyOpenOn(agencyId, today);
+    if (!openDay) {
+      const nextDate = await this.computeNextBusinessDay(agencyId, today);
+      return this.openOrGetForDate(agencyId, nextDate);
+    }
+
     const todayRegister = await this.findOpenByAgency(agencyId, today);
     if (todayRegister && !todayRegister.isClosed) return todayRegister;
 
@@ -46,14 +58,6 @@ export class PrismaCashRegisterRepository implements ICashRegisterRepository {
       return this.openOrGetForDate(agencyId, nextDate);
     }
 
-    // Aucune caisse pour aujourd'hui. Si aujourd'hui n'est pas un jour
-    // d'ouverture configure -> snap au prochain jour ouvrable. Sinon ouvre
-    // pour aujourd'hui.
-    const openDay = await this.isAgencyOpenOn(agencyId, today);
-    if (!openDay) {
-      const nextDate = await this.computeNextBusinessDay(agencyId, today);
-      return this.openOrGetForDate(agencyId, nextDate);
-    }
     return this.openOrGetForDate(agencyId, today);
   }
 
@@ -77,7 +81,13 @@ export class PrismaCashRegisterRepository implements ICashRegisterRepository {
    * de cloture de la caisse precedente comme solde d'ouverture.
    */
   private async openOrGetForDate(agencyId: string, date: Date): Promise<AgencyCashRegister> {
-    const dateOnly = toUtcDateOnly(date);
+    let dateOnly = toUtcDateOnly(date);
+
+    // Garde-fou : jamais de caisse sur un jour ferme du programme de
+    // l'agence, quel que soit l'appelant -> snap au prochain jour ouvrable.
+    if (!(await this.isAgencyOpenOn(agencyId, dateOnly))) {
+      dateOnly = await this.computeNextBusinessDay(agencyId, dateOnly);
+    }
 
     const existing = await this.findOpenByAgency(agencyId, dateOnly);
     if (existing) return existing;
