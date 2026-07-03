@@ -9,6 +9,18 @@ import type {
 import type { PaginationInput, PaginatedResponse } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
+import { safeOrderBy } from '../../../domain/utils/safeOrderBy';
+
+// Colonnes scalaires triables (allowlist anti sort-injection).
+const MANIFEST_SORTABLE = [
+  'id',
+  'number',
+  'type',
+  'status',
+  'closedAt',
+  'createdAt',
+  'updatedAt',
+];
 
 const MANIFEST_INCLUDE = {
   lines: { orderBy: { addedAt: 'asc' as const } },
@@ -65,7 +77,7 @@ export class PrismaManifestRepository implements IManifestRepository {
         where,
         skip,
         take: limit,
-        orderBy: sortBy ? { [sortBy]: sortOrder } : { createdAt: 'desc' },
+        orderBy: safeOrderBy(sortBy, sortOrder, MANIFEST_SORTABLE, 'createdAt'),
         include: MANIFEST_INCLUDE,
       }),
       prisma.shippingManifest.count({ where }),

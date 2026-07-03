@@ -3,6 +3,23 @@ import type { Parcel, Prisma } from '@prisma/client';
 import type { IParcelRepository, ParcelWithRelations } from '../../../application/interfaces/IParcelRepository';
 import type { PaginationInput, PaginatedResponse } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
+import { safeOrderBy } from '../../../domain/utils/safeOrderBy';
+
+// Colonnes scalaires triables (allowlist anti sort-injection).
+const PARCEL_SORTABLE = [
+  'id',
+  'trackingNumber',
+  'designation',
+  'weight',
+  'volume',
+  'status',
+  'price',
+  'category',
+  'arrivalDate',
+  'pickupDate',
+  'createdAt',
+  'updatedAt',
+];
 
 const PARCEL_INCLUDE = {
   client: { select: { id: true, fullName: true, phone: true } },
@@ -145,7 +162,7 @@ export class PrismaParcelRepository implements IParcelRepository {
         where,
         skip,
         take: limit,
-        orderBy: sortBy ? { [sortBy]: sortOrder } : { createdAt: 'desc' },
+        orderBy: safeOrderBy(sortBy, sortOrder, PARCEL_SORTABLE, 'createdAt'),
         include: PARCEL_INCLUDE,
       }),
       prisma.parcel.count({ where }),

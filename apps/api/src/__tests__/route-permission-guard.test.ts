@@ -46,9 +46,12 @@ const WHITELIST: Array<{ file: string; method: string; path: string; reason: str
   { file: 'attachment.routes.ts', method: 'get', path: '/disbursements/:id/attachments', reason: 'lecture — scoping objet etape 2' },
   { file: 'attachment.routes.ts', method: 'get', path: '/debts/:id/attachments', reason: 'lecture — scoping objet etape 2' },
   { file: 'attachment.routes.ts', method: 'get', path: '/fund-transfers/:id/attachments', reason: 'lecture — scoping objet etape 2' },
+  { file: 'notification-templates.routes.ts', method: 'get', path: '/notification-events', reason: 'authentifie ; renvoie un registre statique d\'events (catalogue, aucune donnee tenant)' },
 ];
 
-const GUARD_NAMES = new Set(['authorizeMiddleware', 'requirePermissionMiddleware']);
+// `authenticateClient` : garde du portail client (verifie le jeton client + fait
+// les checks d'appartenance clientId dans le handler). Compte comme garde.
+const GUARD_NAMES = new Set(['authorizeMiddleware', 'requirePermissionMiddleware', 'authenticateClient']);
 
 interface RouteInfo {
   method: string;

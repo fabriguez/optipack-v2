@@ -8,7 +8,9 @@ import { prisma } from '../../config/database';
 import { NotFoundError } from '../../domain/errors/BusinessError';
 import { getOrgId } from '../middleware/tenantGuard';
 
-const orgIdFrom = (req: Request) => req.params.organizationId || (req.user as any)?.organizationId;
+// Isolation tenant : l'organisation vient TOUJOURS du jeton authentifie, jamais
+// du param d'URL / body / query (sinon IDOR cross-tenant sur les ressources siege).
+const orgIdFrom = (req: Request) => (req.user as any)?.organizationId as string;
 
 export class HeadOfficeController {
   // GET /head-office/:organizationId/cash-register
@@ -27,7 +29,7 @@ export class HeadOfficeController {
   static async createDisbursement(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(CreateHeadOfficeDisbursementUseCase);
-      const body = { ...req.body, organizationId: req.body.organizationId || req.user!.organizationId };
+      const body = { ...req.body, organizationId: req.user!.organizationId };
       const result = await useCase.execute(body, req.user!.userId);
       res.status(201).json({ success: true, data: result });
     } catch (err) {
@@ -42,7 +44,7 @@ export class HeadOfficeController {
       const page = Number(q.page) || 1;
       const limit = Number(q.limit) || 20;
       const skip = (page - 1) * limit;
-      const organizationId = q.organizationId || req.user!.organizationId;
+      const organizationId = req.user!.organizationId;
 
       const where: any = {
         organizationId,
@@ -124,7 +126,7 @@ export class HeadOfficeController {
   static async payEmployee(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(PayEmployeeFromHeadOfficeUseCase);
-      const body = { ...req.body, organizationId: req.body.organizationId || req.user!.organizationId };
+      const body = { ...req.body, organizationId: req.user!.organizationId };
       const result = await useCase.execute(req.params.employeeId, body, req.user!.userId);
       res.json({ success: true, data: result });
     } catch (err) {

@@ -3,6 +3,19 @@ import type { Agency, Prisma } from '@prisma/client';
 import type { IAgencyRepository } from '../../../application/interfaces/IAgencyRepository';
 import type { PaginationInput, PaginatedResponse } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
+import { safeOrderBy } from '../../../domain/utils/safeOrderBy';
+
+// Colonnes scalaires triables (allowlist anti sort-injection).
+const AGENCY_SORTABLE = [
+  'id',
+  'name',
+  'code',
+  'city',
+  'country',
+  'isActive',
+  'createdAt',
+  'updatedAt',
+];
 
 @injectable()
 export class PrismaAgencyRepository implements IAgencyRepository {
@@ -37,7 +50,7 @@ export class PrismaAgencyRepository implements IAgencyRepository {
         where,
         skip,
         take: limit,
-        orderBy: sortBy ? { [sortBy]: sortOrder } : { createdAt: 'desc' },
+        orderBy: safeOrderBy(sortBy, sortOrder, AGENCY_SORTABLE, 'createdAt'),
         include: {
           responsibleUser: { select: { id: true, firstName: true, lastName: true } },
           _count: { select: { warehouses: true } },

@@ -3,6 +3,22 @@ import type { Client, Prisma } from '@prisma/client';
 import type { IClientRepository } from '../../../application/interfaces/IClientRepository';
 import type { PaginationInput, PaginatedResponse } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
+import { safeOrderBy } from '../../../domain/utils/safeOrderBy';
+
+// Colonnes scalaires triables (allowlist anti sort-injection).
+const CLIENT_SORTABLE = [
+  'id',
+  'fullName',
+  'phone',
+  'email',
+  'clientType',
+  'loyaltyTier',
+  'loyaltyPoints',
+  'totalSpent',
+  'isActive',
+  'createdAt',
+  'updatedAt',
+];
 
 @injectable()
 export class PrismaClientRepository implements IClientRepository {
@@ -56,7 +72,7 @@ export class PrismaClientRepository implements IClientRepository {
         where,
         skip,
         take: limit,
-        orderBy: sortBy ? { [sortBy]: sortOrder } : { createdAt: 'desc' },
+        orderBy: safeOrderBy(sortBy, sortOrder, CLIENT_SORTABLE, 'createdAt'),
         include: {
           agency: { select: { id: true, name: true, code: true } },
           _count: { select: { parcels: true, invoices: true } },
