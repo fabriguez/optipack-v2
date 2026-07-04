@@ -1268,7 +1268,7 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
               <AppInput
                 label="Nouveau poids (kg)"
                 type="number"
-                step="0.1"
+                step="0.0001"
                 value={unloadWeight}
                 onChange={(e) => setUnloadWeight(e.target.value)}
               />

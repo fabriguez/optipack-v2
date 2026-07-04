@@ -266,7 +266,7 @@ function RuleDialog({
               label="Volume min (m3)"
               type="number"
               min="0"
-              step="0.001"
+              step="0.0001"
               value={minVolume}
               onChange={(e) => setMinVolume(e.target.value)}
               placeholder="Vide = pas de borne min"
@@ -275,7 +275,7 @@ function RuleDialog({
               label="Volume max (m3)"
               type="number"
               min="0"
-              step="0.001"
+              step="0.0001"
               value={maxVolume}
               onChange={(e) => setMaxVolume(e.target.value)}
               placeholder="Vide = pas de borne max"

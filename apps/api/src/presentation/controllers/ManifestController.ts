@@ -4,6 +4,7 @@ import { MANIFEST_REPOSITORY, type IManifestRepository } from '../../application
 import { NotFoundError } from '../../domain/errors/BusinessError';
 import { prisma } from '../../config/database';
 import { PDFService } from '../../application/services/PDFService';
+import { loadPdfBranding } from '../../application/services/PdfBrandingService';
 import { ExcelService } from '../../infrastructure/excel/ExcelService';
 import { HistoryService } from '../../application/services/HistoryService';
 import { RegisterExtraManifestParcelUseCase } from '../../application/use-cases/manifest/RegisterExtraManifestParcelUseCase';
@@ -224,6 +225,8 @@ export class ManifestController {
       if (!manifest) throw new NotFoundError('Bordereau', req.params.id);
 
       const buf = await PDFService.generateManifestPDF({
+        // Logo + nom du tenant sur le bordereau imprime.
+        branding: await loadPdfBranding(manifest.container.organizationId),
         title: manifest.type === 'DISPATCH' ? "BORDEREAU D'ENVOI" : 'BORDEREAU DE RECEPTION',
         reference: manifest.number,
         containerDesignation: manifest.container.designation,
@@ -350,7 +353,7 @@ export class ManifestController {
       const comparison = await repo.getComparison(req.params.containerId);
       const containerData = await prisma.container.findUnique({
         where: { id: req.params.containerId },
-        select: { id: true, designation: true, type: true },
+        select: { id: true, designation: true, type: true, organizationId: true },
       });
       if (!containerData) throw new NotFoundError('Conteneur', req.params.containerId);
 
@@ -398,6 +401,7 @@ export class ManifestController {
       const extraPhysical: DiscRow[] = [...extraFromAuto, ...extraFromAdmin];
 
       const buf = await PDFService.generateComparisonPDF({
+        branding: await loadPdfBranding(containerData.organizationId),
         reference: `CMP-${containerData.designation}`,
         containerDesignation: containerData.designation,
         containerType: containerData.type,

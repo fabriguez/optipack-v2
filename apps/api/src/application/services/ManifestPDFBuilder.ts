@@ -3,6 +3,7 @@ import { prisma } from '../../config/database';
 import { NotFoundError } from '../../domain/errors/BusinessError';
 import { MANIFEST_REPOSITORY, type IManifestRepository } from '../interfaces/IManifestRepository';
 import { PDFService } from './PDFService';
+import { loadPdfBranding } from './PdfBrandingService';
 
 interface PDFResult {
   buffer: Buffer;
@@ -38,6 +39,8 @@ export class ManifestPDFBuilder {
     if (!manifest) throw new NotFoundError('Bordereau', manifestId);
 
     const buffer = await PDFService.generateManifestPDF({
+      // Logo + nom du tenant sur le bordereau (pieces jointes mail incluses).
+      branding: await loadPdfBranding(manifest.container.organizationId),
       title: manifest.type === 'DISPATCH' ? "BORDEREAU D'ENVOI" : 'BORDEREAU DE RECEPTION',
       reference: manifest.number,
       containerDesignation: manifest.container.designation,
@@ -77,7 +80,7 @@ export class ManifestPDFBuilder {
     const comparison = await this.manifestRepo.getComparison(containerId);
     const containerData = await prisma.container.findUnique({
       where: { id: containerId },
-      select: { id: true, designation: true, type: true },
+      select: { id: true, designation: true, type: true, organizationId: true },
     });
     if (!containerData) throw new NotFoundError('Conteneur', containerId);
 
@@ -123,6 +126,7 @@ export class ManifestPDFBuilder {
       }));
 
     const buffer = await PDFService.generateComparisonPDF({
+      branding: await loadPdfBranding(containerData.organizationId),
       reference: `CMP-${containerData.designation}`,
       containerDesignation: containerData.designation,
       containerType: containerData.type,

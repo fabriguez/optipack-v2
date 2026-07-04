@@ -167,7 +167,7 @@ export function RegisterExtraParcelDialog({
               <Camera className="h-4 w-4" />
             </button>
           </div>
-          <AppInput label="Masse (kg)" type="number" step="0.1" {...register('weight')} />
+          <AppInput label="Masse (kg)" type="number" step="0.0001" {...register('weight')} />
           <AppInput label="Volume (m3)" type="number" step="0.01" {...register('volume')} />
           {!weightVal && !volumeVal && (
             <p className="sm:col-span-2 text-xs text-amber-700">

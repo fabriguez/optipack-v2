@@ -114,11 +114,7 @@ function aggregateParcels(items: ParcelLite[]) {
  */
 @injectable()
 export class DailyReportService {
-  async generate(
-    agencyId: string,
-    date: Date,
-    opts?: { force?: boolean },
-  ): Promise<{ id: string; payload: any }> {
+  async generate(agencyId: string, date: Date): Promise<{ id: string; payload: any }> {
     // Resolution du jour calendaire dans le fuseau de l'agence + snap au
     // prochain jour ouvrable si necessaire. Generer un rapport pour un jour
     // non-ouvre (ex: dimanche) -> redirige vers le prochain jour ouvre (lundi).
@@ -164,17 +160,16 @@ export class DailyReportService {
       scheduleEndUtc = utcInstantForLocalTime(dayStart, maxClose, tz);
     }
 
-    // Verrou immutabilite : un rapport CLOSED est un snapshot definitif fige a
-    // la cloture. Regen refusee (on retourne le payload existant) sauf force
-    // explicite (endpoint manuel) -- la reecriture est alors tracee en
-    // passant le rapport en AMENDED (cf upsert final). Sans ce verrou, le
-    // DailyReportRegenHandler ecrasait les rapports historiques avec l'etat
-    // courant (section snapshot non fenetree : etat de stock).
+    // Verrou immutabilite ABSOLU : un rapport deja cloture (closedAt pose,
+    // manuellement ou par la cloture automatique) est un snapshot definitif.
+    // AUCUNE regeneration possible, ni manuelle ni automatique -- on retourne
+    // le payload existant tel quel. Couvre aussi les rapports AMENDED
+    // (clotures puis annotes).
     const existing = await prisma.agencyDailyReport.findUnique({
       where: { agencyId_date: { agencyId, date: dayStart } },
-      select: { id: true, status: true, payload: true },
+      select: { id: true, status: true, closedAt: true, payload: true },
     });
-    if (existing?.status === 'CLOSED' && !opts?.force) {
+    if (existing && (existing.closedAt || existing.status === 'CLOSED')) {
       return { id: existing.id, payload: existing.payload };
     }
 
@@ -514,6 +509,15 @@ export class DailyReportService {
             ],
           },
         ],
+        // Transfert inter-magasins INTRA-agence (conteneur dont depart =
+        // arrivee = cette agence) : le colis n'est jamais sorti de l'agence,
+        // son dechargement n'est donc pas une entree de flux. (Le retrait
+        // d'un colis d'un conteneur SORTANT reste une entree : il annule la
+        // sortie comptee au chargement.)
+        NOT: {
+          action: { startsWith: 'UNLOADED' },
+          container: { departureAgencyId: agencyId, arrivalAgencyId: agencyId },
+        },
       },
       orderBy: { createdAt: 'asc' },
       select: {
@@ -555,7 +559,11 @@ export class DailyReportService {
           },
           {
             action: 'LOADED_INTO_CONTAINER',
-            container: { departureAgencyId: agencyId },
+            // Sortie = le colis QUITTE l'agence : conteneur au depart d'ici
+            // vers une AUTRE agence. Un conteneur intra-agence (depart =
+            // arrivee = cette agence, ex transfert inter-magasins) ne sort
+            // pas le colis de l'agence -> exclu du flux.
+            container: { departureAgencyId: agencyId, arrivalAgencyId: { not: agencyId } },
           },
         ],
       },
@@ -1285,19 +1293,14 @@ export class DailyReportService {
       details,
     };
 
-    // Upsert : un rapport unique par agence/jour. Un rapport CLOSED est
-    // bloque en debut de methode ; s'il a ete regenere en force, la
-    // reecriture est tracee en passant le statut a AMENDED. L'observation
-    // est preservee (update partiel).
+    // Upsert : un rapport unique par agence/jour. Un rapport cloture est
+    // bloque en debut de methode (jamais reecrit). L'observation est
+    // preservee (update partiel).
     const payloadJson = payload as unknown as Prisma.InputJsonValue;
     const saved = existing
       ? await prisma.agencyDailyReport.update({
           where: { id: existing.id },
-          data: {
-            payload: payloadJson,
-            generatedAt: new Date(),
-            ...(existing.status === 'CLOSED' && { status: 'AMENDED' }),
-          },
+          data: { payload: payloadJson, generatedAt: new Date() },
         })
       : await prisma.agencyDailyReport.create({
           data: { agencyId, date: dayStart, payload: payloadJson },

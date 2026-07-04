@@ -236,17 +236,11 @@ export class SendDailyReportEmailUseCase {
   }
 
   private async fetchLogo(logoUrl: string | undefined): Promise<Buffer | null> {
-    if (!logoUrl) return null;
-    try {
-      const key = logoUrl.split('/uploads/object/').pop() ?? logoUrl;
-      const obj = await this.storage.getObject(key);
-      if (!obj) return null;
-      const chunks: Buffer[] = [];
-      for await (const ch of obj.stream as any) chunks.push(ch as Buffer);
-      return Buffer.concat(chunks);
-    } catch {
-      return null;
-    }
+    // fetchLogoBuffer gere toutes les formes de logoUrl (data URL, cle MinIO
+    // publique/privee, URL externe) -- l'extraction manuelle ne couvrait que
+    // /uploads/object/ et laissait le PDF sans logo sinon.
+    const { fetchLogoBuffer } = await import('../../services/PdfBrandingService');
+    return fetchLogoBuffer(logoUrl);
   }
 
   private buildHtmlSummary(report: { date: Date; agency: { name: string } }, payload: any): string {

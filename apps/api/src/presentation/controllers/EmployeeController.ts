@@ -301,20 +301,12 @@ export class EmployeeController {
 
       const org = payslip.employee.agency?.organization ?? null;
 
-      // Logo organisation en buffer (embarque dans le PDF).
-      let logoBuffer: Buffer | null = null;
-      if (org?.logoUrl) {
-        try {
-          const storage = container.resolve(StorageService);
-          const key = org.logoUrl.split('/uploads/object/').pop() ?? org.logoUrl;
-          const obj = await storage.getObject(key);
-          if (obj) {
-            const chunks: Buffer[] = [];
-            for await (const ch of obj.stream as any) chunks.push(ch as Buffer);
-            logoBuffer = Buffer.concat(chunks);
-          }
-        } catch { /* logo optionnel */ }
-      }
+      // Logo organisation en buffer (embarque dans le PDF). fetchLogoBuffer
+      // gere toutes les formes de logoUrl (data URL, cle MinIO publique/
+      // privee, URL externe) -- l'ancienne extraction manuelle ne couvrait
+      // que /uploads/object/ et laissait le bulletin sans logo sinon.
+      const { fetchLogoBuffer } = await import('../../application/services/PdfBrandingService');
+      const logoBuffer: Buffer | null = await fetchLogoBuffer(org?.logoUrl);
 
       const lastPayment = payslip.payments[payslip.payments.length - 1];
       const pdfService = container.resolve(PayslipPDFService);

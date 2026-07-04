@@ -80,7 +80,9 @@ export function DailyReportsTab({ agencyId }: { agencyId: string }) {
                 {isOpen && (
                   <View style={{ padding: spacing.lg, gap: spacing.md }}>
                     <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-                      <Button size="sm" variant="outline" loading={generate.isPending} onPress={() => generate.mutate(r.date)}>Regenerer</Button>
+                      {!r.closedAt && (
+                        <Button size="sm" variant="outline" loading={generate.isPending} onPress={() => generate.mutate(r.date)}>Regenerer</Button>
+                      )}
                       <Button size="sm" variant="outline" loading={email.isPending} onPress={() => email.mutate(r.id)}>{r.emailedAt ? 'Renvoyer par mail' : 'Envoyer par mail'}</Button>
                     </View>
 
@@ -110,7 +112,9 @@ export function DailyReportsTab({ agencyId }: { agencyId: string }) {
                     <TextInput value={obs[r.id] ?? r.observation ?? ''} onChangeText={(v) => setObs((pr) => ({ ...pr, [r.id]: v }))} placeholder="Ajouter une observation..." placeholderTextColor={colors.gray[400]} multiline style={{ minHeight: 80, borderWidth: 1, borderColor: colors.gray[300], borderRadius: radius.md, padding: spacing.md, fontSize: 14, color: colors.gray[900], textAlignVertical: 'top' }} />
                     <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm }}>
                       <Button size="sm" variant="outline" loading={update.isPending} onPress={() => update.mutate({ id: r.id, data: { observation: obs[r.id] ?? r.observation ?? '', status: 'AMENDED' } })}>Enregistrer</Button>
-                      <Button size="sm" loading={update.isPending} onPress={() => update.mutate({ id: r.id, data: { observation: obs[r.id] ?? r.observation ?? '', status: 'CLOSED' } })}>Cloturer</Button>
+                      {!r.closedAt && (
+                        <Button size="sm" loading={update.isPending} onPress={() => update.mutate({ id: r.id, data: { observation: obs[r.id] ?? r.observation ?? '', status: 'CLOSED' } })}>Cloturer</Button>
+                      )}
                     </View>
                   </View>
                 )}

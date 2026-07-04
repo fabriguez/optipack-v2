@@ -297,10 +297,13 @@ function ReportDetails({
             Dernier envoi mail : {formatDateTime(report.emailedAt)}
           </span>
         )}
-        <AppButton size="sm" variant="outline" onClick={regenerate} loading={regenerating}>
-          <RefreshCw className="h-3.5 w-3.5" />
-          Regenerer
-        </AppButton>
+        {/* Un rapport cloture est immuable : plus de regeneration possible. */}
+        {!report.closedAt && (
+          <AppButton size="sm" variant="outline" onClick={regenerate} loading={regenerating}>
+            <RefreshCw className="h-3.5 w-3.5" />
+            Regenerer
+          </AppButton>
+        )}
         <AppButton size="sm" variant="outline" onClick={resendMail} loading={sendingMail}>
           <Mail className="h-3.5 w-3.5" />
           {report.emailedAt ? 'Renvoyer par mail' : 'Envoyer par mail'}
@@ -460,7 +463,10 @@ function ReportDetails({
             <Save className="h-3.5 w-3.5" />
             Enregistrer
           </AppButton>
-          {report.status !== 'CLOSED' && (
+          {/* Cloture manuelle possible UNIQUEMENT si le rapport n'a jamais
+              ete cloture (closedAt vide). Un rapport annote apres cloture
+              passe AMENDED mais garde closedAt -> bouton masque. */}
+          {!report.closedAt && (
             <AppButton size="sm" variant="outline" onClick={() => saveObservation('CLOSED')} loading={savingObs}>
               <Lock className="h-3.5 w-3.5" />
               Cloturer

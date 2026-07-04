@@ -84,8 +84,9 @@ export function DetailButton({ spec }: { spec?: DetailSpec | null }) {
             {spec.table ?? (
               <p className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-800">
                 Le detail element par element n&apos;est pas disponible pour ce rapport
-                (genere avant la mise a jour). Cliquez sur &laquo; Regenerer &raquo; pour
-                l&apos;obtenir.
+                (genere avant la mise a jour). Pour un rapport non cloture, cliquez sur
+                &laquo; Regenerer &raquo; pour l&apos;obtenir ; un rapport cloture est
+                immuable et conserve son contenu d&apos;origine.
               </p>
             )}
           </div>
@@ -313,6 +314,7 @@ export function buildDetailSpecs(payload: any): Record<string, DetailSpec> {
       logic: [
         "Cumul des colis ENTRES dans l'agence pendant la journee du rapport (fenetre = plage horaire de l'agence / session caisse), d'apres l'historique des colis.",
         "Un colis entre quand un evenement le fait atterrir dans un magasin de l'agence : Enregistre (creation en magasin), Receptionne (arrive a destination, statut RECEIVED), Mis en stock (dechargement -> IN_STOCK).",
+        "Les transferts inter-magasins internes a l'agence ne comptent pas (le colis n'a jamais quitte l'agence).",
         "Un colis n'est compte qu'une seule fois : premier evenement d'entree de la journee.",
         'Le compteur "colis recus" en tete du rapport correspond a ce nombre.',
       ],
@@ -341,7 +343,8 @@ export function buildDetailSpecs(payload: any): Record<string, DetailSpec> {
       logic: [
         "Colis sortis de l'agence pendant la periode analysee, d'apres l'historique des colis :",
         "Remis au client : evenement HANDED_OVER (ou remise non tracee UNTRACKED_HANDED_OVER) dans un magasin de l'agence.",
-        "Parti en transit : evenement LOADED_INTO_CONTAINER dans un conteneur au depart de l'agence (transferts inclus).",
+        "Parti en transit : evenement LOADED_INTO_CONTAINER dans un conteneur au depart de l'agence VERS UNE AUTRE AGENCE (transferts inter-agences inclus).",
+        "Les transferts inter-magasins internes a l'agence ne comptent PAS : le colis ne sort pas de l'agence.",
         "Un colis n'est compte qu'une seule fois dans le total, meme s'il a plusieurs evenements le meme jour.",
       ],
       count: d ? flowOutDetail.length : payload?.flow?.out?.count ?? null,
@@ -373,7 +376,8 @@ export function buildDetailSpecs(payload: any): Record<string, DetailSpec> {
       title: 'Sorties - Partis en transit',
       window: win,
       logic: [
-        "Sous-ensemble des sorties du jour : colis charges dans un conteneur au depart de l'agence (evenement LOADED_INTO_CONTAINER) pendant la periode analysee.",
+        "Sous-ensemble des sorties du jour : colis charges dans un conteneur au depart de l'agence vers une AUTRE agence (evenement LOADED_INTO_CONTAINER) pendant la periode analysee.",
+        "Les conteneurs internes a l'agence (transfert inter-magasins) ne comptent pas : le colis reste dans l'agence.",
       ],
       count: d ? toTransitDetail.length : payload?.flow?.out?.byType?.toTransit?.count ?? null,
       table: d ? (

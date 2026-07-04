@@ -587,7 +587,7 @@ function ParcelCard({
                 <AppInput
                   label="Masse (kg)"
                   type="number"
-                  step="0.1"
+                  step="0.0001"
                   value={parcel.weight}
                   onChange={(e) => onChange({ weight: e.target.value })}
                 />

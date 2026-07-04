@@ -169,6 +169,55 @@ function collectBuffer(doc: PDFKit.PDFDocument): Promise<Buffer> {
   });
 }
 
+/**
+ * Bandeau d'entete des bordereaux (envoi/reception/comparaison) : logo +
+ * nom du tenant a gauche quand le branding est fourni, titre centre.
+ */
+function drawBandHeader(
+  doc: PDFKit.PDFDocument,
+  pageWidth: number,
+  branding: PDFBranding | null | undefined,
+  title: string,
+  reference?: string | null,
+): void {
+  const primary = branding?.primaryColor || COLORS.primary;
+  doc.rect(50, 40, pageWidth, 60).fill(primary);
+  let textX = 60;
+  if (branding?.logoBuffer) {
+    try {
+      doc.image(branding.logoBuffer, 58, 46, { fit: [48, 48] });
+      textX = 114;
+    } catch {
+      /* logo optionnel */
+    }
+  }
+  const hasName = !!branding?.organizationName;
+  if (hasName) {
+    doc
+      .font('Helvetica-Bold')
+      .fontSize(10)
+      .fillColor(COLORS.white)
+      .text((branding!.organizationName || '').toUpperCase(), textX, 47, {
+        width: pageWidth - (textX - 50) - 10,
+        lineBreak: false,
+        ellipsis: true,
+      });
+    doc.font('Helvetica');
+  }
+  doc
+    .fontSize(hasName ? 16 : 18)
+    .fillColor(COLORS.white)
+    .text(title, 60, hasName ? 61 : 50, { width: pageWidth - 20, align: 'center' });
+  if (reference) {
+    doc.fontSize(10).fillColor(COLORS.white).text(
+      `Reference: ${reference}`,
+      60,
+      hasName ? 83 : 78,
+      { width: pageWidth - 20, align: 'center' },
+    );
+  }
+}
+
 function formatDate(d: Date | string, timeZone?: string | null): string {
   const date = typeof d === 'string' ? new Date(d) : d;
   return date.toLocaleDateString('fr-FR', {
@@ -918,20 +967,8 @@ export class PDFService {
     const BOTTOM = doc.page.height - 70;
     const title = manifestData.title || "BORDEREAU D'ENVOI";
 
-    // --- Header ---
-    doc.rect(50, 40, pageWidth, 60).fill(COLORS.primary);
-    doc
-      .fontSize(18)
-      .fillColor(COLORS.white)
-      .text(title, 60, 50, { width: pageWidth - 20, align: 'center' });
-    if (manifestData.reference) {
-      doc.fontSize(10).fillColor(COLORS.white).text(
-        `Reference: ${manifestData.reference}`,
-        60,
-        78,
-        { width: pageWidth - 20, align: 'center' },
-      );
-    }
+    // --- Header (logo + nom tenant si branding fourni) ---
+    drawBandHeader(doc, pageWidth, manifestData.branding, title, manifestData.reference);
 
     // --- Container info ---
     let y = 120;
@@ -1128,17 +1165,7 @@ export class PDFService {
     const doc = new PDFDocument({ size: 'A4', margin: 50 });
     const pageWidth = doc.page.width - 100;
 
-    doc.rect(50, 40, pageWidth, 60).fill(COLORS.primary);
-    doc
-      .fontSize(18)
-      .fillColor(COLORS.white)
-      .text('BORDEREAU DE COMPARAISON', 60, 50, { width: pageWidth - 20, align: 'center' });
-    if (data.reference) {
-      doc.fontSize(10).fillColor(COLORS.white).text(
-        `Ref: ${data.reference}`,
-        60, 78, { width: pageWidth - 20, align: 'center' },
-      );
-    }
+    drawBandHeader(doc, pageWidth, data.branding, 'BORDEREAU DE COMPARAISON', data.reference);
 
     let y = 120;
     doc.fillColor(COLORS.dark).fontSize(10);

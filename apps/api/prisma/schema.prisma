@@ -431,11 +431,11 @@ model WarehouseStorageFeeRule {
   // generale du meme type). Sinon : applique a toutes les routes du type.
   transitRouteId String?
   // Intervalle masse en kg. Utilise pour AIR (obligatoire) et LAND (optionnel).
-  minWeight      Decimal?    @db.Decimal(15, 3)
-  maxWeight      Decimal?    @db.Decimal(15, 3)
+  minWeight      Decimal?    @db.Decimal(15, 4)
+  maxWeight      Decimal?    @db.Decimal(15, 4)
   // Intervalle volume en m3. Utilise pour SEA (obligatoire) et LAND (optionnel).
-  minVolume      Decimal?    @db.Decimal(15, 3)
-  maxVolume      Decimal?    @db.Decimal(15, 3)
+  minVolume      Decimal?    @db.Decimal(15, 4)
+  maxVolume      Decimal?    @db.Decimal(15, 4)
   freeDays       Int         @default(0)
   dailyRate      Decimal     @db.Decimal(15, 2)
   isActive       Boolean     @default(true)
@@ -1608,9 +1608,9 @@ model Parcel {
   // a l'utilisateur.
   trackingFournisseur String?
   designation         String
-  weight              Decimal?     @db.Decimal(15, 3)
-  originalWeight      Decimal?     @db.Decimal(15, 3)
-  volume              Decimal?     @db.Decimal(15, 3)
+  weight              Decimal?     @db.Decimal(15, 4)
+  originalWeight      Decimal?     @db.Decimal(15, 4)
+  volume              Decimal?     @db.Decimal(15, 4)
   imageUrl            String?
   qrCodeUrl           String?
   origin              String?
@@ -2879,8 +2879,8 @@ model ManifestLine {
   recipientPhone  String?
   recipientEmail  String?
   destinationCity String?
-  weight          Decimal? @db.Decimal(15, 3)
-  volume          Decimal? @db.Decimal(15, 3)
+  weight          Decimal? @db.Decimal(15, 4)
+  volume          Decimal? @db.Decimal(15, 4)
   origin          String?
   destination     String?
   transit         String?
@@ -2910,7 +2910,7 @@ model ManifestDiscrepancy {
   type           DiscrepancyType
   designation    String?
   trackingNumber String?
-  weight         Decimal?        @db.Decimal(15, 3)
+  weight         Decimal?        @db.Decimal(15, 4)
   comment        String?
   markedByUserId String?
   createdAt      DateTime        @default(now())

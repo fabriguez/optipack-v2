@@ -248,12 +248,11 @@ export class AgencyController {
   static async generateDailyReport(req: Request, res: Response, next: NextFunction) {
     try {
       const date = req.body?.date ? new Date(req.body.date) : new Date();
-      // Regen manuelle : forcee, y compris sur un rapport CLOSED -- mais la
-      // reecriture d'un CLOSED est tracee (le rapport passe en AMENDED).
-      // Les regens automatiques (DailyReportRegenHandler, cloture caisse)
-      // n'utilisent pas force et sont donc bloquees sur les CLOSED.
+      // Regen manuelle : possible UNIQUEMENT tant que le rapport n'est pas
+      // cloture. Un rapport cloture est immuable : le service retourne le
+      // snapshot existant sans le reecrire.
       const svc = container.resolve(DailyReportService);
-      const result = await svc.generate(req.params.id, date, { force: true });
+      const result = await svc.generate(req.params.id, date);
       res.status(201).json({ success: true, data: result });
     } catch (err) {
       next(err);
@@ -316,21 +315,10 @@ export class AgencyController {
       // Recupere le logo organisation depuis MinIO si dispo (le payload n'a
       // que l'URL ; le PDF a besoin du buffer pour l'embarquer).
       const payload = report.payload as any;
-      let logoBuffer: Buffer | null = null;
-      const logoUrl: string | undefined = payload?.organization?.logoUrl;
-      if (logoUrl) {
-        try {
-          const storage = container.resolve(StorageService);
-          // logoUrl peut etre une URL absolue ou une key MinIO ; on tente la key.
-          const key = logoUrl.split('/uploads/object/').pop() ?? logoUrl;
-          const obj = await storage.getObject(key);
-          if (obj) {
-            const chunks: Buffer[] = [];
-            for await (const ch of obj.stream as any) chunks.push(ch as Buffer);
-            logoBuffer = Buffer.concat(chunks);
-          }
-        } catch { /* logo optionnel */ }
-      }
+      // fetchLogoBuffer gere toutes les formes de logoUrl (data URL, cle
+      // MinIO publique/privee, URL externe).
+      const { fetchLogoBuffer } = await import('../../application/services/PdfBrandingService');
+      const logoBuffer: Buffer | null = await fetchLogoBuffer(payload?.organization?.logoUrl);
 
       const pdfService = container.resolve(DailyReportPDFService);
       const buffer = await pdfService.generate({

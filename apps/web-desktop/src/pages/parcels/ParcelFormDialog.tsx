@@ -354,7 +354,7 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
             <AppInput
               label="Masse (kg) *"
               type="number"
-              step="0.1"
+              step="0.0001"
               {...register('weight', { valueAsNumber: true })}
               error={(errors.weight as any)?.message}
             />

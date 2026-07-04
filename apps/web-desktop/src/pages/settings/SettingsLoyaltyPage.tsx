@@ -125,7 +125,7 @@ export default function SettingsLoyaltyPage() {
                       type="number"
                       min={0}
                       max={100}
-                      step="0.1"
+                      step="0.0001"
                       value={String(t.discountPercent)}
                       onChange={(e) => updateTier(i, { discountPercent: Number(e.target.value) })}
                     />
