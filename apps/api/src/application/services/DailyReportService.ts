@@ -494,9 +494,15 @@ export class DailyReportService {
         createdAt: windowFilter,
         AND: [
           {
+            // ATTENTION Prisma/SQL : `NOT { statusBefore: X }` EXCLUT les
+            // lignes NULL (NULL != X est UNKNOWN). Or la creation d'un colis
+            // ecrit statusBefore=null -> il faut une branche null explicite,
+            // sinon les colis crees/enregistres en magasin ne comptent pas.
             OR: [
-              { statusAfter: 'IN_STOCK', NOT: { statusBefore: 'IN_STOCK' } },
-              { statusAfter: 'RECEIVED', NOT: { statusBefore: 'RECEIVED' } },
+              { statusAfter: 'IN_STOCK', statusBefore: null },
+              { statusAfter: 'IN_STOCK', statusBefore: { not: 'IN_STOCK' } },
+              { statusAfter: 'RECEIVED', statusBefore: null },
+              { statusAfter: 'RECEIVED', statusBefore: { not: 'RECEIVED' } },
             ],
           },
           {
@@ -792,9 +798,12 @@ export class DailyReportService {
       where: {
         createdAt: windowFilter,
         warehouse: { agencyId },
+        // Meme piege NULL que le flux entrees : statusBefore=null (creation
+        // directe en stock) doit compter en entree de stock.
         OR: [
-          { statusAfter: 'IN_STOCK', NOT: { statusBefore: 'IN_STOCK' } },
-          { statusBefore: 'IN_STOCK', NOT: { statusAfter: 'IN_STOCK' } },
+          { statusAfter: 'IN_STOCK', statusBefore: null },
+          { statusAfter: 'IN_STOCK', statusBefore: { not: 'IN_STOCK' } },
+          { statusBefore: 'IN_STOCK', statusAfter: { not: 'IN_STOCK' } },
         ],
       },
       select: {

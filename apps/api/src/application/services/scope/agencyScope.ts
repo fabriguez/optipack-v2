@@ -254,16 +254,22 @@ export const parcelGroupScope = makeScope<Prisma.ParcelGroupWhereInput>(
 
 // --- Finance : rattachement agence direct ---
 
+// Invoice/Payment n'ont PAS de scalaire organizationId : l'isolation tenant
+// passe par l'agence emettrice (agencyId requis au schema). Le defaut
+// `{ organizationId }` faisait crasher tout assert (PrismaValidationError,
+// ex: enregistrement d'un paiement au backoffice).
 export const invoiceScope = makeScope<Prisma.InvoiceWhereInput>(
   'Invoice',
   () => prisma.invoice,
   (ids) => ({ agencyId: { in: ids } }),
+  (orgId) => ({ agency: { organizationId: orgId } }),
 );
 
 export const paymentScope = makeScope<Prisma.PaymentWhereInput>(
   'Payment',
   () => prisma.payment,
   (ids) => ({ agencyId: { in: ids } }),
+  (orgId) => ({ agency: { organizationId: orgId } }),
 );
 
 export const cashRegisterScope = makeScope<Prisma.AgencyCashRegisterWhereInput>(
@@ -328,6 +334,8 @@ export const debtPaymentScope = makeScope<Prisma.DebtPaymentWhereInput>(
   'DebtPayment',
   () => prisma.debtPayment,
   (ids) => ({ agencyId: { in: ids } }),
+  // Pas de scalaire organizationId : isolation via l'agence (requise).
+  (orgId) => ({ agency: { organizationId: orgId } }),
 );
 
 // --- Communication ---
@@ -337,6 +345,8 @@ export const chatConversationScope = makeScope<Prisma.ChatConversationWhereInput
   'ChatConversation',
   () => prisma.chatConversation,
   (ids) => ({ agencyId: { in: ids } }),
+  // Pas de scalaire organizationId : isolation via l'agence (requise).
+  (orgId) => ({ agency: { organizationId: orgId } }),
 );
 
 /** Notifications org (listing admin) : agence directe ; null = org-wide. */
@@ -351,6 +361,11 @@ export const auditLogScope = makeScope<Prisma.AuditLogWhereInput>(
   'AuditLog',
   () => prisma.auditLog,
   (ids) => ({ OR: [{ agencyId: { in: ids } }, { agencyId: null }] }),
+  // Pas de scalaire organizationId : isolation via l'agence OU l'utilisateur
+  // auteur (les deux sont nullables -> OR).
+  (orgId) => ({
+    OR: [{ agency: { organizationId: orgId } }, { user: { organizationId: orgId } }],
+  }),
 );
 
 // Ressources volontairement SANS scope agence (referentiels org-wide) :

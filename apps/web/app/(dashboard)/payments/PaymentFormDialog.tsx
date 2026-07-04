@@ -191,6 +191,7 @@ export function PaymentFormDialog({ open, onClose, invoiceId, parcelTracking }: 
         ...data,
         // Si invoiceId est pre-fixe, on l'enforce.
         invoiceId: invoiceId || data.invoiceId,
+        transactionReference: data.transactionReference?.trim() || undefined,
         attachments: validAttachments.length > 0 ? validAttachments : undefined,
       },
       { onSuccess: () => { reset(); setPendingAttachments([]); onClose(); } },
@@ -233,14 +234,6 @@ export function PaymentFormDialog({ open, onClose, invoiceId, parcelTracking }: 
               {pinnedInvoice?.client?.fullName && (
                 <p className="text-xs text-gray-600">{pinnedInvoice.client.fullName}{pinnedInvoice.client.phone ? ` - ${pinnedInvoice.client.phone}` : ''}</p>
               )}
-              {pinnedInvoice && (
-                <p className="text-xs text-gray-500 mt-1">
-                  Solde restant :{' '}
-                  <span className="font-bold text-red-700">
-                    {Number(pinnedInvoice.balance).toLocaleString()} XAF
-                  </span>
-                </p>
-              )}
             </div>
             <input type="hidden" {...register('invoiceId')} value={invoiceId} />
           </div>
@@ -263,6 +256,56 @@ export function PaymentFormDialog({ open, onClose, invoiceId, parcelTracking }: 
               />
             )}
           />
+        )}
+
+        {/* Recap financier de la facture active (pre-fixee OU choisie via la
+            recherche) : montant, deja regle, RESTE A PAYER + remplissage
+            rapide du champ montant. */}
+        {activeInvoice && (
+          <div className="rounded-xl border border-primary-100 bg-primary-50/40 p-3">
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-gray-500">Montant facture</p>
+                <p className="text-sm font-semibold text-gray-900">{Number(activeInvoice.netAmount ?? 0).toLocaleString()} XAF</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-gray-500">Deja regle</p>
+                <p className="text-sm font-semibold text-green-700">{Number(activeInvoice.paidAmount ?? 0).toLocaleString()} XAF</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-gray-500">Reste a payer</p>
+                <p className="text-base font-bold text-red-700">{Number(activeInvoice.balance ?? 0).toLocaleString()} XAF</p>
+              </div>
+            </div>
+            {parcelTracking && (() => {
+              const scoped = (activeInvoice.parcels || []).find(
+                (p: any) => p.trackingNumber === parcelTracking,
+              );
+              if (!scoped) return null;
+              return (
+                <p className="mt-2 text-[11px] text-gray-600">
+                  Colis <span className="font-mono font-semibold">{parcelTracking}</span> : prix{' '}
+                  {Number(scoped.price ?? 0).toLocaleString()} XAF
+                  {Number(scoped.storageFee ?? 0) > 0
+                    ? ` + magasinage ${Number(scoped.storageFee).toLocaleString()} XAF`
+                    : ''}
+                  . Le reste a payer ci-dessus porte sur toute la facture.
+                </p>
+              );
+            })()}
+            {Number(activeInvoice.balance ?? 0) > 0 && (
+              <div className="mt-2 flex justify-end">
+                <AppButton
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setValue('amount', Number(activeInvoice.balance), { shouldValidate: true })}
+                >
+                  Payer le solde ({Number(activeInvoice.balance).toLocaleString()} XAF)
+                </AppButton>
+              </div>
+            )}
+          </div>
         )}
 
         {/* Sous-selecteur colis : visible uniquement si la facture couvre

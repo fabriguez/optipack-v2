@@ -4,6 +4,9 @@ import { CASH_REGISTER_REPOSITORY, type ICashRegisterRepository } from '../../in
 import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 import { DailyReportService } from '../../services/DailyReportService';
 import { startOfDayInTimezone } from '../../../domain/utils/timezone';
+import { createChildLogger } from '../../../config/logger';
+
+const logger = createChildLogger('AutoClose');
 
 /**
  * Cloture automatique de fin de journee (caisse + RAPPORT JOURNALIER).
@@ -49,10 +52,42 @@ export class AutoCloseCashRegistersUseCase {
     const openRegisters = await prisma.agencyCashRegister.findMany({
       where: { isClosed: false, agencyId: { in: agencies.map((a) => a.id) } },
     });
+
+    // Rattrapage : rapports de jours PASSES restes GENERATED (historique
+    // d'avant la cloture auto, ou downtime du serveur a l'heure de
+    // fermeture). Journee finie -> regeneration finale + CLOSED. Plafonne
+    // par passage pour lisser la charge (le cron tourne toutes les 15 s).
+    const staleReports = await prisma.agencyDailyReport.findMany({
+      where: { status: 'GENERATED', agencyId: { in: agencies.map((a) => a.id) } },
+      select: { id: true, agencyId: true, date: true },
+      orderBy: { date: 'asc' },
+    });
+    const dayStartByAgency = new Map(
+      agencies.map((a) => [a.id, startOfDayInTimezone(new Date(), a.timezone || 'Africa/Douala')]),
+    );
+    const backlog = staleReports.filter((r) => {
+      const dayStart = dayStartByAgency.get(r.agencyId);
+      return dayStart ? r.date < dayStart : false;
+    });
     const openByAgency = new Map<string, typeof openRegisters>();
     for (const r of openRegisters) {
       if (!openByAgency.has(r.agencyId)) openByAgency.set(r.agencyId, []);
       openByAgency.get(r.agencyId)!.push(r);
+    }
+
+    for (const r of backlog.slice(0, 10)) {
+      try {
+        // Regeneration finale (fenetre bornee par les regles courantes)
+        // puis gel. Non-force : un rapport deja CLOSED n'est pas touche.
+        const { id } = await this.reportService.generate(r.agencyId, r.date);
+        await prisma.agencyDailyReport.update({
+          where: { id },
+          data: { status: 'CLOSED', closedAt: new Date() },
+        });
+        reportsClosed += 1;
+      } catch (err) {
+        logger.error({ err, agencyId: r.agencyId, date: r.date }, 'Backfill cloture rapport journalier echoue');
+      }
     }
 
     // Agences dont l'heure de fermeture est passee : candidates a la cloture
@@ -159,8 +194,11 @@ export class AutoCloseCashRegistersUseCase {
             });
             reported += 1;
             reportsClosed += 1;
-          } catch {
-            // Best-effort : retente au prochain passage.
+            logger.info({ agencyId: c.agencyId, localTime: c.localTime }, 'Rapport journalier cloture automatiquement');
+          } catch (err) {
+            // Best-effort : retente au prochain passage, mais TRACE l'echec
+            // (un throw silencieux ici = rapport jamais cloture sans indice).
+            logger.error({ err, agencyId: c.agencyId }, 'Cloture auto du rapport journalier echouee');
           }
         }
         // Event caisse APRES la cloture du rapport : le mail part avec le
