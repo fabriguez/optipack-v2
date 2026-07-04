@@ -68,17 +68,25 @@ export function startCronJobs(): void {
     }
   });
 
-  // Cloture automatique des caisses : toutes les 10 minutes, on regarde si l'heure
-  // de fermeture configuree est passee dans le fuseau de l'agence ; si oui on ferme.
-  cron.schedule('*/10 * * * *', async () => {
+  // Cloture automatique caisses + RAPPORTS JOURNALIERS : toutes les 15
+  // secondes (champ secondes node-cron), pour fermer au plus 15 s apres
+  // l'heure de fermeture de l'agence (planning AgencyOpeningHours, fuseau
+  // agence). Le use case est idempotent et quasi gratuit a vide (2 requetes) ;
+  // un garde anti-chevauchement saute le tick si le precedent tourne encore.
+  let autoCloseRunning = false;
+  cron.schedule('*/15 * * * * *', async () => {
+    if (autoCloseRunning) return;
+    autoCloseRunning = true;
     try {
       const useCase = container.resolve(AutoCloseCashRegistersUseCase);
       const result = await useCase.execute();
-      if (result.closed > 0) {
-        logger.info(result, 'Cash registers auto-closed');
+      if (result.closed > 0 || result.reportsClosed > 0) {
+        logger.info(result, 'Cash registers / daily reports auto-closed');
       }
     } catch (err) {
       logger.error({ err }, 'Auto cash register closing failed');
+    } finally {
+      autoCloseRunning = false;
     }
   });
 
@@ -118,7 +126,7 @@ export function startCronJobs(): void {
   });
 
   logger.info(
-    'Cron jobs scheduled: penalty (2AM), debt alerts (8AM), overdue debts (1AM), parcel coherence (every 6h), auto cash close (every 10min), charge alerts (7AM), delay detection (6AM)',
+    'Cron jobs scheduled: penalty (2AM), debt alerts (8AM), overdue debts (1AM), parcel coherence (every 6h), auto cash+report close (every 15s), charge alerts (7AM), delay detection (6AM)',
   );
 }
 

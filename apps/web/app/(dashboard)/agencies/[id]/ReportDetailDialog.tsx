@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from 'react';
 import { AppDialog } from '@/components/ui/AppDialog';
-import { formatAmount } from '@transitsoftservices/shared';
+import { formatAmount, formatDateTime } from '@transitsoftservices/shared';
 import { Info } from 'lucide-react';
 
 /**
@@ -38,7 +38,9 @@ const ENTRY_LABELS: Record<string, string> = {
   MIS_EN_STOCK: 'Mis en stock (dechargement)',
 };
 
-const dt = (v?: string | null) => (v ? new Date(v).toLocaleString('fr-FR') : '-');
+// Affichage centralise : le serveur envoie des instants UTC (ISO), le
+// navigateur les rend dans SON fuseau via le helper shared.
+const dt = (v?: string | null) => (v ? formatDateTime(v) : '-');
 const kg = (v: any) => `${Number(v ?? 0).toFixed(2)} kg`;
 const m3 = (v: any) => `${Number(v ?? 0).toFixed(3)} m3`;
 
@@ -105,6 +107,11 @@ function WindowBanner({ w }: { w?: any }) {
       {w.scheduleStart && (
         <p className="mt-0.5">
           <span className="font-semibold">Plage horaire de l&apos;agence ce jour :</span> {dt(w.scheduleStart)} - {dt(w.scheduleEnd)}
+        </p>
+      )}
+      {w.timezone && (
+        <p className="mt-0.5 text-gray-500">
+          Journee calculee par le serveur dans le fuseau de l&apos;agence ({w.timezone}) ; les heures ci-dessous s&apos;affichent dans votre fuseau local.
         </p>
       )}
       {w.source && (

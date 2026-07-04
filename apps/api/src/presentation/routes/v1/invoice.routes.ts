@@ -470,7 +470,7 @@ export async function buildInvoicePdfBuffer(
     where: { id: invoiceId },
     include: {
       client: { select: { id: true, fullName: true, phone: true, email: true } },
-      agency: { select: { id: true, name: true, code: true, address: true, phone: true, organizationId: true } },
+      agency: { select: { id: true, name: true, code: true, address: true, phone: true, organizationId: true, timezone: true } },
     },
   });
   if (!invoice) return null;
@@ -500,7 +500,7 @@ export async function buildPaymentReceiptPdfBuffer(
           client: { select: { fullName: true, phone: true, email: true } },
         },
       },
-      agency: { select: { name: true, code: true, address: true, phone: true, organizationId: true } },
+      agency: { select: { name: true, code: true, address: true, phone: true, organizationId: true, timezone: true } },
       parcel: { select: { trackingNumber: true, designation: true } },
       receivedBy: { select: { firstName: true, lastName: true } },
     },
@@ -538,7 +538,7 @@ export async function buildPaymentReceiptPdfBuffer(
     // Payment n'a pas d'organizationId : le tenant se resout via l'agence
     // (agencyId obligatoire sur Payment). Sans ca, branding=null -> nom du
     // tenant absent de l'entete/pied du recu.
-    branding: await loadPdfBranding(payment.agency?.organizationId),
+    branding: await loadPdfBranding(payment.agency?.organizationId, payment.agency?.timezone),
   });
 
   return { pdf, reference: payment.reference, clientId: payment.invoice.clientId };
@@ -669,7 +669,7 @@ async function __buildPdfFromInvoice(invoice: any): Promise<Buffer> {
         };
       }),
       // Invoice n'a pas d'organizationId : resolution via l'agence emettrice.
-      branding: await loadPdfBranding(invoice.agency?.organizationId),
+      branding: await loadPdfBranding(invoice.agency?.organizationId, invoice.agency?.timezone),
     };
 
     return PDFService.generateInvoicePDF(invoiceData);

@@ -68,7 +68,7 @@ export function DailyReportsTab({ agencyId }: { agencyId: string }) {
                     <Ionicons name={isOpen ? 'chevron-down' : 'chevron-forward'} size={16} color={colors.gray[500]} />
                     <View>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-                        <Text style={{ fontSize: 14, fontWeight: '600', color: colors.gray[900] }}>{formatDate(r.date)}</Text>
+                        <Text style={{ fontSize: 14, fontWeight: '600', color: colors.gray[900] }}>{formatDate(r.date, 'UTC')}</Text>
                         <Badge variant={st.v}>{st.l}</Badge>
                       </View>
                       <Text style={{ fontSize: 12, color: colors.gray[400] }}>{p.totalParcels ?? 0} colis recus</Text>

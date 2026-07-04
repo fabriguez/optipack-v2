@@ -9,7 +9,7 @@ import { AppBadge } from '@/components/ui/AppBadge';
 import { ImageInput } from '@/components/shared/ImageInput';
 import { uploadImage, uploadFile } from '@/lib/api/uploads';
 import { openAuthedFile } from '@/components/shared/AuthedImage';
-import { formatAmount, formatDate } from '@transitsoftservices/shared';
+import { formatAmount, formatDate, formatDateTime } from '@transitsoftservices/shared';
 import { ChevronDown, ChevronRight, FileText, Lock, Mail, Paperclip, Printer, RefreshCw, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -71,8 +71,9 @@ export function AgencyDailyReportsTab({ agencyId }: Props) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-500">
-          Les rapports sont generes automatiquement a la fermeture de la caisse. Vous
-          pouvez aussi en generer un manuellement pour la journee en cours.
+          Les rapports sont generes et clotures automatiquement a l&apos;heure de
+          fermeture de l&apos;agence (planning horaire). Vous pouvez aussi en generer
+          un manuellement pour la journee en cours.
         </p>
         <AppButton size="sm" onClick={() => generateMutation.mutate()} loading={generateMutation.isPending}>
           <RefreshCw className="h-3.5 w-3.5" />
@@ -131,7 +132,9 @@ function ReportRow({
           {expanded ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
           <FileText className="h-4 w-4 text-primary-600" />
           <div>
-            <p className="text-sm font-medium">Rapport du {formatDate(date)}</p>
+            {/* report.date = jour agence encode UTC midnight -> affiche en UTC
+                pour ne jamais glisser de jour selon le fuseau du navigateur. */}
+            <p className="text-sm font-medium">Rapport du {formatDate(date, 'UTC')}</p>
             <p className="text-xs text-gray-500">
               {payload.totalParcels ?? 0} colis recus
               {report._count?.attachments ? ` · ${report._count.attachments} piece(s) jointe(s)` : ''}
@@ -291,7 +294,7 @@ function ReportDetails({
       <div className="flex flex-wrap items-center justify-end gap-2">
         {report.emailedAt && (
           <span className="text-xs text-gray-500">
-            Dernier envoi mail : {new Date(report.emailedAt).toLocaleString('fr-FR')}
+            Dernier envoi mail : {formatDateTime(report.emailedAt)}
           </span>
         )}
         <AppButton size="sm" variant="outline" onClick={regenerate} loading={regenerating}>
@@ -436,7 +439,7 @@ function ReportDetails({
             <KV label="Sorties" value={'-' + formatAmount(payload.cashRegister.totalExits ?? 0)} negative />
             <KV label="Solde courant" value={formatAmount(payload.cashRegister.currentBalance ?? 0)} bold />
             {payload.cashRegister.closingBalance != null && <KV label="Solde cloture" value={formatAmount(payload.cashRegister.closingBalance)} bold />}
-            {payload.cashRegister.closedAt && <KV label="Cloturee le" value={new Date(payload.cashRegister.closedAt).toLocaleString('fr-FR')} />}
+            {payload.cashRegister.closedAt && <KV label="Cloturee le" value={formatDateTime(payload.cashRegister.closedAt)} />}
           </div>
         </Section>
       )}

@@ -26,14 +26,17 @@ function formatCurrency(n: number): string {
   return `${groupThousands(Math.round(Number.isFinite(n) ? n : 0))} FCFA`;
 }
 
-function formatDate(d: Date | string): string {
+// Rendu SERVEUR : on affiche dans le fuseau de l'AGENCE (pas celui du
+// serveur, qui peut tourner en UTC). 'UTC' pour les champs date-pure
+// (@db.Date encodes UTC midnight).
+function formatDate(d: Date | string, timeZone?: string): string {
   const date = typeof d === 'string' ? new Date(d) : d;
-  return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', ...(timeZone ? { timeZone } : {}) });
 }
 
-function formatDateTime(d: Date | string): string {
+function formatDateTime(d: Date | string, timeZone?: string): string {
   const date = typeof d === 'string' ? new Date(d) : d;
-  return date.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return date.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', ...(timeZone ? { timeZone } : {}) });
 }
 
 function fmtWeight(n: number): string {
@@ -78,6 +81,8 @@ export class DailyReportPDFService {
 
     const org = input.payload?.organization ?? {};
     const agency = input.payload?.agency ?? {};
+    // Fuseau agence = reference d'affichage de toutes les heures du PDF.
+    const tz: string = agency.timezone || input.payload?.details?.window?.timezone || 'Africa/Douala';
     const primary = (org.primaryColor as string) || '#1B5E20';
     const secondary = (org.secondaryColor as string) || '#4CAF50';
     const accent = (org.accentColor as string) || '#E8F5E9';
@@ -110,9 +115,9 @@ export class DailyReportPDFService {
       doc.fillColor(primary).font('Helvetica-Bold').fontSize(14)
         .text('RAPPORT JOURNALIER D\'ACTIVITE', leftX + 10, titleY + 6, { width: pageWidth - 20 });
       doc.font('Helvetica').fontSize(9).fillColor(dark)
-        .text(`Date : ${formatDate(input.reportDate)}`, leftX + 10, titleY + 22)
+        .text(`Date : ${formatDate(input.reportDate, 'UTC')}`, leftX + 10, titleY + 22)
         .text(`Statut : ${input.status}`, leftX + 200, titleY + 22)
-        .text(`Genere le ${formatDateTime(input.payload?.generatedAt ?? new Date())}`, leftX + 10, titleY + 22, {
+        .text(`Genere le ${formatDateTime(input.payload?.generatedAt ?? new Date(), tz)}`, leftX + 10, titleY + 22, {
           width: pageWidth - 20,
           align: 'right',
         });
@@ -310,7 +315,7 @@ export class DailyReportPDFService {
     if (received.length === 0) writeLine('Aucun conteneur recu.', { color: gray });
     else {
       for (const c of received) {
-        writeLine(`${c.designation} - ${TRANSIT_LABELS[c.type] ?? c.type} - ${c.routeName} - arrive ${c.arrivalDate ? formatDateTime(c.arrivalDate) : '-'}`, { bold: true });
+        writeLine(`${c.designation} - ${TRANSIT_LABELS[c.type] ?? c.type} - ${c.routeName} - arrive ${c.arrivalDate ? formatDateTime(c.arrivalDate, tz) : '-'}`, { bold: true });
         const rows = Object.values(c.byRoute as Record<string, any>).map((r: any) => [
           `${r.routeName}${r.type ? ' (' + (TRANSIT_LABELS[r.type] ?? r.type) + ')' : ''}`,
           String(r.count),
@@ -339,7 +344,7 @@ export class DailyReportPDFService {
     if (sent.length === 0) writeLine('Aucun conteneur envoye.', { color: gray });
     else {
       for (const c of sent) {
-        writeLine(`${c.designation} - ${TRANSIT_LABELS[c.type] ?? c.type} - ${c.routeName} - depart ${c.departureDate ? formatDateTime(c.departureDate) : '-'}`, { bold: true });
+        writeLine(`${c.designation} - ${TRANSIT_LABELS[c.type] ?? c.type} - ${c.routeName} - depart ${c.departureDate ? formatDateTime(c.departureDate, tz) : '-'}`, { bold: true });
         const rows = Object.values(c.byRoute as Record<string, any>).map((r: any) => [
           `${r.routeName}${r.type ? ' (' + (TRANSIT_LABELS[r.type] ?? r.type) + ')' : ''}`,
           String(r.count),
@@ -506,7 +511,7 @@ export class DailyReportPDFService {
       writeKV('Sorties caisse', formatCurrency(cr.totalExits));
       writeKV('Solde courant caisse', formatCurrency(cr.currentBalance));
       if (cr.closingBalance != null) writeKV('Solde de cloture', formatCurrency(cr.closingBalance));
-      if (cr.closedAt) writeKV('Caisse cloturee le', formatDateTime(cr.closedAt) + (cr.closedBy ? ` par ${cr.closedBy}` : ''));
+      if (cr.closedAt) writeKV('Caisse cloturee le', formatDateTime(cr.closedAt, tz) + (cr.closedBy ? ` par ${cr.closedBy}` : ''));
     }
 
     // ------------------------------------------------------------------
@@ -534,14 +539,14 @@ export class DailyReportPDFService {
         input.attachments.map((a) => [
           a.caption || '(sans libelle)',
           a.fileName || '-',
-          formatDate(a.createdAt),
+          formatDate(a.createdAt, tz),
         ]),
       );
     }
 
     if (input.closedByName && input.closedAt) {
       ensureSpace(20);
-      writeLine(`Rapport cloture le ${formatDateTime(input.closedAt)} par ${input.closedByName}.`, { color: gray });
+      writeLine(`Rapport cloture le ${formatDateTime(input.closedAt, tz)} par ${input.closedByName}.`, { color: gray });
     }
 
     // Footer sur toutes les pages

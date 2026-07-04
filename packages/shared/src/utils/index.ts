@@ -61,21 +61,27 @@ export function formatAmount(amount: number, currency = 'XAF'): string {
 }
 
 /**
- * Formate une date au format francais
+ * Formate une date au format francais.
+ *
+ * `timeZone` (IANA, ex 'Africa/Douala') force l'affichage dans le fuseau
+ * cible au lieu du fuseau du runtime (navigateur / serveur). Convention
+ * projet : le serveur fait foi, les ecrans affichent dans le fuseau de
+ * l'agence concernee ('UTC' pour les champs @db.Date encodes UTC midnight).
  */
-export function formatDate(date: Date | string): string {
+export function formatDate(date: Date | string, timeZone?: string): string {
   const d = typeof date === 'string' ? new Date(date) : date;
   return new Intl.DateTimeFormat('fr-FR', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
+    ...(timeZone ? { timeZone } : {}),
   }).format(d);
 }
 
 /**
- * Formate une date avec l'heure
+ * Formate une date avec l'heure. Cf `formatDate` pour `timeZone`.
  */
-export function formatDateTime(date: Date | string): string {
+export function formatDateTime(date: Date | string, timeZone?: string): string {
   const d = typeof date === 'string' ? new Date(date) : date;
   return new Intl.DateTimeFormat('fr-FR', {
     day: '2-digit',
@@ -83,6 +89,7 @@ export function formatDateTime(date: Date | string): string {
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    ...(timeZone ? { timeZone } : {}),
   }).format(d);
 }
 

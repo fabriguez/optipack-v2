@@ -198,17 +198,37 @@ export class DailyReportService {
     // caisse est encore ouverte ; sans caisse : fermeture planifiee
     // (closeTime) si deja passee, sinon maintenant. Post-cloture = jour
     // ouvrable suivant (regle metier).
-    const prevRegister = await prisma.agencyCashRegister.findFirst({
-      where: { agencyId, date: { lt: dayStart }, closedAt: { not: null } },
-      orderBy: { date: 'desc' },
-      select: { closedAt: true },
-    });
+    const [prevRegister, prevReport] = await Promise.all([
+      prisma.agencyCashRegister.findFirst({
+        where: { agencyId, date: { lt: dayStart }, closedAt: { not: null } },
+        orderBy: { date: 'desc' },
+        select: { closedAt: true },
+      }),
+      // Rapport precedent cloture : sa fin de fenetre est LA borne de depart
+      // officielle ("les donnees du rapport = de la fermeture du rapport
+      // precedent a l'heure de fermeture du jour"). Necessaire pour les jours
+      // SANS caisse : la caisse precedente peut dater de plusieurs jours et
+      // ferait chevaucher des journees deja rapportees.
+      prisma.agencyDailyReport.findFirst({
+        where: { agencyId, date: { lt: dayStart }, status: { in: ['CLOSED', 'AMENDED'] } },
+        orderBy: { date: 'desc' },
+        select: { closedAt: true, payload: true },
+      }),
+    ]);
+    const prevReportEndRaw = (prevReport?.payload as any)?.window?.end;
+    const prevReportEnd = prevReportEndRaw
+      ? new Date(prevReportEndRaw)
+      : prevReport?.closedAt ?? null;
+    // Borne precedente = le plus RECENT des deux marqueurs de fin de journee.
+    const prevBoundary =
+      prevRegister?.closedAt && prevReportEnd
+        ? prevRegister.closedAt > prevReportEnd
+          ? prevRegister.closedAt
+          : prevReportEnd
+        : prevRegister?.closedAt ?? prevReportEnd;
     const nowTs = new Date();
     const sessionStart = cashRegister?.createdAt ?? scheduleStartUtc ?? dayStart;
-    const windowStart =
-      prevRegister?.closedAt && prevRegister.closedAt < sessionStart
-        ? prevRegister.closedAt
-        : sessionStart;
+    const windowStart = prevBoundary && prevBoundary < sessionStart ? prevBoundary : sessionStart;
     const windowEnd = cashRegister
       ? cashRegister.closedAt ?? nowTs
       : scheduleEndUtc && scheduleEndUtc < nowTs
@@ -1111,6 +1131,7 @@ export class DailyReportService {
         start: windowStart.toISOString(),
         end: windowEnd.toISOString(),
         source: windowSource,
+        timezone: tz,
         scheduleStart: scheduleStartUtc ? scheduleStartUtc.toISOString() : null,
         scheduleEnd: scheduleEndUtc ? scheduleEndUtc.toISOString() : null,
         cashOpenedAt: cashRegister ? cashRegister.createdAt.toISOString() : null,
@@ -1141,6 +1162,10 @@ export class DailyReportService {
             country: agency.country,
             phone: agency.phone,
             email: agency.email,
+            // Fuseau de reference : TOUTES les dates du rapport s'affichent
+            // dans ce fuseau (serveur = source de verite, navigateurs se
+            // conforment).
+            timezone: tz,
           }
         : null,
 

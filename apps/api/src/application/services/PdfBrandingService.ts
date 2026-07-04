@@ -89,6 +89,10 @@ export async function fetchLogoBuffer(logoUrl: string | null | undefined): Promi
  */
 export async function loadPdfBranding(
   organizationId: string | null | undefined,
+  /** Fuseau IANA de l'agence emettrice du document. Les PDF etant rendus
+   *  cote serveur, les dates s'affichent dans CE fuseau (jamais celui du
+   *  serveur). Fallback : Africa/Douala (defaut agence du schema). */
+  timeZone?: string | null,
 ): Promise<PDFBranding | null> {
   if (!organizationId) return null;
   const org = await prisma.organization.findUnique({
@@ -111,5 +115,6 @@ export async function loadPdfBranding(
     organizationAddress: org.address,
     primaryColor: org.primaryColor,
     logoBuffer,
+    timeZone: timeZone || 'Africa/Douala',
   };
 }

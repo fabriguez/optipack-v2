@@ -169,12 +169,13 @@ function collectBuffer(doc: PDFKit.PDFDocument): Promise<Buffer> {
   });
 }
 
-function formatDate(d: Date | string): string {
+function formatDate(d: Date | string, timeZone?: string | null): string {
   const date = typeof d === 'string' ? new Date(d) : d;
   return date.toLocaleDateString('fr-FR', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
+    ...(timeZone ? { timeZone } : {}),
   });
 }
 
@@ -209,6 +210,9 @@ export interface PDFBranding {
   logoBuffer?: Buffer | null;
   /** Couleur principale (#hex). Override le COLORS.primary par defaut. */
   primaryColor?: string | null;
+  /** Fuseau IANA d'affichage des dates (rendu serveur : on affiche dans le
+   *  fuseau de l'agence emettrice, jamais celui du serveur). */
+  timeZone?: string | null;
 }
 
 /**
@@ -405,7 +409,7 @@ export class PDFService {
       title: 'RECU DE PAIEMENT',
       metaLines: [
         `Recu N: ${data.reference}`,
-        `Date: ${formatDate(data.createdAt)}`,
+        `Date: ${formatDate(data.createdAt, data.branding?.timeZone)}`,
       ],
     });
 
@@ -522,7 +526,7 @@ export class PDFService {
     let y = 130;
 
     doc.fontSize(10).text(`Reference: ${invoiceData.reference}`, 50, y);
-    doc.text(`Date: ${formatDate(invoiceData.createdAt)}`, 350, y, {
+    doc.text(`Date: ${formatDate(invoiceData.createdAt, invoiceData.branding?.timeZone)}`, 350, y, {
       align: 'right',
       width: pageWidth - 300,
     });
@@ -742,7 +746,7 @@ export class PDFService {
         doc.fillColor(COLORS.dark);
         xCol = 55;
         const payRow = [
-          formatDate(p.createdAt),
+          formatDate(p.createdAt, invoiceData.branding?.timeZone),
           p.method || '-',
           formatCurrency(Number(p.amount)),
           p.agency?.name || '-',
@@ -806,7 +810,7 @@ export class PDFService {
         xCol2 = 55;
         const wh = [l.warehouseName ?? '-', l.warehouseCity].filter(Boolean).join(' (') + (l.warehouseCity ? ')' : '');
         const phaseLabel = l.phase === 'DEPARTURE' ? 'Depart' : l.phase === 'DESTINATION' ? 'Destination' : 'Transit';
-        const periode = `${formatDate(l.startedAt)} → ${l.isActive ? 'en cours' : formatDate(l.endedAt)}`;
+        const periode = `${formatDate(l.startedAt, invoiceData.branding?.timeZone)} → ${l.isActive ? 'en cours' : formatDate(l.endedAt, invoiceData.branding?.timeZone)}`;
         const row = [
           l.tracking,
           wh,
@@ -861,7 +865,7 @@ export class PDFService {
         doc.fillColor(COLORS.dark);
         xCol3 = 55;
         const row = [
-          formatDate(entry.createdAt),
+          formatDate(entry.createdAt, invoiceData.branding?.timeZone),
           entry.action === 'DISCOUNT_APPLIED' ? 'Appliquee' : 'Retiree',
           formatCurrency(Number(entry.previousDiscount ?? 0)),
           formatCurrency(Number(entry.newDiscount ?? 0)),
@@ -932,7 +936,7 @@ export class PDFService {
     // --- Container info ---
     let y = 120;
     doc.fillColor(COLORS.dark).fontSize(10);
-    doc.text(`Date: ${formatDate(manifestData.date)}`, 50, y);
+    doc.text(`Date: ${formatDate(manifestData.date, manifestData.branding?.timeZone)}`, 50, y);
     y += 18;
     doc.text(`Conteneur: ${manifestData.containerDesignation}`, 50, y);
     const typeLabel = manifestData.isForwarding
@@ -1138,7 +1142,7 @@ export class PDFService {
 
     let y = 120;
     doc.fillColor(COLORS.dark).fontSize(10);
-    doc.text(`Date: ${formatDate(data.date)}`, 50, y);
+    doc.text(`Date: ${formatDate(data.date, data.branding?.timeZone)}`, 50, y);
     doc.text(`Conteneur: ${data.containerDesignation} (${data.containerType})`, 250, y);
 
     y += 28;

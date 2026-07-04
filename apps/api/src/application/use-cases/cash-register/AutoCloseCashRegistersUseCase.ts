@@ -6,17 +6,26 @@ import { DailyReportService } from '../../services/DailyReportService';
 import { startOfDayInTimezone } from '../../../domain/utils/timezone';
 
 /**
- * Cloture automatique de fin de journee.
+ * Cloture automatique de fin de journee (caisse + RAPPORT JOURNALIER).
  *
- * Pour chaque agence avec une caisse ouverte aujourd'hui :
- *  - On determine l'heure courante DANS le fuseau de l'agence.
- *  - On determine l'heure de fermeture du jour (max(closeTime) parmi les plages
- *    AgencyOpeningHours du jour si l'agence est ouverte).
- *  - Si l'heure courante locale > closeTime du jour, on ferme la caisse et on
- *    emet un evenement (rapport de fin de journee).
+ * Pour chaque agence active, des que l'heure locale depasse l'heure de
+ * fermeture du jour (max(closeTime) des plages AgencyOpeningHours du jour) :
+ *  1. La caisse du jour (si ouverte) est fermee.
+ *  2. Le rapport journalier est genere puis passe en CLOSED (snapshot fige).
+ *     La fenetre du rapport court de la cloture du rapport precedent jusqu'a
+ *     cette fermeture (cf DailyReportService) : colis, conteneurs, paiements,
+ *     stock -- toutes les donnees suivent cette fenetre.
+ *  3. L'event CASH_REGISTER_CLOSED est emis APRES la cloture du rapport, pour
+ *     que l'envoi mail (DailyReportEmailHandler) parte avec le snapshot final.
  *
- * Le cron tourne toutes les 10 minutes : la fermeture se declenche dans les 10
- * minutes apres l'heure configuree.
+ * Le cron tourne toutes les 15 secondes : la cloture intervient au plus 15 s
+ * apres l'heure configuree. Le passage est IDEMPOTENT et quasi gratuit a vide
+ * (2 requetes) : un rapport deja CLOSED/AMENDED est saute, une caisse deja
+ * fermee aussi.
+ *
+ * Balayage complementaire : toute caisse restee ouverte sur un jour PASSE
+ * (y compris jour ferme type dimanche, jamais couvert par la cloture horaire)
+ * est fermee d'office.
  */
 @injectable()
 export class AutoCloseCashRegistersUseCase {
@@ -25,10 +34,7 @@ export class AutoCloseCashRegistersUseCase {
     private reportService: DailyReportService,
   ) {}
 
-  async execute(): Promise<{ closed: number; checked: number; reported: number }> {
-    // On itere sur TOUTES les agences (avec horaires d'ouverture). Pour chaque
-    // agence dont l'heure de fermeture locale est depassee, on ferme la caisse
-    // (si ouverte) ET on genere le rapport (meme s'il n'y a pas eu d'activite).
+  async execute(): Promise<{ closed: number; checked: number; reported: number; reportsClosed: number }> {
     const agencies = await prisma.agency.findMany({
       where: { isActive: true },
       select: { id: true, name: true, timezone: true, openingHours: true },
@@ -36,24 +42,40 @@ export class AutoCloseCashRegistersUseCase {
 
     let closed = 0;
     let reported = 0;
+    let reportsClosed = 0;
+    if (agencies.length === 0) return { closed, checked: 0, reported, reportsClosed };
+
+    // Une seule requete pour toutes les caisses encore ouvertes.
+    const openRegisters = await prisma.agencyCashRegister.findMany({
+      where: { isClosed: false, agencyId: { in: agencies.map((a) => a.id) } },
+    });
+    const openByAgency = new Map<string, typeof openRegisters>();
+    for (const r of openRegisters) {
+      if (!openByAgency.has(r.agencyId)) openByAgency.set(r.agencyId, []);
+      openByAgency.get(r.agencyId)!.push(r);
+    }
+
+    // Agences dont l'heure de fermeture est passee : candidates a la cloture
+    // du rapport du jour. `justClosedRegister` = caisse fermee dans CE passage
+    // (event emis apres la cloture du rapport).
+    const candidates: Array<{
+      agencyId: string;
+      dayStart: Date;
+      tz: string;
+      localTime: string;
+      justClosedRegister: { id: string; closingBalance: number } | null;
+    }> = [];
 
     for (const agency of agencies) {
       const tz = agency.timezone || 'Africa/Douala';
       const local = nowInTimezone(tz);
       const localDow = local.getDay();
       const localTime = formatHHMM(local);
-
-      // Date "aujourd'hui" dans le fuseau de l'agence (pour matcher caisse).
       const localDayStart = startOfDayInTimezone(new Date(), tz);
+      const regs = openByAgency.get(agency.id) ?? [];
 
-      // Caisses restees ouvertes sur des jours PASSES (y compris jours fermes
-      // type dimanche, jamais couverts par la cloture horaire ci-dessous) :
-      // cloture d'office. Sans ce balayage, une caisse datee d'un jour ferme
-      // (heritee d'un bug) restait ouverte indefiniment.
-      const staleRegisters = await prisma.agencyCashRegister.findMany({
-        where: { agencyId: agency.id, isClosed: false, date: { lt: localDayStart } },
-      });
-      for (const stale of staleRegisters) {
+      // Caisses restees ouvertes sur des jours passes : cloture d'office.
+      for (const stale of regs.filter((r) => r.date < localDayStart)) {
         await this.cashRegisterRepo.update(stale.id, {
           isClosed: true,
           closedAt: new Date(),
@@ -96,49 +118,70 @@ export class AutoCloseCashRegistersUseCase {
       );
       if (localTime < latestClose) continue;
 
-      // Tente de fermer la caisse ouverte d'aujourd'hui (si existante).
-      const register = await prisma.agencyCashRegister.findFirst({
-        where: {
-          agencyId: agency.id,
-          isClosed: false,
-          date: { gte: localDayStart, lt: new Date(localDayStart.getTime() + 24 * 60 * 60 * 1000) },
-        },
-      });
-
-      if (register) {
-        await this.cashRegisterRepo.update(register.id, {
+      // Heure de fermeture depassee : ferme la caisse du jour si encore ouverte.
+      let justClosedRegister: { id: string; closingBalance: number } | null = null;
+      const todayReg = regs.find((r) => r.date.getTime() === localDayStart.getTime());
+      if (todayReg) {
+        await this.cashRegisterRepo.update(todayReg.id, {
           isClosed: true,
           closedAt: new Date(),
-          closingBalance: register.currentBalance,
+          closingBalance: todayReg.currentBalance,
           notes:
-            (register.notes ? register.notes + '\n' : '') +
+            (todayReg.notes ? todayReg.notes + '\n' : '') +
             `Cloture automatique de fin de journee (${tz}, ${localTime}).`,
         });
-        eventBus.emit({
-          type: DomainEvents.CASH_REGISTER_CLOSED,
-          payload: {
-            registerId: register.id,
-            agencyId: agency.id,
-            closingBalance: Number(register.currentBalance),
-            auto: true,
-          },
-          timestamp: new Date(),
-          userId: undefined,
-        });
+        justClosedRegister = { id: todayReg.id, closingBalance: Number(todayReg.currentBalance) };
         closed += 1;
       }
 
-      // Generation rapport journalier : meme sans caisse, on cree un rapport
-      // (eventuellement vide) pour tracer la journee. Idempotent : upsert.
-      try {
-        await this.reportService.generate(agency.id, localDayStart);
-        reported += 1;
-      } catch {
-        // Best-effort
+      candidates.push({ agencyId: agency.id, dayStart: localDayStart, tz, localTime, justClosedRegister });
+    }
+
+    // Cloture des rapports du jour. Idempotent : un rapport deja CLOSED (ou
+    // AMENDED) est saute -- a vide, ce passage ne coute qu'une requete.
+    if (candidates.length > 0) {
+      const existingReports = await prisma.agencyDailyReport.findMany({
+        where: { OR: candidates.map((c) => ({ agencyId: c.agencyId, date: c.dayStart })) },
+        select: { id: true, agencyId: true, status: true },
+      });
+      const reportByAgency = new Map(existingReports.map((r) => [r.agencyId, r]));
+
+      for (const c of candidates) {
+        const existing = reportByAgency.get(c.agencyId);
+        const needsClosing = !existing || existing.status === 'GENERATED';
+        if (needsClosing) {
+          try {
+            // Regeneration finale (fenetre bornee a la cloture) puis gel.
+            const { id } = await this.reportService.generate(c.agencyId, c.dayStart);
+            await prisma.agencyDailyReport.update({
+              where: { id },
+              data: { status: 'CLOSED', closedAt: new Date() },
+            });
+            reported += 1;
+            reportsClosed += 1;
+          } catch {
+            // Best-effort : retente au prochain passage.
+          }
+        }
+        // Event caisse APRES la cloture du rapport : le mail part avec le
+        // snapshot final.
+        if (c.justClosedRegister) {
+          eventBus.emit({
+            type: DomainEvents.CASH_REGISTER_CLOSED,
+            payload: {
+              registerId: c.justClosedRegister.id,
+              agencyId: c.agencyId,
+              closingBalance: c.justClosedRegister.closingBalance,
+              auto: true,
+            },
+            timestamp: new Date(),
+            userId: undefined,
+          });
+        }
       }
     }
 
-    return { closed, checked: agencies.length, reported };
+    return { closed, checked: agencies.length, reported, reportsClosed };
   }
 }
 

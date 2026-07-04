@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { apiClient } from '@/lib/api/client';
 import { AppBadge } from '@/components/ui/AppBadge';
-import { formatAmount } from '@transitsoftservices/shared';
+import { formatAmount, formatDateTime } from '@transitsoftservices/shared';
 import { FileText, Paperclip, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { DetailButton, type DetailSpec } from './ReportDetailDialog';
@@ -140,7 +140,7 @@ export function ContainerList({ title, containers, dateLabel, dateField, manifes
               <p className="text-xs font-semibold text-gray-800">
                 {c.designation} <span className="text-gray-500">- {c.type} - {c.routeName}</span>
               </p>
-              <p className="text-[11px] text-gray-500">{dateLabel} {c[dateField] ? new Date(c[dateField]).toLocaleString('fr-FR') : '-'} - {c.parcels} colis - {Number(c.totalWeight ?? 0).toFixed(2)} kg - {Number(c.totalVolume ?? 0).toFixed(3)} m3</p>
+              <p className="text-[11px] text-gray-500">{dateLabel} {c[dateField] ? formatDateTime(c[dateField]) : '-'} - {c.parcels} colis - {Number(c.totalWeight ?? 0).toFixed(2)} kg - {Number(c.totalVolume ?? 0).toFixed(3)} m3</p>
               {Object.keys(c.byRoute ?? {}).length > 0 && (
                 <table className="mt-1 w-full text-[11px]">
                   <tbody className="divide-y divide-gray-100">
