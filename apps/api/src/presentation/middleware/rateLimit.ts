@@ -68,26 +68,33 @@ function makeLimiter(opts: { prefix: string; windowMs: number; max: number }) {
   });
 }
 
-// Endpoints d'auth (login/register/refresh) : 10 tentatives / 15 min par IP.
-// Defense contre le credential-stuffing / brute-force et la creation de comptes
-// en masse. Fail-open comme les autres (cf. RedisRateLimitStore).
+/** Lit un max depuis l'env (>0), sinon le defaut. Permet de resserrer les
+ *  limites en prod sans redeploy. Les defauts sont volontairement TRES laxistes. */
+function envMax(name: string, def: number): number {
+  const n = Number(process.env[name]);
+  return Number.isFinite(n) && n > 0 ? n : def;
+}
+
+// Endpoints d'auth (login/register/refresh). Defense brute-force / credential-
+// stuffing. Defaut tres laxiste (10000 / 15 min par IP) — resserrer via
+// RATE_LIMIT_AUTH_MAX. Fail-open (cf. RedisRateLimitStore).
 export const authLimiter = makeLimiter({
   prefix: 'auth',
   windowMs: 15 * 60_000,
-  max: 10,
+  max: envMax('RATE_LIMIT_AUTH_MAX', 10_000),
 });
 
-// Demande de code : 5 envois / 15 min par IP (anti-spam SMS/email).
+// Demande de code (anti-spam SMS/email). Defaut tres laxiste — RATE_LIMIT_FORGOT_MAX.
 export const forgotPasswordLimiter = makeLimiter({
   prefix: 'forgot-pwd',
   windowMs: 15 * 60_000,
-  max: 5,
+  max: envMax('RATE_LIMIT_FORGOT_MAX', 10_000),
 });
 
-// Verification de code : 10 essais / 15 min par IP (en plus du compteur
-// `attempts` par token cote use-case).
+// Verification de code (en plus du compteur `attempts` par token cote use-case).
+// Defaut tres laxiste — RATE_LIMIT_RESET_MAX.
 export const resetPasswordLimiter = makeLimiter({
   prefix: 'reset-pwd',
   windowMs: 15 * 60_000,
-  max: 10,
+  max: envMax('RATE_LIMIT_RESET_MAX', 10_000),
 });
