@@ -13,10 +13,10 @@
  *   - Whitespace / line break ajoute par le scanner : trimme
  *   - Cas null / undefined : retourne ''
  *
- * Le bug initial : les QR des colis encodent l'URL complete (pour permettre
- * un suivi public en scannant). Les consommateurs metier (chargement,
- * dechargement, inventaire, ...) ont besoin du tracking number sec. Cette
- * fonction fait le pont sans changer la generation du QR.
+ * Les QR des colis encodent l'URL complete (pour permettre un suivi public en
+ * scannant). Les consommateurs metier (chargement, dechargement, inventaire,
+ * ...) ont besoin du tracking number sec. Cette fonction fait le pont sans
+ * changer la generation du QR.
  */
 export function normalizeScannedTracking(raw: string | null | undefined): string {
   if (!raw) return '';

@@ -10,6 +10,7 @@ import { AppBadge } from '@/components/ui/AppBadge';
 import { AppInput } from '@/components/ui/AppInput';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { QRScannerDialog } from '@/components/shared/QRScannerDialog';
+import { normalizeScannedTracking } from '@/lib/utils/scanNormalize';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 import { apiClient } from '@/lib/api/client';
 import { formatDateTime } from '@transitsoftservices/shared';
@@ -57,7 +58,7 @@ export default function WarehouseInventoryPage() {
   const extra = items.filter((i) => !i.expected && i.scanned);
 
   const submitScan = async (raw: string) => {
-    const v = raw.trim();
+    const v = normalizeScannedTracking(raw);
     if (!v) return;
     setScanBusy(true);
     try {

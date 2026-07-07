@@ -12,7 +12,15 @@ const logger = createChildLogger('SendDailyReportEmail');
 interface Recipient {
   email: string;
   name: string;
-  role: 'CHEF_AGENCE' | 'ADMIN' | 'SUPER_ADMIN' | 'CASHIER_CLOSER';
+  role: 'CHEF_AGENCE' | 'ADMIN' | 'SUPER_ADMIN' | 'CASHIER_CLOSER' | 'CUSTOM';
+}
+
+interface SendOptions {
+  /**
+   * Liste d'emails saisie manuellement par l'utilisateur. Si fournie (non
+   * vide), elle remplace la resolution automatique des destinataires.
+   */
+  recipients?: string[];
 }
 
 /**
@@ -33,7 +41,7 @@ export class SendDailyReportEmailUseCase {
     @inject(ManifestPDFBuilder) private manifestBuilder: ManifestPDFBuilder,
   ) {}
 
-  async execute(reportId: string): Promise<{ sent: number; recipients: Recipient[] }> {
+  async execute(reportId: string, options?: SendOptions): Promise<{ sent: number; recipients: Recipient[] }> {
     const report = await prisma.agencyDailyReport.findUnique({
       where: { id: reportId },
       include: {
@@ -58,8 +66,14 @@ export class SendDailyReportEmailUseCase {
     const payload = report.payload as any;
     const organizationId = report.agency.organizationId;
 
-    // Resolution destinataires (dedup par email lowercase).
-    const recipients = await this.resolveRecipients(report, organizationId);
+    // Destinataires : liste manuelle si fournie, sinon resolution automatique
+    // (chef d'agence + admins + caissier ayant ferme la caisse), dedup email.
+    const manual = (options?.recipients ?? [])
+      .map((e) => e.trim())
+      .filter((e) => e.length > 0);
+    const recipients = manual.length > 0
+      ? this.buildCustomRecipients(manual)
+      : await this.resolveRecipients(report, organizationId);
     if (recipients.length === 0) {
       logger.warn({ reportId, agencyId: report.agencyId }, 'Aucun destinataire resolu pour le rapport');
       return { sent: 0, recipients: [] };
@@ -96,9 +110,21 @@ export class SendDailyReportEmailUseCase {
     //  - received containers : bordereau RECEPTION + comparaison si hasComparison
     const manifestAttachments = await this.buildManifestAttachments(payload);
 
+    // Pieces jointes uploadees sur le rapport (recus, justificatifs...) :
+    // jointes telles quelles au mail en plus du PDF de synthese.
+    const uploadedAttachments = await this.buildUploadedAttachments(
+      report.attachments.map((a) => ({
+        storageKey: a.storageKey,
+        url: a.url,
+        fileName: a.fileName,
+        contentType: a.contentType,
+      })),
+    );
+
     const allAttachments = [
       { filename, content: pdfBuffer, contentType: 'application/pdf' },
       ...manifestAttachments,
+      ...uploadedAttachments,
     ];
 
     let sent = 0;
@@ -125,6 +151,57 @@ export class SendDailyReportEmailUseCase {
     });
 
     return { sent, recipients };
+  }
+
+  /** Construit des destinataires a partir d'une liste d'emails saisie (dedup, email valide). */
+  private buildCustomRecipients(emails: string[]): Recipient[] {
+    const map = new Map<string, Recipient>();
+    for (const raw of emails) {
+      const email = raw.trim();
+      // Validation legere : format email basique. On ignore les entrees invalides.
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) continue;
+      const key = email.toLowerCase();
+      if (!map.has(key)) map.set(key, { email, name: email, role: 'CUSTOM' });
+    }
+    return Array.from(map.values());
+  }
+
+  /** Recupere le contenu binaire des pieces jointes uploadees pour les joindre au mail. */
+  private async buildUploadedAttachments(
+    attachments: Array<{ storageKey: string | null; url: string; fileName: string | null; contentType: string | null }>,
+  ): Promise<Array<{ filename: string; content: Buffer; contentType: string }>> {
+    const out: Array<{ filename: string; content: Buffer; contentType: string }> = [];
+    for (const [i, a] of attachments.entries()) {
+      const filename = a.fileName || `piece-jointe-${i + 1}`;
+      try {
+        if (a.storageKey) {
+          const obj = await this.storage.getObject(a.storageKey);
+          if (!obj) {
+            logger.warn({ storageKey: a.storageKey }, 'Piece jointe introuvable dans le storage');
+            continue;
+          }
+          const content = await this.streamToBuffer(obj.stream);
+          out.push({ filename, content, contentType: a.contentType || obj.contentType });
+        } else if (a.url) {
+          // Piece jointe externe (pas de cle storage) : recuperation HTTP.
+          const res = await fetch(a.url);
+          if (!res.ok) continue;
+          const content = Buffer.from(await res.arrayBuffer());
+          out.push({ filename, content, contentType: a.contentType || res.headers.get('content-type') || 'application/octet-stream' });
+        }
+      } catch (err) {
+        logger.warn({ err, storageKey: a.storageKey, url: a.url }, 'Echec recuperation piece jointe pour le mail');
+      }
+    }
+    return out;
+  }
+
+  private async streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks);
   }
 
   private async resolveRecipients(
@@ -243,7 +320,16 @@ export class SendDailyReportEmailUseCase {
     return fetchLogoBuffer(logoUrl);
   }
 
-  private buildHtmlSummary(report: { date: Date; agency: { name: string } }, payload: any): string {
+  private escapeHtml(s: string): string {
+    return s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  private buildHtmlSummary(report: { date: Date; agency: { name: string }; observation?: string | null }, payload: any): string {
     const dateStr = new Date(report.date).toLocaleDateString('fr-FR', {
       day: '2-digit',
       month: 'long',
@@ -303,8 +389,12 @@ export class SendDailyReportEmailUseCase {
         <tr><td style="padding:6px 0; color:#111827; font-weight:600;">Solde de cloture</td><td style="text-align:right; font-weight:700;">${fmt(cr.closingBalance ?? cr.currentBalance ?? 0)}</td></tr>
       </table>` : ''}
 
+      ${report.observation && report.observation.trim() ? `
+      <h2 style="font-size:14px; margin:24px 0 12px; color:#374151; text-transform:uppercase; letter-spacing:.5px;">Observation</h2>
+      <p style="margin:0; font-size:14px; color:#374151; white-space:pre-wrap; background:#f9fafb; border:1px solid #e5e7eb; border-radius:8px; padding:12px;">${this.escapeHtml(report.observation.trim())}</p>` : ''}
+
       <p style="margin:24px 0 0; font-size:13px; color:#6b7280;">
-        Le rapport complet est joint en piece jointe (PDF).
+        Le rapport complet est joint en piece jointe (PDF), avec les pieces justificatives eventuelles.
       </p>
     </div>
   </div>

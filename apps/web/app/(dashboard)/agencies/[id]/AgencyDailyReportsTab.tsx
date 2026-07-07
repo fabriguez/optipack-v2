@@ -8,6 +8,7 @@ import { AppButton } from '@/components/ui/AppButton';
 import { AppBadge } from '@/components/ui/AppBadge';
 import { ImageInput } from '@/components/shared/ImageInput';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { DailyReportEmailDialog } from './DailyReportEmailDialog';
 import { uploadImage, uploadFile } from '@/lib/api/uploads';
 import { openAuthedFile } from '@/components/shared/AuthedImage';
 import { formatAmount, formatDate, formatDateTime } from '@transitsoftservices/shared';
@@ -255,16 +256,18 @@ function ReportDetails({
   };
 
   const [sendingMail, setSendingMail] = useState(false);
-  const resendMail = async () => {
+  const [mailDialogOpen, setMailDialogOpen] = useState(false);
+  const resendMail = async (recipients: string[]) => {
     setSendingMail(true);
     try {
-      const res = await apiClient.post(`/agencies/daily-reports/${reportId}/email`);
+      const res = await apiClient.post(`/agencies/daily-reports/${reportId}/email`, { recipients });
       const data = res.data?.data;
       const sent = data?.sent ?? 0;
       const total = data?.recipients?.length ?? 0;
       if (sent > 0) toast.success(`Mail envoye a ${sent} destinataire(s) sur ${total}`);
       else toast.error(total === 0 ? 'Aucun destinataire trouve' : 'Echec envoi mail (voir logs)');
       qc.invalidateQueries({ queryKey: ['daily-reports', reportId] });
+      setMailDialogOpen(false);
     } catch (e: any) {
       toast.error(e?.response?.data?.message || 'Echec envoi mail');
     } finally {
@@ -312,7 +315,7 @@ function ReportDetails({
             Regenerer
           </AppButton>
         )}
-        <AppButton size="sm" variant="outline" onClick={resendMail} loading={sendingMail}>
+        <AppButton size="sm" variant="outline" onClick={() => setMailDialogOpen(true)} loading={sendingMail}>
           <Mail className="h-3.5 w-3.5" />
           {report.emailedAt ? 'Renvoyer par mail' : 'Envoyer par mail'}
         </AppButton>
@@ -543,6 +546,13 @@ function ReportDetails({
         )}
       </div>
       )}
+
+      <DailyReportEmailDialog
+        open={mailDialogOpen}
+        onClose={() => setMailDialogOpen(false)}
+        onSend={resendMail}
+        sending={sendingMail}
+      />
 
       <ConfirmDialog
         open={confirmClose}

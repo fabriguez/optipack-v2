@@ -35,6 +35,7 @@ import { toast } from 'sonner';
 import { ComparisonDialog } from './ComparisonDialog';
 import { ParcelFormDialog } from '@/pages/parcels/ParcelFormDialog';
 import { QRScannerDialog } from '@/components/shared/QRScannerDialog';
+import { normalizeScannedTracking } from '@/lib/utils/scanNormalize';
 import { LiveScanCollector } from '@/components/shared/LiveScanCollector';
 import { ParcelPickerList } from '@/components/shared/ParcelPickerList';
 import { MaskedValue, isMasked } from '@/components/ui/MaskedValue';
@@ -273,7 +274,7 @@ export default function ContainerDetailPage() {
   };
 
   const submitScan = async (raw: string) => {
-    const v = raw.trim();
+    const v = normalizeScannedTracking(raw);
     if (!v) return;
     setScanBusy(true);
     try {

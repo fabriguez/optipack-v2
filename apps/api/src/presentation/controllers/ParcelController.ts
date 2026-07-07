@@ -20,6 +20,7 @@ import {
 } from '../../application/use-cases/parcel/ArchiveParcelsUseCase';
 import { DeleteParcelUseCase } from '../../application/use-cases/parcel/DeleteParcelUseCase';
 import { parcelScope, scopeCtx, scopeEnforced } from '../../application/services/scope/agencyScope';
+import { PARCEL_REPOSITORY, type IParcelRepository } from '../../application/interfaces/IParcelRepository';
 import { applyFieldPolicy, PARCEL_FIELD_POLICY } from '../serializers/fieldPolicy';
 import { getPolicy } from '../middleware/policyContext';
 
@@ -61,6 +62,7 @@ export class ParcelController {
         lastContainerId,
         spaceId,
         origin,
+        destination,
         parcelGroupId,
         clientId,
         status,
@@ -85,6 +87,7 @@ export class ParcelController {
           lastContainerId: lastContainerId as string,
           spaceId: spaceId as string,
           origin: origin as string,
+          destination: destination as string,
           parcelGroupId: parcelGroupId as string,
           clientId: clientId as string,
           status: status as string,
@@ -101,6 +104,34 @@ export class ParcelController {
         ? { ...result, data: applyFieldPolicy(result.data, PARCEL_FIELD_POLICY, policy) }
         : result;
       res.json({ success: true, ...data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * Valeurs distinctes disponibles pour les filtres du listing (conteneur,
+   * client, zone, destination, statut, route) calculees sur le meme perimetre
+   * que la liste -- ex: colis presents d'un magasin -- et non sur toute la base.
+   */
+  static async facets(req: Request, res: Response, next: NextFunction) {
+    try {
+      const repo = container.resolve<IParcelRepository>(PARCEL_REPOSITORY);
+      const { warehouseId, onlyPresent, archived } = req.query;
+      const scopeWhere = parcelScope.where(scopeCtx(req)) ?? null;
+      const scope = scopeEnforced()
+        ? null
+        : req.user!.role === 'SUPER_ADMIN' ? null : req.user!.agencyIds;
+      const archivedFilter: 'true' | 'all' | undefined =
+        archived === 'true' ? 'true' : archived === 'all' ? 'all' : undefined;
+      const facets = await repo.findFilterFacets({
+        warehouseId: warehouseId as string,
+        agencyIds: scope,
+        scopeWhere,
+        onlyPresent: onlyPresent === 'true' || onlyPresent === '1',
+        archived: archivedFilter,
+      });
+      res.json({ success: true, data: facets });
     } catch (err) {
       next(err);
     }

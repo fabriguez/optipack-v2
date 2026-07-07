@@ -41,6 +41,8 @@ router.get('/:id/qrcode', requirePermission('parcel.read'), async (req, res, nex
 });
 
 router.get('/', requirePermission('parcel.read'), validate(paginationSchema, 'query'), ParcelController.list);
+// Valeurs de filtre presentes dans un listing (selects scopes). Avant /:id.
+router.get('/facets', requirePermission('parcel.read'), ParcelController.facets);
 router.get('/tracking/:tracking', requirePermission('parcel.read'), ParcelController.getByTracking);
 router.get('/:id', requirePermission('parcel.read'), ParcelController.getById);
 router.post('/', requirePermission('parcel.create'), validate(createParcelSchema), ParcelController.create);

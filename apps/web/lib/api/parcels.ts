@@ -11,18 +11,38 @@ export interface ParcelImage {
   createdAt: string;
 }
 
+export interface ParcelListParams extends Partial<PaginationInput> {
+  status?: string;
+  clientId?: string;
+  warehouseId?: string;
+  containerId?: string;
+  /** Conteneur de provenance (apres dechargement). */
+  lastContainerId?: string;
+  /** Zone de rangement. */
+  spaceId?: string;
+  destination?: string;
+  transitType?: string;
+  onlyPresent?: boolean;
+  /** 'true' = archives uniquement, 'all' = tout, undefined/'false' = exclut archives. */
+  archived?: 'true' | 'all' | 'false';
+}
+
+export interface ParcelFilterFacets {
+  containers: { id: string; label: string }[];
+  clients: { id: string; label: string }[];
+  zones: { id: string; label: string }[];
+  destinations: string[];
+  statuses: string[];
+  routes: { id: string; label: string }[];
+}
+
 export const parcelsApi = {
-  list: (
-    params?: Partial<PaginationInput> & {
-      status?: string;
-      clientId?: string;
-      warehouseId?: string;
-      containerId?: string;
-      /** 'true' = archives uniquement, 'all' = tout, undefined/'false' = exclut archives. */
-      archived?: 'true' | 'all' | 'false';
-    },
-  ) =>
+  list: (params?: ParcelListParams) =>
     apiClient.get('/parcels', { params }).then((r) => r.data),
+  facets: (
+    params?: { warehouseId?: string; onlyPresent?: boolean; archived?: 'true' | 'all' | 'false' },
+  ): Promise<{ success: boolean; data: ParcelFilterFacets }> =>
+    apiClient.get('/parcels/facets', { params }).then((r) => r.data),
   archive: (ids: string[], reason?: string) =>
     apiClient.post('/parcels/archive', { ids, reason }).then((r) => r.data),
   unarchive: (ids: string[], reason?: string) =>

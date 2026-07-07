@@ -23,7 +23,8 @@ import { RowActions } from '@/components/shared/RowActions';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useParcels } from '@/lib/hooks/useParcels';
+import { useParcels, useParcelFacets } from '@/lib/hooks/useParcels';
+import { WarehouseParcelFilters, type ParcelFilterValues } from './WarehouseParcelFilters';
 import { apiClient } from '@/lib/api/client';
 import { formatAmount, formatDate, formatDurationSince } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
@@ -39,6 +40,12 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
   const router = useRouter();
   const qc = useQueryClient();
   const [parcelPage, setParcelPage] = useState(1);
+  // Filtres du listing colis, scopes aux valeurs presentes dans ce magasin.
+  const [parcelFilters, setParcelFilters] = useState<ParcelFilterValues>({});
+  const setParcelFilter = (key: keyof ParcelFilterValues, value?: string) => {
+    setParcelFilters((f) => ({ ...f, [key]: value }));
+    setParcelPage(1);
+  };
   const [parcelView, setParcelView] = useState<'parcels' | 'groups'>('parcels');
   const [showCreateParcel, setShowCreateParcel] = useState(false);
   const [editParcel, setEditParcel] = useState<any>(null);
@@ -100,7 +107,15 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
     onlyPresent: true,
     limit: 20,
     page: parcelPage,
+    ...parcelFilters,
   } as any);
+
+  // Valeurs distinctes pour les selects de filtre (conteneur, client, zone,
+  // destination, statut) presentes dans ce magasin uniquement.
+  const { data: facetsData } = useParcelFacets(
+    { warehouseId: id, onlyPresent: true },
+    !!id && parcelView === 'parcels',
+  );
 
   // Groupes de colis de l'agence du magasin (un groupe n'a pas de magasin
   // propre : il est scope a l'agence). Charge uniquement en vue "groupes".
@@ -838,6 +853,15 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
               </AppButton>
             </div>
           </div>
+          <WarehouseParcelFilters
+            facets={facetsData?.data}
+            values={parcelFilters}
+            onChange={setParcelFilter}
+            onReset={() => {
+              setParcelFilters({});
+              setParcelPage(1);
+            }}
+          />
           {/* Barre de selection : visible des qu'il y a au moins une ligne
               eligible (IN_STOCK). Permet "tout cocher (page)", affiche le
               compteur, et expose le bouton "Transferer la selection" qui

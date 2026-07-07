@@ -51,10 +51,17 @@ export class PaymentController {
   static async list(req: Request, res: Response, next: NextFunction) {
     try {
       const repo = container.resolve<any>(PAYMENT_REPOSITORY);
-      const { agencyId } = req.query;
+      const { agencyId, paymentMethod, startDate, endDate } = req.query;
       const scopeWhere = paymentScope.where(scopeCtx(req)) ?? null;
       const result = await repo.findAll(
-        { agencyId: agencyId as string, agencyIds: req.user!.agencyIds, scopeWhere },
+        {
+          agencyId: agencyId as string,
+          agencyIds: req.user!.agencyIds,
+          scopeWhere,
+          paymentMethod: paymentMethod as string | undefined,
+          startDate: startDate as string | undefined,
+          endDate: endDate as string | undefined,
+        },
         req.query as unknown as PaginationInput,
       );
       const policy = getPolicy(req);

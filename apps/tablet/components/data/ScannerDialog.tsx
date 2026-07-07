@@ -5,6 +5,7 @@ import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'ex
 import { Button } from '@/components/ui/Button';
 import { colors } from '@/lib/theme/colors';
 import { radius, spacing } from '@/lib/theme/spacing';
+import { normalizeScannedTracking } from '@/lib/utils/scanNormalize';
 
 const MIN_VALID_LENGTH = 4;
 const BARCODE_TYPES = ['qr', 'ean13', 'ean8', 'code128', 'code39', 'code93', 'codabar', 'upc_a', 'upc_e', 'itf14', 'pdf417', 'datamatrix', 'aztec'] as const;
@@ -40,7 +41,9 @@ export function ScannerDialog({
   const lastAtRef = useRef(0);
 
   const emit = (raw: string) => {
-    const v = raw.trim();
+    // Les QR encodent l'URL publique ("https://.../track?q=TST-ABC") : on extrait
+    // le tracking number sec avant de valider la longueur et de remonter.
+    const v = normalizeScannedTracking(raw);
     if (v.length < MIN_VALID_LENGTH) return;
     onDetected(v);
     setLastCode(v);
@@ -49,7 +52,7 @@ export function ScannerDialog({
 
   const onBarcode = (res: BarcodeScanningResult) => {
     const now = Date.now();
-    const v = (res?.data ?? '').trim();
+    const v = normalizeScannedTracking(res?.data ?? '');
     // Anti-rebond : ignore meme code < 1.5s ou trop court.
     if (v.length < MIN_VALID_LENGTH) return;
     if (v === lastCode && now - lastAtRef.current < 1500) return;

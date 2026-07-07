@@ -262,7 +262,11 @@ export class AgencyController {
   static async resendDailyReportEmail(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(SendDailyReportEmailUseCase);
-      const result = await useCase.execute(req.params.reportId);
+      const rawRecipients = req.body?.recipients;
+      const recipients = Array.isArray(rawRecipients)
+        ? rawRecipients.filter((e: unknown): e is string => typeof e === 'string')
+        : undefined;
+      const result = await useCase.execute(req.params.reportId, { recipients });
       res.json({ success: true, data: result });
     } catch (err) {
       next(err);

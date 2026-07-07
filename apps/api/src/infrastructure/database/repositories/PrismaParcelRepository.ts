@@ -1,6 +1,6 @@
 import { injectable } from 'tsyringe';
 import type { Parcel, Prisma } from '@prisma/client';
-import type { IParcelRepository, ParcelWithRelations } from '../../../application/interfaces/IParcelRepository';
+import type { IParcelRepository, ParcelWithRelations, ParcelFilterFacets } from '../../../application/interfaces/IParcelRepository';
 import type { PaginationInput, PaginatedResponse } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
 import { safeOrderBy } from '../../../domain/utils/safeOrderBy';
@@ -100,6 +100,8 @@ export class PrismaParcelRepository implements IParcelRepository {
       spaceId?: string;
       // Filtre par origine (text libre)
       origin?: string;
+      // Filtre par destination (valeur exacte, issue des facettes du listing)
+      destination?: string;
       // Filtre par groupe de colis (envoi groupe)
       parcelGroupId?: string;
       clientId?: string;
@@ -139,6 +141,7 @@ export class PrismaParcelRepository implements IParcelRepository {
       ...(filters.lastContainerId && { lastContainerId: filters.lastContainerId }),
       ...(filters.spaceId && { spaceId: filters.spaceId }),
       ...(filters.origin && { origin: { contains: filters.origin, mode: 'insensitive' } }),
+      ...(filters.destination && { destination: filters.destination }),
       ...(filters.parcelGroupId && { parcelGroupId: filters.parcelGroupId }),
       ...(filters.clientId && { clientId: filters.clientId }),
       ...(filters.status && { status: filters.status as any }),
@@ -171,6 +174,80 @@ export class PrismaParcelRepository implements IParcelRepository {
     return {
       data: data as ParcelWithRelations[],
       meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
+    };
+  }
+
+  async findFilterFacets(filters: {
+    warehouseId?: string;
+    agencyIds?: string[] | null;
+    scopeWhere?: object | null;
+    onlyPresent?: boolean;
+    archived?: 'true' | 'all' | 'false';
+  }): Promise<ParcelFilterFacets> {
+    const presenceFilter = filters.onlyPresent
+      ? { isPresent: true, status: { in: ['IN_STOCK', 'RECEIVED'] as any } }
+      : {};
+    const archivedFilter =
+      filters.archived === 'true'
+        ? { isArchived: true }
+        : filters.archived === 'all'
+          ? {}
+          : { isArchived: false };
+
+    // Perimetre = memes filtres de base que le listing (magasin, presence,
+    // scope agence), sans les filtres d'entite pour que chaque select liste
+    // toutes les valeurs presentes dans ce listing.
+    const where: Prisma.ParcelWhereInput = {
+      isDeleted: false,
+      ...archivedFilter,
+      ...(filters.warehouseId && { warehouseId: filters.warehouseId }),
+      ...(filters.agencyIds?.length && { warehouse: { agencyId: { in: filters.agencyIds } } }),
+      ...presenceFilter,
+      ...(filters.scopeWhere && { AND: [filters.scopeWhere as Prisma.ParcelWhereInput] }),
+    };
+
+    const rows = await prisma.parcel.findMany({
+      where,
+      select: {
+        status: true,
+        destination: true,
+        clientId: true,
+        client: { select: { id: true, fullName: true } },
+        spaceId: true,
+        space: { select: { id: true, name: true } },
+        lastContainerId: true,
+        lastContainer: { select: { id: true, designation: true } },
+        transitRouteId: true,
+        transitRoute: { select: { id: true, name: true } },
+      },
+    });
+
+    const containers = new Map<string, string>();
+    const clients = new Map<string, string>();
+    const zones = new Map<string, string>();
+    const routes = new Map<string, string>();
+    const destinations = new Set<string>();
+    const statuses = new Set<string>();
+
+    for (const r of rows) {
+      if (r.lastContainerId && r.lastContainer) containers.set(r.lastContainerId, r.lastContainer.designation);
+      if (r.clientId && r.client) clients.set(r.clientId, r.client.fullName);
+      if (r.spaceId && r.space) zones.set(r.spaceId, r.space.name);
+      if (r.transitRouteId && r.transitRoute) routes.set(r.transitRouteId, r.transitRoute.name);
+      if (r.destination) destinations.add(r.destination);
+      if (r.status) statuses.add(r.status);
+    }
+
+    const toSorted = (m: Map<string, string>) =>
+      Array.from(m, ([id, label]) => ({ id, label })).sort((a, b) => a.label.localeCompare(b.label));
+
+    return {
+      containers: toSorted(containers),
+      clients: toSorted(clients),
+      zones: toSorted(zones),
+      routes: toSorted(routes),
+      destinations: Array.from(destinations).sort((a, b) => a.localeCompare(b)),
+      statuses: Array.from(statuses).sort(),
     };
   }
 

@@ -10,6 +10,20 @@ export interface ParcelWithRelations extends Parcel {
   invoice?: { id: string; reference: string; status: string } | null;
 }
 
+/**
+ * Valeurs distinctes disponibles pour les filtres d'un listing de colis,
+ * calculees SUR le perimetre du listing (ex: colis presents d'un magasin) et
+ * non sur toute la base. Alimente les selects de filtre cote client.
+ */
+export interface ParcelFilterFacets {
+  containers: { id: string; label: string }[];
+  clients: { id: string; label: string }[];
+  zones: { id: string; label: string }[];
+  destinations: string[];
+  statuses: string[];
+  routes: { id: string; label: string }[];
+}
+
 export interface IParcelRepository {
   findById(id: string): Promise<ParcelWithRelations | null>;
   findByTracking(trackingNumber: string): Promise<ParcelWithRelations | null>;
@@ -20,6 +34,7 @@ export interface IParcelRepository {
       lastContainerId?: string;
       spaceId?: string;
       origin?: string;
+      destination?: string;
       parcelGroupId?: string;
       clientId?: string;
       status?: string;
@@ -30,6 +45,14 @@ export interface IParcelRepository {
     },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<ParcelWithRelations>>;
+  /** Valeurs distinctes de filtre presentes dans le perimetre donne. */
+  findFilterFacets(filters: {
+    warehouseId?: string;
+    agencyIds?: string[] | null;
+    scopeWhere?: object | null;
+    onlyPresent?: boolean;
+    archived?: 'true' | 'all' | 'false';
+  }): Promise<ParcelFilterFacets>;
   findByContainer(containerId: string): Promise<Parcel[]>;
   /**
    * Snapshot des colis presents dans le conteneur a l'arrivee : tous les

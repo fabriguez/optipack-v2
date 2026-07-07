@@ -1,21 +1,25 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { parcelsApi } from '@/lib/api/parcels';
-import type { CreateParcelInput, UpdateParcelInput, PaginationInput } from '@transitsoftservices/shared';
+import { parcelsApi, type ParcelListParams } from '@/lib/api/parcels';
+import type { CreateParcelInput, UpdateParcelInput } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
 import { extractApiError } from '@/lib/api/errorMessage';
 
-export function useParcels(
-  params?: Partial<PaginationInput> & {
-    status?: string;
-    clientId?: string;
-    warehouseId?: string;
-    containerId?: string;
-    archived?: 'true' | 'all' | 'false';
-  },
-) {
+export function useParcels(params?: ParcelListParams) {
   return useQuery({
     queryKey: ['parcels', params],
     queryFn: () => parcelsApi.list(params),
+  });
+}
+
+/** Valeurs de filtre presentes dans un listing de colis (selects scopes). */
+export function useParcelFacets(
+  params?: { warehouseId?: string; onlyPresent?: boolean; archived?: 'true' | 'all' | 'false' },
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ['parcels', 'facets', params],
+    queryFn: () => parcelsApi.facets(params),
+    enabled,
   });
 }
 

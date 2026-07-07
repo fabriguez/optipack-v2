@@ -6,6 +6,7 @@ import { AppInput } from '@/components/ui/AppInput';
 import { AppButton } from '@/components/ui/AppButton';
 import { QRScannerDialog } from './QRScannerDialog';
 import { scanSound } from '@/lib/utils/scanSound';
+import { normalizeScannedTracking } from '@/lib/utils/scanNormalize';
 import { toast } from 'sonner';
 
 export interface BatchScanCollectorProps {
@@ -59,7 +60,7 @@ export function BatchScanCollector({
   });
 
   const addCode = async (raw: string) => {
-    const v = raw.trim();
+    const v = normalizeScannedTracking(raw);
     if (!v) return;
     const current = codesRef.current;
     if (current.includes(v)) {

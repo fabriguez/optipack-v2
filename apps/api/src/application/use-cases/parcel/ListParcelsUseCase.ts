@@ -15,6 +15,7 @@ export class ListParcelsUseCase {
       lastContainerId?: string;
       spaceId?: string;
       origin?: string;
+      destination?: string;
       parcelGroupId?: string;
       clientId?: string;
       status?: string;

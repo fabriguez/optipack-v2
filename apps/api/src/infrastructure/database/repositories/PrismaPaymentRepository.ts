@@ -60,11 +60,28 @@ export class PrismaPaymentRepository implements IPaymentRepository {
   }
 
   async findAll(
-    filters: { agencyId?: string; agencyIds?: string[]; scopeWhere?: object | null },
+    filters: {
+      agencyId?: string;
+      agencyIds?: string[];
+      scopeWhere?: object | null;
+      paymentMethod?: string;
+      startDate?: string;
+      endDate?: string;
+    },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<PaymentWithRelations>> {
     const { page, limit, search } = pagination;
     const skip = (page - 1) * limit;
+
+    // Intervalle de dates sur createdAt (bornes incluses). endDate est etendu
+    // a la fin de journee pour inclure tous les paiements du jour choisi.
+    const createdAt: Prisma.DateTimeFilter = {};
+    if (filters.startDate) createdAt.gte = new Date(filters.startDate);
+    if (filters.endDate) {
+      const end = new Date(filters.endDate);
+      end.setHours(23, 59, 59, 999);
+      createdAt.lte = end;
+    }
 
     // Recherche elargie : ref paiement, ref facture, nom/tel client de la
     // facture, tracking d'un colis lie (direct via parcel ou indirect via
@@ -73,6 +90,8 @@ export class PrismaPaymentRepository implements IPaymentRepository {
     const where: Prisma.PaymentWhereInput = {
       ...(filters.agencyId && { agencyId: filters.agencyId }),
       ...(filters.agencyIds?.length && { agencyId: { in: filters.agencyIds } }),
+      ...(filters.paymentMethod && { paymentMethod: filters.paymentMethod }),
+      ...(Object.keys(createdAt).length && { createdAt }),
       // Scope agence : en AND pour ne pas ecraser le OR de recherche.
       ...(filters.scopeWhere && { AND: [filters.scopeWhere as Prisma.PaymentWhereInput] }),
       ...(search && {
