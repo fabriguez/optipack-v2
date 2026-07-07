@@ -69,6 +69,14 @@ export const config = {
   resend: {
     apiKey: process.env.RESEND_API_KEY || '',
     from: process.env.RESEND_FROM || process.env.SMTP_FROM || 'TransitSoftServices <noreply@transitsoftservices.com>',
+    // Domaine verifie chez Resend. Le From plateforme par tenant devient
+    // "<slug>@<tenantDomain>" (ex: acme@transitsoftservices.com). Le domaine
+    // reste unique et deja verifie => aucun DNS par tenant.
+    tenantDomain: process.env.RESEND_TENANT_DOMAIN || 'transitsoftservices.com',
+    // Tenant principal : son slug ne sert pas de local-part. Il envoie depuis
+    // "<primaryLocalPart>@<tenantDomain>" (ex: contact@transitsoftservices.com).
+    primarySlug: (process.env.RESEND_PRIMARY_SLUG || 'transitsoftservices').toLowerCase(),
+    primaryLocalPart: process.env.RESEND_PRIMARY_LOCALPART || 'contact',
   },
 
   stripe: {

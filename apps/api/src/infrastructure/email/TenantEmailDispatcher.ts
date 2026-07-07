@@ -31,20 +31,35 @@ const sharedResend = config.resend.apiKey
   ? new ResendProvider(config.resend.apiKey, config.resend.from)
   : null;
 
-const tenantNameCache = new Map<string, string>();
+type TenantIdentity = { name: string | null; slug: string | null };
 
-async function getTenantName(organizationId: string): Promise<string | null> {
-  const cached = tenantNameCache.get(organizationId);
+const tenantIdentityCache = new Map<string, TenantIdentity>();
+
+async function getTenantIdentity(organizationId: string): Promise<TenantIdentity> {
+  const cached = tenantIdentityCache.get(organizationId);
   if (cached) return cached;
   const org = await prisma.organization.findUnique({
     where: { id: organizationId },
-    select: { name: true },
+    select: { name: true, slug: true },
   });
-  if (org?.name) {
-    tenantNameCache.set(organizationId, org.name);
-    return org.name;
-  }
-  return null;
+  const identity: TenantIdentity = { name: org?.name ?? null, slug: org?.slug ?? null };
+  if (org) tenantIdentityCache.set(organizationId, identity);
+  return identity;
+}
+
+/**
+ * From plateforme "brande" avec le slug tenant, sur le domaine Resend deja
+ * verifie : ex. "Acme Transit <acme@transitsoftservices.com>". A n'utiliser
+ * que quand l'envoi passe par le Resend partage (domaine controle) -- jamais
+ * en SMTP (sender doit etre autorise) ni sur le Resend dedie du tenant.
+ */
+function platformTenantFrom(identity: TenantIdentity | null): string | undefined {
+  const slug = identity?.slug?.trim().toLowerCase();
+  if (!slug) return undefined;
+  // Tenant principal : local-part fixe (contact@...) au lieu de son slug.
+  const local = slug === config.resend.primarySlug ? config.resend.primaryLocalPart : slug;
+  const display = identity?.name?.trim() || 'TransitSoftServices';
+  return `${display} <${local}@${config.resend.tenantDomain}>`;
 }
 
 class TenantEmailDispatcher {
@@ -58,11 +73,20 @@ class TenantEmailDispatcher {
     meta?: { event?: string },
   ): Promise<EmailSendResult> {
     const started = Date.now();
-    const tenantName = organizationId ? await getTenantName(organizationId) : null;
+    const identity = organizationId ? await getTenantIdentity(organizationId) : null;
+    const tenantName = identity?.name ?? null;
 
     const provider = organizationId
       ? await this.resolveTenantProvider(organizationId)
       : this.resolveSharedProvider();
+
+    // Envoi via le Resend plateforme (domaine verifie) => on brande le From
+    // avec le slug tenant. On ne touche pas si l'appelant a deja fixe un From,
+    // ni si le provider est SMTP ou le Resend dedie du tenant.
+    if (organizationId && provider === sharedResend && !params.from) {
+      const from = platformTenantFrom(identity);
+      if (from) params.from = from;
+    }
 
     const providerLabel = provider.id === 'resend' && organizationId
       ? 'resend'
@@ -102,6 +126,12 @@ class TenantEmailDispatcher {
         durationMs,
       });
       const shared = this.resolveSharedProvider();
+      if (shared === sharedResend) {
+        // Le From du tenant dedie n'est pas valide sur le domaine plateforme :
+        // on rebascule sur le From brande "<slug>@tenantDomain".
+        const from = platformTenantFrom(identity);
+        params.from = from ?? undefined;
+      }
       const retryStarted = Date.now();
       const retry = await shared.send(params);
       const retryDuration = Date.now() - retryStarted;
@@ -198,7 +228,7 @@ class TenantEmailDispatcher {
 
   /** Invalide le cache (a appeler quand un admin change le nom de l'org). */
   invalidateTenantCache(organizationId: string) {
-    tenantNameCache.delete(organizationId);
+    tenantIdentityCache.delete(organizationId);
   }
 }
 
