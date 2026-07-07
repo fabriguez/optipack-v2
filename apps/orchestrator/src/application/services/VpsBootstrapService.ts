@@ -81,30 +81,46 @@ export class VpsBootstrapService {
   }
 
   private async installCaddyContainer(creds: SshConnection): Promise<StepResult> {
-    // Lance Caddy en container. L'admin API ecoute sur 127.0.0.1:2019 (jamais
-    // exposee a internet). Config initiale minimaliste -- l'orchestrator la
-    // remplacera via /load au premier provisioning de tenant.
+    // Lance Caddy en container qui lit un **Caddyfile sur disque monte**
+    // (~/.optipack/caddy/Caddyfile) -> source de verite, survit au restart.
+    // L'orchestrator y merge la region OPTIPACK-MANAGED via SSH (CaddyService).
+    // L'admin API ecoute sur 127.0.0.1:2019 (jamais exposee a internet).
     const cmd = `
       set -e
+      D="$HOME/.optipack/caddy"
+      mkdir -p "$D"
+      # Seed le Caddyfile de base (bloc global admin + region geree vide) s'il
+      # n'existe pas encore. Ne l'ecrase jamais (preserve les blocs manuels).
+      if [ ! -f "$D/Caddyfile" ]; then
+      cat > "$D/Caddyfile" <<'CADDY_BASE_EOF'
+{
+	admin 0.0.0.0:2019 {
+		origins http://orchestrator http://localhost http://127.0.0.1 http://host.docker.internal
+	}
+}
+
+# >>> OPTIPACK-MANAGED:BEGIN (genere par l'orchestrateur — NE PAS EDITER, regenere a chaque reconcile) >>>
+# (vide — rempli au premier reconcile)
+# <<< OPTIPACK-MANAGED:END <<<
+CADDY_BASE_EOF
+      fi
+      # Idempotent : si un caddy tourne DEJA en mode fichier, on ne touche a rien.
       if docker ps --format '{{.Names}}' | grep -qx caddy; then
-        echo "ALREADY_RUNNING"
-        exit 0
+        if docker exec caddy sh -c 'test -f /etc/caddy/Caddyfile' 2>/dev/null; then
+          echo "ALREADY_RUNNING"
+          exit 0
+        fi
+        # Ancien conteneur (bootstrap JSON + --resume) -> migration one-shot.
+        docker rm -f caddy || true
       fi
       docker network inspect caddy-net >/dev/null 2>&1 || docker network create caddy-net
       docker volume inspect caddy-data >/dev/null 2>&1 || docker volume create caddy-data
-      docker volume inspect caddy-config >/dev/null 2>&1 || docker volume create caddy-config
-      # Config bootstrap : Caddy minimal avec admin actif. L'orchestrator
-      # remplace via POST /load au premier provisioning.
-      mkdir -p ~/.optipack
-      cat > ~/.optipack/caddy-bootstrap.json <<'CADDY_BOOT_EOF'
-{ "admin": { "listen": "0.0.0.0:2019", "origins": ["http://orchestrator","http://localhost:2019","http://127.0.0.1:2019"] }, "apps": { "http": { "servers": { "srv": { "listen": [":80", ":443"], "routes": [] } } } } }
-CADDY_BOOT_EOF
       docker run -d --name caddy --restart unless-stopped \
         --network caddy-net \
         -p 80:80 -p 443:443 -p 127.0.0.1:2019:2019 \
-        -v caddy-data:/data -v caddy-config:/config \
-        -v ~/.optipack/caddy-bootstrap.json:/etc/caddy/bootstrap.json:ro \
-        caddy:2-alpine caddy run --config /etc/caddy/bootstrap.json --resume
+        -v caddy-data:/data \
+        -v "$D":/etc/caddy \
+        caddy:2-alpine caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
       docker exec caddy caddy version
     `;
     return this.runStep(creds, 'caddy container', cmd);

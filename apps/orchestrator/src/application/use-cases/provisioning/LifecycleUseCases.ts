@@ -51,14 +51,14 @@ async function refreshCaddy(
           : t.status === 'FROZEN',
       isMain: (t as { isMain?: boolean }).isMain ?? false,
     }));
-  const config = caddy.buildConfig(entries, { baseDomain: BASE_DOMAIN, email: CADDY_EMAIL });
-  // VPS local (self) -> push local. Sinon SSH.
+  // Merge dans le Caddyfile du VPS (self -> mount+API, distant -> SSH).
   const vps = await prisma.vPS.findUnique({ where: { id: vpsId }, select: { name: true } });
-  if (vps?.name === SELF_VPS_NAME) {
-    await caddy.pushLocal(config);
-  } else {
-    await caddy.push(creds, config);
-  }
+  await caddy.applyForVps(
+    { name: vps?.name ?? '', ...creds },
+    entries,
+    { baseDomain: BASE_DOMAIN, email: CADDY_EMAIL },
+    new Date(),
+  );
 }
 
 @injectable()

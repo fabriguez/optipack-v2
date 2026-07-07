@@ -5,11 +5,7 @@ import {
   CADDY_SERVICE,
   type TenantCaddyEntry,
 } from '../../../infrastructure/caddy/CaddyService';
-import {
-  SSHService,
-  SSH_SERVICE,
-  type SshConnection,
-} from '../../../infrastructure/ssh/SSHService';
+import { SSHService, SSH_SERVICE } from '../../../infrastructure/ssh/SSHService';
 import { BusinessError } from '../../../domain/errors/BusinessError';
 
 const BASE_DOMAIN = process.env.OPS_BASE_DOMAIN ?? 'transitsoftservices.com';
@@ -112,23 +108,19 @@ export class ReconcileCaddyUseCase {
             isMain: (t as { isMain?: boolean }).isMain ?? false,
           }));
 
-        const configJson = this.caddy.buildConfig(entries, {
-          baseDomain: BASE_DOMAIN,
-          email: CADDY_EMAIL,
-        });
-
         const isSelf = vps.name === SELF_VPS_NAME;
-        if (isSelf) {
-          await this.caddy.pushLocal(configJson);
-        } else {
-          const creds: SshConnection = {
+        await this.caddy.applyForVps(
+          {
+            name: vps.name,
             host: vps.host,
             port: vps.port,
             username: vps.username,
             sshKeyEncrypted: vps.sshKeyEncrypted,
-          };
-          await this.caddy.push(creds, configJson);
-        }
+          },
+          entries,
+          { baseDomain: BASE_DOMAIN, email: CADDY_EMAIL },
+          new Date(),
+        );
 
         results.push({
           vpsId: vps.id,

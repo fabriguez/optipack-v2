@@ -700,9 +700,11 @@ rm -f ${tmpScript} ${tmpData}
         isFrozen: false,
       });
     }
-    await this.caddy.push(
-      creds,
-      this.caddy.buildConfig(caddyEntries, { baseDomain: BASE_DOMAIN, email: CADDY_EMAIL }),
+    await this.caddy.applyForVps(
+      { name: tenant.vps.name, ...creds },
+      caddyEntries,
+      { baseDomain: BASE_DOMAIN, email: CADDY_EMAIL },
+      new Date(),
     );
 
     // 11. Health check API

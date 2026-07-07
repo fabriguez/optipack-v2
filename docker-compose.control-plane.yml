@@ -79,6 +79,13 @@ services:
       # encore notre liste d origines custom (orchestrator/host.docker.internal).
       CADDY_ADMIN_ORIGIN: ${CADDY_ADMIN_ORIGIN:-http://localhost}
       OPS_SELF_VPS_NAME: ${OPS_SELF_VPS_NAME:-self}
+      # Chemin du Caddyfile du host self, tel que monte dans le conteneur (cf.
+      # volumes). L'orchestrateur y merge la region OPTIPACK-MANAGED.
+      CADDY_SELF_FILE: ${CADDY_SELF_FILE:-/etc/caddy/Caddyfile}
+      # Routes statiques additionnelles preservees a chaque reconcile (format
+      # host=upstream, virgule). Si set, REMPLACE le defaut ops/ops-admin -> re-
+      # inclure ops + ops-admin. Ex : whatsapp, s3, storage.
+      CADDY_STATIC_ROUTES: ${CADDY_STATIC_ROUTES:-}
       OPS_BASE_DOMAIN: ${OPS_BASE_DOMAIN:-transitsoftservices.com}
       OPS_CADDY_EMAIL: ${OPS_CADDY_EMAIL:-admin@transitsoftservices.com}
       # Token partage orchestrator <-> tenant API pour ops-sync + reset-pwd.
@@ -111,6 +118,12 @@ services:
       SEED_SELF_VPS_NAME: ${SEED_SELF_VPS_NAME:-self}
     ports:
       - "127.0.0.1:4020:4020"
+    volumes:
+      # Bind-mount du Caddyfile de l'host (self) : l'orchestrateur (root dans le
+      # conteneur) lit/merge/ecrit /etc/caddy/Caddyfile SANS sudo ni SSH, puis
+      # recharge via l'admin API (host.docker.internal:2019). Le fichier sur
+      # disque reste la source de verite -> survit au restart de Caddy.
+      - /etc/caddy:/etc/caddy
     networks:
       - control-plane
 

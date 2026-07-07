@@ -238,6 +238,12 @@ export class MigrateTenantUseCase {
         webPort: t.webPort!,
         isFrozen: t.status === 'FROZEN',
       }));
-    await this.caddy.push(creds, this.caddy.buildConfig(entries, { baseDomain: BASE_DOMAIN, email: CADDY_EMAIL }));
+    const vps = await prisma.vPS.findUnique({ where: { id: vpsId }, select: { name: true } });
+    await this.caddy.applyForVps(
+      { name: vps?.name ?? '', ...creds },
+      entries,
+      { baseDomain: BASE_DOMAIN, email: CADDY_EMAIL },
+      new Date(),
+    );
   }
 }
