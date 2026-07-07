@@ -322,10 +322,6 @@ function ReportDetails({
         </AppButton>
       </div>
 
-      {/* Synthese + sections detaillees : masquees des que le rapport est
-          cloture (fige). Seules l'observation et les PJ restent visibles. */}
-      {!isClosed && (
-      <>
       {/* Synthese chiffres */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Recettes" value={'+' + formatAmount(payload.recetteTotal ?? 0)} positive detail={specs.recette} />
@@ -457,8 +453,6 @@ function ReportDetails({
             {payload.cashRegister.closedAt && <KV label="Cloturee le" value={formatDateTime(payload.cashRegister.closedAt)} />}
           </div>
         </Section>
-      )}
-      </>
       )}
 
 
