@@ -160,19 +160,9 @@ async function start(): Promise<void> {
     // Start cron jobs
     startCronJobs();
 
-    // Restaure les sessions WhatsApp au boot (LocalAuth re-hydrate sans QR) ;
-    // si une session est perdue/deconnectee, le proprietaire recoit un email
-    // avec un lien pour reconfigurer. Non bloquant.
-    void (async () => {
-      try {
-        const { tenantWaSessionService } = await import(
-          './application/services/whatsapp/TenantWhatsAppSessionService'
-        );
-        await tenantWaSessionService.restoreSessionsOnBoot();
-      } catch (err) {
-        logger.warn({ err }, 'WA restoreSessionsOnBoot a echoue (ignore)');
-      }
-    })();
+    // Le canal WhatsApp personnel s'appuie désormais sur l'API WhatsApp interne
+    // (whatsapp-api.transitsoftservices.com) : sessions/QR gérés côté dashboard
+    // externe, plus rien à restaurer au boot ici.
 
     httpServer.listen(config.port, () => {
       logger.info(`API server running on port ${config.port}`);

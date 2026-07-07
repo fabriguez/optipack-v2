@@ -3101,52 +3101,42 @@ model TenantNotificationTemplate {
 }
 
 // ============================================================
-// WHATSAPP PERSONAL CHANNEL (whatsapp-web.js par tenant)
+// WHATSAPP PERSONAL CHANNEL (API WhatsApp interne / Baileys)
 // ============================================================
 
 /**
- * Session WhatsApp personnel d'un tenant (via whatsapp-web.js).
- * L'admin scanne le QR depuis son dashboard pour connecter son WhatsApp.
- * Les messages de notification partent depuis ce compte quand CONNECTED.
+ * Config de la session WhatsApp d'un tenant sur l'API WhatsApp interne
+ * (whatsapp-api.transitsoftservices.com, moteur Baileys, multi-sessions).
+ *
+ * Le QR / la connexion se gerent sur le dashboard externe
+ * (whatsapp-dashboard.transitsoftservices.com) qui delivre une CLE API scopee
+ * a la session. Ici on ne stocke que les variables de connexion du client :
+ * la cle API (par tenant) et une base URL optionnelle (sinon config.whatsapp.apiUrl).
+ * Les notifications du tenant partent via cette session quand `enabled`.
  */
 model TenantWhatsAppSession {
-  id               String                  @id @default(cuid())
-  organizationId   String                  @unique
-  status           WhatsAppSessionStatus   @default(DISCONNECTED)
-  /** QR code base64 (null une fois connecté). */
-  qrCode           String?                 @db.Text
-  /**
-   * Progression du chargement WhatsApp Web (0-100) pendant l'état SYNCING :
-   * après le scan, WA Web synchronise les chats avant d'être prêt à envoyer.
-   * null hors de cette phase.
-   */
-  loadingPercent   Int?
-  /** Numéro WhatsApp connecté (format E.164). */
-  connectedPhone   String?
-  /** Quota messages/heure (défaut : 50). */
-  rateLimitPerHour Int                     @default(50)
-  /** Délai minimum entre envois en secondes (défaut : 3). */
-  minDelaySeconds  Int                     @default(3)
-  connectedAt      DateTime?
-  lastError        String?
-  createdAt        DateTime                @default(now())
-  updatedAt        DateTime                @updatedAt
+  id             String    @id @default(cuid())
+  organizationId String    @unique
+  /** Canal WhatsApp personnel activé pour ce tenant. */
+  enabled        Boolean   @default(false)
+  /** Clé API de la session (header x-api-key vers l'API WhatsApp interne). */
+  apiKey         String?   @db.Text
+  /** Base URL de l'API WhatsApp (override). Vide => config.whatsapp.apiUrl global. */
+  baseUrl        String?
+  /** Dernier numéro connecté connu (rafraîchi via GET /v1/session). */
+  connectedPhone String?
+  /** Dernier statut de session renvoyé par l'API externe (ex: connected, qr, disconnected). */
+  lastStatus     String?
+  /** Dernière erreur de connexion / d'envoi. */
+  lastError      String?
+  /** Dernier check de statut auprès de l'API externe. */
+  lastCheckedAt  DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@map("tenant_whatsapp_sessions")
-}
-
-enum WhatsAppSessionStatus {
-  DISCONNECTED
-  QR_READY
-  CONNECTING
-  // Scanné : WhatsApp Web synchronise les chats (voir loadingPercent) avant
-  // d'être réellement prêt. Les notifs émises pendant cette phase restent
-  // PENDING et partent quand la session passe CONNECTED.
-  SYNCING
-  CONNECTED
-  BANNED
 }
 
 // ABAC Phase 2 : traçabilité des uploads pour scoping objet.

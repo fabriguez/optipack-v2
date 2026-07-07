@@ -6,8 +6,8 @@
  *   - WHATSAPP_PROVIDER_CHAIN   : liste ordonnee de providers a enchaîner en fallback
  *                                 Valeurs : 'twilio' | 'meta' | 'africas-talking' | 'log'
  *                                 Defaut : 'twilio'
- *                                 NB : le canal prioritaire est WhatsApp Web JS (TenantWhatsAppSessionService)
- *                                      ce provider chain n'est utilise qu'en fallback si la session perso n'est pas connectee.
+ *                                 NB : le canal prioritaire est l'API WhatsApp interne (TenantWhatsAppSessionService)
+ *                                      ce provider chain n'est utilise qu'en fallback si le canal perso n'est pas configure/actif.
  *   - PUSH_PROVIDER             : 'expo' | 'fcm' | 'log' (defaut: 'log')
  *
  * Credentials Twilio WhatsApp :
@@ -440,8 +440,8 @@ export function registerNotificationProviders(): void {
   const smsKind = (process.env.SMS_PROVIDER ?? 'log').toLowerCase();
   const pushKind = (process.env.PUSH_PROVIDER ?? 'log').toLowerCase();
 
-  // WhatsApp : chaine de fallback ordonnee (priorite : WA Web JS via TenantWhatsAppSessionService).
-  // Ce provider chain n'est tente que si la session perso du tenant n'est pas connectee.
+  // WhatsApp : chaine de fallback ordonnee (priorite : API WhatsApp interne via TenantWhatsAppSessionService).
+  // Ce provider chain n'est tente que si le canal perso du tenant n'est pas configure/actif.
   const waChainRaw = process.env.WHATSAPP_PROVIDER_CHAIN ?? process.env.WHATSAPP_PROVIDER ?? 'twilio';
   const waChainNames = waChainRaw.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
   const waProviders = waChainNames.map(resolveWhatsappProvider).filter((p): p is ExternalChannelProvider => p !== null);

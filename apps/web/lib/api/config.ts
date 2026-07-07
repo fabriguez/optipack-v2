@@ -115,35 +115,55 @@ export const notificationConfigApi = {
 
 // ── WhatsApp Personnel ─────────────────────────────────────
 
-export type WaSessionStatus =
-  | 'DISCONNECTED'
-  | 'QR_READY'
-  | 'CONNECTING'
-  | 'SYNCING'
-  | 'CONNECTED'
-  | 'BANNED';
-
+/**
+ * État de la session WhatsApp du tenant, adossée à l'API WhatsApp interne.
+ * `status` = statut renvoyé par l'API externe (`connected`, `qr`, `connecting`,
+ * `disconnected`, `logged_out`...) ou statut local
+ * (`NOT_CONFIGURED`, `NO_BASE_URL`, `UNREACHABLE`).
+ */
 export interface WaSessionState {
-  status: WaSessionStatus;
-  qrCode: string | null;
-  /** Progression du chargement WhatsApp Web (0-100) pendant SYNCING, sinon null. */
-  loadingPercent: number | null;
+  enabled: boolean;
+  configured: boolean;
+  baseUrl: string | null;
+  status: string;
   connectedPhone: string | null;
   lastError: string | null;
+  lastCheckedAt: string | null;
+}
+
+export interface WaConfigInput {
+  enabled?: boolean;
+  /** Chaîne vide = effacer la clé. Absent = inchangé. */
+  apiKey?: string;
+  /** Chaîne vide = base URL globale. Absent = inchangé. */
+  baseUrl?: string;
+}
+
+export interface WaTestResult {
+  id: string;
+  name: string;
+  phoneNumber: string | null;
+  status: string;
+  rateLimitPerMin: number;
 }
 
 export const whatsappPersonalApi = {
   getStatus: () =>
-    apiClient.get<{ success: boolean; data: WaSessionState }>('/whatsapp-personal/status').then((r) => r.data.data),
+    apiClient
+      .get<{ success: boolean; data: WaSessionState }>('/whatsapp-personal/status')
+      .then((r) => r.data.data),
 
-  start: () =>
-    apiClient.post('/whatsapp-personal/start').then((r) => r.data),
+  saveConfig: (input: WaConfigInput) =>
+    apiClient
+      .put<{ success: boolean; data: WaSessionState }>('/whatsapp-personal/config', input)
+      .then((r) => r.data.data),
 
-  disconnect: () =>
-    apiClient.delete('/whatsapp-personal/disconnect').then((r) => r.data),
+  testConnection: (input: Pick<WaConfigInput, 'apiKey' | 'baseUrl'> = {}) =>
+    apiClient
+      .post<{ success: boolean; data: WaTestResult }>('/whatsapp-personal/test', input)
+      .then((r) => r.data.data),
 
-  updateRateLimit: (perHour: number, minDelaySeconds: number) =>
-    apiClient.patch('/whatsapp-personal/rate-limit', { perHour, minDelaySeconds }).then((r) => r.data),
+  clear: () => apiClient.delete('/whatsapp-personal/config').then((r) => r.data),
 };
 
 // ── Reports ────────────────────────────────────────────────

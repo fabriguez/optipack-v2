@@ -19,6 +19,13 @@ export const config = {
     url: process.env.REDIS_URL || 'redis://localhost:6379',
   },
 
+  // API WhatsApp interne (Baileys) deployee — canal WhatsApp personnel.
+  // La cle API est configuree par tenant (une session par organisation) ;
+  // seule la base URL est globale ici. Cf. whatsapp-dashboard.transitsoftservices.com.
+  whatsapp: {
+    apiUrl: process.env.WA_API_URL || '',
+  },
+
   minio: {
     endpoint: process.env.MINIO_ENDPOINT || 'localhost',
     port: parseInt(process.env.MINIO_PORT || '9000', 10),

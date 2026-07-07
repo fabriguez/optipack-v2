@@ -5,7 +5,6 @@ import { realtimeService } from '../../../infrastructure/realtime/RealtimeServic
 import { createChildLogger } from '../../../config/logger';
 import { resolveTemplate } from './NotificationTemplateRenderer';
 import { safeFetch } from '../../../infrastructure/http/safeFetch';
-import { notificationChannelConfigSchema, type WaMediaMode } from '@transitsoftservices/shared';
 import type {
   ChannelDeliveryResult,
   ExternalChannelProvider,
@@ -490,138 +489,29 @@ export const deliverPush = (t: NotificationTarget, p: NotificationPayload) =>
   deliverExternal('PUSH', pushProvider, t, p);
 
 /**
- * Resout le mode d'envoi des pieces jointes WhatsApp pour un tenant.
- * Priorite : config tenant (notificationConfig.waMediaMode) -> override env
- * WA_MEDIA_MODE (compat : 'upload'/'base64' => asset) -> defaut 'asset' (media
- * base64). 'asset' = vrai fichier envoye ; 'link' = lien dans le texte.
+ * Ajoute les pièces jointes en fin de message sous forme de liens.
+ * L'API WhatsApp interne n'envoie que du texte (pas de média) : les PJ
+ * deviennent des liens cliquables dans le corps du message.
  */
-async function resolveWaMediaMode(organizationId: string): Promise<WaMediaMode> {
-  try {
-    const org = await prisma.organization.findUnique({
-      where: { id: organizationId },
-      select: { notificationConfig: true },
-    });
-    const parsed = notificationChannelConfigSchema.safeParse(org?.notificationConfig ?? {});
-    const m = parsed.success ? parsed.data.waMediaMode : undefined;
-    if (m === 'asset' || m === 'link') return m;
-  } catch {
-    // ignore -> fallback env/defaut
-  }
-  const env = (process.env.WA_MEDIA_MODE ?? '').toLowerCase();
-  if (env === 'link') return 'link';
-  if (env === 'upload' || env === 'asset' || env === 'base64') return 'asset';
-  return 'asset';
-}
-
-/**
- * Envoie le corps + les pièces jointes d'une notification via la session
- * WhatsApp Web JS du tenant. Factorisé pour être réutilisé par la livraison
- * directe (deliverWhatsapp) ET par l'écoulement des PENDING (flushPendingWhatsapp).
- *
- * @returns true si le message principal est parti (les PJ suivantes sont best-effort).
- */
-async function sendWaBundle(
-  svc: import('../whatsapp/TenantWhatsAppSessionService').TenantWhatsAppSessionService,
-  organizationId: string,
-  phone: string,
+function appendAttachmentLinks(
   message: string,
   attachments: NotificationAttachment[],
-  mediaMode: WaMediaMode,
-): Promise<boolean> {
-  const images = attachments.filter((a) => a.type === 'image');
-  const docs = attachments.filter((a) => a.type !== 'image');
-
-  let sentMain = false;
-  if (mediaMode === 'asset' && images.length > 0) {
-    // Image principale inline avec la légende = le message.
-    sentMain = await svc.sendMedia(organizationId, phone, images[0].url, {
-      caption: message,
-      filename: images[0].filename,
-    });
-    for (const img of images.slice(1)) {
-      await svc.sendMedia(organizationId, phone, img.url, {
-        filename: img.filename,
-        caption: img.caption,
-      });
-    }
-  } else {
-    const linkLines =
-      mediaMode === 'link' && attachments.length > 0
-        ? '\n\n' +
-          attachments.map((a) => `${a.caption ? `${a.caption} : ` : ''}${a.url}`).join('\n')
-        : '';
-    sentMain = await svc.sendMessage(organizationId, phone, message + linkLines);
-  }
-
-  if (sentMain && mediaMode === 'asset') {
-    for (const doc of docs) {
-      await svc.sendMedia(organizationId, phone, doc.url, {
-        filename: doc.filename,
-        caption: doc.caption,
-        asDocument: true,
-      });
-    }
-  }
-  return sentMain;
+): string {
+  if (attachments.length === 0) return message;
+  const links = attachments
+    .map((a) => `${a.caption ? `${a.caption} : ` : ''}${a.url}`)
+    .join('\n');
+  return `${message}\n\n${links}`;
 }
 
 /**
- * Écoule les notifications WhatsApp restées PENDING pour un tenant : elles ont
- * été créées pendant que la session WhatsApp Web JS se synchronisait (SYNCING).
- * Appelé par le service au 'ready', quand le compte est réellement prêt à
- * envoyer. Traite chaque notif dans l'ordre et la passe SENT / FAILED.
- */
-export async function flushPendingWhatsapp(organizationId: string): Promise<void> {
-  const { tenantWaSessionService } = await import('../whatsapp/TenantWhatsAppSessionService');
-  if (!tenantWaSessionService.isConnected(organizationId)) return;
-
-  const rows = await prisma.notification.findMany({
-    where: {
-      organizationId,
-      type: 'WHATSAPP',
-      status: 'PENDING',
-      // Uniquement les notifs de la session perso (métadonnée provider).
-      metadata: { path: ['provider'], equals: 'whatsapp-web-js' },
-    },
-    orderBy: { createdAt: 'asc' },
-  });
-  if (rows.length === 0) return;
-
-  const mediaMode = await resolveWaMediaMode(organizationId);
-  logger.info({ organizationId, count: rows.length }, 'WA flush: écoulement des notifs PENDING');
-
-  for (const row of rows) {
-    const phone = row.recipient;
-    if (!phone) {
-      await prisma.notification.update({
-        where: { id: row.id },
-        data: { status: 'FAILED', error: 'Destinataire WhatsApp manquant.' },
-      }).catch(() => {});
-      continue;
-    }
-    const attachments = (row.attachments as NotificationAttachment[] | null) ?? [];
-    let sent = false;
-    try {
-      sent = await sendWaBundle(tenantWaSessionService, organizationId, phone, row.message, attachments, mediaMode);
-    } catch (err) {
-      logger.warn({ err, organizationId, phone }, 'WA flush send threw');
-    }
-    await prisma.notification.update({
-      where: { id: row.id },
-      data: sent
-        ? { status: 'SENT', sentAt: new Date() }
-        : { status: 'FAILED', error: 'Envoi WhatsApp échoué (après synchronisation).' },
-    }).catch(() => {});
-  }
-}
-
-/**
- * Livraison WhatsApp : essaie d'abord la session WhatsApp Web JS du tenant.
- * - CONNECTED : envoi immédiat.
- * - CONNECTING / SYNCING (session en cours de chargement) : la notif est créée
- *   en PENDING et laissée telle quelle ; elle partira au 'ready' via
- *   flushPendingWhatsapp.
- * - sinon : retombe sur le provider chain configuré (Twilio/Meta).
+ * Livraison WhatsApp : emprunte d'abord le canal WhatsApp personnel du tenant
+ * (API WhatsApp interne) s'il est configuré + activé, sinon retombe sur le
+ * provider chain configuré (Twilio / Meta / Africa's Talking).
+ *
+ * L'API interne gère la file d'attente et le rate limit par session : on file
+ * le message (texte + liens des pièces jointes) et on marque la notif SENT dès
+ * acceptation, FAILED sinon.
  */
 export async function deliverWhatsapp(
   t: NotificationTarget,
@@ -636,17 +526,14 @@ export async function deliverWhatsapp(
     ? await resolveTemplate(organizationId, eventKind, 'WHATSAPP', p.templateVariables ?? {}).catch(() => null)
     : null;
 
-  // Tenter le canal WA Web JS du tenant en priorité
+  // Tenter le canal WhatsApp personnel (API interne) en priorité.
   if (organizationId) {
     try {
       const { tenantWaSessionService } = await import('../whatsapp/TenantWhatsAppSessionService');
-      // On emprunte le canal perso si la session est CONNECTED (envoi direct)
-      // ou en cours de chargement CONNECTING/SYNCING (on met en PENDING). Sinon
-      // (QR non scanné, déconnecté...) on laisse tomber sur le provider chain.
-      const booting = tenantWaSessionService.isBooting(organizationId);
-      const state = await tenantWaSessionService.getStatus(organizationId);
-      if (state.status === 'CONNECTED' || booting) {
-        // Résoudre le numéro du destinataire
+      // Canal utilisable seulement si le tenant a activé + renseigné sa clé API.
+      const sendable = await tenantWaSessionService.getSendable(organizationId);
+      if (sendable) {
+        // Résoudre le numéro du destinataire.
         let phone = t.phone ?? null;
         if (!phone && t.clientId) {
           const c = await prisma.client.findUnique({ where: { id: t.clientId }, select: { phone: true } });
@@ -659,12 +546,11 @@ export async function deliverWhatsapp(
         if (phone) {
           const tenantName = await resolveTenantName(organizationId);
           // Template personnalise : corps brut. Defaut : wrapMessage avec branding.
-          const msgToSend = customWa
+          const bodyBase = customWa
             ? customWa.body
             : wrapMessage(tenantName, p.title, p.message, 'WHATSAPP').message;
           const titleToSend = customWa ? p.title : `[${tenantName}] ${p.title}`;
-
-          const attachments = p.attachments ?? [];
+          const msgToSend = appendAttachmentLinks(bodyBase, p.attachments ?? []);
 
           // Cree la notif en PENDING AVANT l'envoi : elle apparait tout de suite
           // dans le centre de notif. On la passe ensuite a SENT ou FAILED.
@@ -677,35 +563,20 @@ export async function deliverWhatsapp(
               message: msgToSend,
               status: 'PENDING',
               recipient: phone,
-              provider: 'whatsapp-web-js',
+              provider: 'whatsapp-api',
               attachments: p.attachments,
               metadata: p.metadata,
             }),
           });
 
-          // Session encore en cours de chargement : on garde la notif PENDING.
-          // Elle sera écoulée par flushPendingWhatsapp quand la session sera
-          // réellement prête ('ready'). On ne tente pas d'envoi ni de fallback.
-          if (state.status !== 'CONNECTED') {
-            logger.info(
-              { organizationId, phone, waStatus: state.status, loadingPercent: state.loadingPercent },
-              'WA perso en synchronisation -> notif PENDING (partira au ready)',
-            );
-            return { channel: 'WHATSAPP', status: 'PENDING', notificationId: row.id };
-          }
-
-          // Mode media WhatsApp Web JS (configurable par tenant) : 'asset'
-          // (fichiers en base64) ou 'link' (URLs dans le texte).
-          const mediaMode = await resolveWaMediaMode(organizationId);
-          let sentMain = false;
+          let sent = false;
           try {
-            sentMain = await sendWaBundle(tenantWaSessionService, organizationId, phone, msgToSend, attachments, mediaMode);
+            sent = await tenantWaSessionService.sendMessage(organizationId, phone, msgToSend);
           } catch (err) {
-            sentMain = false;
             logger.warn({ err, organizationId, phone }, 'WA personal send threw');
           }
 
-          if (sentMain) {
+          if (sent) {
             await prisma.notification.update({
               where: { id: row.id },
               data: { status: 'SENT', sentAt: new Date() },
@@ -714,10 +585,9 @@ export async function deliverWhatsapp(
             return { channel: 'WHATSAPP', status: 'SENT', notificationId: row.id };
           }
 
-          // Echec (session figee / rate limit abandonne) : on MARQUE la notif
-          // FAILED (visible dans le centre) au lieu de la laisser PENDING ou de
-          // tomber en silence sur le provider chain.
-          const failMsg = 'Envoi WhatsApp echoue (session indisponible ou limite de debit depassee).';
+          // Echec (API injoignable / clé invalide) : on MARQUE la notif FAILED
+          // (visible dans le centre) plutôt que de tomber en silence.
+          const failMsg = 'Envoi WhatsApp échoué (API WhatsApp indisponible ou clé invalide).';
           await prisma.notification.update({
             where: { id: row.id },
             data: { status: 'FAILED', error: failMsg },
@@ -727,7 +597,7 @@ export async function deliverWhatsapp(
         }
       }
     } catch (err) {
-      // Erreur inattendue cote session perso -> on retombe sur le provider chain.
+      // Erreur inattendue cote canal perso -> on retombe sur le provider chain.
       logger.warn({ err, organizationId }, 'WA personal path error -> fallback chain');
     }
   }
