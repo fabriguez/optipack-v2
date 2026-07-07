@@ -70,8 +70,13 @@ COPY --from=pruner /app/node_modules ./node_modules
 COPY --from=pruner /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/apps/api/package.json ./apps/api/package.json
+COPY --from=builder /app/apps/api/tsconfig.json ./apps/api/tsconfig.json
 COPY --from=builder /app/packages/ ./packages/
 COPY apps/api/prisma ./apps/api/prisma
+# Le seed (execute via tsx en TS au demarrage) importe des sources partagees
+# depuis ../src (ex: domain/accounting/chart-of-accounts). Sans src/ dans
+# l'image runtime, `tsx prisma/seed.ts` echoue avec MODULE_NOT_FOUND.
+COPY --from=builder /app/apps/api/src ./apps/api/src
 
 # Install Prisma CLI + tsx globally so the entrypoint can run
 # `prisma migrate deploy` and `prisma db seed` (devDeps were pruned).
