@@ -7,6 +7,7 @@ import { AppCard } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppBadge } from '@/components/ui/AppBadge';
 import { ImageInput } from '@/components/shared/ImageInput';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { uploadImage, uploadFile } from '@/lib/api/uploads';
 import { openAuthedFile } from '@/components/shared/AuthedImage';
 import { formatAmount, formatDate, formatDateTime } from '@transitsoftservices/shared';
@@ -168,6 +169,8 @@ function ReportDetails({
   const [observation, setObservation] = useState(initialReport.observation ?? '');
   const [savingObs, setSavingObs] = useState(false);
   const [uploading, setUploading] = useState(false);
+  // Confirmation avant cloture : action irreversible (rapport fige a jamais).
+  const [confirmClose, setConfirmClose] = useState(false);
 
   const { data } = useQuery({
     queryKey: ['daily-reports', reportId],
@@ -176,6 +179,11 @@ function ReportDetails({
 
   const report = (data?.data as DailyReport) ?? initialReport;
   const payload = report.payload || {};
+  // Rapport cloture (ou annote apres cloture, closedAt conserve) = immuable et
+  // fige : on masque toute la synthese chiffree, les sections, l'observation et
+  // l'ajout de pieces jointes. Ne restent que l'entete, l'impression/envoi mail
+  // et les pieces jointes existantes en lecture seule.
+  const isClosed = !!report.closedAt || report.status === 'CLOSED';
   // Specs des popups "Voir les details" : regle de calcul + elements pris en
   // compte pour chaque section (payload.details, servi par le GET individuel).
   const specs = buildDetailSpecs(payload);
@@ -314,6 +322,10 @@ function ReportDetails({
         </AppButton>
       </div>
 
+      {/* Synthese + sections detaillees : masquees des que le rapport est
+          cloture (fige). Seules l'observation et les PJ restent visibles. */}
+      {!isClosed && (
+      <>
       {/* Synthese chiffres */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Recettes" value={'+' + formatAmount(payload.recetteTotal ?? 0)} positive detail={specs.recette} />
@@ -446,9 +458,22 @@ function ReportDetails({
           </div>
         </Section>
       )}
+      </>
+      )}
 
 
-      {/* Observation */}
+      {/* Observation : editable tant que non cloture ; en lecture seule (texte
+          fige) une fois le rapport cloture, sans bouton d'action. */}
+      {isClosed ? (
+        report.observation ? (
+          <div>
+            <p className="text-xs font-medium text-gray-500 mb-1">Observation</p>
+            <p className="whitespace-pre-wrap rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+              {report.observation}
+            </p>
+          </div>
+        ) : null
+      ) : (
       <div>
         <p className="text-xs font-medium text-gray-500 mb-1">Observation</p>
         <textarea
@@ -467,37 +492,46 @@ function ReportDetails({
               ete cloture (closedAt vide). Un rapport annote apres cloture
               passe AMENDED mais garde closedAt -> bouton masque. */}
           {!report.closedAt && (
-            <AppButton size="sm" variant="outline" onClick={() => saveObservation('CLOSED')} loading={savingObs}>
+            <AppButton size="sm" variant="outline" onClick={() => setConfirmClose(true)} loading={savingObs}>
               <Lock className="h-3.5 w-3.5" />
               Cloturer
             </AppButton>
           )}
         </div>
       </div>
+      )}
 
-      {/* Pieces jointes */}
+      {/* Pieces jointes : ajout possible tant que non cloture. Une fois
+          cloture, seules les PJ deja ajoutees restent visibles en lecture
+          seule (pas d'ajout, ni suppression, ni edition de libelle). Le bloc
+          est masque si le rapport est cloture et sans piece jointe. */}
+      {(!isClosed || (report.attachments && report.attachments.length > 0)) && (
       <div>
         <p className="text-xs font-medium text-gray-500 mb-1 flex items-center gap-1">
           <Paperclip className="h-3.5 w-3.5" /> Pieces jointes
         </p>
-        <input
-          type="text"
-          value={pendingCaption}
-          onChange={(e) => setPendingCaption(e.target.value)}
-          placeholder="Libelle de la prochaine piece jointe (ex: Recu MTN du 12/05)"
-          className="mb-3 w-full rounded-xl border border-gray-200 px-3 py-2 text-xs focus:border-primary-500 focus:outline-none"
-        />
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <ImageInput
-            value={null}
-            onFile={handleAttachment}
-            uploading={uploading}
-            allowClear={false}
-            height={250}
-            hint="Glissez ou photographiez une piece justificative (image)"
-          />
-          <NonImageAttachmentInput onUpload={handleAttachment} uploading={uploading} />
-        </div>
+        {!isClosed && (
+          <>
+            <input
+              type="text"
+              value={pendingCaption}
+              onChange={(e) => setPendingCaption(e.target.value)}
+              placeholder="Libelle de la prochaine piece jointe (ex: Recu MTN du 12/05)"
+              className="mb-3 w-full rounded-xl border border-gray-200 px-3 py-2 text-xs focus:border-primary-500 focus:outline-none"
+            />
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <ImageInput
+                value={null}
+                onFile={handleAttachment}
+                uploading={uploading}
+                allowClear={false}
+                height={250}
+                hint="Glissez ou photographiez une piece justificative (image)"
+              />
+              <NonImageAttachmentInput onUpload={handleAttachment} uploading={uploading} />
+            </div>
+          </>
+        )}
 
         {report.attachments && report.attachments.length > 0 && (
           <ul className="mt-3 space-y-2">
@@ -505,6 +539,7 @@ function ReportDetails({
               <AttachmentRow
                 key={att.id}
                 att={att}
+                readOnly={isClosed}
                 onOpen={() => openAuthedFile(att.url, att.fileName ?? 'piece-jointe').catch(() => toast.error('Echec du telechargement'))}
                 onSaveCaption={(c) => updateCaption(att.id, c)}
                 onDelete={() => deleteAttachment(att.id)}
@@ -513,6 +548,21 @@ function ReportDetails({
           </ul>
         )}
       </div>
+      )}
+
+      <ConfirmDialog
+        open={confirmClose}
+        onClose={() => setConfirmClose(false)}
+        onConfirm={async () => {
+          await saveObservation('CLOSED');
+          setConfirmClose(false);
+        }}
+        title="Cloturer le rapport ?"
+        message="Cette action est irreversible. Une fois cloture, le rapport est fige : plus aucune regeneration ni modification ne sera possible."
+        confirmLabel="Cloturer"
+        variant="destructive"
+        loading={savingObs}
+      />
     </div>
   );
 }
