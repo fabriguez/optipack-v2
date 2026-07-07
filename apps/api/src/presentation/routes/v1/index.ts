@@ -121,7 +121,7 @@ router.use('/reports', reportRoutes);
 router.use(configRoutes);
 // Notification config (canaux globaux + par event) + templates personnalisés
 router.use(notificationTemplatesRoutes);
-// WhatsApp personnel par tenant (whatsapp-web.js)
+// WhatsApp personnel par tenant (API WhatsApp interne)
 router.use(whatsappPersonalRoutes);
 
 // Uploads generiques (recus, justificatifs, photos colis, ...)

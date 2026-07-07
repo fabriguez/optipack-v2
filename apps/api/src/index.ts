@@ -193,12 +193,10 @@ async function start(): Promise<void> {
   }
 }
 
-// Filets de securite process-level. whatsapp-web.js / puppeteer lancent des
-// promesses FLOTTANTES internes (ex: Client.inject) qui peuvent rejeter
-// ("Execution context was destroyed" quand la page WA navigue/logout pendant
-// l'init). Sans ces handlers, ca remonte en unhandledRejection/uncaughtException
-// et TUE tout le process API (donc TOUT le tenant tombe). On log et on garde le
-// process vivant : l'erreur est cantonnee au sous-systeme WhatsApp.
+// Filets de securite process-level : une promesse FLOTTANTE qui rejette dans un
+// sous-systeme (I/O reseau, provider externe...) ne doit pas remonter en
+// unhandledRejection/uncaughtException et TUER tout le process API (donc TOUT le
+// tenant tombe). On log et on garde le process vivant : l'erreur reste cantonnee.
 process.on('unhandledRejection', (reason) => {
   logger.error({ reason }, '[process] unhandledRejection (ignoree, process maintenu)');
 });

@@ -6,16 +6,15 @@ const logger = createChildLogger('TenantWhatsAppSessionService');
 
 /**
  * Canal WhatsApp personnel d'un tenant, adossé à l'API WhatsApp interne
- * (whatsapp-api.transitsoftservices.com, moteur Baileys, multi-sessions).
+ * (whatsapp-api.transitsoftservices.com, multi-sessions).
  *
  * Le QR / la connexion se gèrent sur le dashboard externe
  * (whatsapp-dashboard.transitsoftservices.com), qui délivre une CLÉ API scopée
  * à la session. Ici on ne fait que **configurer les variables du client**
  * (clé API par tenant + base URL optionnelle) et envoyer des messages texte.
  *
- * Remplace l'ancien moteur whatsapp-web.js (puppeteer/QR local) : plus de
- * session locale, de rate limiter, ni de cycle SYNCING/PENDING — l'API externe
- * gère la file d'attente, le rate limit par session et la disponibilité.
+ * Pas de session locale ni de rate limiter côté OptiPack : l'API externe gère
+ * la file d'attente, le rate limit par session et la disponibilité.
  */
 
 const REQUEST_TIMEOUT_MS = 15_000;

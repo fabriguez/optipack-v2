@@ -136,17 +136,6 @@ export type NotificationEventChannels = z.infer<typeof notificationEventChannels
  * Les templates HTML / WhatsApp / SMS personnalisés sont stockés dans
  * TenantNotificationTemplate (table dédiée) pour éviter un JSON trop lourd.
  */
-/**
- * Mode d'envoi des pieces jointes sur le canal WhatsApp Web JS.
- *  - 'asset' (defaut) : les fichiers sont envoyes en MEDIA (telecharges puis
- *    transmis en base64 via la session WA). Le destinataire recoit le vrai
- *    fichier (image/PDF), pas un lien.
- *  - 'link' : les fichiers sont ajoutes comme LIENS dans le texte (plus leger
- *    pour la session puppeteer ; utile si la session est instable).
- */
-export const waMediaModeSchema = z.enum(['asset', 'link']);
-export type WaMediaMode = z.infer<typeof waMediaModeSchema>;
-
 export const notificationChannelConfigSchema = z.object({
   /** Canaux globaux (master switches). Si absent, comportement défaut. */
   channels: notificationGlobalChannelsSchema.optional(),
@@ -155,8 +144,6 @@ export const notificationChannelConfigSchema = z.object({
    * Seuls les overrides sont stockés — undefined = comportement global.
    */
   events: z.record(z.string(), notificationEventChannelsSchema).optional(),
-  /** Mode d'envoi des pieces jointes WhatsApp. Defaut : 'asset' (media base64). */
-  waMediaMode: waMediaModeSchema.optional(),
 });
 export type NotificationChannelConfig = z.infer<typeof notificationChannelConfigSchema>;
 
@@ -171,13 +158,4 @@ export const DEFAULT_NOTIFICATION_GLOBAL_CHANNELS: NotificationGlobalChannels = 
 export const DEFAULT_NOTIFICATION_CHANNEL_CONFIG: NotificationChannelConfig = {
   channels: DEFAULT_NOTIFICATION_GLOBAL_CHANNELS,
   events: {},
-  waMediaMode: 'asset',
 };
-
-// ---- WhatsApp personal channel (whatsapp-web.js) ----
-
-export const whatsAppPersonalRateLimitSchema = z.object({
-  perHour: z.number().int().min(1).max(500).default(50),
-  minDelaySeconds: z.number().int().min(0).max(60).default(3),
-});
-export type WhatsAppPersonalRateLimit = z.infer<typeof whatsAppPersonalRateLimitSchema>;

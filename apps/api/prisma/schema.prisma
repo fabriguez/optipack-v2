@@ -113,7 +113,7 @@ model Organization {
   headOfficeFundTransfers FundTransfer[]                  @relation("HeadOfficeSourceTransfers")
   // Templates de notification personnalises par le tenant.
   notificationTemplates   TenantNotificationTemplate[]
-  // Session WhatsApp personnel du tenant (whatsapp-web.js).
+  // Config WhatsApp personnel du tenant (API WhatsApp interne).
   whatsAppSession         TenantWhatsAppSession?
   // Plannings de travail (horaires RH) scopes a l'organisation.
   workSchedules           WorkSchedule[]
@@ -3101,12 +3101,12 @@ model TenantNotificationTemplate {
 }
 
 // ============================================================
-// WHATSAPP PERSONAL CHANNEL (API WhatsApp interne / Baileys)
+// WHATSAPP PERSONAL CHANNEL (API WhatsApp interne)
 // ============================================================
 
 /**
  * Config de la session WhatsApp d'un tenant sur l'API WhatsApp interne
- * (whatsapp-api.transitsoftservices.com, moteur Baileys, multi-sessions).
+ * (whatsapp-api.transitsoftservices.com, multi-sessions).
  *
  * Le QR / la connexion se gerent sur le dashboard externe
  * (whatsapp-dashboard.transitsoftservices.com) qui delivre une CLE API scopee

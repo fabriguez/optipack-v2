@@ -17,8 +17,9 @@ services:
     entrypoint: ["/bin/sh", "/usr/local/bin/api-entrypoint.sh"]
     command: ["node", "dist/index.js"]
     restart: unless-stopped
-    # Total tenant principal vise : 4 Go RAM / 3 CPU. L'API porte le metier +
-    # Chromium/WhatsApp -> la plus grosse part (~45% RAM, 1.5 CPU).
+    # Total tenant principal vise : 4 Go RAM / 3 CPU. L'API porte le metier ;
+    # le canal WhatsApp passe par l'API interne distante (plus de navigateur
+    # embarque) : marge RAM/CPU liberee, limites revisables a la baisse.
     deploy:
       resources:
         limits:
