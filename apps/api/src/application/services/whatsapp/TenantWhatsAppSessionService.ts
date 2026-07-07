@@ -254,6 +254,51 @@ export class TenantWhatsAppSessionService {
       return false;
     }
   }
+
+  /**
+   * Envoie un document/image via l'API WhatsApp interne. Deux sources possibles :
+   *  - `mediaBase64` (recommande) : octets inline -> aucun fetch cote serveur WA,
+   *    donc fonctionne meme si le MinIO du tenant n'est PAS expose sur internet.
+   *  - `mediaUrl` : Baileys telecharge l'URL (requiert un MinIO public).
+   * `mimetype` decide document vs image. Resout `true` des acceptation (queued).
+   */
+  async sendDocument(
+    organizationId: string,
+    phone: string,
+    media: { mediaBase64?: string; mediaUrl?: string },
+    fileName: string,
+    caption?: string,
+    mimetype = 'application/pdf',
+  ): Promise<boolean> {
+    if (!media.mediaBase64 && !media.mediaUrl) return false;
+    const sendable = await this.getSendable(organizationId);
+    if (!sendable) return false;
+    const to = normalizePhone(phone);
+    try {
+      await waFetch<{ id: string; status: string }>(
+        sendable.baseUrl,
+        sendable.apiKey,
+        'POST',
+        '/messages',
+        {
+          to,
+          body: caption || undefined,
+          mediaBase64: media.mediaBase64,
+          mediaUrl: media.mediaUrl,
+          mimetype,
+          fileName,
+        },
+      );
+      return true;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.warn({ organizationId, phone: to, fileName, err: message }, 'WA sendDocument échoué');
+      await prisma.tenantWhatsAppSession
+        .updateMany({ where: { organizationId }, data: { lastError: message } })
+        .catch(() => {});
+      return false;
+    }
+  }
 }
 
 export const tenantWaSessionService = new TenantWhatsAppSessionService();

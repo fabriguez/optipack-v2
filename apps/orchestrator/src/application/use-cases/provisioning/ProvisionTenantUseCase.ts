@@ -218,6 +218,12 @@ export class ProvisionTenantUseCase {
       `MINIO_ROOT_PASSWORD=${minioPass}`,
       `MINIO_ACCESS_KEY=${minioUser}`,
       `MINIO_SECRET_KEY=${minioPass}`,
+      // URL publique du MinIO du tenant : liens presignes notif-center/email
+      // (signes directement contre ce host). Les pieces jointes WhatsApp ne
+      // l'exigent PAS (envoi inline base64 depuis le MinIO interne) -> le media
+      // marche meme sans route publique. Requiert une route Caddy
+      // s3.<slug>.<domaine> pour que les LIENS soient cliquables.
+      `MINIO_PUBLIC_BASE_URL=https://s3.${tenant.slug}.${BASE_DOMAIN}`,
       `POSTGRES_USER=${pgUser}`,
       `POSTGRES_PASSWORD=${pgPass}`,
       `POSTGRES_DB=${dbName}`,

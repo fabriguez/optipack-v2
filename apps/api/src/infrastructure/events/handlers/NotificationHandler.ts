@@ -16,7 +16,7 @@ import type {
   NotificationTarget,
 } from '../../../application/services/notifications/types';
 import { filterChannelsByPrefs } from '../../../application/services/notifications/preferences';
-import { minioClient } from '../../../config/minio';
+import { minioClient, presignPublicGet } from '../../../config/minio';
 import {
   buildInvoicePdfBuffer,
   buildPaymentReceiptPdfBuffer,
@@ -71,39 +71,26 @@ async function uploadBufferForWhatsApp(
   try {
     const bucket = config.minio.bucket;
     const key = `tmp/notif/${Date.now()}-${filename}`;
+    // Upload via l'endpoint INTERNE (rapide), presignation via l'endpoint PUBLIC
+    // (signature valide depuis internet, cf presignPublicGet -- pas de reecriture
+    // de host qui casserait la signature SigV4).
     await minioClient.putObject(bucket, key, buffer, buffer.length, {
       'Content-Type': contentType,
     });
-    const signed = await (minioClient as any).presignedGetObject(bucket, key, 1800);
+    const finalUrl = await presignPublicGet(bucket, key, 1800);
     const hasPublic = !!config.minio.publicBaseUrl;
-    let finalUrl: string = signed;
-    if (hasPublic) {
-      const parsedSigned = new URL(signed);
-      const parsedPublic = new URL(config.minio.publicBaseUrl);
-      parsedSigned.protocol = parsedPublic.protocol;
-      parsedSigned.hostname = parsedPublic.hostname;
-      parsedSigned.port = parsedPublic.port;
-      finalUrl = parsedSigned.toString();
-    }
     let signedHost: string | null = null;
     try {
-      signedHost = new URL(signed).host;
+      signedHost = new URL(finalUrl).host;
     } catch {
       /* ignore */
     }
     // Diagnostic : sans MINIO_PUBLIC_BASE_URL, l'URL garde le host interne
     // (ex minio:9000) -> INACCESSIBLE hors conteneur (WhatsApp/email/navigateur).
     logger.info(
-      {
-        filename,
-        key,
-        signedHost,
-        publicBaseUrl: config.minio.publicBaseUrl || null,
-        externallyReachable: hasPublic,
-        finalUrl,
-      },
+      { filename, key, signedHost, publicBaseUrl: config.minio.publicBaseUrl || null, externallyReachable: hasPublic },
       hasPublic
-        ? '[notif-upload] URL presignee (host public)'
+        ? '[notif-upload] URL presignee (host public, signee)'
         : '[notif-upload] URL presignee host INTERNE (MINIO_PUBLIC_BASE_URL absent -> inaccessible hors conteneur)',
     );
     return finalUrl;

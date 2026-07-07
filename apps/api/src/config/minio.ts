@@ -10,6 +10,53 @@ export const minioClient = new Minio.Client({
   secretKey: config.minio.secretKey,
 });
 
+/**
+ * Client dedie a la PRESIGNATION d'URLs accessibles depuis internet.
+ *
+ * Une URL presignee SigV4 signe le header `host` (`X-Amz-SignedHeaders=host`).
+ * Reecrire le host APRES la signature (minio:9000 -> s3.<domaine>) invalide la
+ * signature -> 403 SignatureDoesNotMatch cote MinIO. La seule facon correcte est
+ * de SIGNER directement contre l'endpoint public. Ce client pointe donc sur
+ * MINIO_PUBLIC_BASE_URL (host/port/ssl parses). La presignation est un calcul
+ * local (pas de connexion), donc pas besoin que ce host soit joignable depuis
+ * le conteneur. Null si MINIO_PUBLIC_BASE_URL absent -> fallback endpoint interne.
+ */
+let publicPresignClient: Minio.Client | null | undefined;
+function getPublicPresignClient(): Minio.Client | null {
+  if (publicPresignClient !== undefined) return publicPresignClient;
+  const base = config.minio.publicBaseUrl;
+  if (!base) {
+    publicPresignClient = null;
+    return null;
+  }
+  try {
+    const u = new URL(base);
+    const useSSL = u.protocol === 'https:';
+    publicPresignClient = new Minio.Client({
+      endPoint: u.hostname,
+      port: u.port ? parseInt(u.port, 10) : useSSL ? 443 : 80,
+      useSSL,
+      accessKey: config.minio.accessKey,
+      secretKey: config.minio.secretKey,
+    });
+  } catch (err) {
+    logger.warn({ err, base }, 'MINIO_PUBLIC_BASE_URL invalide -> presign public desactive');
+    publicPresignClient = null;
+  }
+  return publicPresignClient;
+}
+
+/**
+ * Presigne un GET valide DEPUIS INTERNET (pieces jointes WhatsApp/email, liens
+ * partages). Signe contre l'endpoint public si MINIO_PUBLIC_BASE_URL est defini,
+ * sinon retombe sur l'endpoint interne (dev local uniquement -> URL inaccessible
+ * hors conteneur). Aucune reecriture de host (casserait la signature).
+ */
+export function presignPublicGet(bucket: string, key: string, expirySec = 1800): Promise<string> {
+  const client = getPublicPresignClient() ?? minioClient;
+  return client.presignedGetObject(bucket, key, expirySec);
+}
+
 /** Prefixe des objets a lecture publique anonyme (cf StorageService.PUBLIC_PREFIX). */
 const PUBLIC_PREFIX = 'public/';
 
