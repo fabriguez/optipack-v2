@@ -1,9 +1,47 @@
 import { inject, injectable } from 'tsyringe';
+import type { Prisma } from '@prisma/client';
 import { EMPLOYEE_REPOSITORY, type IEmployeeRepository } from '../../interfaces/IEmployeeRepository';
 import { PayrollChargeService } from '../../services/PayrollChargeService';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
 import { prisma } from '../../../config/database';
 import { syncEmployeeAgencies } from '../../services/EmployeeAgencyService';
+
+/**
+ * Construit un payload Prisma sur (checked input) depuis le body HTTP brut :
+ * whitelist des colonnes scalaires + mapping des FK vers les relations
+ * (agencyId -> agency.connect, ...). Les champs etrangers au modele
+ * (email, createUser, additionalAgencyIds...) sont ignores — Prisma rejette
+ * tout argument inconnu avec une PrismaClientValidationError 400.
+ */
+function toEmployeeUpdateData(data: any): Prisma.EmployeeUpdateInput {
+  const out: Prisma.EmployeeUpdateInput = {};
+  const trimOrNull = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+
+  if (data.fullName !== undefined) out.fullName = data.fullName;
+  if (data.idNumber !== undefined) out.idNumber = trimOrNull(data.idNumber);
+  if (data.phone !== undefined) out.phone = trimOrNull(data.phone);
+  if (data.position !== undefined) out.position = data.position;
+  if (data.level !== undefined) out.level = trimOrNull(data.level);
+  if (data.baseSalary !== undefined) out.baseSalary = data.baseSalary;
+  if (data.educationLevel !== undefined) out.educationLevel = trimOrNull(data.educationLevel);
+  if (data.specialty !== undefined) out.specialty = trimOrNull(data.specialty);
+  if (data.contractType !== undefined) out.contractType = data.contractType;
+  if (data.isAgencyManager !== undefined) out.isAgencyManager = !!data.isAgencyManager;
+  if (data.isActive !== undefined) out.isActive = data.isActive;
+  if (data.startDate !== undefined) out.startDate = data.startDate;
+  if (data.endDate !== undefined) out.endDate = data.endDate;
+  if (data.emergencyContactName !== undefined) out.emergencyContactName = trimOrNull(data.emergencyContactName);
+  if (data.emergencyContactPhone !== undefined) out.emergencyContactPhone = trimOrNull(data.emergencyContactPhone);
+  if (data.emergencyContactRelation !== undefined) out.emergencyContactRelation = trimOrNull(data.emergencyContactRelation);
+
+  if (data.agencyId) out.agency = { connect: { id: data.agencyId } };
+  if (data.positionId) out.positionRef = { connect: { id: data.positionId } };
+  // managerId vide = retrait du superieur hierarchique.
+  if (data.managerId !== undefined) {
+    out.manager = data.managerId ? { connect: { id: data.managerId } } : { disconnect: true };
+  }
+  return out;
+}
 
 @injectable()
 export class UpdateEmployeeUseCase {
@@ -65,7 +103,7 @@ export class UpdateEmployeeUseCase {
       }
     }
 
-    const employee = await this.employeeRepo.update(id, data);
+    const employee = await this.employeeRepo.update(id, toEmployeeUpdateData(data));
 
     // Si le salaire ou l'etat actif change, on resync la masse salariale.
     const agencyChanged = data.agencyId && data.agencyId !== existing.agencyId;
