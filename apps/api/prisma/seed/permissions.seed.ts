@@ -134,6 +134,9 @@ export const PERMISSION_CATALOG: Array<{ key: string; label: string; category: s
   { key: 'loyalty.read', label: 'Voir la fidelite clients', category: 'fidelite', description: 'Consulter les soldes de points de fidelite des clients et les tarifs partenaires actifs.' },
   { key: 'loyalty.manage', label: 'Gerer les points et tarifs partenaires', category: 'fidelite', description: 'Attribuer, ajuster ou retirer des points de fidelite et gerer les tarifs partenaires clients.' },
   { key: 'loyalty.policy.manage', label: 'Gerer la politique de fidelite', category: 'fidelite', description: 'Definir les regles d\'attribution et de conversion des points fidelite (seuils, ratios, expirations).' },
+  // Statut partenaire : cle dediee (distincte de loyalty.manage) pour confier
+  // la promotion/retrogradation partenaire a un role specifique.
+  { key: 'client.partner.manage', label: 'Gerer le statut partenaire', category: 'fidelite', description: 'Promouvoir un client au statut partenaire ou le lui retirer, et gerer ses tarifs dedies.' },
 
   // penalite
   { key: 'penalty.read', label: 'Voir les penalites', category: 'penalite', description: 'Consulter les penalites appliquees aux clients (retards de paiement, infractions, avaries).' },

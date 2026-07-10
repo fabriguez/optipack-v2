@@ -9,9 +9,15 @@ import { config } from '../../../config/index';
 import { emailService } from '../../../infrastructure/email/EmailService';
 import { notificationService } from '../../services/notifications/NotificationService';
 import { provisionClientPortalAccess } from '../../services/ClientPortalAccessService';
+import { syncEmployeeAgencies } from '../../services/EmployeeAgencyService';
 
 interface CreateEmployeeInput {
   agencyId: string;
+  /**
+   * Agences d'intervention supplementaires (en plus de l'agence principale).
+   * Les permissions du poste s'appliquent sur toutes les agences associees.
+   */
+  additionalAgencyIds?: string[];
   fullName: string;
   idNumber?: string;
   phone?: string;
@@ -145,6 +151,7 @@ export class CreateEmployeeUseCase {
 
     // 2) Optionnel : creation User pour le portail self-service
     let initialPassword: string | undefined;
+    let linkedUserId: string | null = null;
     if (input.createUser) {
       if (!input.email) {
         throw new BusinessError(
@@ -154,6 +161,7 @@ export class CreateEmployeeUseCase {
       // Si User existe deja, on le rattache
       const existing = await prisma.user.findUnique({ where: { email: input.email } });
       if (existing) {
+        linkedUserId = existing.id;
         await prisma.employee.update({
           where: { id: employee.id },
           data: { userId: existing.id },
@@ -178,13 +186,11 @@ export class CreateEmployeeUseCase {
             isVerified: false,
           },
         });
-        // Lie User <-> Employee + ajoute UserAgency pour acces a l'agence
+        // Lie User <-> Employee (UserAgency pose par syncEmployeeAgencies ci-dessous)
+        linkedUserId = user.id;
         await prisma.employee.update({
           where: { id: employee.id },
           data: { userId: user.id },
-        });
-        await prisma.userAgency.create({
-          data: { userId: user.id, agencyId: input.agencyId },
         });
         // Envoi email best-effort des identifiants (le mot de passe reste aussi
         // affiche a l'admin via initialPassword pour fallback).
@@ -207,6 +213,15 @@ export class CreateEmployeeUseCase {
         }
       }
     }
+
+    // 2bis) Agences d'intervention : agence principale + supplementaires.
+    // Tenues en phase dans EmployeeAgencyAssignment (RH) et UserAgency (JWT).
+    await syncEmployeeAgencies(
+      employee.id,
+      linkedUserId,
+      input.agencyId,
+      input.additionalAgencyIds ?? [],
+    );
 
     // 3) Sync Personnel <-> Client (Phase 1 RH).
     // Un personnel est un potentiel client : on lui cree (ou lie) un profil

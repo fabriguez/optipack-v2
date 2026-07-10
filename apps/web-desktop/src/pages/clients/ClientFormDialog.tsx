@@ -15,6 +15,7 @@ import { searchers, toSearchOption } from '@/lib/api/searchers';
 import { apiClient } from '@/lib/api/client';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { usePermission } from '@/lib/hooks/usePermission';
 
 interface ClientFormDialogProps {
   open: boolean;
@@ -53,6 +54,7 @@ const SLOT_FACING: Record<Slot, 'user' | 'environment'> = {
 };
 
 export function ClientFormDialog({ open, onClose, defaultAgency, client }: ClientFormDialogProps) {
+  const canManagePartner = usePermission('client.partner.manage');
   const isEdit = !!client;
   const qc = useQueryClient();
   const createMutation = useCreateClient();
@@ -288,6 +290,9 @@ export function ClientFormDialog({ open, onClose, defaultAgency, client }: Clien
             )}
           />
           <AppInput label="Email" type="email" {...register('email')} error={errors.email?.message} />
+          <p className="text-xs text-gray-500 sm:col-span-2 -mt-1">
+            Renseignez au moins un telephone ou un email.
+          </p>
           <AppInput label="N. CNI / Identite" {...register('idNumber' as any)} />
           <AppInput label="Adresse" {...register('address')} error={errors.address?.message} className="sm:col-span-2" />
 
@@ -299,10 +304,16 @@ export function ClientFormDialog({ open, onClose, defaultAgency, client }: Clien
                 label="Type de client"
                 value={field.value}
                 onValueChange={(v) => field.onChange(v)}
+                // Statut partenaire : reserve a la cle client.partner.manage.
+                // Sans elle, PARTNER n'est ni selectionnable ni retirable
+                // (select verrouille si le client est deja partenaire).
+                disabled={!canManagePartner && field.value === 'PARTNER'}
                 options={[
                   { value: 'INDIVIDUAL', label: 'Particulier' },
                   { value: 'COMPANY', label: 'Entreprise' },
-                  { value: 'PARTNER', label: 'Partenaire (tarif dedie)' },
+                  ...(canManagePartner || field.value === 'PARTNER'
+                    ? [{ value: 'PARTNER', label: 'Partenaire (tarif dedie)' }]
+                    : []),
                 ]}
               />
             )}

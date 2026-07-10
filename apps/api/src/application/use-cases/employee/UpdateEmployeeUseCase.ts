@@ -3,6 +3,7 @@ import { EMPLOYEE_REPOSITORY, type IEmployeeRepository } from '../../interfaces/
 import { PayrollChargeService } from '../../services/PayrollChargeService';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
 import { prisma } from '../../../config/database';
+import { syncEmployeeAgencies } from '../../services/EmployeeAgencyService';
 
 @injectable()
 export class UpdateEmployeeUseCase {
@@ -14,6 +15,13 @@ export class UpdateEmployeeUseCase {
   async execute(id: string, data: any) {
     const existing = await this.employeeRepo.findById(id);
     if (!existing) throw new NotFoundError('Employe', id);
+
+    // Agences supplementaires : champ virtuel (pas une colonne Employee),
+    // extrait avant le update Prisma puis synchronise a part.
+    const additionalAgencyIds: string[] | undefined = Array.isArray(data.additionalAgencyIds)
+      ? data.additionalAgencyIds
+      : undefined;
+    delete data.additionalAgencyIds;
 
     // Employe inactif (contrat rompu) : verrouille toute modification metier
     // sauf reactivation explicite (isActive=true + endDate=null).
@@ -61,6 +69,18 @@ export class UpdateEmployeeUseCase {
 
     // Si le salaire ou l'etat actif change, on resync la masse salariale.
     const agencyChanged = data.agencyId && data.agencyId !== existing.agencyId;
+
+    // Sync agences d'intervention (assignments RH + UserAgency/JWT) quand la
+    // liste est fournie ou que l'agence principale change.
+    if (additionalAgencyIds !== undefined || agencyChanged) {
+      const active = additionalAgencyIds ?? (
+        await prisma.employeeAgencyAssignment.findMany({
+          where: { employeeId: id, toDate: null, isPrimary: false },
+          select: { agencyId: true },
+        })
+      ).map((a) => a.agencyId);
+      await syncEmployeeAgencies(id, (existing as any).userId ?? null, employee.agencyId, active);
+    }
     await this.payrollCharge.syncForAgency(employee.agencyId);
     if (agencyChanged) {
       await this.payrollCharge.syncForAgency(existing.agencyId);

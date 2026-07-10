@@ -16,6 +16,7 @@ import {
 } from '../../application/use-cases/client/ClientXlsxUseCases';
 import { BusinessError, NotFoundError } from '../../domain/errors/BusinessError';
 import { getOrgId } from '../middleware/tenantGuard';
+import { getPolicy } from '../middleware/policyContext';
 import { clientScope, scopeCtx } from '../../application/services/scope/agencyScope';
 
 export class ClientController {
@@ -179,7 +180,11 @@ export class ClientController {
     try {
       await clientScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(UpdateClientUseCase);
-      const client = await useCase.execute(req.params.id, req.body);
+      const policy = getPolicy(req);
+      const client = await useCase.execute(req.params.id, req.body, {
+        canManagePartner: policy?.can('client.partner.manage') ?? false,
+        userId: policy?.userId,
+      });
       res.json({ success: true, data: client });
     } catch (err) {
       next(err);

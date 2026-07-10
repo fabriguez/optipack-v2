@@ -25,6 +25,16 @@ export class PrismaEmployeeRepository implements IEmployeeRepository {
       include: {
         agency: { select: { id: true, name: true, code: true } },
         termination: true,
+        // Agences d'intervention actives (multi-agences) : prefill du form
+        // d'edition + affichage detail.
+        agencyAssignments: {
+          where: { toDate: null },
+          select: {
+            agencyId: true,
+            isPrimary: true,
+            agency: { select: { id: true, name: true, city: true } },
+          },
+        },
       },
     });
   }

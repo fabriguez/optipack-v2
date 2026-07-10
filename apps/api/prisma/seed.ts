@@ -13,7 +13,8 @@ const ORG_ID = '00000000-0000-4000-a000-000000000001';
 const ADMIN_ID = '00000000-0000-4000-a000-000000000010';
 
 // Bump this version when seed content changes to force a re-run
-const SEED_VERSION = process.env.SEED_VERSION || '3';
+// v4 : ajout cle client.partner.manage (statut partenaire, role dedie)
+const SEED_VERSION = process.env.SEED_VERSION || '4';
 const SEED_MARKER_KEY = 'seed_version';
 
 async function main() {

@@ -1,14 +1,16 @@
-import { useEffect, useMemo, useState } from 'react';
+
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
+import { X } from 'lucide-react';
 import { AppDialog } from '@/components/ui/AppDialog';
 import { AppInput } from '@/components/ui/AppInput';
 import { AppButton } from '@/components/ui/AppButton';
-import { AppSearchSelect } from '@/components/ui/AppSearchSelect';
+import { AppSearchSelect, type SearchOption } from '@/components/ui/AppSearchSelect';
 import { AppPhoneInput } from '@/components/ui/AppPhoneInput';
 import { ImageInput } from '@/components/shared/ImageInput';
 import { AppSelect } from '@/components/ui/AppSelect';
 import { searchers, toSearchOption } from '@/lib/api/searchers';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { toast } from 'sonner';
 import { usePositions } from '@/lib/hooks/useHR';
@@ -94,7 +96,7 @@ export function EmployeeFormDialog({ open, onClose, defaultAgency, employee }: P
     onError: () => toast.error('Erreur'),
   });
 
-  const { register, handleSubmit, reset, control, setValue } = useForm<any>({
+  const { register, handleSubmit, reset, control, setValue, watch } = useForm<any>({
     // defaultValues garantit que `agencyId` est defini des le premier render
     // (sinon Controller render avec field.value=undefined puis reset n'est pas
     // toujours respectee par les sous-composants disabled -> formulaire bloque).
@@ -110,12 +112,54 @@ export function EmployeeFormDialog({ open, onClose, defaultAgency, employee }: P
         .map((p: any) => ({ value: p.id, label: p.name })),
     [positionsResp],
   );
+  // Agences d'intervention supplementaires (multi-agences) : les permissions
+  // du poste s'appliquent sur toutes les agences associees a l'employe.
+  const [extraAgencies, setExtraAgencies] = useState<{ id: string; label: string }[]>([]);
+  const agencyOptionCache = useRef<Map<string, SearchOption>>(new Map());
+  const primaryAgencyId = watch('agencyId') as string | undefined;
+  const searchExtraAgencies = async (q: string, limit: number) => {
+    const opts = await searchers.agencies(q, limit);
+    opts.forEach((o) => agencyOptionCache.current.set(o.value, o));
+    // Exclut l'agence principale et celles deja selectionnees.
+    return opts.filter(
+      (o) => o.value !== primaryAgencyId && !extraAgencies.some((a) => a.id === o.value),
+    );
+  };
+  const addExtraAgency = (v: string | null) => {
+    if (!v || v === primaryAgencyId || extraAgencies.some((a) => a.id === v)) return;
+    const label = agencyOptionCache.current.get(v)?.label ?? v;
+    setExtraAgencies((s) => [...s, { id: v, label }]);
+  };
+
+  // Prefill en edition : agences actives non principales depuis le detail API.
+  const { data: detailResp } = useQuery({
+    queryKey: ['employees', employee?.id, 'agencies'],
+    queryFn: () => apiClient.get(`/employees/${employee!.id}`).then((r) => r.data),
+    enabled: open && isEdit,
+  });
+  useEffect(() => {
+    if (!open || !isEdit) return;
+    const assignments = (detailResp as any)?.data?.agencyAssignments as
+      | { agencyId: string; isPrimary: boolean; agency?: { name?: string } }[]
+      | undefined;
+    if (!assignments) return;
+    setExtraAgencies(
+      assignments
+        .filter((a) => !a.isPrimary)
+        .map((a) => ({ id: a.agencyId, label: a.agency?.name ?? a.agencyId })),
+    );
+  }, [open, isEdit, detailResp]);
+
   const onSubmit = (data: any) => {
     if (!data.agencyId) {
       toast.error('Agence manquante');
       return;
     }
-    mutation.mutate({ ...data, baseSalary: Number(data.baseSalary || 0) });
+    mutation.mutate({
+      ...data,
+      baseSalary: Number(data.baseSalary || 0),
+      additionalAgencyIds: extraAgencies.map((a) => a.id).filter((id) => id !== data.agencyId),
+    });
   };
 
   // editableId : ID utilisable pour uploader les photos (employe.id en edition,
@@ -164,6 +208,7 @@ export function EmployeeFormDialog({ open, onClose, defaultAgency, employee }: P
       if (defaultAgency?.id) setValue('agencyId', defaultAgency.id, { shouldValidate: true });
       setEditableId(null);
       setInitialPassword(null);
+      setExtraAgencies([]);
       setPhotoUrls({ selfie: null, locationPlan: null, idDocument: null, idDocumentBack: null });
     }
   }, [open, defaultAgency, employee, reset, setValue]);
@@ -323,6 +368,42 @@ export function EmployeeFormDialog({ open, onClose, defaultAgency, employee }: P
             )}
           />
         </div>
+        <div className="rounded-xl border border-gray-100 p-3">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-gray-500">
+            Agences d&apos;intervention supplementaires
+          </p>
+          <p className="mb-2 text-[11px] text-gray-500">
+            L&apos;employe peut intervenir sur plusieurs agences : les permissions de son poste
+            s&apos;appliquent sur toutes les agences associees.
+          </p>
+          {extraAgencies.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              {extraAgencies.map((a) => (
+                <span
+                  key={a.id}
+                  className="inline-flex items-center gap-1 rounded-lg bg-primary-50 px-2 py-1 text-xs font-medium text-primary-700"
+                >
+                  {a.label}
+                  <button
+                    type="button"
+                    onClick={() => setExtraAgencies((s) => s.filter((x) => x.id !== a.id))}
+                    className="rounded p-0.5 hover:bg-primary-100"
+                    aria-label={`Retirer ${a.label}`}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          <AppSearchSelect
+            value={null}
+            onChange={addExtraAgency}
+            search={searchExtraAgencies}
+            placeholder="Ajouter une agence"
+          />
+        </div>
+
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"

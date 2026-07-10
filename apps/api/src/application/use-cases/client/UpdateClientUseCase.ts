@@ -1,9 +1,16 @@
 import { inject, injectable } from 'tsyringe';
 import type { UpdateClientInput } from '@transitsoftservices/shared';
 import { CLIENT_REPOSITORY, type IClientRepository } from '../../interfaces/IClientRepository';
-import { ConflictError, NotFoundError } from '../../../domain/errors/BusinessError';
+import { AuthorizationError, ConflictError, NotFoundError } from '../../../domain/errors/BusinessError';
 import { prisma } from '../../../config/database';
+import { config } from '../../../config/index';
 import { realtimeService } from '../../../infrastructure/realtime/RealtimeService';
+
+/** Contexte d'autorisation passe par le controller (ABAC). */
+interface UpdateClientAuthCtx {
+  canManagePartner: boolean;
+  userId?: string;
+}
 
 @injectable()
 export class UpdateClientUseCase {
@@ -11,10 +18,27 @@ export class UpdateClientUseCase {
     @inject(CLIENT_REPOSITORY) private clientRepo: IClientRepository,
   ) {}
 
-  async execute(id: string, input: UpdateClientInput) {
+  async execute(id: string, input: UpdateClientInput, auth?: UpdateClientAuthCtx) {
     const client = await this.clientRepo.findById(id);
     if (!client) {
       throw new NotFoundError('Client', id);
+    }
+
+    // Promotion/retrogradation partenaire : reservee a la cle dediee
+    // `client.partner.manage` (role specifique). Respecte le mode shadow
+    // (PERMISSIONS_ENFORCE=log) comme requirePermission.
+    const partnerToggled =
+      input.clientType !== undefined &&
+      (input.clientType === 'PARTNER') !== (client.clientType === 'PARTNER');
+    if (partnerToggled && auth && !auth.canManagePartner) {
+      if (config.permissions.enforce === 'log') {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[PERM-DENY] user=${auth.userId} missing=[client.partner.manage] PATCH /clients/${id} (clientType)`,
+        );
+      } else {
+        throw new AuthorizationError('Permission insuffisante pour modifier le statut partenaire');
+      }
     }
 
     // Email unique : refuse si un AUTRE client porte deja cet email.

@@ -15,6 +15,7 @@ import { searchers } from '@/lib/api/searchers';
 import { apiClient } from '@/lib/api/client';
 import { toast } from 'sonner';
 import { formatAmount, checkPricingForType } from '@transitsoftservices/shared';
+import { usePermission } from '@/lib/hooks/usePermission';
 
 type RouteType = 'AIR' | 'SEA' | 'LAND';
 
@@ -25,6 +26,9 @@ interface Props {
 
 export function PartnerPricingsSection({ clientId, isPartner }: Props) {
   const qc = useQueryClient();
+  // Cle dediee : seul un role "gestion partenaires" peut promouvoir/retirer
+  // le statut partenaire et gerer les tarifs dedies.
+  const canManagePartner = usePermission('client.partner.manage');
   const [open, setOpen] = useState(false);
   const [routeId, setRouteId] = useState<string | null>(null);
   const [pricePerKg, setPricePerKg] = useState('');
@@ -88,10 +92,16 @@ export function PartnerPricingsSection({ clientId, isPartner }: Props) {
         <AppCardHeader title="Tarification partenaire" />
         <div className="flex items-center gap-3 rounded-xl bg-gray-50 p-3 text-sm text-gray-600">
           <Tag className="h-4 w-4 shrink-0 text-gray-400" />
-          <span className="flex-1">Pour activer la tarification dediee, marquez le client comme <strong>Partenaire</strong>.</span>
-          <AppButton size="sm" onClick={() => promoteMut.mutate()} disabled={promoteMut.isPending}>
-            {promoteMut.isPending ? 'En cours...' : 'Marquer comme Partenaire'}
-          </AppButton>
+          <span className="flex-1">
+            {canManagePartner
+              ? <>Pour activer la tarification dediee, marquez le client comme <strong>Partenaire</strong>.</>
+              : 'Seul un role habilite a la gestion des partenaires peut promouvoir ce client.'}
+          </span>
+          {canManagePartner && (
+            <AppButton size="sm" onClick={() => promoteMut.mutate()} disabled={promoteMut.isPending}>
+              {promoteMut.isPending ? 'En cours...' : 'Marquer comme Partenaire'}
+            </AppButton>
+          )}
         </div>
       </AppCard>
     );
@@ -106,10 +116,12 @@ export function PartnerPricingsSection({ clientId, isPartner }: Props) {
             Prix specifiques pour ce partenaire. Une regle par route ou globale (sans route).
           </p>
         </div>
-        <AppButton size="sm" onClick={() => setOpen(true)}>
-          <Plus className="h-3.5 w-3.5" />
-          Ajouter
-        </AppButton>
+        {canManagePartner && (
+          <AppButton size="sm" onClick={() => setOpen(true)}>
+            <Plus className="h-3.5 w-3.5" />
+            Ajouter
+          </AppButton>
+        )}
       </div>
 
       {isLoading ? (
@@ -139,9 +151,11 @@ export function PartnerPricingsSection({ clientId, isPartner }: Props) {
                   </p>
                 </div>
               </div>
-              <button onClick={() => setToDelete(p.id)} className="rounded-lg p-1.5 hover:bg-red-50" aria-label="Supprimer">
-                <Trash2 className="h-4 w-4 text-red-600" />
-              </button>
+              {canManagePartner && (
+                <button onClick={() => setToDelete(p.id)} className="rounded-lg p-1.5 hover:bg-red-50" aria-label="Supprimer">
+                  <Trash2 className="h-4 w-4 text-red-600" />
+                </button>
+              )}
             </div>
           ))}
         </div>

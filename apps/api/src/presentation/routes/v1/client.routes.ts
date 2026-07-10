@@ -46,26 +46,25 @@ router.get('/:id/image/:slot', requirePermission('client.read'), ClientControlle
 router.post('/:id/image/:slot', requirePermission('client.update'), uploadImageMiddleware, ClientController.uploadImage);
 router.delete('/:id/image/:slot', requirePermission('client.update'), ClientController.deleteImage);
 
-// Tarification partenaire
+// Tarification partenaire. Mutations : cle dediee `client.partner.manage`
+// (role specifique "gestion partenaires"), plus de verrou role admin — la
+// cle est assignable a un poste via la matrice.
 router.get('/:clientId/pricings', requirePermission('loyalty.read'), PartnerPricingController.list);
 router.post(
   '/:clientId/pricings',
-  authorize('SUPER_ADMIN', 'ADMIN'),
-  requirePermission('loyalty.manage'),
+  requirePermission('client.partner.manage'),
   validate(partnerPricingSchema),
   PartnerPricingController.create,
 );
 router.patch(
   '/pricings/:id',
-  authorize('SUPER_ADMIN', 'ADMIN'),
-  requirePermission('loyalty.manage'),
+  requirePermission('client.partner.manage'),
   validate(updatePartnerPricingSchema),
   PartnerPricingController.update,
 );
 router.delete(
   '/pricings/:id',
-  authorize('SUPER_ADMIN', 'ADMIN'),
-  requirePermission('loyalty.manage'),
+  requirePermission('client.partner.manage'),
   PartnerPricingController.remove,
 );
 
