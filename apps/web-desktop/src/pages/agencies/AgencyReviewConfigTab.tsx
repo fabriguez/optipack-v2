@@ -5,6 +5,7 @@ import { AppCard } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppInput } from '@/components/ui/AppInput';
 import { AppSelect } from '@/components/ui/AppSelect';
+import { Can } from '@/lib/components/Can';
 import { Plus, Save, Trash2, Wand2, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import { AUTO_CRITERIA, AUTO_CRITERIA_BY_KEY, type Criterion } from '@/lib/reviews/autoCriteria';
@@ -196,10 +197,13 @@ export function AgencyReviewConfigTab({ agencyId }: { agencyId: string }) {
         </div>
 
         <div className="mt-4 flex justify-end">
-          <AppButton onClick={onSave} loading={saving}>
-            <Save className="h-4 w-4" />
-            Enregistrer
-          </AppButton>
+          {/* PUT review-config exige review.manage */}
+          <Can permission="review.manage">
+            <AppButton onClick={onSave} loading={saving}>
+              <Save className="h-4 w-4" />
+              Enregistrer
+            </AppButton>
+          </Can>
         </div>
       </AppCard>
     </div>

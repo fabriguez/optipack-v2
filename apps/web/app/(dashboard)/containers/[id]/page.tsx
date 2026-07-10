@@ -46,6 +46,8 @@ import { ContainerExpensesTab } from './ContainerExpensesTab';
 import { ContainerDocumentsTab } from './ContainerDocumentsTab';
 import { ContainerLinksGraph } from './ContainerLinksGraph';
 import { HandCoins, Paperclip } from 'lucide-react';
+import { Can } from '@/lib/components/Can';
+import { usePermission } from '@/lib/hooks/usePermission';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
 
@@ -95,6 +97,11 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
   const { id } = use(params);
   const router = useRouter();
   const qc = useQueryClient();
+
+  // Permissions ABAC : cycle de vie conteneur (chargement, depart, arrivee,
+  // dechargement, edition) et gestion des manifestes / ecarts.
+  const canManageContainer = usePermission('container.manage');
+  const canManageManifest = usePermission('manifest.manage');
 
   const { data, isLoading } = useContainer(id);
   const { data: parcelsData } = useContainerParcels(id);
@@ -495,17 +502,17 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
           actions={[
             { label: 'Voir', icon: <Eye className="h-4 w-4" />, onClick: () => router.push(`/parcels/${row.id}`) },
             { label: 'QR / Etiquette', icon: <QrCode className="h-4 w-4" />, onClick: () => setQrParcel(row) },
-            ...(container.status === 'LOADING'
+            ...(canManageContainer && container.status === 'LOADING'
               ? [{
                   label: 'Retirer (chargement par erreur)',
                   icon: <PackageMinus className="h-4 w-4" />,
                   onClick: () => { setRemoveTarget({ id: row.id, designation: row.designation }); setRemoveReason(''); },
                 }]
               : []),
-            ...(canUnload
+            ...(canManageContainer && canUnload
               ? [{ label: 'Decharger', icon: <PackageMinus className="h-4 w-4" />, onClick: () => setUnloadTarget({ id: row.id, designation: row.designation }) }]
               : []),
-            ...((container.status === 'IN_TRANSIT' || container.status === 'RECEIVED') && row.status !== 'LOST'
+            ...(canManageManifest && (container.status === 'IN_TRANSIT' || container.status === 'RECEIVED') && row.status !== 'LOST'
               ? [{
                   label: 'Marquer non recu',
                   icon: <AlertCircle className="h-4 w-4" />,
@@ -641,66 +648,70 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
                 choix PDF / XLSX. Le manifest record est cree une fois ;
                 seul le format de telechargement differe. Les deux formats
                 restent disponibles dans l'historique. */}
-            <AppDropdownMenu
-              trigger={
-                <AppButton
-                  variant="outline"
-                  size="sm"
-                  loading={busyManifest === 'dispatch'}
-                >
-                  <FileText className="h-4 w-4" />
-                  Bordereau d&apos;envoi
-                  <ChevronDown className="h-3.5 w-3.5" />
-                </AppButton>
-              }
-              items={[
-                {
-                  label: 'Generer PDF',
-                  icon: <FileText className="h-4 w-4" />,
-                  onClick: () => handleGenerateDispatch('pdf'),
-                },
-                {
-                  label: 'Generer XLSX',
-                  icon: <FileSpreadsheet className="h-4 w-4" />,
-                  onClick: () => handleGenerateDispatch('xlsx'),
-                },
-              ]}
-            />
+            <Can permission="manifest.manage">
+              <AppDropdownMenu
+                trigger={
+                  <AppButton
+                    variant="outline"
+                    size="sm"
+                    loading={busyManifest === 'dispatch'}
+                  >
+                    <FileText className="h-4 w-4" />
+                    Bordereau d&apos;envoi
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  </AppButton>
+                }
+                items={[
+                  {
+                    label: 'Generer PDF',
+                    icon: <FileText className="h-4 w-4" />,
+                    onClick: () => handleGenerateDispatch('pdf'),
+                  },
+                  {
+                    label: 'Generer XLSX',
+                    icon: <FileSpreadsheet className="h-4 w-4" />,
+                    onClick: () => handleGenerateDispatch('xlsx'),
+                  },
+                ]}
+              />
+            </Can>
 
             {/* Bordereau de reception : reserve a UNLOADED. */}
-            <AppDropdownMenu
-              trigger={
-                <AppButton
-                  variant="outline"
-                  size="sm"
-                  loading={busyManifest === 'reception'}
-                  disabled={container.status !== 'UNLOADED'}
-                  title={
-                    container.status !== 'UNLOADED'
-                      ? 'Disponible uniquement quand le conteneur est entierement vide (statut UNLOADED).'
-                      : undefined
-                  }
-                >
-                  <FileCheck className="h-4 w-4" />
-                  Bordereau de reception
-                  <ChevronDown className="h-3.5 w-3.5" />
-                </AppButton>
-              }
-              items={[
-                {
-                  label: 'Generer PDF',
-                  icon: <FileText className="h-4 w-4" />,
-                  onClick: () => handleGenerateReception('pdf'),
-                  disabled: container.status !== 'UNLOADED',
-                },
-                {
-                  label: 'Generer XLSX',
-                  icon: <FileSpreadsheet className="h-4 w-4" />,
-                  onClick: () => handleGenerateReception('xlsx'),
-                  disabled: container.status !== 'UNLOADED',
-                },
-              ]}
-            />
+            <Can permission="manifest.manage">
+              <AppDropdownMenu
+                trigger={
+                  <AppButton
+                    variant="outline"
+                    size="sm"
+                    loading={busyManifest === 'reception'}
+                    disabled={container.status !== 'UNLOADED'}
+                    title={
+                      container.status !== 'UNLOADED'
+                        ? 'Disponible uniquement quand le conteneur est entierement vide (statut UNLOADED).'
+                        : undefined
+                    }
+                  >
+                    <FileCheck className="h-4 w-4" />
+                    Bordereau de reception
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  </AppButton>
+                }
+                items={[
+                  {
+                    label: 'Generer PDF',
+                    icon: <FileText className="h-4 w-4" />,
+                    onClick: () => handleGenerateReception('pdf'),
+                    disabled: container.status !== 'UNLOADED',
+                  },
+                  {
+                    label: 'Generer XLSX',
+                    icon: <FileSpreadsheet className="h-4 w-4" />,
+                    onClick: () => handleGenerateReception('xlsx'),
+                    disabled: container.status !== 'UNLOADED',
+                  },
+                ]}
+              />
+            </Can>
 
             <AppButton
               variant="outline"
@@ -856,13 +867,13 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-base font-semibold text-gray-900">Colis dans le conteneur ({parcels.length})</h3>
           <div className="flex flex-wrap items-center gap-2">
-            {canLoad && !isClosed && (
+            {canManageContainer && canLoad && !isClosed && (
               <AppButton size="sm" onClick={() => setShowLoadDialog(true)}>
                 <Plus className="h-3.5 w-3.5" />
                 Charger des colis
               </AppButton>
             )}
-            {canUnload && parcels.length > 0 && (
+            {canManageContainer && canUnload && parcels.length > 0 && (
               <AppButton size="sm" variant="outline" onClick={() => setShowBatchUnload(true)}>
                 <Camera className="h-3.5 w-3.5" />
                 Decharger par scan
@@ -964,19 +975,19 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
             </div>
           </div>
           <div className="flex gap-2">
-            {(container.status === 'EMPTY' || container.status === 'LOADING') && (
+            {canManageContainer && (container.status === 'EMPTY' || container.status === 'LOADING') && (
               <AppButton variant="outline" onClick={() => setShowEdit(true)}>
                 <Edit className="h-4 w-4" />
                 Modifier
               </AppButton>
             )}
-            {container.status === 'LOADING' && (
+            {canManageContainer && container.status === 'LOADING' && (
               <AppButton onClick={() => setShowDepart(true)}>
                 <Play className="h-4 w-4" />
                 Depart
               </AppButton>
             )}
-            {container.status === 'IN_TRANSIT' && (
+            {canManageContainer && container.status === 'IN_TRANSIT' && (
               <AppButton onClick={() => setShowArrive(true)}>
                 <PackageCheck className="h-4 w-4" />
                 Arrivee

@@ -12,6 +12,8 @@ import { FilterDialog } from '@/components/shared/FilterDialog';
 import { ExportButton } from '@/components/shared/ExportButton';
 import { CsvImportDialog } from '@/components/shared/CsvImportDialog';
 import { RowActions } from '@/components/shared/RowActions';
+import { Can } from '@/lib/components/Can';
+import { usePermission } from '@/lib/hooks/usePermission';
 import { useServerPagination } from '@/lib/hooks/useServerPagination';
 import { useAgencies, useDeleteAgency } from '@/lib/hooks/useAgencies';
 import { AgencyFormDialog } from './AgencyFormDialog';
@@ -25,6 +27,8 @@ function AgenciesContent() {
   const [showCreate, setShowCreate] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const deleteMutation = useDeleteAgency();
+  // Permission ABAC : creation/suppression d'agence = agency.manage
+  const canManageAgency = usePermission('agency.manage');
 
   const cityFilter = searchParams.get('city') || '';
   const countryFilter = searchParams.get('country') || '';
@@ -110,7 +114,7 @@ function AgenciesContent() {
           actions={[
             { label: 'Voir', icon: <Eye className="h-4 w-4" />, onClick: () => navigate(`/agencies/${row.id}`) },
             { label: 'Modifier', icon: <Edit className="h-4 w-4" />, onClick: () => navigate(`/agencies/${row.id}`) },
-            { label: 'Supprimer', icon: <Trash2 className="h-4 w-4" />, onClick: () => deleteMutation.mutate(row.id), variant: 'destructive' },
+            ...(canManageAgency ? [{ label: 'Supprimer', icon: <Trash2 className="h-4 w-4" />, onClick: () => deleteMutation.mutate(row.id), variant: 'destructive' as const }] : []),
           ]}
         />
       ),
@@ -126,14 +130,16 @@ function AgenciesContent() {
             <p className="text-sm text-gray-500 mt-1">{data?.meta?.total ?? 0} agences</p>
           </div>
           <div className="flex gap-2">
-            <AppButton variant="outline" onClick={() => setShowImport(true)}>
-              <Upload className="h-4 w-4" />
-              Importer
-            </AppButton>
-            <AppButton onClick={() => setShowCreate(true)}>
-              <Plus className="h-4 w-4" />
-              Nouvelle agence
-            </AppButton>
+            <Can permission="agency.manage">
+              <AppButton variant="outline" onClick={() => setShowImport(true)}>
+                <Upload className="h-4 w-4" />
+                Importer
+              </AppButton>
+              <AppButton onClick={() => setShowCreate(true)}>
+                <Plus className="h-4 w-4" />
+                Nouvelle agence
+              </AppButton>
+            </Can>
           </div>
         </div>
 

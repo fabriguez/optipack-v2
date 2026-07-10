@@ -5,6 +5,7 @@ import { AppCard } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppInput } from '@/components/ui/AppInput';
 import { DateRangePicker, type DateRange } from '@/components/ui/DateRangePicker';
+import { Can } from '@/lib/components/Can';
 import { Wand2 } from 'lucide-react';
 import { formatDate } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
@@ -158,6 +159,8 @@ export function EmployeeReviewsTab({ employeeId, agencyId }: { employeeId: strin
 
   return (
     <div className="space-y-4">
+      {/* POST /employees/:id/reviews exige review.manage */}
+      <Can permission="review.manage">
       <AppCard>
         <h3 className="mb-3 text-base font-semibold">Nouvelle evaluation</h3>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -232,6 +235,7 @@ export function EmployeeReviewsTab({ employeeId, agencyId }: { employeeId: strin
           </AppButton>
         </div>
       </AppCard>
+      </Can>
 
       <AppCard>
         <h3 className="mb-3 text-base font-semibold">Historique</h3>

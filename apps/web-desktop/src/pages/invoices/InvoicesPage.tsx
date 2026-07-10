@@ -10,6 +10,7 @@ import { FilterDialog } from '@/components/shared/FilterDialog';
 import { ExportButton } from '@/components/shared/ExportButton';
 import { RowActions } from '@/components/shared/RowActions';
 import { useServerPagination } from '@/lib/hooks/useServerPagination';
+import { usePermission } from '@/lib/hooks/usePermission';
 import { searchers } from '@/lib/api/searchers';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
@@ -21,6 +22,10 @@ function InvoicesContent() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { page, search, setPage, setSearch, queryParams } = useServerPagination();
+
+  // Gating ABAC : memes cles que les routes API correspondantes
+  const canExport = usePermission('invoice.export');
+  const canRecordPayment = usePermission('payment.record');
 
   const statusFilter = searchParams.get('status') || '';
   const agencyFilter = searchParams.get('agencyId') || '';
@@ -136,8 +141,8 @@ function InvoicesContent() {
       render: (row: any) => (
         <RowActions actions={[
           { label: 'Voir les details', icon: <Eye className="h-4 w-4" />, onClick: () => navigate(`/invoices/${row.id}`) },
-          { label: 'Imprimer PDF', icon: <Printer className="h-4 w-4" />, onClick: () => handlePrint(row.id) },
-          { label: 'Enregistrer paiement', icon: <CreditCard className="h-4 w-4" />, onClick: () => navigate(`/payments?invoiceId=${row.id}`), disabled: row.status === 'PAID' },
+          ...(canExport ? [{ label: 'Imprimer PDF', icon: <Printer className="h-4 w-4" />, onClick: () => handlePrint(row.id) }] : []),
+          ...(canRecordPayment ? [{ label: 'Enregistrer paiement', icon: <CreditCard className="h-4 w-4" />, onClick: () => navigate(`/payments?invoiceId=${row.id}`), disabled: row.status === 'PAID' }] : []),
         ]} />
       ),
     },

@@ -11,6 +11,8 @@ import { RowActions } from '@/components/shared/RowActions';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 import { useQuery } from '@tanstack/react-query';
 import { usePaymentsByInvoice } from '@/lib/hooks/usePayments';
+import { usePermission } from '@/lib/hooks/usePermission';
+import { Can } from '@/lib/components/Can';
 import { apiClient } from '@/lib/api/client';
 import { formatAmount, formatDate, formatDateTime } from '@transitsoftservices/shared';
 import { PaymentFormDialog } from '@/pages/payments/PaymentFormDialog';
@@ -33,6 +35,9 @@ export default function InvoiceDetailPage() {
 
   const [xlsxLoading, setXlsxLoading] = useState(false);
   const [lightbox, setLightbox] = useState<{ parcelId: string; index: number; images: any[] } | null>(null);
+
+  // Gating ABAC : meme cle que la route API POST /payments/:id/void
+  const canVoidPayment = usePermission('payment.void');
 
   const handleDownloadPdf = async () => {
     setPdfLoading(true);
@@ -123,7 +128,7 @@ export default function InvoiceDetailPage() {
         <RowActions
           actions={[
             { label: 'Voir', icon: <Eye className="h-4 w-4" />, onClick: () => navigate(`/payments/${row.id}`) },
-            { label: 'Annuler', icon: <XCircle className="h-4 w-4" />, onClick: () => navigate(`/payments/${row.id}`), variant: 'destructive' as const, disabled: row.isVoided },
+            ...(canVoidPayment ? [{ label: 'Annuler', icon: <XCircle className="h-4 w-4" />, onClick: () => navigate(`/payments/${row.id}`), variant: 'destructive' as const, disabled: row.isVoided }] : []),
           ]}
         />
       ),
@@ -148,22 +153,28 @@ export default function InvoiceDetailPage() {
             </div>
           </div>
           <div className="flex gap-2">
-            <AppButton variant="outline" onClick={handleDownloadPdf} loading={pdfLoading}>
-              <Download className="h-4 w-4" />
-              PDF
-            </AppButton>
-            <AppButton variant="outline" onClick={handleDownloadXlsx} loading={xlsxLoading}>
-              <Download className="h-4 w-4" />
-              XLSX
-            </AppButton>
-            <AppButton variant="outline" onClick={() => setShowDiscount(true)} disabled={invoice.status === 'PAID'}>
-              <Percent className="h-4 w-4" />
-              Remise
-            </AppButton>
-            <AppButton onClick={() => setShowPayment(true)} disabled={invoice.status === 'PAID' || allLost}>
-              <Plus className="h-4 w-4" />
-              Enregistrer paiement
-            </AppButton>
+            <Can permission="invoice.export">
+              <AppButton variant="outline" onClick={handleDownloadPdf} loading={pdfLoading}>
+                <Download className="h-4 w-4" />
+                PDF
+              </AppButton>
+              <AppButton variant="outline" onClick={handleDownloadXlsx} loading={xlsxLoading}>
+                <Download className="h-4 w-4" />
+                XLSX
+              </AppButton>
+            </Can>
+            <Can permission="invoice.discount">
+              <AppButton variant="outline" onClick={() => setShowDiscount(true)} disabled={invoice.status === 'PAID'}>
+                <Percent className="h-4 w-4" />
+                Remise
+              </AppButton>
+            </Can>
+            <Can permission="payment.record">
+              <AppButton onClick={() => setShowPayment(true)} disabled={invoice.status === 'PAID' || allLost}>
+                <Plus className="h-4 w-4" />
+                Enregistrer paiement
+              </AppButton>
+            </Can>
           </div>
         </div>
 
@@ -541,10 +552,12 @@ export default function InvoiceDetailPage() {
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-base font-semibold text-gray-900">Paiements ({paymentsData?.data?.length || 0})</h3>
             <div className="flex items-center gap-2">
-              <AppButton size="sm" onClick={() => setShowPayment(true)} disabled={invoice.status === 'PAID' || allLost}>
-                <Plus className="h-3.5 w-3.5" />
-                Enregistrer paiement
-              </AppButton>
+              <Can permission="payment.record">
+                <AppButton size="sm" onClick={() => setShowPayment(true)} disabled={invoice.status === 'PAID' || allLost}>
+                  <Plus className="h-3.5 w-3.5" />
+                  Enregistrer paiement
+                </AppButton>
+              </Can>
             </div>
           </div>
           <AppDataTable

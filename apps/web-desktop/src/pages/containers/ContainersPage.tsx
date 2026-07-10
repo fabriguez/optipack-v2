@@ -17,7 +17,7 @@ import { formatDate } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
 import { ContainerFormDialog } from './ContainerFormDialog';
 import { Can } from '@/lib/components/Can';
-import { useAgencyIds, useIsTenantAdmin } from '@/lib/hooks/usePermission';
+import { useAgencyIds, useIsTenantAdmin, usePermission } from '@/lib/hooks/usePermission';
 
 export default function ContainersPage() {
   const [page, setPage] = useState(1);
@@ -29,6 +29,8 @@ export default function ContainersPage() {
   const [searchParams] = useSearchParams();
   const isAdmin = useIsTenantAdmin();
   const agencyIds = useAgencyIds();
+  // Permission ABAC : creation / modification / import de conteneurs.
+  const canManageContainer = usePermission('container.manage');
   const singleUserAgencyId = !isAdmin && agencyIds.length >= 1 ? agencyIds[0] : undefined;
 
   const statusFilter = searchParams.get('status') || '';
@@ -148,7 +150,7 @@ export default function ContainersPage() {
         <RowActions actions={[
           { label: 'Voir details', icon: <Eye className="h-4 w-4" />, onClick: () => navigate(`/containers/${row.id}`) },
           { label: 'Voir les colis', icon: <Package className="h-4 w-4" />, onClick: () => navigate(`/containers/${row.id}`) },
-          ...(row.status === 'EMPTY' || row.status === 'LOADING'
+          ...(canManageContainer && (row.status === 'EMPTY' || row.status === 'LOADING')
             ? [{ label: 'Modifier', icon: <Edit className="h-4 w-4" />, onClick: () => setEditContainer(row) }]
             : []),
         ]} />
@@ -165,10 +167,12 @@ export default function ContainersPage() {
             <p className="text-sm text-gray-500 mt-1">Gerez les conteneurs et leur chargement.</p>
           </div>
           <div className="flex gap-2">
-            <AppButton variant="outline" onClick={() => setShowImport(true)}>
-              <Upload className="h-4 w-4" />
-              Importer
-            </AppButton>
+            <Can permission="container.manage">
+              <AppButton variant="outline" onClick={() => setShowImport(true)}>
+                <Upload className="h-4 w-4" />
+                Importer
+              </AppButton>
+            </Can>
             <Can permission="container.manage">
               <AppButton onClick={() => setShowCreate(true)}>
                 <Plus className="h-4 w-4" />

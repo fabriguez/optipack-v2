@@ -15,6 +15,7 @@ import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
 import { cn } from '@/lib/utils/cn';
+import { Can } from '@/lib/components/Can';
 import { DebtFormDialog } from './DebtFormDialog';
 
 // Couleur badge selon statut. PARTIALLY_PAID = orange (en cours), CLEARED =
@@ -220,10 +221,12 @@ export default function DebtsPage() {
               Suivi typee : clients vs entreprise (personnel, agence, transporteur).
             </p>
           </div>
-          <AppButton onClick={() => setShowCreate(true)}>
-            <Plus className="h-4 w-4" />
-            Nouvelle dette
-          </AppButton>
+          <Can permission="debt.create">
+            <AppButton onClick={() => setShowCreate(true)}>
+              <Plus className="h-4 w-4" />
+              Nouvelle dette
+            </AppButton>
+          </Can>
         </div>
 
         {dashboard?.data && (

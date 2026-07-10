@@ -7,6 +7,7 @@ import { AppInput } from '@/components/ui/AppInput';
 import { AppSelect } from '@/components/ui/AppSelect';
 import { AppBadge } from '@/components/ui/AppBadge';
 import { ImageInput } from '@/components/shared/ImageInput';
+import { Can } from '@/lib/components/Can';
 import { uploadImage, uploadFile } from '@/lib/api/uploads';
 import { formatDate } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
@@ -134,6 +135,8 @@ export function EmployeeDisciplineTab({ employeeId, employee }: { employeeId: st
       )}
 
       {!isInactive && (
+      // POST /employees/:id/sanctions exige sanction.manage
+      <Can permission="sanction.manage">
       <AppCard>
         <h3 className="mb-3 text-base font-semibold">Nouvelle sanction</h3>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -164,6 +167,7 @@ export function EmployeeDisciplineTab({ employeeId, employee }: { employeeId: st
           </AppButton>
         </div>
       </AppCard>
+      </Can>
       )}
 
       <AppCard>
@@ -199,6 +203,8 @@ export function EmployeeDisciplineTab({ employeeId, employee }: { employeeId: st
       </AppCard>
 
       {employee?.isActive && (
+        // POST /employees/:id/terminate exige personnel.delete
+        <Can permission="personnel.delete">
         <AppCard>
           <h3 className="mb-3 text-base font-semibold text-red-700">Rupture de contrat</h3>
           <p className="mb-3 text-xs text-gray-500">
@@ -223,6 +229,7 @@ export function EmployeeDisciplineTab({ employeeId, employee }: { employeeId: st
             </AppButton>
           </div>
         </AppCard>
+        </Can>
       )}
     </div>
   );

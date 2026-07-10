@@ -27,6 +27,7 @@ import { toast } from 'sonner';
 import { ParcelFormDialog } from './ParcelFormDialog';
 import { MaskedValue, isMasked } from '@/components/ui/MaskedValue';
 import { Can } from '@/lib/components/Can';
+import { usePermission } from '@/lib/hooks/usePermission';
 
 function ParcelsContent() {
   const navigate = useNavigate();
@@ -41,6 +42,11 @@ function ParcelsContent() {
   const [tab, setTab] = useState<'active' | 'archived'>('active');
   // Vue : colis individuels ou groupes de colis.
   const [view, setView] = useState<'parcels' | 'groups'>('parcels');
+  // Permissions ABAC : resolues au top-level (regle des hooks), utilisees
+  // dans les renders de colonnes et les items de dropdown.
+  const canCreateGroup = usePermission('parcelgroup.manage');
+  const canUpdateParcel = usePermission('parcel.update');
+  const canDeliverParcel = usePermission('parcel.deliver');
 
   const { data: groupsData, isLoading: groupsLoading } = useQuery({
     queryKey: ['parcel-groups'],
@@ -333,10 +339,12 @@ function ParcelsContent() {
         <RowActions actions={[
           { label: 'Voir details', icon: <Eye className="h-4 w-4" />, onClick: () => navigate(`/parcels/${row.id}`) },
           { label: 'QR / Etiquette', icon: <QrCode className="h-4 w-4" />, onClick: () => setQrParcel(row) },
-          ...(row.status !== 'DELIVERED'
+          ...(canDeliverParcel && row.status !== 'DELIVERED'
             ? [{ label: 'Remettre au client', icon: <HandCoins className="h-4 w-4" />, onClick: () => setHandoverParcel(row) }]
             : []),
-          { label: 'Changer statut', icon: <RefreshCw className="h-4 w-4" />, onClick: () => navigate(`/parcels/${row.id}`) },
+          ...(canUpdateParcel
+            ? [{ label: 'Changer statut', icon: <RefreshCw className="h-4 w-4" />, onClick: () => navigate(`/parcels/${row.id}`) }]
+            : []),
         ]} />
       ),
     },
@@ -388,10 +396,12 @@ function ParcelsContent() {
             </p>
           </div>
           <div className="flex gap-2">
-            <AppButton variant="outline" onClick={() => setShowImport(true)}>
-              <Upload className="h-4 w-4" />
-              Importer
-            </AppButton>
+            <Can permission="parcel.create">
+              <AppButton variant="outline" onClick={() => setShowImport(true)}>
+                <Upload className="h-4 w-4" />
+                Importer
+              </AppButton>
+            </Can>
             <Can permission="parcel.create">
               <AppDropdownMenu
                 trigger={
@@ -403,7 +413,10 @@ function ParcelsContent() {
                 }
                 items={[
                   { label: 'Un seul colis', icon: <Package className="h-4 w-4" />, onClick: () => setShowCreate(true) },
-                  { label: 'Un groupe de colis', icon: <Boxes className="h-4 w-4" />, onClick: () => setShowCreateGroup(true) },
+                  // La creation de groupe passe par POST /parcel-groups (cle distincte).
+                  ...(canCreateGroup
+                    ? [{ label: 'Un groupe de colis', icon: <Boxes className="h-4 w-4" />, onClick: () => setShowCreateGroup(true) }]
+                    : []),
                 ]}
               />
             </Can>
@@ -498,17 +511,19 @@ function ParcelsContent() {
           <div className="flex flex-wrap items-center gap-2">
             {selectedIds.size > 0 && (
               <>
-                {tab === 'active' ? (
-                  <AppButton size="sm" variant="outline" onClick={handleArchiveSelected} loading={archiveMut.isPending}>
-                    <Archive className="h-3.5 w-3.5" />
-                    Archiver
-                  </AppButton>
-                ) : (
-                  <AppButton size="sm" onClick={handleUnarchiveSelected} loading={unarchiveMut.isPending}>
-                    <ArchiveRestore className="h-3.5 w-3.5" />
-                    Desarchiver
-                  </AppButton>
-                )}
+                <Can permission="parcel.archive">
+                  {tab === 'active' ? (
+                    <AppButton size="sm" variant="outline" onClick={handleArchiveSelected} loading={archiveMut.isPending}>
+                      <Archive className="h-3.5 w-3.5" />
+                      Archiver
+                    </AppButton>
+                  ) : (
+                    <AppButton size="sm" onClick={handleUnarchiveSelected} loading={unarchiveMut.isPending}>
+                      <ArchiveRestore className="h-3.5 w-3.5" />
+                      Desarchiver
+                    </AppButton>
+                  )}
+                </Can>
                 <button
                   type="button"
                   onClick={clearSelection}

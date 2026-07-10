@@ -19,6 +19,7 @@ import { AppInput } from '@/components/ui/AppInput';
 import { MonthYearPicker } from '@/components/ui/MonthYearPicker';
 import { AppSelect } from '@/components/ui/AppSelect';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { Can } from '@/lib/components/Can';
 import { ImageUrlField } from '@/components/shared/ImageUrlField';
 import { ImageInput } from '@/components/shared/ImageInput';
 import { uploadImage, uploadFile } from '@/lib/api/uploads';
@@ -113,10 +114,12 @@ export function AgencyChargesTab({ agencyId }: Props) {
             onChange={(e) => setPeriod(e.target.value)}
           />
         </div>
-        <AppButton onClick={() => setShowAdd(true)}>
-          <Plus className="h-4 w-4" />
-          Ajouter une charge
-        </AppButton>
+        <Can permission="charge.manage">
+          <AppButton onClick={() => setShowAdd(true)}>
+            <Plus className="h-4 w-4" />
+            Ajouter une charge
+          </AppButton>
+        </Can>
       </div>
 
       {/* Totals */}
@@ -184,37 +187,39 @@ export function AgencyChargesTab({ agencyId }: Props) {
                     {c.status === 'PARTIAL' && <AppBadge variant="warning">Partiel</AppBadge>}
                     {c.status === 'UNPAID' && <AppBadge variant="error">Impaye</AppBadge>}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <AppButton
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setPayCharge(c)}
-                      disabled={c.status === 'PAID'}
-                    >
-                      <Wallet className="h-3.5 w-3.5" />
-                      Payer
-                    </AppButton>
-                    <button
-                      type="button"
-                      className="rounded-lg p-2 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
-                      onClick={() => setEditCharge(c)}
-                      disabled={c.isAutoManaged}
-                      aria-label="Modifier"
-                      title={c.isAutoManaged ? 'Charge auto-geree, modifiable via les salaires des employes.' : 'Modifier'}
-                    >
-                      <Edit2 className="h-3.5 w-3.5 text-gray-500" />
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-lg p-2 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                      onClick={() => setDeleteCharge(c)}
-                      disabled={c.isAutoManaged}
-                      aria-label="Supprimer"
-                      title={c.isAutoManaged ? 'Charge auto-geree, ne peut pas etre supprimee.' : 'Supprimer'}
-                    >
-                      <Trash2 className="h-3.5 w-3.5 text-red-500" />
-                    </button>
-                  </div>
+                  <Can permission="charge.manage">
+                    <div className="flex items-center gap-2">
+                      <AppButton
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setPayCharge(c)}
+                        disabled={c.status === 'PAID'}
+                      >
+                        <Wallet className="h-3.5 w-3.5" />
+                        Payer
+                      </AppButton>
+                      <button
+                        type="button"
+                        className="rounded-lg p-2 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                        onClick={() => setEditCharge(c)}
+                        disabled={c.isAutoManaged}
+                        aria-label="Modifier"
+                        title={c.isAutoManaged ? 'Charge auto-geree, modifiable via les salaires des employes.' : 'Modifier'}
+                      >
+                        <Edit2 className="h-3.5 w-3.5 text-gray-500" />
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-lg p-2 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                        onClick={() => setDeleteCharge(c)}
+                        disabled={c.isAutoManaged}
+                        aria-label="Supprimer"
+                        title={c.isAutoManaged ? 'Charge auto-geree, ne peut pas etre supprimee.' : 'Supprimer'}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                      </button>
+                    </div>
+                  </Can>
                 </div>
               );
             })}

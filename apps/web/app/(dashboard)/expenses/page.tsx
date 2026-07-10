@@ -16,6 +16,7 @@ import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { searchers } from '@/lib/api/searchers';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
+import { Can } from '@/lib/components/Can';
 import { ExpenseFormDialog } from './ExpenseFormDialog';
 
 export default function ExpensesPage() {
@@ -85,7 +86,9 @@ export default function ExpensesPage() {
             <h1 className="text-2xl font-bold text-gray-900">Depenses</h1>
             <p className="text-sm text-gray-500 mt-1">Suivi des depenses avec justificatifs.</p>
           </div>
-          <AppButton onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" />Nouvelle depense</AppButton>
+          <Can permission="expense.create">
+            <AppButton onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" />Nouvelle depense</AppButton>
+          </Can>
         </div>
 
         {/* Search --- Export | Filtres | Effacer */}

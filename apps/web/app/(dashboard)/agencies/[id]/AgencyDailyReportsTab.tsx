@@ -8,6 +8,8 @@ import { AppButton } from '@/components/ui/AppButton';
 import { AppBadge } from '@/components/ui/AppBadge';
 import { ImageInput } from '@/components/shared/ImageInput';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { Can } from '@/lib/components/Can';
+import { usePermission } from '@/lib/hooks/usePermission';
 import { DailyReportEmailDialog } from './DailyReportEmailDialog';
 import { uploadImage, uploadFile } from '@/lib/api/uploads';
 import { openAuthedFile } from '@/components/shared/AuthedImage';
@@ -77,10 +79,12 @@ export function AgencyDailyReportsTab({ agencyId }: Props) {
           fermeture de l&apos;agence (planning horaire). Vous pouvez aussi en generer
           un manuellement pour la journee en cours.
         </p>
-        <AppButton size="sm" onClick={() => generateMutation.mutate()} loading={generateMutation.isPending}>
-          <RefreshCw className="h-3.5 w-3.5" />
-          Generer aujourd&apos;hui
-        </AppButton>
+        <Can permission="dailyreport.manage">
+          <AppButton size="sm" onClick={() => generateMutation.mutate()} loading={generateMutation.isPending}>
+            <RefreshCw className="h-3.5 w-3.5" />
+            Generer aujourd&apos;hui
+          </AppButton>
+        </Can>
       </div>
 
       {isLoading ? (
@@ -172,6 +176,9 @@ function ReportDetails({
   const [uploading, setUploading] = useState(false);
   // Confirmation avant cloture : action irreversible (rapport fige a jamais).
   const [confirmClose, setConfirmClose] = useState(false);
+  // Toutes les mutations du rapport (regen, mail, observation, cloture, PJ)
+  // passent par des endpoints proteges par dailyreport.manage.
+  const canManageReport = usePermission('dailyreport.manage');
 
   const { data } = useQuery({
     queryKey: ['daily-reports', reportId],
@@ -309,16 +316,18 @@ function ReportDetails({
           </span>
         )}
         {/* Un rapport cloture est immuable : plus de regeneration possible. */}
-        {!report.closedAt && (
+        {!report.closedAt && canManageReport && (
           <AppButton size="sm" variant="outline" onClick={regenerate} loading={regenerating}>
             <RefreshCw className="h-3.5 w-3.5" />
             Regenerer
           </AppButton>
         )}
-        <AppButton size="sm" variant="outline" onClick={() => setMailDialogOpen(true)} loading={sendingMail}>
-          <Mail className="h-3.5 w-3.5" />
-          {report.emailedAt ? 'Renvoyer par mail' : 'Envoyer par mail'}
-        </AppButton>
+        {canManageReport && (
+          <AppButton size="sm" variant="outline" onClick={() => setMailDialogOpen(true)} loading={sendingMail}>
+            <Mail className="h-3.5 w-3.5" />
+            {report.emailedAt ? 'Renvoyer par mail' : 'Envoyer par mail'}
+          </AppButton>
+        )}
         <AppButton size="sm" variant="outline" onClick={printPDF}>
           <Printer className="h-3.5 w-3.5" />
           Imprimer en PDF
@@ -481,19 +490,21 @@ function ReportDetails({
           placeholder="Ajoutez vos commentaires ou notes pour ce rapport..."
         />
         <div className="mt-2 flex items-center gap-2">
-          <AppButton size="sm" onClick={() => saveObservation('AMENDED')} loading={savingObs}>
-            <Save className="h-3.5 w-3.5" />
-            Enregistrer
-          </AppButton>
-          {/* Cloture manuelle possible UNIQUEMENT si le rapport n'a jamais
-              ete cloture (closedAt vide). Un rapport annote apres cloture
-              passe AMENDED mais garde closedAt -> bouton masque. */}
-          {!report.closedAt && (
-            <AppButton size="sm" variant="outline" onClick={() => setConfirmClose(true)} loading={savingObs}>
-              <Lock className="h-3.5 w-3.5" />
-              Cloturer
+          <Can permission="dailyreport.manage">
+            <AppButton size="sm" onClick={() => saveObservation('AMENDED')} loading={savingObs}>
+              <Save className="h-3.5 w-3.5" />
+              Enregistrer
             </AppButton>
-          )}
+            {/* Cloture manuelle possible UNIQUEMENT si le rapport n'a jamais
+                ete cloture (closedAt vide). Un rapport annote apres cloture
+                passe AMENDED mais garde closedAt -> bouton masque. */}
+            {!report.closedAt && (
+              <AppButton size="sm" variant="outline" onClick={() => setConfirmClose(true)} loading={savingObs}>
+                <Lock className="h-3.5 w-3.5" />
+                Cloturer
+              </AppButton>
+            )}
+          </Can>
         </div>
       </div>
       )}
@@ -507,7 +518,7 @@ function ReportDetails({
         <p className="text-xs font-medium text-gray-500 mb-1 flex items-center gap-1">
           <Paperclip className="h-3.5 w-3.5" /> Pieces jointes
         </p>
-        {!isClosed && (
+        {!isClosed && canManageReport && (
           <>
             <input
               type="text"
@@ -536,7 +547,7 @@ function ReportDetails({
               <AttachmentRow
                 key={att.id}
                 att={att}
-                readOnly={isClosed}
+                readOnly={isClosed || !canManageReport}
                 onOpen={() => openAuthedFile(att.url, att.fileName ?? 'piece-jointe').catch(() => toast.error('Echec du telechargement'))}
                 onSaveCaption={(c) => updateCaption(att.id, c)}
                 onDelete={() => deleteAttachment(att.id)}

@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/sheet';
 import { AppBadge } from '@/components/ui/AppBadge';
 import { AppButton } from '@/components/ui/AppButton';
+import { usePermission } from '@/lib/hooks/usePermission';
 import type { AdminNotification } from '@/lib/api/notifications';
 import {
   CHANNEL_LABEL,
@@ -49,7 +50,9 @@ export function NotificationDetailDrawer({
 }: NotificationDetailDrawerProps) {
   const n = notification;
   const attachments = n?.attachments ?? [];
-  const showRetry = n ? canRetry(n.status, n.type) : false;
+  // Le renvoi exige la permission notification.manage (endpoint retry).
+  const canManageNotification = usePermission('notification.manage');
+  const showRetry = n ? canManageNotification && canRetry(n.status, n.type) : false;
 
   return (
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>

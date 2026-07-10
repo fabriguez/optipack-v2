@@ -5,6 +5,7 @@ import { apiClient } from '@/lib/api/client';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppBadge } from '@/components/ui/AppBadge';
+import { Can } from '@/lib/components/Can';
 import { Check, X, LogOut } from 'lucide-react';
 import { formatDate } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
@@ -102,6 +103,8 @@ export function EmployeeAttendanceTab({ employeeId }: { employeeId: string }) {
               est calcule a partir de l&apos;horaire planifie. Pas de pointage retroactif.
             </p>
           </div>
+          {/* POST attendance / check-out exige attendance.mark */}
+          <Can permission="attendance.mark">
           <div className="flex flex-wrap gap-2">
             <AppButton
               variant="outline"
@@ -142,6 +145,7 @@ export function EmployeeAttendanceTab({ employeeId }: { employeeId: string }) {
               Absent
             </AppButton>
           </div>
+          </Can>
         </div>
         {todayRow && (
           <div className="mt-3 rounded-lg bg-gray-50 px-3 py-2 text-xs">

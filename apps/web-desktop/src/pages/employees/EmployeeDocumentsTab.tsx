@@ -6,6 +6,7 @@ import { AppButton } from '@/components/ui/AppButton';
 import { AppInput } from '@/components/ui/AppInput';
 import { AppSelect } from '@/components/ui/AppSelect';
 import { ImageInput } from '@/components/shared/ImageInput';
+import { Can } from '@/lib/components/Can';
 import { uploadImage, uploadFile } from '@/lib/api/uploads';
 import { openAuthedFile } from '@/components/shared/AuthedImage';
 import { formatDate } from '@transitsoftservices/shared';
@@ -82,6 +83,8 @@ export function EmployeeDocumentsTab({ employeeId }: { employeeId: string }) {
 
   return (
     <div className="space-y-4">
+      {/* POST /employees/:id/documents exige personnel.update */}
+      <Can permission="personnel.update">
       <AppCard>
         <h3 className="mb-3 text-base font-semibold">Ajouter un document</h3>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -135,6 +138,7 @@ export function EmployeeDocumentsTab({ employeeId }: { employeeId: string }) {
           </AppButton>
         </div>
       </AppCard>
+      </Can>
 
       <AppCard>
         <h3 className="mb-3 text-base font-semibold">Documents ({items.length})</h3>
@@ -159,17 +163,19 @@ export function EmployeeDocumentsTab({ employeeId }: { employeeId: string }) {
                     {d.contentType && ` · ${d.contentType}`}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!confirm('Supprimer ce document ?')) return;
-                    deleteMutation.mutate(d.id);
-                  }}
-                  className="rounded-lg p-1.5 text-red-500 hover:bg-red-50"
-                  aria-label="Supprimer"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                <Can permission="personnel.update">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!confirm('Supprimer ce document ?')) return;
+                      deleteMutation.mutate(d.id);
+                    }}
+                    className="rounded-lg p-1.5 text-red-500 hover:bg-red-50"
+                    aria-label="Supprimer"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </Can>
               </li>
             ))}
           </ul>

@@ -5,6 +5,8 @@ import {
   Plus, Package, CreditCard, Receipt, UserCog, Eye, Vault, Container, Trash2, Wallet,
 } from 'lucide-react';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { Can } from '@/lib/components/Can';
+import { usePermission } from '@/lib/hooks/usePermission';
 import { useDeleteAgency } from '@/lib/hooks/useAgencies';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard, AppCardHeader } from '@/components/ui/AppCard';
@@ -58,6 +60,12 @@ export default function AgencyDetailPage() {
   const [payEmployee, setPayEmployee] = useState<any | null>(null);
   const [deductionEmployee, setDeductionEmployee] = useState<any | null>(null);
   const qc = useQueryClient();
+  // Permissions ABAC : chaque bouton de mutation exige la cle de l'endpoint appele.
+  const canManageWarehouse = usePermission('warehouse.manage');
+  const canCreateClient = usePermission('client.create');
+  const canCreateEmployee = usePermission('personnel.create');
+  const canUpdateEmployee = usePermission('personnel.update');
+  const canPaySalary = usePermission('payroll.pay');
 
   const refreshAgency = () => {
     qc.invalidateQueries({ queryKey: ['agencies', id] });
@@ -189,13 +197,15 @@ export default function AgencyDetailPage() {
         <RowActions
           actions={[
             { label: 'Voir', icon: <Eye className="h-4 w-4" />, onClick: () => navigate(`/employees/${row.id}`) },
-            { label: 'Payer salaire', icon: <CreditCard className="h-4 w-4" />, onClick: () => setPayEmployee(row) },
-            { label: 'Retenues sur salaire', icon: <Wallet className="h-4 w-4" />, onClick: () => setDeductionEmployee(row) },
-            {
+            ...(canPaySalary ? [
+              { label: 'Payer salaire', icon: <CreditCard className="h-4 w-4" />, onClick: () => setPayEmployee(row) },
+              { label: 'Retenues sur salaire', icon: <Wallet className="h-4 w-4" />, onClick: () => setDeductionEmployee(row) },
+            ] : []),
+            ...(canUpdateEmployee ? [{
               label: row.isAgencyManager ? 'Retirer chef d\'agence' : 'Promouvoir chef d\'agence',
               icon: <UserCog className="h-4 w-4" />,
               onClick: () => toggleManagerFlag(row),
-            },
+            }] : []),
           ]}
         />
       ),
@@ -232,7 +242,7 @@ export default function AgencyDetailPage() {
         title={`Magasins (${warehousesData?.data?.length || 0})`}
         columns={warehouseColumns}
         data={warehousesData?.data || []}
-        onAdd={() => setShowCreateWarehouse(true)}
+        onAdd={canManageWarehouse ? () => setShowCreateWarehouse(true) : undefined}
         addLabel="Ajouter magasin"
       />
 
@@ -241,7 +251,7 @@ export default function AgencyDetailPage() {
         title={`Clients (${clientsData?.meta?.total || 0})`}
         columns={clientColumns}
         data={clientsData?.data || []}
-        onAdd={() => setShowCreateClient(true)}
+        onAdd={canCreateClient ? () => setShowCreateClient(true) : undefined}
         addLabel="Ajouter client"
         seeAllHref={`/clients?agencyId=${id}`}
       />
@@ -285,17 +295,20 @@ export default function AgencyDetailPage() {
   const personnelTab = (
     <div className="space-y-4">
       <div className="flex items-center justify-end gap-2">
-        <XlsxExportButton endpoint="employees" params={{ agencyId: id }} fileName="personnel" label="Exporter (XLSX)" />
-        <AppButton size="sm" variant="outline" onClick={() => setShowImportEmployees(true)}>
-          <Upload className="h-3.5 w-3.5" />
-          Importer (XLSX)
-        </AppButton>
+        {/* Export et import XLSX passent par /exports et /imports (cle report.export) */}
+        <Can permission="report.export">
+          <XlsxExportButton endpoint="employees" params={{ agencyId: id }} fileName="personnel" label="Exporter (XLSX)" />
+          <AppButton size="sm" variant="outline" onClick={() => setShowImportEmployees(true)}>
+            <Upload className="h-3.5 w-3.5" />
+            Importer (XLSX)
+          </AppButton>
+        </Can>
       </div>
       <RelationTable
         title={`Employes (${employeesData?.data?.length || 0})`}
         columns={employeeColumns}
         data={employeesData?.data || []}
-        onAdd={() => setShowCreateEmployee(true)}
+        onAdd={canCreateEmployee ? () => setShowCreateEmployee(true) : undefined}
         addLabel="Ajouter employe"
       />
     </div>
@@ -310,17 +323,20 @@ export default function AgencyDetailPage() {
             <button onClick={() => navigate(-1)} className="rounded-xl p-2 hover:bg-gray-100 transition-colors">
               <ArrowLeft className="h-5 w-5 text-gray-500" />
             </button>
-            <button
-              type="button"
-              onClick={() => setShowImageDialog(true)}
-              className="group relative"
-              title="Modifier l'image de l'agence"
-            >
-              <AgencyAvatar agency={agency} size={56} rounded="lg" />
-              <span className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
-                <Camera className="h-5 w-5 text-white" />
-              </span>
-            </button>
+            {/* Upload/suppression image = agency.manage ; sinon avatar en lecture seule */}
+            <Can permission="agency.manage" fallback={<AgencyAvatar agency={agency} size={56} rounded="lg" />}>
+              <button
+                type="button"
+                onClick={() => setShowImageDialog(true)}
+                className="group relative"
+                title="Modifier l'image de l'agence"
+              >
+                <AgencyAvatar agency={agency} size={56} rounded="lg" />
+                <span className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+                  <Camera className="h-5 w-5 text-white" />
+                </span>
+              </button>
+            </Can>
             <div>
               <div className="flex items-center gap-3">
                 <h1 className="text-2xl font-bold text-gray-900">{agency.name}</h1>
@@ -331,14 +347,16 @@ export default function AgencyDetailPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <AppButton variant="outline" onClick={() => setShowEdit(true)}>
-              <Edit className="h-4 w-4" />
-              Modifier
-            </AppButton>
-            <AppButton variant="outline" onClick={() => setShowDelete(true)}>
-              <Trash2 className="h-4 w-4 text-red-600" />
-              Supprimer
-            </AppButton>
+            <Can permission="agency.manage">
+              <AppButton variant="outline" onClick={() => setShowEdit(true)}>
+                <Edit className="h-4 w-4" />
+                Modifier
+              </AppButton>
+              <AppButton variant="outline" onClick={() => setShowDelete(true)}>
+                <Trash2 className="h-4 w-4 text-red-600" />
+                Supprimer
+              </AppButton>
+            </Can>
           </div>
         </div>
 

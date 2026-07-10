@@ -13,6 +13,7 @@ import { SearchBar } from '@/components/shared/SearchBar';
 import { FilterDialog } from '@/components/shared/FilterDialog';
 import { ExportButton } from '@/components/shared/ExportButton';
 import { RowActions } from '@/components/shared/RowActions';
+import { Can } from '@/lib/components/Can';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { formatAmount } from '@transitsoftservices/shared';
@@ -93,9 +94,12 @@ export default function PenaltiesPage() {
             <h1 className="text-2xl font-bold text-gray-900">Penalites de stockage</h1>
             <p className="text-sm text-gray-500 mt-1">Penalites automatiques apres 10 jours en agence de destination.</p>
           </div>
-          <AppButton variant="outline" onClick={() => calculateMutation.mutate()} loading={calculateMutation.isPending}>
-            Recalculer les penalites
-          </AppButton>
+          {/* Recalcul des penalites : reserve aux detenteurs de penalty.manage */}
+          <Can permission="penalty.manage">
+            <AppButton variant="outline" onClick={() => calculateMutation.mutate()} loading={calculateMutation.isPending}>
+              Recalculer les penalites
+            </AppButton>
+          </Can>
         </div>
 
         {/* Search --- Export | Filtres | Effacer */}

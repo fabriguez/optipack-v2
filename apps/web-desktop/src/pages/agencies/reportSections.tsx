@@ -234,7 +234,7 @@ export function FundTransfersSection({ outgoing, incoming, outTotal, inTotal, de
   );
 }
 
-export function AttachmentRow({ att, onOpen, onSaveCaption, onDelete }: { att: Attachment; onOpen: () => void; onSaveCaption: (c: string) => void; onDelete: () => void }) {
+export function AttachmentRow({ att, onOpen, onSaveCaption, onDelete, readOnly }: { att: Attachment; onOpen: () => void; onSaveCaption: (c: string) => void; onDelete: () => void; readOnly?: boolean }) {
   const [caption, setCaption] = useState(att.caption ?? '');
   const [editing, setEditing] = useState(false);
   return (
@@ -249,12 +249,17 @@ export function AttachmentRow({ att, onOpen, onSaveCaption, onDelete }: { att: A
           <span className="truncate">{att.caption || att.fileName || 'piece-jointe'}</span>
           {att.fileName && att.caption && <span className="text-gray-400 truncate">({att.fileName})</span>}
         </button>
-        <button type="button" onClick={() => setEditing((v) => !v)} className="rounded-lg px-2 py-1 text-gray-500 hover:bg-gray-100">Libelle</button>
-        <button type="button" onClick={onDelete} className="rounded-lg p-1 text-red-500 hover:bg-red-50" aria-label="Supprimer">
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        {/* Edition/suppression masquees sans la permission dailyreport.manage */}
+        {!readOnly && (
+          <>
+            <button type="button" onClick={() => setEditing((v) => !v)} className="rounded-lg px-2 py-1 text-gray-500 hover:bg-gray-100">Libelle</button>
+            <button type="button" onClick={onDelete} className="rounded-lg p-1 text-red-500 hover:bg-red-50" aria-label="Supprimer">
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </>
+        )}
       </div>
-      {editing && (
+      {editing && !readOnly && (
         <div className="mt-2 flex items-center gap-2">
           <input
             type="text"

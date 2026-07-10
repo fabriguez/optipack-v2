@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { apiClient } from '@/lib/api/client';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
+import { Can } from '@/lib/components/Can';
 import { formatDate } from '@transitsoftservices/shared';
 import { Check, X } from 'lucide-react';
 import { toast } from 'sonner';
@@ -75,6 +76,7 @@ export function AgencyLeavesTab({ agencyId }: { agencyId: string }) {
                   {l.requestedBy ? `${l.requestedBy.firstName} ${l.requestedBy.lastName}` : '-'}
                 </td>
                 <td className="py-2 text-right">
+                  <Can permission="leave.validate">
                   <div className="flex justify-end gap-1">
                     <AppButton
                       size="sm"
@@ -100,6 +102,7 @@ export function AgencyLeavesTab({ agencyId }: { agencyId: string }) {
                       Refuser
                     </AppButton>
                   </div>
+                  </Can>
                 </td>
               </tr>
             ))}

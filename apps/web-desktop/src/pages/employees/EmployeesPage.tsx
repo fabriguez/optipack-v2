@@ -19,6 +19,7 @@ import { formatAmount } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
 import { EmployeeFormDialog } from './EmployeeFormDialog';
 import { Can } from '@/lib/components/Can';
+import { usePermission } from '@/lib/hooks/usePermission';
 
 export default function EmployeesPage() {
   const navigate = useNavigate();
@@ -31,6 +32,8 @@ export default function EmployeesPage() {
   const [toDelete, setToDelete] = useState<{ id: string; fullName: string } | null>(null);
   const agencyIdFilter = searchParams.get('agencyId') || '';
   const queryClient = useQueryClient();
+  // Permission ABAC : DELETE /employees/:id exige personnel.delete.
+  const canDeleteEmployee = usePermission('personnel.delete');
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => apiClient.delete(`/employees/${id}`),
@@ -123,7 +126,7 @@ export default function EmployeesPage() {
         <RowActions actions={[
           { label: 'Voir details', icon: <Eye className="h-4 w-4" />, onClick: () => navigate(`/employees/${row.id}`) },
           { label: 'Modifier', icon: <Edit className="h-4 w-4" />, onClick: () => navigate(`/employees/${row.id}`) },
-          ...(row.isActive ? [{
+          ...(row.isActive && canDeleteEmployee ? [{
             label: 'Supprimer',
             icon: <Trash2 className="h-4 w-4" />,
             variant: 'destructive' as const,
@@ -143,10 +146,12 @@ export default function EmployeesPage() {
             <p className="text-sm text-gray-500 mt-1">{data?.meta?.total ?? 0} employes.</p>
           </div>
           <div className="flex gap-2">
-            <AppButton variant="outline" onClick={() => setShowImport(true)}>
-              <Upload className="h-4 w-4" />
-              Importer
-            </AppButton>
+            <Can permission="personnel.create">
+              <AppButton variant="outline" onClick={() => setShowImport(true)}>
+                <Upload className="h-4 w-4" />
+                Importer
+              </AppButton>
+            </Can>
             <Can permission="personnel.create">
               <AppButton onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" />Nouvel employe</AppButton>
             </Can>

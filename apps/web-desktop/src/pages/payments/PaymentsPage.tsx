@@ -12,6 +12,8 @@ import { ExportButton } from '@/components/shared/ExportButton';
 import { RowActions } from '@/components/shared/RowActions';
 import { useServerPagination } from '@/lib/hooks/useServerPagination';
 import { usePayments } from '@/lib/hooks/usePayments';
+import { usePermission } from '@/lib/hooks/usePermission';
+import { Can } from '@/lib/components/Can';
 import { searchers } from '@/lib/api/searchers';
 import { formatAmount, formatDateTime } from '@transitsoftservices/shared';
 import { PaymentFormDialog } from './PaymentFormDialog';
@@ -25,6 +27,9 @@ function PaymentsContent() {
   const [searchParams] = useSearchParams();
   const [showCreate, setShowCreate] = useState(false);
   const { page, search, setPage, setSearch, queryParams } = useServerPagination();
+
+  // Gating ABAC : meme cle que la route API POST /payments/:id/void
+  const canVoid = usePermission('payment.void');
 
   const agencyFilter = searchParams.get('agencyId') || '';
   const paymentMethodFilter = searchParams.get('paymentMethod') || '';
@@ -158,7 +163,7 @@ function PaymentsContent() {
         <RowActions actions={[
           { label: 'Voir les details', icon: <Eye className="h-4 w-4" />, onClick: () => navigate(`/payments/${row.id}`) },
           { label: 'Voir la facture', icon: <FileText className="h-4 w-4" />, onClick: () => navigate(`/invoices/${row.invoice?.id || row.invoiceId}`) },
-          { label: 'Annuler', icon: <Ban className="h-4 w-4" />, onClick: () => navigate(`/payments/${row.id}`), variant: 'destructive', disabled: row.isVoided },
+          ...(canVoid ? [{ label: 'Annuler', icon: <Ban className="h-4 w-4" />, onClick: () => navigate(`/payments/${row.id}`), variant: 'destructive' as const, disabled: row.isVoided }] : []),
         ]} />
       ),
     },
@@ -172,10 +177,12 @@ function PaymentsContent() {
             <h1 className="text-2xl font-bold text-gray-900">Paiements</h1>
             <p className="text-sm text-gray-500 mt-1">{data?.meta?.total ?? 0} paiements</p>
           </div>
-          <AppButton onClick={() => setShowCreate(true)}>
-            <Plus className="h-4 w-4" />
-            Nouveau paiement
-          </AppButton>
+          <Can permission="payment.record">
+            <AppButton onClick={() => setShowCreate(true)}>
+              <Plus className="h-4 w-4" />
+              Nouveau paiement
+            </AppButton>
+          </Can>
         </div>
 
         {/* Search --- Export | Filtres | Effacer */}

@@ -8,6 +8,7 @@ import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
 import { Can } from '@/lib/components/Can';
+import { usePermission } from '@/lib/hooks/usePermission';
 import { AppBadge } from '@/components/ui/AppBadge';
 import { AppDataTable } from '@/components/ui/AppDataTable';
 import { SearchBar } from '@/components/shared/SearchBar';
@@ -35,6 +36,9 @@ function ClientsContent() {
   const [editClient, setEditClient] = useState<any | null>(null);
   const [confirmDeleteClient, setConfirmDeleteClient] = useState<any | null>(null);
   const deleteMut = useDeleteClient();
+  // Permissions ABAC : modification / suppression client (actions de ligne).
+  const canUpdateClient = usePermission('client.update');
+  const canDeleteClient = usePermission('client.delete');
 
 
   const agencyFilter = searchParams.get('agencyId') || '';
@@ -131,8 +135,12 @@ function ClientsContent() {
           { label: 'Voir le profil', icon: <Eye className="h-4 w-4" />, onClick: () => router.push(`/clients/${row.id}`) },
           { label: 'Voir les colis', icon: <Package className="h-4 w-4" />, onClick: () => router.push(`/parcels?clientId=${row.id}`) },
           { label: 'Voir les factures', icon: <CreditCard className="h-4 w-4" />, onClick: () => router.push(`/invoices?clientId=${row.id}`) },
-          { label: 'Modifier', icon: <Edit className="h-4 w-4" />, onClick: () => setEditClient(row) },
-          { label: 'Supprimer', icon: <Trash2 className="h-4 w-4" />, onClick: () => setConfirmDeleteClient(row), variant: 'destructive' as const },
+          ...(canUpdateClient
+            ? [{ label: 'Modifier', icon: <Edit className="h-4 w-4" />, onClick: () => setEditClient(row) }]
+            : []),
+          ...(canDeleteClient
+            ? [{ label: 'Supprimer', icon: <Trash2 className="h-4 w-4" />, onClick: () => setConfirmDeleteClient(row), variant: 'destructive' as const }]
+            : []),
         ]} />
       ),
     },
@@ -147,10 +155,12 @@ function ClientsContent() {
             <p className="text-sm text-gray-500 mt-1">{data?.meta?.total ?? 0} clients</p>
           </div>
           <div className="flex gap-2">
-            <AppButton variant="outline" onClick={() => setShowImport(true)}>
-              <Upload className="h-4 w-4" />
-              Importer
-            </AppButton>
+            <Can permission="client.create">
+              <AppButton variant="outline" onClick={() => setShowImport(true)}>
+                <Upload className="h-4 w-4" />
+                Importer
+              </AppButton>
+            </Can>
             <Can permission="client.create">
               <AppButton onClick={() => setShowCreate(true)}>
                 <Plus className="h-4 w-4" />

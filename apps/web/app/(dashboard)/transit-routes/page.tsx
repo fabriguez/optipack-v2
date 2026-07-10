@@ -19,6 +19,7 @@ import { apiClient } from '@/lib/api/client';
 import { formatAmount } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
 import { TransitRouteFormDialog } from './TransitRouteFormDialog';
+import { Can } from '@/lib/components/Can';
 
 const TYPE_COLORS: Record<string, string> = {
   AIR: 'bg-blue-50 text-blue-700',
@@ -142,11 +143,13 @@ export default function TransitRoutesPage() {
             <p className="text-sm text-gray-500 mt-1">Configuration des routes et tarification.</p>
           </div>
           <div className="flex gap-2">
-            <AppButton variant="outline" onClick={() => setShowImport(true)}>
-              <Upload className="h-4 w-4" />
-              Importer
-            </AppButton>
-            <AppButton onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" />Nouvelle route</AppButton>
+            <Can permission="transitroute.manage">
+              <AppButton variant="outline" onClick={() => setShowImport(true)}>
+                <Upload className="h-4 w-4" />
+                Importer
+              </AppButton>
+              <AppButton onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" />Nouvelle route</AppButton>
+            </Can>
           </div>
         </div>
 

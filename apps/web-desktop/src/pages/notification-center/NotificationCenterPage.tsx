@@ -11,6 +11,7 @@ import { AppDataTable } from '@/components/ui/AppDataTable';
 import { SearchBar } from '@/components/shared/SearchBar';
 import { FilterDialog } from '@/components/shared/FilterDialog';
 import { RowActions } from '@/components/shared/RowActions';
+import { usePermission } from '@/lib/hooks/usePermission';
 import { useServerPagination } from '@/lib/hooks/useServerPagination';
 import { searchers } from '@/lib/api/searchers';
 import { extractApiError } from '@/lib/api/errorMessage';
@@ -38,6 +39,8 @@ function NotificationCenterContent() {
   const queryClient = useQueryClient();
   const { page, search, setPage, setSearch, queryParams } = useServerPagination();
   const [selected, setSelected] = useState<AdminNotification | null>(null);
+  // Permission ABAC : POST /notifications/:id/retry exige notification.manage.
+  const canRetryNotification = usePermission('notification.manage');
 
   // Filtres lus depuis l'URL (geres par FilterDialog).
   const filters: AdminNotificationParams = {
@@ -167,7 +170,7 @@ function NotificationCenterContent() {
         <RowActions
           actions={[
             { label: 'Voir le detail', icon: <Eye className="h-4 w-4" />, onClick: () => setSelected(row) },
-            ...(canRetry(row.status, row.type)
+            ...(canRetryNotification && canRetry(row.status, row.type)
               ? [{ label: 'Renvoyer', icon: <RotateCw className="h-4 w-4" />, onClick: () => retryMut.mutate(row.id) }]
               : []),
           ]}

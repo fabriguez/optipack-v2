@@ -32,6 +32,7 @@ import { ImageInput } from '@/components/shared/ImageInput';
 import { AuthedImage } from '@/components/shared/AuthedImage';
 import { ImageLightbox } from '@/components/shared/ImageLightbox';
 import { uploadImage } from '@/lib/api/uploads';
+import { Can } from '@/lib/components/Can';
 import { toast } from 'sonner';
 
 interface PricingBreakdown {
@@ -429,24 +430,26 @@ export default function ParcelDetailPage() {
     <AppCard>
       <AppCardHeader title={`Galerie (${images.length} image${images.length > 1 ? 's' : ''})`} />
       <div className="space-y-4">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <ImageInput
-            label="Ajouter une image (drop, fichier ou camera)"
-            onFile={handleAddImageFile}
-            uploading={imageUploading || addImage.isPending}
-            height={160}
-            allowClear={false}
-            hint="Une fois selectionnee, l'image est uploadee et ajoutee automatiquement"
-          />
-          <div className="flex flex-col justify-end">
-            <AppInput
-              label="Legende (appliquee a la prochaine image)"
-              value={imageCaption}
-              onChange={(e) => setImageCaption(e.target.value)}
-              placeholder="Optionnel"
+        <Can permission="parcel.update">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <ImageInput
+              label="Ajouter une image (drop, fichier ou camera)"
+              onFile={handleAddImageFile}
+              uploading={imageUploading || addImage.isPending}
+              height={160}
+              allowClear={false}
+              hint="Une fois selectionnee, l'image est uploadee et ajoutee automatiquement"
             />
+            <div className="flex flex-col justify-end">
+              <AppInput
+                label="Legende (appliquee a la prochaine image)"
+                value={imageCaption}
+                onChange={(e) => setImageCaption(e.target.value)}
+                placeholder="Optionnel"
+              />
+            </div>
           </div>
-        </div>
+        </Can>
 
         {images.length === 0 ? (
           <div className="flex flex-col items-center py-8">
@@ -468,14 +471,16 @@ export default function ParcelDetailPage() {
                 {img.caption && (
                   <p className="px-2 py-1 text-xs text-gray-600 truncate">{img.caption}</p>
                 )}
-                <button
-                  type="button"
-                  onClick={() => setImageToDelete(img.id)}
-                  className="absolute right-1 top-1 rounded-lg bg-white/90 p-1.5 opacity-0 shadow-sm transition-opacity hover:bg-red-50 group-hover:opacity-100"
-                  aria-label="Supprimer"
-                >
-                  <Trash2 className="h-4 w-4 text-red-600" />
-                </button>
+                <Can permission="parcel.update">
+                  <button
+                    type="button"
+                    onClick={() => setImageToDelete(img.id)}
+                    className="absolute right-1 top-1 rounded-lg bg-white/90 p-1.5 opacity-0 shadow-sm transition-opacity hover:bg-red-50 group-hover:opacity-100"
+                    aria-label="Supprimer"
+                  >
+                    <Trash2 className="h-4 w-4 text-red-600" />
+                  </button>
+                </Can>
               </div>
             ))}
           </div>
@@ -581,10 +586,12 @@ export default function ParcelDetailPage() {
               </div>
             </div>
           </div>
-          <AppButton variant="outline" onClick={() => setEditOpen(true)}>
-            <Edit className="h-4 w-4" />
-            Modifier
-          </AppButton>
+          <Can permission="parcel.update">
+            <AppButton variant="outline" onClick={() => setEditOpen(true)}>
+              <Edit className="h-4 w-4" />
+              Modifier
+            </AppButton>
+          </Can>
         </div>
 
         <AppCard>

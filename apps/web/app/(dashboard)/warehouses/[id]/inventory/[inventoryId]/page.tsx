@@ -17,6 +17,7 @@ import { normalizeScannedTracking } from '@/lib/utils/scanNormalize';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 import { apiClient } from '@/lib/api/client';
 import { formatDateTime } from '@transitsoftservices/shared';
+import { Can } from '@/lib/components/Can';
 import { toast } from 'sonner';
 
 export default function InventoryDetailPage({
@@ -205,6 +206,7 @@ export default function InventoryDetailPage({
         </div>
 
         {isOpen && (
+          <Can permission="warehouse.inventory.manage">
           <AppCard>
             <h3 className="text-base font-semibold text-gray-900 mb-3">Scanner un colis</h3>
             <div className="flex gap-2">
@@ -239,6 +241,7 @@ export default function InventoryDetailPage({
               </AppButton>
             </div>
           </AppCard>
+          </Can>
         )}
 
         {/* Colis presents dans le magasin : pointage rapide quand le QR/code-barres
@@ -294,6 +297,7 @@ export default function InventoryDetailPage({
                         </td>
                         <td className="p-2 text-gray-500 hidden lg:table-cell">{p.client?.fullName ?? '-'}</td>
                         <td className="p-2">
+                          <Can permission="warehouse.inventory.manage">
                           <div className="flex flex-wrap items-center justify-end gap-1.5">
                             <button
                               type="button"
@@ -323,6 +327,7 @@ export default function InventoryDetailPage({
                               Absent
                             </button>
                           </div>
+                          </Can>
                         </td>
                       </tr>
                     ))}

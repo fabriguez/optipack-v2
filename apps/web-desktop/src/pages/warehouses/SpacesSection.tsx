@@ -9,6 +9,7 @@ import {
   useUpsertWarehouseSpaces,
 } from '@/lib/hooks/useWarehouseSpaces';
 import type { WarehouseSpaceDTO, SpaceUpsertItem } from '@/lib/api/warehouseSpaces';
+import { Can } from '@/lib/components/Can';
 
 interface Props {
   warehouseId: string;
@@ -65,10 +66,12 @@ export function SpacesSection({ warehouseId }: Props) {
           Zones de rangement ({list.length})
         </h3>
         {!editing ? (
-          <AppButton size="sm" variant="outline" onClick={() => setEditing(true)}>
-            <Edit3 className="h-3.5 w-3.5" />
-            Gerer
-          </AppButton>
+          <Can permission="warehouse.manage">
+            <AppButton size="sm" variant="outline" onClick={() => setEditing(true)}>
+              <Edit3 className="h-3.5 w-3.5" />
+              Gerer
+            </AppButton>
+          </Can>
         ) : (
           <div className="flex gap-1">
             <AppButton size="sm" variant="ghost" onClick={() => setEditing(false)}>

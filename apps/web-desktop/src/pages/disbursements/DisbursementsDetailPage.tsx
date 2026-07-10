@@ -12,6 +12,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
 import { AttachmentsCard } from '@/components/shared/AttachmentsCard';
+import { Can } from '@/lib/components/Can';
 import { toast } from 'sonner';
 import { MaskedValue, isMasked } from '@/components/ui/MaskedValue';
 
@@ -61,10 +62,12 @@ export default function DisbursementsDetailPage() {
             </div>
           </div>
           {!voucher.isVoided && (
-            <AppButton variant="outline" onClick={() => setShowVoid(true)}>
-              <Ban className="h-4 w-4 text-red-600" />
-              Annuler
-            </AppButton>
+            <Can permission="disbursement.void">
+              <AppButton variant="outline" onClick={() => setShowVoid(true)}>
+                <Ban className="h-4 w-4 text-red-600" />
+                Annuler
+              </AppButton>
+            </Can>
           )}
         </div>
 

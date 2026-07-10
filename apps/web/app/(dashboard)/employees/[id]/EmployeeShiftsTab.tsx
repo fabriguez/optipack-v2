@@ -8,6 +8,7 @@ import { AppButton } from '@/components/ui/AppButton';
 import { AppCheckbox } from '@/components/ui/AppCheckbox';
 import { AppInput } from '@/components/ui/AppInput';
 import { AppTimePicker } from '@/components/ui/AppTimePicker';
+import { Can } from '@/lib/components/Can';
 import { Save } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -118,10 +119,13 @@ export function EmployeeShiftsTab({ employeeId }: { employeeId: string }) {
         );
       })}
       <div className="mt-3 flex justify-end">
-        <AppButton onClick={onSave} loading={saving}>
-          <Save className="h-4 w-4" />
-          Enregistrer
-        </AppButton>
+        {/* PUT /employees/:id/shifts exige schedule.manage */}
+        <Can permission="schedule.manage">
+          <AppButton onClick={onSave} loading={saving}>
+            <Save className="h-4 w-4" />
+            Enregistrer
+          </AppButton>
+        </Can>
       </div>
     </AppCard>
   );

@@ -17,6 +17,7 @@ import { RecordDebtPaymentDialog } from '../RecordDebtPaymentDialog';
 import { AdjustDebtDialog } from '../AdjustDebtDialog';
 import { AppDialog } from '@/components/ui/AppDialog';
 import { AppTextarea } from '@/components/ui/AppTextarea';
+import { Can } from '@/lib/components/Can';
 import { toast } from 'sonner';
 
 const STATUS_VARIANT: Record<string, 'warning' | 'info' | 'success' | 'error' | 'default'> = {
@@ -179,22 +180,28 @@ export default function DebtDetailPage({ params }: { params: Promise<{ id: strin
           </div>
           <div className="flex gap-2">
             {canAct && (
-              <AppButton size="sm" onClick={() => setPaymentOpen(true)}>
-                <CreditCard className="h-4 w-4" />
-                Enregistrer paiement
-              </AppButton>
+              <Can permission="debt.pay">
+                <AppButton size="sm" onClick={() => setPaymentOpen(true)}>
+                  <CreditCard className="h-4 w-4" />
+                  Enregistrer paiement
+                </AppButton>
+              </Can>
             )}
             {canAct && (
-              <AppButton size="sm" variant="outline" onClick={() => setAdjustOpen(true)}>
-                <Wrench className="h-4 w-4" />
-                Ajuster
-              </AppButton>
+              <Can permission="debt.update">
+                <AppButton size="sm" variant="outline" onClick={() => setAdjustOpen(true)}>
+                  <Wrench className="h-4 w-4" />
+                  Ajuster
+                </AppButton>
+              </Can>
             )}
             {canAct && (
-              <AppButton size="sm" variant="outline" onClick={() => setVoidOpen(true)}>
-                <Ban className="h-4 w-4" />
-                Annuler
-              </AppButton>
+              <Can permission="debt.void">
+                <AppButton size="sm" variant="outline" onClick={() => setVoidOpen(true)}>
+                  <Ban className="h-4 w-4" />
+                  Annuler
+                </AppButton>
+              </Can>
             )}
           </div>
         </div>

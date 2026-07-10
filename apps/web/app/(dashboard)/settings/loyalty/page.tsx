@@ -9,6 +9,7 @@ import { AppCard } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppInput } from '@/components/ui/AppInput';
 import { apiClient } from '@/lib/api/client';
+import { Can } from '@/lib/components/Can';
 import { toast } from 'sonner';
 
 interface Tier {
@@ -167,10 +168,13 @@ export default function LoyaltyConfigPage() {
                   <Plus className="h-3.5 w-3.5" />
                   Ajouter un palier
                 </AppButton>
-                <AppButton onClick={onSave} loading={saving}>
-                  <Save className="h-4 w-4" />
-                  Enregistrer
-                </AppButton>
+                {/* Sauvegarde de la politique : reservee aux detenteurs de loyalty.policy.manage */}
+                <Can permission="loyalty.policy.manage">
+                  <AppButton onClick={onSave} loading={saving}>
+                    <Save className="h-4 w-4" />
+                    Enregistrer
+                  </AppButton>
+                </Can>
               </div>
             </div>
           )}

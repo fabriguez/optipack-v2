@@ -18,6 +18,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { searchers } from '@/lib/api/searchers';
 import { ClientFormDialog } from './ClientFormDialog';
 import { Can } from '@/lib/components/Can';
+import { usePermission } from '@/lib/hooks/usePermission';
 import { formatAmount } from '@transitsoftservices/shared';
 
 const TIER_VARIANT: Record<string, 'default' | 'info' | 'warning' | 'success'> = {
@@ -34,6 +35,9 @@ export default function ClientsPage() {
   const [editClient, setEditClient] = useState<any | null>(null);
   const [confirmDeleteClient, setConfirmDeleteClient] = useState<any | null>(null);
   const deleteMut = useDeleteClient();
+  // Permissions ABAC : modification / suppression client (actions de ligne).
+  const canUpdateClient = usePermission('client.update');
+  const canDeleteClient = usePermission('client.delete');
 
 
   const agencyFilter = searchParams.get('agencyId') || '';
@@ -119,8 +123,12 @@ export default function ClientsPage() {
           { label: 'Voir le profil', icon: <Eye className="h-4 w-4" />, onClick: () => navigate(`/clients/${row.id}`) },
           { label: 'Voir les colis', icon: <Package className="h-4 w-4" />, onClick: () => navigate(`/parcels?clientId=${row.id}`) },
           { label: 'Voir les factures', icon: <CreditCard className="h-4 w-4" />, onClick: () => navigate(`/invoices?clientId=${row.id}`) },
-          { label: 'Modifier', icon: <Edit className="h-4 w-4" />, onClick: () => setEditClient(row) },
-          { label: 'Supprimer', icon: <Trash2 className="h-4 w-4" />, onClick: () => setConfirmDeleteClient(row), variant: 'destructive' as const },
+          ...(canUpdateClient
+            ? [{ label: 'Modifier', icon: <Edit className="h-4 w-4" />, onClick: () => setEditClient(row) }]
+            : []),
+          ...(canDeleteClient
+            ? [{ label: 'Supprimer', icon: <Trash2 className="h-4 w-4" />, onClick: () => setConfirmDeleteClient(row), variant: 'destructive' as const }]
+            : []),
         ]} />
       ),
     },
@@ -135,10 +143,12 @@ export default function ClientsPage() {
             <p className="text-sm text-gray-500 mt-1">{data?.meta?.total ?? 0} clients</p>
           </div>
           <div className="flex gap-2">
-            <AppButton variant="outline" onClick={() => setShowImport(true)}>
-              <Upload className="h-4 w-4" />
-              Importer
-            </AppButton>
+            <Can permission="client.create">
+              <AppButton variant="outline" onClick={() => setShowImport(true)}>
+                <Upload className="h-4 w-4" />
+                Importer
+              </AppButton>
+            </Can>
             <Can permission="client.create">
               <AppButton onClick={() => setShowCreate(true)}>
                 <Plus className="h-4 w-4" />

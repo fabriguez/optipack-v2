@@ -11,6 +11,8 @@ import { fetchPdfAuthed } from '@/lib/api/pdfDownload';
 import { toast } from 'sonner';
 import { formatDateTime } from '@transitsoftservices/shared';
 import { RegisterExtraParcelDialog } from './RegisterExtraParcelDialog';
+import { Can } from '@/lib/components/Can';
+import { usePermission } from '@/lib/hooks/usePermission';
 
 interface Props {
   open: boolean;
@@ -31,6 +33,9 @@ export function ComparisonDialog({ open, onClose, containerId, containerDesignat
   const [discToDelete, setDiscToDelete] = useState<string | null>(null);
   // Dialog d'enregistrement complet d'un colis EXTRA_PHYSICAL.
   const [showRegisterExtra, setShowRegisterExtra] = useState(false);
+  // Permission ABAC : creation / suppression d'ecarts et enregistrement
+  // de colis trouves physiquement.
+  const canManageManifest = usePermission('manifest.manage');
 
   const { data: comparisonData, isLoading } = useQuery({
     queryKey: ['manifests', 'comparison', containerId],
@@ -179,7 +184,7 @@ export function ComparisonDialog({ open, onClose, containerId, containerDesignat
                             <p className="text-sm font-medium text-gray-900">{line?.designation}</p>
                             <p className="text-xs text-gray-500 mt-0.5">{line?.weight ? `${Number(line.weight)} kg` : '-'}</p>
                           </div>
-                          {!alreadyMarked && (
+                          {!alreadyMarked && canManageManifest && (
                             <div className="flex flex-col gap-1.5 min-w-0 flex-1">
                               <AppInput
                                 placeholder="Commentaire admin..."
@@ -245,7 +250,9 @@ export function ComparisonDialog({ open, onClose, containerId, containerDesignat
                   <AppInput placeholder="Designation *" value={extraDesignation} onChange={(e) => setExtraDesignation(e.target.value)} className="sm:col-span-2" />
                   <AppInput placeholder="Tracking" value={extraTracking} onChange={(e) => setExtraTracking(e.target.value)} />
                   <AppInput placeholder="Poids (kg)" type="number" value={extraWeight} onChange={(e) => setExtraWeight(e.target.value)} />
-                  <AppButton size="sm" onClick={handleAddExtra}><Plus className="h-3.5 w-3.5" />Marquer ecart</AppButton>
+                  <Can permission="manifest.manage">
+                    <AppButton size="sm" onClick={handleAddExtra}><Plus className="h-3.5 w-3.5" />Marquer ecart</AppButton>
+                  </Can>
                 </div>
                 <p className="rounded-lg bg-gray-50 p-2 text-[11px] text-gray-500">
                   Pour <strong>enregistrer un vrai colis</strong> avec tous les details
@@ -253,12 +260,14 @@ export function ComparisonDialog({ open, onClose, containerId, containerDesignat
                   utilisez le bouton ci-dessous. Le colis cree apparaitra dans tous les
                   listings (magasin, historique conteneur, etc.).
                 </p>
-                <div className="flex justify-end">
-                  <AppButton size="sm" variant="outline" onClick={() => setShowRegisterExtra(true)}>
-                    <Plus className="h-3.5 w-3.5" />
-                    Enregistrer un colis complet
-                  </AppButton>
-                </div>
+                <Can permission="manifest.manage">
+                  <div className="flex justify-end">
+                    <AppButton size="sm" variant="outline" onClick={() => setShowRegisterExtra(true)}>
+                      <Plus className="h-3.5 w-3.5" />
+                      Enregistrer un colis complet
+                    </AppButton>
+                  </div>
+                </Can>
                 <AppInput placeholder="Commentaire (optionnel)" value={extraComment} onChange={(e) => setExtraComment(e.target.value)} />
 
                 {adminExtra.length === 0 ? (
@@ -306,6 +315,8 @@ function Stat({ label, value, accent }: { label: string; value: number; accent?:
 }
 
 function DiscrepancyRow({ disc, onDelete }: { disc: { id: string; designation: string | null; trackingNumber: string | null; weight: unknown; comment: string | null; createdAt: string }; onDelete: () => void }) {
+  // Permission ABAC : suppression d'un ecart (DELETE /manifests/discrepancies).
+  const canManageManifest = usePermission('manifest.manage');
   return (
     <div className="flex items-start justify-between gap-2 rounded-xl bg-gray-50 p-3">
       <div className="flex items-start gap-2 min-w-0 flex-1">
@@ -318,9 +329,11 @@ function DiscrepancyRow({ disc, onDelete }: { disc: { id: string; designation: s
           {disc.comment && <p className="text-xs text-gray-600 mt-0.5 italic">{disc.comment}</p>}
         </div>
       </div>
-      <button onClick={onDelete} className="rounded-lg p-1.5 hover:bg-red-50" aria-label="Supprimer">
-        <Trash2 className="h-3.5 w-3.5 text-red-600" />
-      </button>
+      {canManageManifest && (
+        <button onClick={onDelete} className="rounded-lg p-1.5 hover:bg-red-50" aria-label="Supprimer">
+          <Trash2 className="h-3.5 w-3.5 text-red-600" />
+        </button>
+      )}
     </div>
   );
 }

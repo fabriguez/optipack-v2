@@ -12,6 +12,7 @@ import { openAuthedFile } from '@/components/shared/AuthedImage';
 import { uploadImage, uploadFile } from '@/lib/api/uploads';
 import { formatDate } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
+import { usePermission } from '@/lib/hooks/usePermission';
 
 interface Doc {
   id: string;
@@ -32,6 +33,8 @@ export function ContainerDocumentsTab({ containerId }: { containerId: string }) 
   const qc = useQueryClient();
   const [pendingCaption, setPendingCaption] = useState('');
   const [uploading, setUploading] = useState(false);
+  // Permission ABAC : ajout / edition / suppression de documents conteneur.
+  const canManage = usePermission('container.manage');
 
   const { data, isLoading } = useQuery({
     queryKey: ['containers', containerId, 'documents'],
@@ -84,7 +87,7 @@ export function ContainerDocumentsTab({ containerId }: { containerId: string }) 
         </h3>
       </div>
 
-      {remaining <= 0 ? (
+      {!canManage ? null : remaining <= 0 ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
           Limite atteinte ({MAX_DOCS} max). Supprimez un document pour en ajouter un autre.
         </div>
@@ -156,6 +159,8 @@ export function ContainerDocumentsTab({ containerId }: { containerId: string }) 
 function DocRow({ doc, onOpen, onSaveCaption, onDelete }: { doc: Doc; onOpen: () => void; onSaveCaption: (c: string) => void; onDelete: () => void }) {
   const [caption, setCaption] = useState(doc.caption ?? '');
   const [editing, setEditing] = useState(false);
+  // Permission ABAC : edition du libelle et suppression du document.
+  const canManage = usePermission('container.manage');
   return (
     <li className="rounded-xl border border-gray-100 bg-white px-3 py-2 text-sm">
       <div className="flex items-center justify-between gap-2">
@@ -170,12 +175,16 @@ function DocRow({ doc, onOpen, onSaveCaption, onDelete }: { doc: Doc; onOpen: ()
           {doc.isImage && <span className="rounded-md bg-purple-100 px-1.5 py-0.5 text-[10px] font-medium text-purple-700">IMG</span>}
         </button>
         <span className="text-[11px] text-gray-400">{formatDate(doc.createdAt)}</span>
-        <button type="button" onClick={() => setEditing((v) => !v)} className="rounded-lg p-1 text-gray-500 hover:bg-gray-100" aria-label="Editer libelle">
-          <Edit2 className="h-3.5 w-3.5" />
-        </button>
-        <button type="button" onClick={onDelete} className="rounded-lg p-1 text-red-500 hover:bg-red-50" aria-label="Supprimer">
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        {canManage && (
+          <button type="button" onClick={() => setEditing((v) => !v)} className="rounded-lg p-1 text-gray-500 hover:bg-gray-100" aria-label="Editer libelle">
+            <Edit2 className="h-3.5 w-3.5" />
+          </button>
+        )}
+        {canManage && (
+          <button type="button" onClick={onDelete} className="rounded-lg p-1 text-red-500 hover:bg-red-50" aria-label="Supprimer">
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
       {editing && (
         <div className="mt-2 flex items-center gap-2">

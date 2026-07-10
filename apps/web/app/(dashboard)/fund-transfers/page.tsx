@@ -16,6 +16,8 @@ import { RowActions } from '@/components/shared/RowActions';
 import { useQuery } from '@tanstack/react-query';
 import { fundTransfersApi } from '@/lib/api/finance';
 import { searchers } from '@/lib/api/searchers';
+import { Can } from '@/lib/components/Can';
+import { usePermission } from '@/lib/hooks/usePermission';
 import { formatAmount, formatDateTime } from '@transitsoftservices/shared';
 import { FundTransferFormDialog } from './FundTransferFormDialog';
 
@@ -31,6 +33,9 @@ export default function FundTransfersPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  // Gating ABAC : actions confirmees/annulees selon les permissions
+  const canConfirm = usePermission('transfer.confirm');
+  const canVoid = usePermission('transfer.void');
 
   const statusFilter = searchParams.get('status') || '';
   const sourceAgencyId = searchParams.get('sourceAgencyId') || '';
@@ -107,8 +112,8 @@ export default function FundTransfersPage() {
       render: (row: any) => (
         <RowActions actions={[
           { label: 'Voir details', icon: <Eye className="h-4 w-4" />, onClick: () => router.push(`/fund-transfers/${row.id}`) },
-          { label: 'Confirmer', icon: <CheckCircle className="h-4 w-4" />, onClick: () => router.push(`/fund-transfers/${row.id}`), disabled: row.status !== 'PENDING' },
-          { label: 'Annuler', icon: <Ban className="h-4 w-4" />, onClick: () => router.push(`/fund-transfers/${row.id}`), variant: 'destructive', disabled: row.isVoided || row.status === 'VOIDED' },
+          ...(canConfirm ? [{ label: 'Confirmer', icon: <CheckCircle className="h-4 w-4" />, onClick: () => router.push(`/fund-transfers/${row.id}`), disabled: row.status !== 'PENDING' }] : []),
+          ...(canVoid ? [{ label: 'Annuler', icon: <Ban className="h-4 w-4" />, onClick: () => router.push(`/fund-transfers/${row.id}`), variant: 'destructive' as const, disabled: row.isVoided || row.status === 'VOIDED' }] : []),
         ]} />
       ),
     },
@@ -122,7 +127,9 @@ export default function FundTransfersPage() {
             <h1 className="text-2xl font-bold text-gray-900">Transferts de fonds</h1>
             <p className="text-sm text-gray-500 mt-1">Transferts d'argent des agences vers le siege.</p>
           </div>
-          <AppButton onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" />Nouveau transfert</AppButton>
+          <Can permission="transfer.initiate">
+            <AppButton onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" />Nouveau transfert</AppButton>
+          </Can>
         </div>
 
         {/* Search --- Export | Filtres | Effacer */}

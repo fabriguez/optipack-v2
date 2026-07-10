@@ -14,6 +14,7 @@ import { useServerPagination } from '@/lib/hooks/useServerPagination';
 import { useCarriers, useDeleteCarrier, type CarrierItem } from '@/lib/hooks/useCarriers';
 import { CarrierFormDialog, type CarrierLike } from './CarrierFormDialog';
 import { Can } from '@/lib/components/Can';
+import { usePermission } from '@/lib/hooks/usePermission';
 
 function CarriersContent() {
   const navigate = useNavigate();
@@ -21,6 +22,8 @@ function CarriersContent() {
   const [showForm, setShowForm] = useState(false);
   const [editTarget, setEditTarget] = useState<CarrierLike | null>(null);
   const deleteMutation = useDeleteCarrier();
+  // Permission ABAC : modification / desactivation d'un transporteur.
+  const canManageCarrier = usePermission('carrier.manage');
 
   const { data, isLoading } = useCarriers(queryParams);
 
@@ -106,8 +109,12 @@ function CarriersContent() {
         <RowActions
           actions={[
             { label: 'Voir', icon: <Eye className="h-4 w-4" />, onClick: () => navigate(`/carriers/${row.id}`) },
-            { label: 'Modifier', icon: <Edit className="h-4 w-4" />, onClick: () => openEdit(row) },
-            { label: 'Desactiver', icon: <Trash2 className="h-4 w-4" />, onClick: () => deleteMutation.mutate(row.id), variant: 'destructive' as const, disabled: !row.isActive },
+            ...(canManageCarrier
+              ? [
+                  { label: 'Modifier', icon: <Edit className="h-4 w-4" />, onClick: () => openEdit(row) },
+                  { label: 'Desactiver', icon: <Trash2 className="h-4 w-4" />, onClick: () => deleteMutation.mutate(row.id), variant: 'destructive' as const, disabled: !row.isActive },
+                ]
+              : []),
           ]}
         />
       ),

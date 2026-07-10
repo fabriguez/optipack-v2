@@ -11,6 +11,7 @@ import { AppInput } from '@/components/ui/AppInput';
 import { apiClient } from '@/lib/api/client';
 import { extractApiError } from '@/lib/api/errorMessage';
 import { AuthedImage, openAuthedFile } from '@/components/shared/AuthedImage';
+import { Can } from '@/lib/components/Can';
 
 interface PendingClient {
   id: string;
@@ -84,29 +85,32 @@ export default function ClientsKycPage() {
                 <DocPreview label="Verso" uri={c.idDocumentBackUrl} />
               </div>
 
-              <div className="flex gap-2 mt-4">
-                <AppButton
-                  variant="destructive"
-                  size="sm"
-                  className="flex-1"
-                  onClick={() => {
-                    setTarget(c);
-                    setMode('reject');
-                  }}
-                >
-                  Refuser
-                </AppButton>
-                <AppButton
-                  size="sm"
-                  className="flex-1"
-                  onClick={() => {
-                    setTarget(c);
-                    setMode('approve');
-                  }}
-                >
-                  Valider
-                </AppButton>
-              </div>
+              {/* Decision KYC : reservee aux detenteurs de kyc.validate */}
+              <Can permission="kyc.validate">
+                <div className="flex gap-2 mt-4">
+                  <AppButton
+                    variant="destructive"
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => {
+                      setTarget(c);
+                      setMode('reject');
+                    }}
+                  >
+                    Refuser
+                  </AppButton>
+                  <AppButton
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => {
+                      setTarget(c);
+                      setMode('approve');
+                    }}
+                  >
+                    Valider
+                  </AppButton>
+                </div>
+              </Can>
             </AppCard>
           ))}
         </div>

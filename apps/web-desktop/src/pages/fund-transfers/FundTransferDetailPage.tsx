@@ -13,6 +13,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
 import { AttachmentsCard } from '@/components/shared/AttachmentsCard';
+import { Can } from '@/lib/components/Can';
 import { toast } from 'sonner';
 
 const STATUS_VARIANT: Record<string, 'warning' | 'success' | 'error'> = {
@@ -88,16 +89,20 @@ export default function FundTransferDetailPage() {
           </div>
           <div className="flex items-center gap-2">
             {transfer.status === 'PENDING' && (
-              <AppButton onClick={() => setShowConfirm(true)}>
-                <CheckCircle className="h-4 w-4" />
-                Confirmer
-              </AppButton>
+              <Can permission="transfer.confirm">
+                <AppButton onClick={() => setShowConfirm(true)}>
+                  <CheckCircle className="h-4 w-4" />
+                  Confirmer
+                </AppButton>
+              </Can>
             )}
             {!transfer.isVoided && transfer.status !== 'VOIDED' && (
-              <AppButton variant="outline" onClick={() => setShowVoid(true)}>
-                <Ban className="h-4 w-4 text-red-600" />
-                Annuler
-              </AppButton>
+              <Can permission="transfer.void">
+                <AppButton variant="outline" onClick={() => setShowVoid(true)}>
+                  <Ban className="h-4 w-4 text-red-600" />
+                  Annuler
+                </AppButton>
+              </Can>
             )}
           </div>
         </div>

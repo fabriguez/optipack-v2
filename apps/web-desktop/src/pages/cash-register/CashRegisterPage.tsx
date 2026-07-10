@@ -6,6 +6,7 @@ import { AppButton } from '@/components/ui/AppButton';
 import { AppBadge } from '@/components/ui/AppBadge';
 import { CardSkeleton } from '@/components/ui/AppSkeleton';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { Can } from '@/lib/components/Can';
 import { formatAmount, formatDateTime } from '@transitsoftservices/shared';
 import { ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -79,10 +80,12 @@ export default function CashRegisterPage() {
             <p className="text-sm text-gray-500 mt-1">Suivi en temps reel de la caisse du jour.</p>
           </div>
           {cr && !cr.isClosed && (
-            <AppButton variant="outline" onClick={() => setShowClose(true)}>
-              <Lock className="h-4 w-4" />
-              Cloturer la caisse
-            </AppButton>
+            <Can permission="cashregister.close">
+              <AppButton variant="outline" onClick={() => setShowClose(true)}>
+                <Lock className="h-4 w-4" />
+                Cloturer la caisse
+              </AppButton>
+            </Can>
           )}
         </div>
 

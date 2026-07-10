@@ -12,6 +12,7 @@ import { TransitRouteFormDialog } from '../TransitRouteFormDialog';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { formatAmount } from '@transitsoftservices/shared';
+import { Can } from '@/lib/components/Can';
 
 const TYPE_CONFIG: Record<string, { label: string; variant: 'info' | 'warning' | 'success'; icon: any }> = {
   AIR: { label: 'Aerien', variant: 'info', icon: Plane },
@@ -66,10 +67,12 @@ export default function TransitRouteDetailPage({ params }: { params: Promise<{ i
               </p>
             </div>
           </div>
-          <AppButton variant="outline" onClick={() => setShowEdit(true)}>
-            <Edit className="h-4 w-4" />
-            Modifier
-          </AppButton>
+          <Can permission="transitroute.manage">
+            <AppButton variant="outline" onClick={() => setShowEdit(true)}>
+              <Edit className="h-4 w-4" />
+              Modifier
+            </AppButton>
+          </Can>
         </div>
 
         <TransitRouteFormDialog open={showEdit} onClose={() => setShowEdit(false)} route={route} />

@@ -12,6 +12,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { apiClient } from '@/lib/api/client';
 import { useCarrier, useDeleteCarrier } from '@/lib/hooks/useCarriers';
 import { CarrierFormDialog, type CarrierLike } from './CarrierFormDialog';
+import { Can } from '@/lib/components/Can';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 
@@ -78,18 +79,20 @@ export default function CarrierDetailPage() {
             </div>
           </div>
           <div className="flex gap-2">
-            <AppButton variant="outline" onClick={() => setEditOpen(true)}>
-              <Edit className="h-4 w-4" />
-              Modifier
-            </AppButton>
-            <AppButton
-              variant="outline"
-              onClick={() => setConfirmDeactivate(true)}
-              disabled={!carrier.isActive}
-            >
-              <Trash2 className="h-4 w-4" />
-              Desactiver
-            </AppButton>
+            <Can permission="carrier.manage">
+              <AppButton variant="outline" onClick={() => setEditOpen(true)}>
+                <Edit className="h-4 w-4" />
+                Modifier
+              </AppButton>
+              <AppButton
+                variant="outline"
+                onClick={() => setConfirmDeactivate(true)}
+                disabled={!carrier.isActive}
+              >
+                <Trash2 className="h-4 w-4" />
+                Desactiver
+              </AppButton>
+            </Can>
           </div>
         </div>
 

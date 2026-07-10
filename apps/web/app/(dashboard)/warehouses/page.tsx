@@ -104,10 +104,12 @@ export default function WarehousesPage() {
             <p className="text-sm text-gray-500 mt-1">{data?.meta?.total ?? 0} entrepots.</p>
           </div>
           <div className="flex gap-2">
-            <AppButton variant="outline" onClick={() => setShowImport(true)}>
-              <Upload className="h-4 w-4" />
-              Importer
-            </AppButton>
+            <Can permission="warehouse.manage">
+              <AppButton variant="outline" onClick={() => setShowImport(true)}>
+                <Upload className="h-4 w-4" />
+                Importer
+              </AppButton>
+            </Can>
             <Can permission="warehouse.manage">
               <AppButton onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" />Nouveau magasin</AppButton>
             </Can>

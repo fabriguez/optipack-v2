@@ -8,6 +8,7 @@ import { AppButton } from '@/components/ui/AppButton';
 import { AppInput } from '@/components/ui/AppInput';
 import { AppSelect } from '@/components/ui/AppSelect';
 import { AppBadge } from '@/components/ui/AppBadge';
+import { Can } from '@/lib/components/Can';
 import { formatDate } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
 
@@ -64,6 +65,8 @@ export function EmployeeLeavesTab({ employeeId }: { employeeId: string }) {
 
   return (
     <div className="space-y-4">
+      {/* POST /employees/:id/leaves accepte leave.request OU leave.validate */}
+      <Can permission={['leave.request', 'leave.validate']}>
       <AppCard>
         <h3 className="mb-3 text-base font-semibold">Nouvelle demande</h3>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
@@ -82,6 +85,7 @@ export function EmployeeLeavesTab({ employeeId }: { employeeId: string }) {
           </AppButton>
         </div>
       </AppCard>
+      </Can>
 
       <AppCard>
         <h3 className="mb-3 text-base font-semibold">Historique des conges</h3>
@@ -123,6 +127,7 @@ export function EmployeeLeavesTab({ employeeId }: { employeeId: string }) {
                   </td>
                   <td className="py-2 text-right">
                     {l.status === 'PENDING' && (
+                      <Can permission="leave.validate">
                       <div className="flex gap-1">
                         <AppButton
                           size="sm"
@@ -146,6 +151,7 @@ export function EmployeeLeavesTab({ employeeId }: { employeeId: string }) {
                           Refuser
                         </AppButton>
                       </div>
+                      </Can>
                     )}
                   </td>
                 </tr>

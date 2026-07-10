@@ -7,6 +7,7 @@ import { AppButton } from '@/components/ui/AppButton';
 import { AppCheckbox } from '@/components/ui/AppCheckbox';
 import { AppInput } from '@/components/ui/AppInput';
 import { AppTimePicker } from '@/components/ui/AppTimePicker';
+import { Can } from '@/lib/components/Can';
 import { Save } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -128,10 +129,13 @@ export function AgencyOpeningHoursEditor({ agencyId }: Props) {
         <p className="text-xs text-gray-500">
           La caisse se cloture automatiquement apres l&apos;heure de fermeture la plus tardive du jour.
         </p>
-        <AppButton onClick={onSave} loading={saving}>
-          <Save className="h-4 w-4" />
-          Enregistrer
-        </AppButton>
+        {/* PUT /agencies/:id/opening-hours exige agency.manage */}
+        <Can permission="agency.manage">
+          <AppButton onClick={onSave} loading={saving}>
+            <Save className="h-4 w-4" />
+            Enregistrer
+          </AppButton>
+        </Can>
       </div>
     </div>
   );

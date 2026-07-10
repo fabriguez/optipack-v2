@@ -31,6 +31,8 @@ import { AgencyAvatar } from '@/components/shared/AgencyAvatar';
 import { SpacesSection } from './SpacesSection';
 import { MoveToSpaceDialog } from './MoveToSpaceDialog';
 import { MaskedValue, isMasked } from '@/components/ui/MaskedValue';
+import { Can } from '@/lib/components/Can';
+import { usePermission } from '@/lib/hooks/usePermission';
 
 export default function WarehouseDetailPage() {
   const { id = '' } = useParams();
@@ -71,6 +73,12 @@ export default function WarehouseDetailPage() {
   // checkboxes). Pre-rempli la modale de transfert quand on l'ouvre depuis
   // le bouton "Transferer la selection".
   const [selectedParcelIds, setSelectedParcelIds] = useState<Set<string>>(new Set());
+  // Permissions ABAC : resolues au top-level (regle des hooks), utilisees
+  // dans les renders de colonnes (actions de lignes).
+  const canUpdateParcel = usePermission('parcel.update');
+  const canDeleteParcel = usePermission('parcel.delete');
+  const canDeliverParcel = usePermission('parcel.deliver');
+  const canManageWarehouse = usePermission('warehouse.manage');
 
   const { data, isLoading } = useQuery({
     queryKey: ['warehouses', id],
@@ -543,16 +551,24 @@ export default function WarehouseDetailPage() {
           actions={[
             { label: 'Voir', icon: <Eye className="h-4 w-4" />, onClick: () => navigate(`/parcels/${row.id}`) },
             { label: 'QR / Etiquette', icon: <QrCode className="h-4 w-4" />, onClick: () => setQrParcel(row) },
-            ...(row.status !== 'DELIVERED'
+            ...(canDeliverParcel && row.status !== 'DELIVERED'
               ? [{ label: 'Remettre au client', icon: <HandCoins className="h-4 w-4" />, onClick: () => setHandoverParcel(row) }]
               : []),
             ...(canModifyParcel(row) ? [
-              { label: 'Modifier', icon: <Edit className="h-4 w-4" />, onClick: () => navigate(`/parcels/${row.id}`) },
-              { label: 'Deplacer vers une zone', icon: <MapPin className="h-4 w-4" />, onClick: () => setMoveSpaceParcel(row) },
-              { label: 'Transferer', icon: <ArrowRightLeft className="h-4 w-4" />, onClick: () => setTransferParcel(row) },
-              { label: 'Retirer du magasin', icon: <Package className="h-4 w-4" />, onClick: () => setRemoveParcel(row) },
-              { label: 'Marquer perdu', icon: <AlertTriangle className="h-4 w-4" />, onClick: () => setLostParcel(row) },
-              { label: 'Supprimer', icon: <Trash2 className="h-4 w-4" />, onClick: () => setDeleteParcel(row), variant: 'destructive' as const },
+              ...(canUpdateParcel ? [
+                { label: 'Modifier', icon: <Edit className="h-4 w-4" />, onClick: () => navigate(`/parcels/${row.id}`) },
+              ] : []),
+              ...(canManageWarehouse ? [
+                { label: 'Deplacer vers une zone', icon: <MapPin className="h-4 w-4" />, onClick: () => setMoveSpaceParcel(row) },
+              ] : []),
+              ...(canUpdateParcel ? [
+                { label: 'Transferer', icon: <ArrowRightLeft className="h-4 w-4" />, onClick: () => setTransferParcel(row) },
+                { label: 'Retirer du magasin', icon: <Package className="h-4 w-4" />, onClick: () => setRemoveParcel(row) },
+                { label: 'Marquer perdu', icon: <AlertTriangle className="h-4 w-4" />, onClick: () => setLostParcel(row) },
+              ] : []),
+              ...(canDeleteParcel ? [
+                { label: 'Supprimer', icon: <Trash2 className="h-4 w-4" />, onClick: () => setDeleteParcel(row), variant: 'destructive' as const },
+              ] : []),
             ] : []),
           ]}
         />
@@ -618,10 +634,12 @@ export default function WarehouseDetailPage() {
               )}
             </p>
           </div>
-          <AppButton variant="outline" size="sm" onClick={() => setEditWarehouseOpen(true)}>
-            <Edit className="h-3.5 w-3.5" />
-            Modifier
-          </AppButton>
+          <Can permission="warehouse.manage">
+            <AppButton variant="outline" size="sm" onClick={() => setEditWarehouseOpen(true)}>
+              <Edit className="h-3.5 w-3.5" />
+              Modifier
+            </AppButton>
+          </Can>
         </div>
 
         <WarehouseStorageRulesCard warehouseId={warehouse.id} />
@@ -726,10 +744,12 @@ export default function WarehouseDetailPage() {
                     <h3 className="text-base font-semibold text-gray-900">Inventaires</h3>
                     <p className="text-xs text-gray-500">Lancez un inventaire pour reconcilier le stock theorique avec le stock physique.</p>
                   </div>
-                  <AppButton size="sm" onClick={handleStartInventory}>
-                    <PlayCircle className="h-4 w-4" />
-                    Lancer un inventaire
-                  </AppButton>
+                  <Can permission="warehouse.inventory.manage">
+                    <AppButton size="sm" onClick={handleStartInventory}>
+                      <PlayCircle className="h-4 w-4" />
+                      Lancer un inventaire
+                    </AppButton>
+                  </Can>
                 </div>
                 {(() => {
                   const items = inventoriesData?.data || [];
@@ -814,26 +834,32 @@ export default function WarehouseDetailPage() {
               <Link to={`/parcels?warehouseId=${id}`}>
                 <AppButton variant="ghost" size="sm">Voir tout</AppButton>
               </Link>
-              <AppButton variant="outline" size="sm" onClick={() => setShowUntrackedHandover(true)}>
-                <HandCoins className="h-3.5 w-3.5" />
-                Remettre un colis non enregistre
-              </AppButton>
-              <AppButton variant="outline" size="sm" onClick={() => setBatchAddOpen(true)}>
-                <Camera className="h-3.5 w-3.5" />
-                Ajouter par scan
-              </AppButton>
-              <AppButton variant="outline" size="sm" onClick={() => setBatchRemoveOpen(true)}>
-                <ScanLine className="h-3.5 w-3.5" />
-                Retirer par scan
-              </AppButton>
-              <AppButton variant="outline" size="sm" onClick={() => setBatchTransferOpen(true)}>
-                <Camera className="h-3.5 w-3.5" />
-                Transferer par scan
-              </AppButton>
-              <AppButton size="sm" onClick={() => setShowCreateParcel(true)}>
-                <Plus className="h-3.5 w-3.5" />
-                Ajouter colis
-              </AppButton>
+              <Can permission="parcel.deliver">
+                <AppButton variant="outline" size="sm" onClick={() => setShowUntrackedHandover(true)}>
+                  <HandCoins className="h-3.5 w-3.5" />
+                  Remettre un colis non enregistre
+                </AppButton>
+              </Can>
+              <Can permission="parcel.update">
+                <AppButton variant="outline" size="sm" onClick={() => setBatchAddOpen(true)}>
+                  <Camera className="h-3.5 w-3.5" />
+                  Ajouter par scan
+                </AppButton>
+                <AppButton variant="outline" size="sm" onClick={() => setBatchRemoveOpen(true)}>
+                  <ScanLine className="h-3.5 w-3.5" />
+                  Retirer par scan
+                </AppButton>
+                <AppButton variant="outline" size="sm" onClick={() => setBatchTransferOpen(true)}>
+                  <Camera className="h-3.5 w-3.5" />
+                  Transferer par scan
+                </AppButton>
+              </Can>
+              <Can permission="parcel.create">
+                <AppButton size="sm" onClick={() => setShowCreateParcel(true)}>
+                  <Plus className="h-3.5 w-3.5" />
+                  Ajouter colis
+                </AppButton>
+              </Can>
             </div>
           </div>
           {/* Barre de selection : visible des qu'il y a au moins une ligne
@@ -857,18 +883,20 @@ export default function WarehouseDetailPage() {
               <div className="flex items-center gap-2">
                 {selectedParcelIds.size > 0 && (
                   <>
-                    <AppButton
-                      size="sm"
-                      onClick={() => {
-                        // Ouvre la modale en mode "selection" (pas de scan).
-                        // batchTransferCodes reste vide, on passe directement
-                        // les IDs au handler `handleBatchTransferByIds`.
-                        setBatchTransferOpen(true);
-                      }}
-                    >
-                      <ArrowRightLeft className="h-3.5 w-3.5" />
-                      Transferer {selectedParcelIds.size} colis
-                    </AppButton>
+                    <Can permission="parcel.update">
+                      <AppButton
+                        size="sm"
+                        onClick={() => {
+                          // Ouvre la modale en mode "selection" (pas de scan).
+                          // batchTransferCodes reste vide, on passe directement
+                          // les IDs au handler `handleBatchTransferByIds`.
+                          setBatchTransferOpen(true);
+                        }}
+                      >
+                        <ArrowRightLeft className="h-3.5 w-3.5" />
+                        Transferer {selectedParcelIds.size} colis
+                      </AppButton>
+                    </Can>
                     <button
                       type="button"
                       onClick={() => setSelectedParcelIds(new Set())}

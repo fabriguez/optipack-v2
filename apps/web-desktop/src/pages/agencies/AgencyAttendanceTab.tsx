@@ -5,6 +5,7 @@ import { AppCard } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppInput } from '@/components/ui/AppInput';
 import { AppBadge } from '@/components/ui/AppBadge';
+import { usePermission } from '@/lib/hooks/usePermission';
 import { formatDate } from '@transitsoftservices/shared';
 import { Check, X, ListChecks, LogOut } from 'lucide-react';
 import { toast } from 'sonner';
@@ -59,6 +60,9 @@ export function AgencyAttendanceTab({ agencyId }: { agencyId: string }) {
   // etre changee pour CONSULTER l'historique d'un autre jour, mais les
   // boutons d'action ne sont affiches que si isToday.
   const isToday = date === today;
+  // Permission ABAC : POST attendance / check-out exige attendance.mark.
+  const canMark = usePermission('attendance.mark');
+  const showActions = isToday && canMark;
 
   const { data, isLoading } = useQuery({
     queryKey: ['agency-attendance', agencyId, date],
@@ -158,7 +162,7 @@ export function AgencyAttendanceTab({ agencyId }: { agencyId: string }) {
                 <th className="pb-2">Retard</th>
                 <th className="pb-2">Depart anticipe</th>
                 <th className="pb-2">Heures sup</th>
-                {isToday && <th className="pb-2 text-right">Actions</th>}
+                {showActions && <th className="pb-2 text-right">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -210,7 +214,7 @@ export function AgencyAttendanceTab({ agencyId }: { agencyId: string }) {
                     <td className="py-2 text-amber-700">{att?.lateMinutes ? `+${att.lateMinutes} min` : '-'}</td>
                     <td className="py-2 text-red-700">{att?.earlyDepartureMinutes ? `-${att.earlyDepartureMinutes} min` : '-'}</td>
                     <td className="py-2 text-emerald-700">{att?.overtimeMinutes ? `+${att.overtimeMinutes} min` : '-'}</td>
-                    {isToday && (
+                    {showActions && (
                       <td className="py-2 text-right">
                         <div className="flex justify-end gap-1">
                           <button

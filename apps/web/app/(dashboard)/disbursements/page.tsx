@@ -17,6 +17,8 @@ import { MaskedValue, isMasked } from '@/components/ui/MaskedValue';
 import { useQuery } from '@tanstack/react-query';
 import { disbursementsApi } from '@/lib/api/finance';
 import { searchers } from '@/lib/api/searchers';
+import { Can } from '@/lib/components/Can';
+import { usePermission } from '@/lib/hooks/usePermission';
 import { formatAmount, formatDateTime } from '@transitsoftservices/shared';
 import { DisbursementFormDialog } from './DisbursementFormDialog';
 
@@ -26,6 +28,8 @@ export default function DisbursementsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  // Gating ABAC : seuls les detenteurs de la permission voient l'action void
+  const canVoid = usePermission('disbursement.void');
 
   const agencyFilter = searchParams.get('agencyId') || '';
   const ordererUserId = searchParams.get('ordererUserId') || '';
@@ -97,7 +101,7 @@ export default function DisbursementsPage() {
       render: (row: any) => (
         <RowActions actions={[
           { label: 'Voir details', icon: <Eye className="h-4 w-4" />, onClick: () => router.push(`/disbursements/${row.id}`) },
-          { label: 'Annuler', icon: <Ban className="h-4 w-4" />, onClick: () => router.push(`/disbursements/${row.id}`), variant: 'destructive', disabled: row.isVoided },
+          ...(canVoid ? [{ label: 'Annuler', icon: <Ban className="h-4 w-4" />, onClick: () => router.push(`/disbursements/${row.id}`), variant: 'destructive' as const, disabled: row.isVoided }] : []),
         ]} />
       ),
     },
@@ -111,7 +115,9 @@ export default function DisbursementsPage() {
             <h1 className="text-2xl font-bold text-gray-900">Bons de decaissement</h1>
             <p className="text-sm text-gray-500 mt-1">Depenses tracables avec verification de solde.</p>
           </div>
-          <AppButton onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" />Nouveau decaissement</AppButton>
+          <Can permission="disbursement.create">
+            <AppButton onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" />Nouveau decaissement</AppButton>
+          </Can>
         </div>
 
         {/* Search --- Export | Filtres | Effacer */}

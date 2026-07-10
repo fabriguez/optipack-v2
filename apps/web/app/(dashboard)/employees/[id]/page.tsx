@@ -18,6 +18,7 @@ import { apiClient } from '@/lib/api/client';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
 import { EmployeeFormDialog } from '../EmployeeFormDialog';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { Can } from '@/lib/components/Can';
 import { Mail } from 'lucide-react';
 import { toast } from 'sonner';
 import { EmployeeShiftsTab } from './EmployeeShiftsTab';
@@ -168,18 +169,21 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {employee.isActive && (
-              <AppButton variant="outline" onClick={() => setConfirmResend(true)}>
-                <Mail className="h-4 w-4" />
-                Envoyer identifiants
-              </AppButton>
-            )}
-            {employee.isActive && (
-              <AppButton variant="outline" onClick={() => setShowEdit(true)}>
-                <Edit className="h-4 w-4" />
-                Modifier
-              </AppButton>
-            )}
+            {/* resend-credentials et PATCH /employees/:id exigent personnel.update */}
+            <Can permission="personnel.update">
+              {employee.isActive && (
+                <AppButton variant="outline" onClick={() => setConfirmResend(true)}>
+                  <Mail className="h-4 w-4" />
+                  Envoyer identifiants
+                </AppButton>
+              )}
+              {employee.isActive && (
+                <AppButton variant="outline" onClick={() => setShowEdit(true)}>
+                  <Edit className="h-4 w-4" />
+                  Modifier
+                </AppButton>
+              )}
+            </Can>
           </div>
         </div>
 

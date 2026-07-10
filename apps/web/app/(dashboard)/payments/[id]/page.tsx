@@ -9,6 +9,7 @@ import { AppButton } from '@/components/ui/AppButton';
 import { AppBadge } from '@/components/ui/AppBadge';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { Can } from '@/lib/components/Can';
 import { useQuery } from '@tanstack/react-query';
 import { useVoidPayment } from '@/lib/hooks/usePayments';
 import { apiClient } from '@/lib/api/client';
@@ -57,10 +58,12 @@ export default function PaymentDetailPage({ params }: { params: Promise<{ id: st
             </div>
           </div>
           {!payment.isVoided && (
-            <AppButton variant="destructive" onClick={() => setShowVoid(true)}>
-              <AlertTriangle className="h-4 w-4" />
-              Annuler le paiement
-            </AppButton>
+            <Can permission="payment.void">
+              <AppButton variant="destructive" onClick={() => setShowVoid(true)}>
+                <AlertTriangle className="h-4 w-4" />
+                Annuler le paiement
+              </AppButton>
+            </Can>
           )}
         </div>
 

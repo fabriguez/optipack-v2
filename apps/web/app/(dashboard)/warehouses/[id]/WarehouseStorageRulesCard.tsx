@@ -15,6 +15,7 @@ import { AppSearchSelect } from '@/components/ui/AppSearchSelect';
 import { AppSwitch } from '@/components/ui/AppSwitch';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { formatAmount } from '@transitsoftservices/shared';
+import { Can } from '@/lib/components/Can';
 import { toast } from 'sonner';
 
 type TransitType = 'AIR' | 'SEA' | 'LAND';
@@ -80,10 +81,12 @@ export function WarehouseStorageRulesCard({ warehouseId }: { warehouseId: string
           title="Frais de magasinage"
           description="Regles par type de transit, route, intervalle masse-volume. Tarif journalier x (jours - gratuits)."
         />
-        <AppButton size="sm" onClick={() => setCreateOpen(true)}>
-          <Plus className="h-3.5 w-3.5" />
-          Nouvelle regle
-        </AppButton>
+        <Can permission="warehouse.manage">
+          <AppButton size="sm" onClick={() => setCreateOpen(true)}>
+            <Plus className="h-3.5 w-3.5" />
+            Nouvelle regle
+          </AppButton>
+        </Can>
       </div>
 
       {isLoading ? (
@@ -115,14 +118,16 @@ export function WarehouseStorageRulesCard({ warehouseId }: { warehouseId: string
                     {formatAmount(Number(r.dailyRate))}/jour apres {r.freeDays} jour(s) gratuits
                   </p>
                 </div>
-                <div className="flex gap-1">
-                  <button onClick={() => setEditTarget(r)} className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100" aria-label="Modifier">
-                    <Edit className="h-4 w-4" />
-                  </button>
-                  <button onClick={() => setDeleteTarget(r)} className="rounded-lg p-1.5 text-red-500 hover:bg-red-50" aria-label="Supprimer">
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
+                <Can permission="warehouse.manage">
+                  <div className="flex gap-1">
+                    <button onClick={() => setEditTarget(r)} className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100" aria-label="Modifier">
+                      <Edit className="h-4 w-4" />
+                    </button>
+                    <button onClick={() => setDeleteTarget(r)} className="rounded-lg p-1.5 text-red-500 hover:bg-red-50" aria-label="Supprimer">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </Can>
               </div>
             </li>
           ))}

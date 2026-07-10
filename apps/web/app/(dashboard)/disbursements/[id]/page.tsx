@@ -16,6 +16,7 @@ import { apiClient } from '@/lib/api/client';
 import { MaskedValue, isMasked } from '@/components/ui/MaskedValue';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
 import { AttachmentsCard } from '@/components/shared/AttachmentsCard';
+import { Can } from '@/lib/components/Can';
 import { toast } from 'sonner';
 
 export default function DisbursementDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -64,10 +65,12 @@ export default function DisbursementDetailPage({ params }: { params: Promise<{ i
             </div>
           </div>
           {!voucher.isVoided && (
-            <AppButton variant="outline" onClick={() => setShowVoid(true)}>
-              <Ban className="h-4 w-4 text-red-600" />
-              Annuler
-            </AppButton>
+            <Can permission="disbursement.void">
+              <AppButton variant="outline" onClick={() => setShowVoid(true)}>
+                <Ban className="h-4 w-4 text-red-600" />
+                Annuler
+              </AppButton>
+            </Can>
           )}
         </div>
 
