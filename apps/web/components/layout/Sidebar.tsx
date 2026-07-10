@@ -96,13 +96,13 @@ const systemNav: NavItem[] = [
   { label: 'Personnel', href: '/employees', icon: UserCog, module: 'employees', permissions: ['personnel.read'] },
   { label: 'Fidelite', href: '/loyalty', icon: Star, module: 'loyalty', permissions: ['loyalty.read'] },
   { label: 'Penalites', href: '/penalties', icon: AlertTriangle, module: 'penalties', permissions: ['penalty.read'] },
-  { label: 'Notifications', href: '/notifications', icon: Bell },
-  { label: 'Centre de notifications', href: '/notification-center', icon: Send },
+  { label: 'Notifications', href: '/notifications', icon: Bell, permissions: ['notification.read'] },
+  { label: 'Centre de notifications', href: '/notification-center', icon: Send, permissions: ['notification.read'] },
   { label: 'Support', href: '/chat', icon: MessageSquare, module: 'chat', permissions: ['support.read'] },
   { label: 'Rapports', href: '/reports', icon: BarChart3, module: 'reports', permissions: ['report.read'] },
-  { label: 'Personnalisation', href: '/settings/branding', icon: Settings },
+  { label: 'Personnalisation', href: '/settings/branding', icon: Settings, adminOnly: true },
   { label: 'Studio site', href: '/settings/site', icon: Settings, adminOnly: true },
-  { label: 'Parametres', href: '/settings', icon: Settings },
+  { label: 'Parametres', href: '/settings', icon: Settings, adminOnly: true },
   { label: 'Audit', href: '/audit-log', icon: Shield, permissions: ['audit.read'] },
 ];
 

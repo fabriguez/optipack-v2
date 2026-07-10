@@ -3,7 +3,7 @@ import { ShieldX } from 'lucide-react';
 import { usePermission, useIsTenantAdmin } from '@/lib/hooks/usePermission';
 import { useAuthStore } from '@/lib/auth/authStore';
 
-const ROUTE_PERMISSION_MAP: Array<{ prefix: string; keys: string[] }> = [
+const ROUTE_PERMISSION_MAP: Array<{ prefix: string; keys: string[]; adminOnly?: boolean }> = [
   { prefix: '/agencies',        keys: ['agency.read'] },
   { prefix: '/warehouses',      keys: ['warehouse.read'] },
   { prefix: '/clients',         keys: ['client.read'] },
@@ -27,21 +27,28 @@ const ROUTE_PERMISSION_MAP: Array<{ prefix: string; keys: string[] }> = [
   { prefix: '/reports',         keys: ['report.read'] },
   { prefix: '/audit-log',       keys: ['audit.read'] },
   { prefix: '/carriers',        keys: ['carrier.read'] },
+  { prefix: '/notification-center', keys: ['notification.read'] },
+  { prefix: '/notifications',   keys: ['notification.read'] },
+  // Personnalisation (/settings/branding), Studio site (/settings/site) et
+  // Parametres (/settings) : reserves a l'admin tenant.
+  { prefix: '/settings',        keys: [], adminOnly: true },
 ];
 
-function requiredKeysForPath(pathname: string): string[] {
+function policyForPath(pathname: string): { keys: string[]; adminOnly: boolean } {
   const match = ROUTE_PERMISSION_MAP.find(
     (m) => pathname === m.prefix || pathname.startsWith(m.prefix + '/'),
   );
-  return match?.keys ?? [];
+  return { keys: match?.keys ?? [], adminOnly: !!match?.adminOnly };
 }
 
 export function PermissionGate({ children }: { children: React.ReactNode }) {
   const pathname = useLocation().pathname ?? '/';
   const status = useAuthStore((s) => s.status);
   const isAdmin = useIsTenantAdmin();
-  const requiredKeys = requiredKeysForPath(pathname);
-  const allowed = usePermission(requiredKeys, 'any');
+  const { keys: requiredKeys, adminOnly } = policyForPath(pathname);
+  const hasKeys = usePermission(requiredKeys, 'any');
+  // adminOnly : les permissions ne suffisent pas, seul le rôle admin passe.
+  const allowed = adminOnly ? false : hasKeys;
 
   if (status === 'loading') return <>{children}</>;
   if (isAdmin || allowed) return <>{children}</>;

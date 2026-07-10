@@ -8,9 +8,10 @@ import { useSession } from 'next-auth/react';
 
 /**
  * Carte route → permission(s) requise(s) (mode "any" : une suffit).
+ * `adminOnly` : réservé ADMIN/SUPER_ADMIN quelles que soient les permissions.
  * Préfixe absent = route libre.
  */
-const ROUTE_PERMISSION_MAP: Array<{ prefix: string; keys: string[] }> = [
+const ROUTE_PERMISSION_MAP: Array<{ prefix: string; keys: string[]; adminOnly?: boolean }> = [
   { prefix: '/agencies',        keys: ['agency.read'] },
   { prefix: '/warehouses',      keys: ['warehouse.read'] },
   { prefix: '/clients',         keys: ['client.read'] },
@@ -34,14 +35,19 @@ const ROUTE_PERMISSION_MAP: Array<{ prefix: string; keys: string[] }> = [
   { prefix: '/reports',         keys: ['report.read'] },
   { prefix: '/audit-log',       keys: ['audit.read'] },
   { prefix: '/carriers',        keys: ['carrier.read'] },
+  { prefix: '/notification-center', keys: ['notification.read'] },
+  { prefix: '/notifications',   keys: ['notification.read'] },
+  // Personnalisation (/settings/branding), Studio site (/settings/site) et
+  // Parametres (/settings) : reserves a l'admin tenant.
+  { prefix: '/settings',        keys: [], adminOnly: true },
 ];
 
-function requiredKeysForPath(pathname: string): string[] {
+function policyForPath(pathname: string): { keys: string[]; adminOnly: boolean } {
   const match = ROUTE_PERMISSION_MAP.find(
     (m) => pathname === m.prefix || pathname.startsWith(m.prefix + '/'),
   );
   // Routes sans contrainte → tableau vide (usePermission([]) = true)
-  return match?.keys ?? [];
+  return { keys: match?.keys ?? [], adminOnly: !!match?.adminOnly };
 }
 
 /**
@@ -53,9 +59,11 @@ export function PermissionGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? '/';
   const { status } = useSession();
   const isAdmin = useIsTenantAdmin();
-  const requiredKeys = requiredKeysForPath(pathname);
+  const { keys: requiredKeys, adminOnly } = policyForPath(pathname);
   // Toujours appelé (règle des hooks) ; tableau vide → true automatiquement.
-  const allowed = usePermission(requiredKeys, 'any');
+  const hasKeys = usePermission(requiredKeys, 'any');
+  // adminOnly : les permissions ne suffisent pas, seul le rôle admin passe.
+  const allowed = adminOnly ? false : hasKeys;
 
   // Pendant le chargement de session : laisse passer pour éviter le flash.
   if (status === 'loading') return <>{children}</>;
