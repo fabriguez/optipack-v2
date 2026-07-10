@@ -17,6 +17,25 @@ function employeeStatusFilter(pagination: PaginationInput): Prisma.EmployeeWhere
   return { isActive: true };
 }
 
+// Rattachement multi-agences : un employe "appartient" a une agence si c'est
+// son agence principale OU une affectation active (EmployeeAgencyAssignment).
+function agencyMembership(agencyIds: string[]): Prisma.EmployeeWhereInput {
+  return {
+    OR: [
+      { agencyId: { in: agencyIds } },
+      { agencyAssignments: { some: { toDate: null, agencyId: { in: agencyIds } } } },
+    ],
+  };
+}
+
+// Agences secondaires actives, pour affichage listing/detail.
+const SECONDARY_AGENCIES_INCLUDE = {
+  agencyAssignments: {
+    where: { toDate: null, isPrimary: false },
+    select: { agencyId: true, agency: { select: { id: true, name: true } } },
+  },
+} satisfies Prisma.EmployeeInclude;
+
 @injectable()
 export class PrismaEmployeeRepository implements IEmployeeRepository {
   async findById(id: string): Promise<Employee | null> {
@@ -47,21 +66,25 @@ export class PrismaEmployeeRepository implements IEmployeeRepository {
     const skip = (page - 1) * limit;
 
     const where: Prisma.EmployeeWhereInput = {
-      agencyId,
+      AND: [
+        agencyMembership([agencyId]),
+        ...(search
+          ? [{
+              OR: [
+                { fullName: { contains: search, mode: 'insensitive' as const } },
+                { position: { contains: search, mode: 'insensitive' as const } },
+              ],
+            }]
+          : []),
+      ],
       ...employeeStatusFilter(pagination),
-      ...(search && {
-        OR: [
-          { fullName: { contains: search, mode: 'insensitive' } },
-          { position: { contains: search, mode: 'insensitive' } },
-        ],
-      }),
     };
 
     const [data, total] = await Promise.all([
       prisma.employee.findMany({
         where, skip, take: limit,
         orderBy: { fullName: 'asc' },
-        include: { agency: { select: { id: true, name: true } } },
+        include: { agency: { select: { id: true, name: true } }, ...SECONDARY_AGENCIES_INCLUDE },
       }),
       prisma.employee.count({ where }),
     ]);
@@ -78,21 +101,28 @@ export class PrismaEmployeeRepository implements IEmployeeRepository {
     const skip = (page - 1) * limit;
 
     const where: Prisma.EmployeeWhereInput = {
-      agencyId: agencyId ? { equals: agencyId, in: agencyIds } : { in: agencyIds },
+      AND: [
+        // Scope du user (ses agences) puis filtre optionnel sur une agence
+        // precise — les deux matchent principale OU affectation active.
+        agencyMembership(agencyIds),
+        ...(agencyId ? [agencyMembership([agencyId])] : []),
+        ...(search
+          ? [{
+              OR: [
+                { fullName: { contains: search, mode: 'insensitive' as const } },
+                { position: { contains: search, mode: 'insensitive' as const } },
+              ],
+            }]
+          : []),
+      ],
       ...employeeStatusFilter(pagination),
-      ...(search && {
-        OR: [
-          { fullName: { contains: search, mode: 'insensitive' } },
-          { position: { contains: search, mode: 'insensitive' } },
-        ],
-      }),
     };
 
     const [data, total] = await Promise.all([
       prisma.employee.findMany({
         where, skip, take: limit,
         orderBy: { fullName: 'asc' },
-        include: { agency: { select: { id: true, name: true } } },
+        include: { agency: { select: { id: true, name: true } }, ...SECONDARY_AGENCIES_INCLUDE },
       }),
       prisma.employee.count({ where }),
     ]);

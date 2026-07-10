@@ -91,7 +91,26 @@ export default function EmployeesPage() {
 
   const columns = [
     { key: 'fullName', label: 'Nom complet', render: (row: any) => <Link to={`/employees/${row.id}`} className="text-primary-700 font-medium hover:underline" onClick={(e) => e.stopPropagation()}>{row.fullName}</Link> },
-    { key: 'agency', label: 'Agence', render: (row: any) => <span className="text-sm">{row.agency?.name || '-'}</span> },
+    {
+      key: 'agency',
+      label: 'Agence',
+      render: (row: any) => {
+        const secondary = (row.agencyAssignments ?? []) as { agency?: { name?: string } }[];
+        return (
+          <span className="text-sm">
+            {row.agency?.name || '-'}
+            {secondary.length > 0 && (
+              <span
+                className="ml-1 text-xs text-gray-500"
+                title={secondary.map((a) => a.agency?.name).filter(Boolean).join(', ')}
+              >
+                +{secondary.length}
+              </span>
+            )}
+          </span>
+        );
+      },
+    },
     { key: 'position', label: 'Poste' },
     { key: 'phone', label: 'Telephone', render: (row: any) => row.phone || '-' },
     { key: 'baseSalary', label: 'Salaire de base', render: (row: any) => formatAmount(Number(row.baseSalary)) },

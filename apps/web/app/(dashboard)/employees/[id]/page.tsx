@@ -97,6 +97,21 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
               ) : (
                 <p className="text-sm font-medium text-gray-900">{employee.agencyId}</p>
               )}
+              {(employee.agencyAssignments ?? []).filter((a: any) => !a.isPrimary).length > 0 && (
+                <p className="mt-0.5 text-xs text-gray-500">
+                  Aussi :{' '}
+                  {(employee.agencyAssignments as any[])
+                    .filter((a) => !a.isPrimary)
+                    .map((a, i, arr) => (
+                      <span key={a.agencyId}>
+                        <Link href={`/agencies/${a.agencyId}`} className="text-primary-600 hover:underline">
+                          {a.agency?.name ?? a.agencyId}
+                        </Link>
+                        {i < arr.length - 1 && ', '}
+                      </span>
+                    ))}
+                </p>
+              )}
             </div>
           </div>
         </AppCard>
