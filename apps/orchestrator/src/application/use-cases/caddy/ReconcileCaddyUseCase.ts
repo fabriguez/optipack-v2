@@ -94,6 +94,7 @@ export class ReconcileCaddyUseCase {
             vpsId: vps.id,
             status: { in: ['ACTIVE', 'PROVISIONING', 'FROZEN'] },
           },
+          include: { site: true },
         });
 
         const entries: TenantCaddyEntry[] = tenants
@@ -104,6 +105,11 @@ export class ReconcileCaddyUseCase {
             apiPort: t.apiPort!,
             webPort: t.webPort!,
             webClientPort: t.webClientPort ?? undefined,
+            // Site custom live -> prend la main sur les hosts publics.
+            customSitePort:
+              t.site && t.site.status === 'live' && t.site.sitePort
+                ? t.site.sitePort
+                : undefined,
             isFrozen: t.status === 'FROZEN',
             isMain: (t as { isMain?: boolean }).isMain ?? false,
           }));

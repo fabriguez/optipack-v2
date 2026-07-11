@@ -683,6 +683,7 @@ rm -f ${tmpScript} ${tmpData}
     await log(`[provision] reload Caddy config`);
     const allTenants = await prisma.tenant.findMany({
       where: { vpsId: tenant.vpsId, status: { in: ['ACTIVE', 'PROVISIONING'] } },
+      include: { site: true },
     });
     const caddyEntries: TenantCaddyEntry[] = allTenants
       .filter((t) => t.apiPort && t.webPort)
@@ -692,6 +693,10 @@ rm -f ${tmpScript} ${tmpData}
         apiPort: t.apiPort!,
         webPort: t.webPort!,
         webClientPort: t.webClientPort ?? undefined,
+        // Site custom live -> prend la main sur les hosts publics (preserve au
+        // (re-)provisioning : on ne casse pas un site custom deja deploye).
+        customSitePort:
+          t.site && t.site.status === 'live' && t.site.sitePort ? t.site.sitePort : undefined,
         isFrozen: false,
         isMain: (t as { isMain?: boolean }).isMain ?? false,
       }));

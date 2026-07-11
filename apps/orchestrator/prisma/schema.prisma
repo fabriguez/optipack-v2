@@ -176,6 +176,10 @@ model Tenant {
   planChanges PlanChange[]
   mail        TenantMail?
   billingUsers OpsAdmin[] @relation("TenantBillingUsers")
+  // Site public custom (repo GitHub buildé sur le VPS, lifecycle isole des
+  // updates tenant). 0 ou 1 par tenant.
+  site           TenantSite?
+  siteDeployJobs SiteDeployJob[]
 
   @@index([vpsId])
   @@index([status])
@@ -389,6 +393,85 @@ model TenantUpdateJob {
   @@index([tenantId])
   @@index([status])
   @@map("tenant_update_jobs")
+}
+
+/**
+ * Site public CUSTOM d'un tenant : un repo GitHub buildé en image Docker et
+ * lancé sur le VPS du tenant, dans un PROJET compose séparé (`tenant-<slug>-site`)
+ * avec son propre réseau — donc totalement isolé du stack applicatif.
+ *
+ * Isolation vis-à-vis des updates : UpdateTenantUseCase ne patche que
+ * api/web/web-client dans le compose principal. Le site vit dans un autre
+ * fichier + projet compose -> un update tenant ne peut PAS le toucher.
+ * Redéploiement dédié (bouton ops-admin ou webhook push GitHub).
+ *
+ * Sécurité : même si le repo est saisi par l'ops-admin (confiance), le
+ * container tourne sur un réseau Docker isolé, sans accès à la DB/aux secrets
+ * du tenant, avec limites CPU/RAM.
+ *
+ * Une fois `status = live`, le site prend la main sur les hosts PUBLICS du
+ * tenant (`<slug>.<base>`, `www.<slug>.<base>`, customDomain) via Caddy, à la
+ * place du web-client standard. Le dashboard staff (app.*) et l'API restent
+ * inchangés.
+ */
+model TenantSite {
+  tenantId       String   @id
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // --- Source ---
+  repoUrl        String   // ex: https://github.com/acme/site.git
+  branch         String   @default("main")
+  dockerfilePath String   @default("Dockerfile")
+  // Sous-chemin du repo à builder (monorepo). Vide = racine.
+  buildContext   String?
+  // Token d'accès (repos privés), chiffré AES-256-GCM comme les SSH keys.
+  repoTokenEnc   String?
+  // Variables d'env passées au build ET au runtime, chiffrées (JSON k/v).
+  envVarsEnc     String?
+  // Secret HMAC du webhook GitHub (X-Hub-Signature-256). Généré à la config.
+  webhookSecret  String
+
+  // --- Runtime ---
+  containerPort  Int      @default(3000) // port EXPOSE dans le Dockerfile du site
+  sitePort       Int?     // port host alloué (plage VPS), map -> containerPort
+  healthPath     String   @default("/")
+  cpuLimit       Float    @default(0.5)
+  memoryMb       Int      @default(512)
+
+  // --- Etat déploiement ---
+  status         String    @default("idle") // idle | building | live | failed
+  autoDeploy     Boolean   @default(true)    // déploie auto sur push (webhook)
+  lastDeploySha  String?
+  lastDeployAt   DateTime?
+  lastError      String?   @db.Text
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("tenant_sites")
+}
+
+/**
+ * Historique d'un déploiement de site custom (1 ligne par build). Porte les
+ * logs live + le statut, comme TenantUpdateJob pour les updates applicatifs.
+ */
+model SiteDeployJob {
+  id          String    @id @default(uuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+
+  status      String    @default("queued") // queued | building | succeeded | failed
+  trigger     String    // manual | webhook
+  commitSha   String?
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  logs        String?   @db.Text
+  errorLog    String?   @db.Text
+  createdAt   DateTime  @default(now())
+
+  @@index([tenantId])
+  @@index([status])
+  @@map("site_deploy_jobs")
 }
 
 // ============================================================

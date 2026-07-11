@@ -7,6 +7,7 @@ import type {
   MigrateJobData,
   UpdateJobData,
   RollbackJobData,
+  SiteDeployJobData,
 } from '../queues';
 import { logger } from '../../logger';
 import { ProvisionTenantUseCase } from '../../../application/use-cases/provisioning/ProvisionTenantUseCase';
@@ -21,6 +22,7 @@ import {
   UpdateTenantUseCase,
   RollbackTenantUseCase,
 } from '../../../application/use-cases/release/UpdateTenantUseCase';
+import { DeploySiteUseCase } from '../../../application/use-cases/site/DeploySiteUseCase';
 import { ProvisioningJobLogger } from '../../../application/use-cases/provisioning/ProvisioningJobLogger';
 
 const workerOpts = {
@@ -202,6 +204,21 @@ export function startProvisioningWorkers(): Worker[] {
       async (bullJob) => {
         const useCase = container.resolve(RollbackTenantUseCase);
         await useCase.execute(bullJob.data.updateJobId);
+      },
+      workerOpts,
+    ),
+  );
+
+  // SITE_DEPLOY — build + lancement du site custom d'un tenant. Le use-case gere
+  // son propre historique/logs (SiteDeployJob). Concurrency 1 (workerOpts) : un
+  // seul build a la fois cote host (les builds sont lourds). La dedup par tenant
+  // est assuree par le jobId deterministe cote producteur.
+  workers.push(
+    new Worker<SiteDeployJobData>(
+      QUEUE_NAMES.SITE_DEPLOY,
+      async (bullJob) => {
+        const useCase = container.resolve(DeploySiteUseCase);
+        await useCase.execute(bullJob.data.tenantId, bullJob.data.trigger);
       },
       workerOpts,
     ),

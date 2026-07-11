@@ -62,6 +62,44 @@ export class PortAllocator {
     return { apiPort, webPort, webClientPort };
   }
 
+  /**
+   * Alloue UN port libre sur le VPS (pour le site custom d'un tenant). Prend en
+   * compte les ports api/web/web-client de tous les tenants ET les sitePort deja
+   * attribues, pour ne jamais collisionner. Idempotent cote appelant : ne pas
+   * ré-allouer si le tenant a deja un sitePort.
+   */
+  async allocateOne(vpsId: string): Promise<number> {
+    const vps = await prisma.vPS.findUnique({
+      where: { id: vpsId },
+      select: { portRangeStart: true, portRangeEnd: true },
+    });
+    if (!vps) throw new NotFoundError('VPS', vpsId);
+    const start = vps.portRangeStart ?? DEFAULT_PORT_RANGE_START;
+    const end = vps.portRangeEnd ?? DEFAULT_PORT_RANGE_END;
+    if (start >= end) {
+      throw new BusinessError(`Plage de ports VPS invalide : start=${start} >= end=${end}`);
+    }
+
+    const tenants = await prisma.tenant.findMany({
+      where: { vpsId, status: { not: 'ARCHIVED' } },
+      select: { apiPort: true, webPort: true, webClientPort: true },
+    });
+    const sites = await prisma.tenantSite.findMany({
+      where: { tenant: { vpsId }, sitePort: { not: null } },
+      select: { sitePort: true },
+    });
+
+    const taken = new Set<number>();
+    for (const t of tenants) {
+      if (t.apiPort) taken.add(t.apiPort);
+      if (t.webPort) taken.add(t.webPort);
+      if (t.webClientPort) taken.add(t.webClientPort);
+    }
+    for (const s of sites) if (s.sitePort) taken.add(s.sitePort);
+
+    return this.findFree(taken, start, end);
+  }
+
   private findFree(taken: Set<number>, start: number, end: number): number {
     for (let p = start; p <= end; p++) {
       if (!taken.has(p)) return p;

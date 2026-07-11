@@ -21,6 +21,7 @@ export const QUEUE_NAMES = {
   MIGRATE: 'tenant-migrate',
   UPDATE: 'tenant-update',
   ROLLBACK: 'tenant-rollback',
+  SITE_DEPLOY: 'tenant-site-deploy',
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];

@@ -27,6 +27,10 @@ export interface TenantCaddyEntry {
   /** Port du conteneur web-client (site public + portail). Optionnel pour
    *  retrocompatibilite avec les tenants pre-Phase web-client. */
   webClientPort?: number;
+  /** Port d'un SITE CUSTOM live (repo GitHub buildé). Quand present, il prend
+   *  la main sur les hosts PUBLICS (a la place de web-client). Le dashboard
+   *  staff (app.*) et l'API ne sont pas affectes. */
+  customSitePort?: number;
   isFrozen: boolean;
   /** Tenant principal : schema d'URL plat (app/api/apex/www.{base}) au lieu
    *  du pattern slug habituel. */
@@ -161,10 +165,9 @@ export function renderManagedRegion(
     }
     // Staff dashboard
     blocks.push(siteBlock(h.staffHosts, proxyBody(`127.0.0.1:${t.webPort}`, 'SAMEORIGIN')));
-    // Public site + portail (fallback sur le web staff si pas de web-client)
-    const publicUpstream = t.webClientPort
-      ? `127.0.0.1:${t.webClientPort}`
-      : `127.0.0.1:${t.webPort}`;
+    // Public site + portail. Priorite : site custom live > web-client > web staff.
+    const publicPort = t.customSitePort ?? t.webClientPort ?? t.webPort;
+    const publicUpstream = `127.0.0.1:${publicPort}`;
     blocks.push(siteBlock(h.publicHosts, proxyBody(publicUpstream, 'SAMEORIGIN')));
     // API : X-Frame-Options DENY (jamais embarquee en iframe)
     blocks.push(siteBlock([h.apiHost], proxyBody(`127.0.0.1:${t.apiPort}`, 'DENY')));

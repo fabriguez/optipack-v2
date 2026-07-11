@@ -21,6 +21,7 @@ import { TenantStudio } from './TenantStudio';
 import { TenantMail } from './TenantMail';
 import { TenantBilling } from './TenantBilling';
 import { BillingUserCard } from './BillingUserCard';
+import { TenantCustomSite } from './TenantCustomSite';
 
 interface TenantDetail {
   id: string;
@@ -325,6 +326,12 @@ export default function TenantDetailPage({
       {!isTenantUser && (
         <Section title="Messagerie (Resend)">
           <TenantMail tenantId={t.id} />
+        </Section>
+      )}
+
+      {!isTenantUser && !t.isMain && (
+        <Section title="Site public custom (repo GitHub)">
+          <TenantCustomSite tenantId={t.id} slug={t.slug} canDelete={isSuperAdmin} />
         </Section>
       )}
 

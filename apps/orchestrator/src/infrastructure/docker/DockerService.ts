@@ -127,6 +127,86 @@ export class DockerService {
   }
 
   /**
+   * Clone (ou met a jour) un repo git sur le VPS dans `destDir`, checkout la
+   * branche demandee, et renvoie le SHA HEAD. Repo prive : passer un `token`
+   * (injecte dans l'URL https, jamais logue). `git` doit etre installe sur le
+   * VPS. Idempotent : clone si absent, sinon fetch + reset --hard.
+   */
+  async gitSync(
+    creds: SshConnection,
+    opts: { repoUrl: string; branch: string; destDir: string; token?: string },
+  ): Promise<string> {
+    // Injecte le token dans l'URL https (repos prives). On ne le loggue jamais :
+    // les commandes git n'echoent pas l'URL, et l'output est capture cote appelant.
+    let authUrl = opts.repoUrl;
+    if (opts.token && /^https:\/\//.test(opts.repoUrl)) {
+      authUrl = opts.repoUrl.replace('https://', `https://x-access-token:${opts.token}@`);
+    }
+    const probe = await this.ssh.exec(creds, 'command -v git >/dev/null 2>&1 && echo OK || echo MISSING');
+    if (probe.stdout.trim() !== 'OK') {
+      throw new Error(`git absent sur ${creds.host} : installer git sur le VPS (apt-get install -y git).`);
+    }
+    // -c credential.helper= : desactive tout prompt interactif (repo prive sans token -> echec net, pas de blocage).
+    const script = [
+      'set -e',
+      `D=${this.sh(opts.destDir)}`,
+      `B=${this.sh(opts.branch)}`,
+      `U=${this.sh(authUrl)}`,
+      'if [ -d "$D/.git" ]; then',
+      '  git -C "$D" remote set-url origin "$U"',
+      '  git -C "$D" -c credential.helper= fetch --depth 1 origin "$B"',
+      '  git -C "$D" checkout -B "$B" FETCH_HEAD',
+      '  git -C "$D" reset --hard FETCH_HEAD',
+      'else',
+      '  rm -rf "$D"',
+      '  git -c credential.helper= clone --depth 1 --branch "$B" "$U" "$D"',
+      'fi',
+      'git -C "$D" rev-parse HEAD',
+    ].join('\n');
+    const r = await this.ssh.exec(creds, script);
+    if (r.code !== 0) {
+      // Scrub le token d'un eventuel message d'erreur avant de le remonter.
+      const scrubbed = (r.stderr || r.stdout || '').replace(/x-access-token:[^@]*@/g, 'x-access-token:***@');
+      throw new Error(`git sync ${opts.repoUrl} (${opts.branch}) echoue : ${scrubbed.trim().slice(0, 400)}`);
+    }
+    // Le SHA est la derniere ligne non vide de stdout.
+    const lines = (r.stdout || '').trim().split('\n').filter(Boolean);
+    return lines[lines.length - 1] ?? '';
+  }
+
+  /**
+   * `docker build` sur le VPS. `contextDir` = racine du contexte de build,
+   * `dockerfilePath` relatif a ce contexte. `buildArgs` passes en --build-arg.
+   * Tag l'image `tag`. Le build execute du code du repo -> volontairement
+   * lance tel quel (l'ops-admin controle la source). Timeout genereux.
+   */
+  async buildImage(
+    creds: SshConnection,
+    opts: {
+      contextDir: string;
+      dockerfilePath: string;
+      tag: string;
+      buildArgs?: Record<string, string>;
+    },
+  ): Promise<string> {
+    const parts = ['docker build', `-t ${opts.tag}`, `-f ${this.sh(`${opts.contextDir}/${opts.dockerfilePath}`)}`];
+    if (opts.buildArgs) {
+      for (const [k, v] of Object.entries(opts.buildArgs)) {
+        parts.push(`--build-arg ${k}=${this.sh(String(v))}`);
+      }
+    }
+    parts.push(this.sh(opts.contextDir));
+    const r = await this.ssh.exec(creds, parts.join(' '));
+    if (r.code !== 0) throw new Error(`docker build ${opts.tag} echoue : ${(r.stderr || r.stdout).trim().slice(0, 800)}`);
+    return r.stdout.trim();
+  }
+
+  /** Quote un argument shell en single-quote (robuste). */
+  private sh(v: string): string {
+    return `'${String(v).replace(/'/g, "'\\''")}'`;
+  }
+
+  /**
    * `docker compose up -d --remove-orphans` sur un fichier compose DEJA present
    * (ne reecrit pas le YAML, contrairement a composeUp). Recree les services
    * dont l'image a change en conservant env_file / environment / networks.

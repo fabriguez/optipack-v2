@@ -8,6 +8,7 @@ import { AuditController } from '../controllers/AuditController';
 import { PlanController } from '../controllers/PlanController';
 import { BillingController } from '../controllers/BillingController';
 import { ReleaseController } from '../controllers/ReleaseController';
+import { SiteController } from '../controllers/SiteController';
 import { BackupController } from '../controllers/BackupController';
 import { CaddyController } from '../controllers/CaddyController';
 import { UfwController } from '../controllers/UfwController';
@@ -118,6 +119,13 @@ router.post('/billing/run-autofreeze', authenticateOps, requireSuperAdmin, Billi
 // IMPORTANT : raw body pour Stripe (verif HMAC)
 router.post('/billing/webhook/stripe', raw({ type: 'application/json' }), BillingController.stripeWebhook);
 router.post('/billing/webhook/momo', BillingController.momoWebhook);
+// Webhook GitHub push -> auto-deploy du site custom. Public : legitimite via
+// HMAC X-Hub-Signature-256 (webhookSecret du site). raw body requis.
+router.post(
+  '/webhooks/github/site/:tenantId',
+  raw({ type: 'application/json' }),
+  SiteController.webhook,
+);
 
 // ============================================================
 // RELEASES + TENANT UPDATES (Phase 4.5)
@@ -134,6 +142,14 @@ router.post('/tenants/:id/updates', authenticateOps, requireGlobalOps, ReleaseCo
 router.get('/tenants/:id/updates', authenticateOps, requireGlobalOps, ReleaseController.listJobs);
 router.get('/tenants/:id/updates/:jobId', authenticateOps, requireGlobalOps, ReleaseController.getJob);
 router.post('/tenants/:id/updates/:jobId/rollback', authenticateOps, requireSuperAdmin, ReleaseController.rollback);
+
+// ============================================================
+// SITE CUSTOM (repo GitHub buildé + lancé sur le VPS, isolé des updates)
+// ============================================================
+router.get('/tenants/:id/site', authenticateOps, requireGlobalOps, SiteController.get);
+router.put('/tenants/:id/site', authenticateOps, requireGlobalOps, SiteController.configure);
+router.post('/tenants/:id/site/redeploy', authenticateOps, requireGlobalOps, SiteController.redeploy);
+router.delete('/tenants/:id/site', authenticateOps, requireSuperAdmin, SiteController.remove);
 
 // Endpoint de proxy pour l'API tenant (pas auth ops admin, mais service token partage).
 // L'API tenant appelle ceci depuis son backend pour repondre a /api/v1/system/updates
