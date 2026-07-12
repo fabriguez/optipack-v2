@@ -67,12 +67,14 @@ export class DeploySiteUseCase {
       // 2. Git sync sur le VPS (clone/pull + checkout) -> SHA HEAD.
       const destDir = `${config.tenantEnvDir}/sites/${tenant.slug}`;
       const token = site.repoTokenEnc ? SshKeyEncryption.decrypt(site.repoTokenEnc) : undefined;
-      await log(`[site] git sync -> ${destDir}`);
+      const sshKey = site.repoSshKeyEnc ? SshKeyEncryption.decrypt(site.repoSshKeyEnc) : undefined;
+      await log(`[site] git sync -> ${destDir} (${DockerService.isSshRepoUrl(site.repoUrl) ? 'ssh' : 'https'})`);
       const sha = await this.docker.gitSync(creds, {
         repoUrl: site.repoUrl,
         branch: site.branch,
         destDir,
         token,
+        sshKey,
       });
       await log(`[site] HEAD ${sha.slice(0, 12)}`);
 

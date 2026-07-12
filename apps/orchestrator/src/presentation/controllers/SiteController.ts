@@ -12,8 +12,16 @@ import { NotFoundError } from '../../domain/errors/BusinessError';
 
 const BASE_DOMAIN = process.env.OPS_BASE_DOMAIN ?? 'transitsoftservices.com';
 
+// Accepte HTTPS (https://…) OU SSH (ssh://… ou forme scp git@host:org/repo.git).
+const REPO_URL_RE = /^(https?:\/\/|ssh:\/\/|[A-Za-z0-9._-]+@[^/]+:)/;
+
 const configureSchema = z.object({
-  repoUrl: z.string().url(),
+  repoUrl: z
+    .string()
+    .min(1)
+    .refine((v) => REPO_URL_RE.test(v.trim()), {
+      message: 'URL de repo invalide (https://… ou git@host:org/repo.git)',
+    }),
   branch: z.string().min(1).default('main'),
   dockerfilePath: z.string().min(1).default('Dockerfile'),
   buildContext: z.string().optional().nullable(),
@@ -24,6 +32,8 @@ const configureSchema = z.object({
   autoDeploy: z.boolean().default(true),
   // Secrets : optionnels ; chiffrés avant stockage. Vide = inchangé.
   repoToken: z.string().optional().nullable(),
+  // Clé privée SSH de déploiement (repos SSH). Vide = inchangé.
+  repoSshKey: z.string().optional().nullable(),
   envVars: z.record(z.string()).optional().nullable(),
 });
 
@@ -81,6 +91,12 @@ export class SiteController {
           : parsed.repoToken
             ? SshKeyEncryption.encrypt(parsed.repoToken)
             : null;
+      const repoSshKeyEnc =
+        parsed.repoSshKey === undefined
+          ? existing?.repoSshKeyEnc ?? null
+          : parsed.repoSshKey
+            ? SshKeyEncryption.encrypt(parsed.repoSshKey)
+            : null;
       const envVarsEnc =
         parsed.envVars === undefined
           ? existing?.envVarsEnc ?? null
@@ -99,6 +115,7 @@ export class SiteController {
         memoryMb: parsed.memoryMb,
         autoDeploy: parsed.autoDeploy,
         repoTokenEnc,
+        repoSshKeyEnc,
         envVarsEnc,
         webhookSecret,
       };
@@ -144,6 +161,28 @@ export class SiteController {
         entityId: tenantId,
       });
       res.status(202).json({ success: true, data: { queued: true } });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * POST /ops/tenants/:id/site/webhook/regenerate — génère un nouveau secret
+   * HMAC (invalide l'ancien). Le secret n'est renvoyé qu'ici, en clair.
+   */
+  static async regenerateWebhook(req: Request, res: Response, next: NextFunction) {
+    try {
+      const tenantId = req.params.id;
+      const existing = await prisma.tenantSite.findUnique({ where: { tenantId }, select: { tenantId: true } });
+      if (!existing) throw new NotFoundError('TenantSite', tenantId);
+      const webhookSecret = randomBytes(24).toString('hex');
+      await prisma.tenantSite.update({ where: { tenantId }, data: { webhookSecret } });
+      await container.resolve(AuditLogger).log(req, {
+        action: 'TENANT_SITE_WEBHOOK_REGENERATED',
+        entityType: 'TenantSite',
+        entityId: tenantId,
+      });
+      res.json({ success: true, data: { webhookUrl: webhookUrlFor(tenantId), webhookSecret } });
     } catch (err) {
       next(err);
     }
@@ -282,6 +321,7 @@ export class SiteController {
     lastDeployAt: Date | null;
     lastError: string | null;
     repoTokenEnc: string | null;
+    repoSshKeyEnc: string | null;
     envVarsEnc: string | null;
   }) {
     return {
@@ -300,7 +340,9 @@ export class SiteController {
       lastDeploySha: site.lastDeploySha,
       lastDeployAt: site.lastDeployAt,
       lastError: site.lastError,
+      isSshRepo: REPO_URL_RE.test(site.repoUrl) && /^(ssh:\/\/|[A-Za-z0-9._-]+@[^/]+:)/.test(site.repoUrl),
       hasRepoToken: !!site.repoTokenEnc,
+      hasRepoSshKey: !!site.repoSshKeyEnc,
       hasEnvVars: !!site.envVarsEnc,
     };
   }

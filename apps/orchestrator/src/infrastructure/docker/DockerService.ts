@@ -134,24 +134,44 @@ export class DockerService {
    */
   async gitSync(
     creds: SshConnection,
-    opts: { repoUrl: string; branch: string; destDir: string; token?: string },
+    opts: { repoUrl: string; branch: string; destDir: string; token?: string; sshKey?: string },
   ): Promise<string> {
-    // Injecte le token dans l'URL https (repos prives). On ne le loggue jamais :
-    // les commandes git n'echoent pas l'URL, et l'output est capture cote appelant.
-    let authUrl = opts.repoUrl;
-    if (opts.token && /^https:\/\//.test(opts.repoUrl)) {
-      authUrl = opts.repoUrl.replace('https://', `https://x-access-token:${opts.token}@`);
-    }
+    const isSsh = DockerService.isSshRepoUrl(opts.repoUrl);
     const probe = await this.ssh.exec(creds, 'command -v git >/dev/null 2>&1 && echo OK || echo MISSING');
     if (probe.stdout.trim() !== 'OK') {
       throw new Error(`git absent sur ${creds.host} : installer git sur le VPS (apt-get install -y git).`);
     }
-    // -c credential.helper= : desactive tout prompt interactif (repo prive sans token -> echec net, pas de blocage).
+
+    // Auth : SSH (cle de deploiement / cle par defaut du VPS) ou HTTPS (token
+    // injecte dans l'URL). Le token et la cle ne sont JAMAIS logues (URL non
+    // echoee, cle ecrite via heredoc quote, output scrubbe cote erreur).
+    let authUrl = opts.repoUrl;
+    const keyPath = `${opts.destDir}.deploykey`;
+    const pre: string[] = ['set -e', `D=${this.sh(opts.destDir)}`, `B=${this.sh(opts.branch)}`];
+
+    if (isSsh) {
+      if (opts.sshKey) {
+        pre.push(`mkdir -p "$(dirname ${this.sh(keyPath)})"`);
+        pre.push('umask 077');
+        // Heredoc quote -> contenu litteral, aucune expansion. Newline finale
+        // ajoutee (ssh exige une cle terminee par \n).
+        pre.push(`cat > ${this.sh(keyPath)} <<'OPTIPACK_SSH_KEY_EOF'\n${opts.sshKey.replace(/\r/g, '').replace(/\n*$/, '')}\nOPTIPACK_SSH_KEY_EOF`);
+        pre.push(`chmod 600 ${this.sh(keyPath)}`);
+        // keyPath sans espaces (derive de destDir controle) -> pas de quoting interne.
+        pre.push(`export GIT_SSH_COMMAND="ssh -i ${keyPath} -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null"`);
+      } else {
+        // Pas de cle fournie : on s'appuie sur la cle SSH par defaut du VPS.
+        pre.push('export GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=accept-new"');
+      }
+    } else if (opts.token && /^https:\/\//.test(opts.repoUrl)) {
+      authUrl = opts.repoUrl.replace('https://', `https://x-access-token:${opts.token}@`);
+    }
+    pre.push(`U=${this.sh(authUrl)}`);
+
+    // -c credential.helper= : coupe tout prompt interactif (repo prive sans
+    // credentials -> echec net, pas de blocage).
     const script = [
-      'set -e',
-      `D=${this.sh(opts.destDir)}`,
-      `B=${this.sh(opts.branch)}`,
-      `U=${this.sh(authUrl)}`,
+      ...pre,
       'if [ -d "$D/.git" ]; then',
       '  git -C "$D" remote set-url origin "$U"',
       '  git -C "$D" -c credential.helper= fetch --depth 1 origin "$B"',
@@ -165,13 +185,16 @@ export class DockerService {
     ].join('\n');
     const r = await this.ssh.exec(creds, script);
     if (r.code !== 0) {
-      // Scrub le token d'un eventuel message d'erreur avant de le remonter.
       const scrubbed = (r.stderr || r.stdout || '').replace(/x-access-token:[^@]*@/g, 'x-access-token:***@');
       throw new Error(`git sync ${opts.repoUrl} (${opts.branch}) echoue : ${scrubbed.trim().slice(0, 400)}`);
     }
-    // Le SHA est la derniere ligne non vide de stdout.
     const lines = (r.stdout || '').trim().split('\n').filter(Boolean);
     return lines[lines.length - 1] ?? '';
+  }
+
+  /** URL SSH : `ssh://…` ou forme scp `git@host:org/repo.git`. */
+  static isSshRepoUrl(url: string): boolean {
+    return /^ssh:\/\//.test(url) || /^[A-Za-z0-9._-]+@[^/]+:/.test(url);
   }
 
   /**

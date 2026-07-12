@@ -44,7 +44,9 @@ interface Site {
   lastDeploySha: string | null;
   lastDeployAt: string | null;
   lastError: string | null;
+  isSshRepo: boolean;
   hasRepoToken: boolean;
+  hasRepoSshKey: boolean;
   hasEnvVars: boolean;
   webhookUrl: string;
   deployJobs: DeployJob[];
@@ -61,6 +63,7 @@ interface FormState {
   memoryMb: number;
   autoDeploy: boolean;
   repoToken: string;
+  repoSshKey: string;
   envVars: string;
 }
 
@@ -75,6 +78,7 @@ const EMPTY_FORM: FormState = {
   memoryMb: 512,
   autoDeploy: true,
   repoToken: '',
+  repoSshKey: '',
   envVars: '',
 };
 
@@ -136,6 +140,15 @@ export function TenantCustomSite({
     onSuccess: () => qc.invalidateQueries({ queryKey: ['tenant', tenantId, 'site'] }),
   });
 
+  const regenerate = useMutation({
+    mutationFn: () => api.post(`/tenants/${tenantId}/site/webhook/regenerate`),
+    onSuccess: (res) => {
+      const data = res.data?.data as { webhookSecret?: string } | undefined;
+      if (data?.webhookSecret) setSecret(data.webhookSecret);
+      qc.invalidateQueries({ queryKey: ['tenant', tenantId, 'site'] });
+    },
+  });
+
   const remove = useMutation({
     mutationFn: () => api.delete(`/tenants/${tenantId}/site`),
     onSuccess: () => {
@@ -159,6 +172,7 @@ export function TenantCustomSite({
         memoryMb: site.memoryMb,
         autoDeploy: site.autoDeploy,
         repoToken: '',
+        repoSshKey: '',
         envVars: '',
       });
     } else {
@@ -181,6 +195,7 @@ export function TenantCustomSite({
     };
     // Secrets : envoyés seulement si saisis (vide = inchangé côté serveur).
     if (form.repoToken.trim()) payload.repoToken = form.repoToken.trim();
+    if (form.repoSshKey.trim()) payload.repoSshKey = form.repoSshKey;
     if (form.envVars.trim()) payload.envVars = parseEnv(form.envVars);
     configure.mutate(payload);
   };
@@ -287,22 +302,32 @@ export function TenantCustomSite({
         </p>
       )}
 
-      {/* Webhook (URL toujours affichée ; secret uniquement après config) */}
+      {/* Webhook (URL toujours affichée ; secret uniquement après config/régén) */}
       {site && !editing && (
-        <WebhookBox url={site.webhookUrl} secret={secret} branch={site.branch} />
+        <WebhookBox
+          url={site.webhookUrl}
+          secret={secret}
+          branch={site.branch}
+          onRegenerate={() => regenerate.mutate()}
+          regenerating={regenerate.isPending}
+        />
       )}
 
       {/* Form config */}
       {editing && (
         <div className="rounded-lg border bg-white p-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label="Repo GitHub (URL .git)" full>
+            <Field label="Repo (HTTPS ou SSH)" full>
               <input
                 className="w-full rounded-md border px-3 py-2 text-sm font-mono"
                 value={form.repoUrl}
                 onChange={(e) => setForm({ ...form, repoUrl: e.target.value })}
-                placeholder="https://github.com/acme/site.git"
+                placeholder="git@github.com:BrightkyEfoo/alnadjah.git"
               />
+              <p className="mt-1 text-[11px] text-gray-400">
+                HTTPS (<code className="font-mono">https://…</code>, + token si privé) ou SSH (
+                <code className="font-mono">git@host:org/repo.git</code>, + clé de déploiement ci-dessous).
+              </p>
             </Field>
             <Field label="Branche">
               <input
@@ -358,14 +383,26 @@ export function TenantCustomSite({
                 onChange={(e) => setForm({ ...form, memoryMb: Number(e.target.value) })}
               />
             </Field>
-            <Field label={`Token repo privé ${site?.hasRepoToken ? '(défini — vide = inchangé)' : '(optionnel)'}`}>
+            <Field label={`Token HTTPS privé ${site?.hasRepoToken ? '(défini — vide = inchangé)' : '(optionnel)'}`}>
               <input
                 type="password"
                 className="w-full rounded-md border px-3 py-2 text-sm font-mono"
                 value={form.repoToken}
                 onChange={(e) => setForm({ ...form, repoToken: e.target.value })}
-                placeholder="ghp_… (repos privés)"
+                placeholder="ghp_… (repos HTTPS privés)"
               />
+            </Field>
+            <Field label={`Clé SSH de déploiement ${site?.hasRepoSshKey ? '(définie — vide = inchangé)' : '(repos git@…)'}`} full>
+              <textarea
+                className="h-24 w-full rounded-md border px-3 py-2 text-sm font-mono"
+                value={form.repoSshKey}
+                onChange={(e) => setForm({ ...form, repoSshKey: e.target.value })}
+                placeholder={'-----BEGIN OPENSSH PRIVATE KEY-----\n… (clé privée du deploy key GitHub)\n-----END OPENSSH PRIVATE KEY-----'}
+              />
+              <p className="mt-1 text-[11px] text-gray-400">
+                Pour un repo SSH (<code className="font-mono">git@github.com:…</code>) : colle la clé privée
+                dont la clé publique est ajoutée en Deploy key du repo. Chiffrée avant stockage.
+              </p>
             </Field>
             <Field label={`Variables d'env ${site?.hasEnvVars ? '(définies — vide = inchangé)' : '(build + runtime)'}`} full>
               <textarea
@@ -432,22 +469,48 @@ export function TenantCustomSite({
   );
 }
 
-function WebhookBox({ url, secret, branch }: { url: string; secret: string | null; branch: string }) {
+function WebhookBox({
+  url,
+  secret,
+  branch,
+  onRegenerate,
+  regenerating,
+}: {
+  url: string;
+  secret: string | null;
+  branch: string;
+  onRegenerate: () => void;
+  regenerating: boolean;
+}) {
   return (
     <div className="rounded-lg border bg-white p-4">
-      <p className="text-sm font-semibold">Webhook GitHub (auto-deploy)</p>
-      <p className="mt-1 text-xs text-gray-500">
-        GitHub → repo → Settings → Webhooks → Add webhook. Content type{' '}
-        <code className="font-mono">application/json</code>, event <code className="font-mono">push</code>.
-        Déploie sur push de la branche <code className="font-mono">{branch}</code>.
-      </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold">Webhook GitHub (auto-deploy)</p>
+          <p className="mt-1 text-xs text-gray-500">
+            GitHub → repo → Settings → Webhooks → Add webhook. Content type{' '}
+            <code className="font-mono">application/json</code>, event <code className="font-mono">push</code>.
+            Déploie sur push de la branche <code className="font-mono">{branch}</code>.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onRegenerate}
+          disabled={regenerating}
+          className="inline-flex shrink-0 items-center gap-1 rounded-md border bg-white px-2.5 py-1.5 text-xs hover:bg-gray-50 disabled:opacity-50"
+          title="Génère un nouveau secret (invalide l'ancien)"
+        >
+          {regenerating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+          Régénérer le secret
+        </button>
+      </div>
       <div className="mt-2 space-y-2">
         <LabeledCopy label="Payload URL" value={url} mono />
         {secret ? (
           <LabeledCopy label="Secret (copie-le maintenant, non réaffiché)" value={secret} mono highlight />
         ) : (
           <p className="text-xs text-gray-400">
-            Secret : masqué. Ré-enregistre la config pour en générer/afficher un nouveau.
+            Secret : masqué. Clique « Régénérer le secret » (ou ré-enregistre la config) pour en obtenir un nouveau.
           </p>
         )}
       </div>

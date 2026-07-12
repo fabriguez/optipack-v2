@@ -424,8 +424,11 @@ model TenantSite {
   dockerfilePath String   @default("Dockerfile")
   // Sous-chemin du repo à builder (monorepo). Vide = racine.
   buildContext   String?
-  // Token d'accès (repos privés), chiffré AES-256-GCM comme les SSH keys.
+  // Token d'accès HTTPS (repos privés), chiffré AES-256-GCM comme les SSH keys.
   repoTokenEnc   String?
+  // Clé privée SSH de déploiement (repos en git@host:.../ ssh://), chiffrée.
+  // Utilisée via GIT_SSH_COMMAND quand repoUrl est une URL SSH.
+  repoSshKeyEnc  String?
   // Variables d'env passées au build ET au runtime, chiffrées (JSON k/v).
   envVarsEnc     String?
   // Secret HMAC du webhook GitHub (X-Hub-Signature-256). Généré à la config.

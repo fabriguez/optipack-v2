@@ -149,6 +149,7 @@ router.post('/tenants/:id/updates/:jobId/rollback', authenticateOps, requireSupe
 router.get('/tenants/:id/site', authenticateOps, requireGlobalOps, SiteController.get);
 router.put('/tenants/:id/site', authenticateOps, requireGlobalOps, SiteController.configure);
 router.post('/tenants/:id/site/redeploy', authenticateOps, requireGlobalOps, SiteController.redeploy);
+router.post('/tenants/:id/site/webhook/regenerate', authenticateOps, requireGlobalOps, SiteController.regenerateWebhook);
 router.delete('/tenants/:id/site', authenticateOps, requireSuperAdmin, SiteController.remove);
 
 // Endpoint de proxy pour l'API tenant (pas auth ops admin, mais service token partage).
