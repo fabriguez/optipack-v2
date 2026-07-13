@@ -4,10 +4,13 @@
  * Activation par env vars :
  *   - SMS_PROVIDER              : 'twilio' | 'africas-talking' | 'vonage' | 'log' (defaut: 'log')
  *   - WHATSAPP_PROVIDER_CHAIN   : liste ordonnee de providers a enchaîner en fallback
- *                                 Valeurs : 'twilio' | 'meta' | 'africas-talking' | 'log'
+ *                                 Valeurs : 'wapino' | 'twilio' | 'meta' | 'africas-talking' | 'log'
  *                                 Defaut : 'twilio'
- *                                 NB : le canal prioritaire est l'API WhatsApp interne (TenantWhatsAppSessionService)
- *                                      ce provider chain n'est utilise qu'en fallback si le canal perso n'est pas configure/actif.
+ *                                 NB : le canal prioritaire est l'API WhatsApp interne PERSONNELLE du tenant
+ *                                      (TenantWhatsAppSessionService) ; ce provider chain n'est utilise qu'en
+ *                                      fallback si le canal perso n'est pas configure/actif. Pour que Wapino
+ *                                      soit le fallback JUSTE APRES le canal perso, mettre 'wapino' en tete
+ *                                      (ex: WHATSAPP_PROVIDER_CHAIN=wapino,twilio).
  *   - PUSH_PROVIDER             : 'expo' | 'fcm' | 'log' (defaut: 'log')
  *
  * Credentials Twilio WhatsApp :
@@ -319,6 +322,64 @@ function makeTwilioWhatsappProvider(): ExternalChannelProvider {
 }
 
 /**
+ * Wapino — session GLOBALE sur l'API WhatsApp interne (multi-sessions Baileys,
+ * whatsapp-api.transitsoftservices.com). Sert de fallback juste APRES le canal
+ * WhatsApp PERSONNEL du tenant (TenantWhatsAppSessionService, cle par
+ * organisation) : mettre 'wapino' en tete de WHATSAPP_PROVIDER_CHAIN.
+ *
+ * Meme contrat REST que le canal perso : POST {base}/v1/messages, header
+ * x-api-key, body { to (digits), body, mediaUrl?, fileName?, mimetype? }.
+ *
+ * Env :
+ *   WAPINO_API_KEY   cle API de la session Wapino (wp_live_...)
+ *   WAPINO_BASE_URL  base URL de l'API WA (defaut : WA_API_URL global)
+ *   WAPINO_INSTANCE  nom de la session (informationnel ; la cle scope la session)
+ */
+function makeWapinoWhatsappProvider(): ExternalChannelProvider {
+  const apiKey = process.env.WAPINO_API_KEY ?? '';
+  const baseUrl = (process.env.WAPINO_BASE_URL || process.env.WA_API_URL || '').replace(/\/+$/, '');
+  const instance = process.env.WAPINO_INSTANCE ?? '';
+  const enabled = !!apiKey && !!baseUrl;
+  if (!enabled) {
+    logger.warn(
+      'Wapino WhatsApp provider non active : WAPINO_API_KEY et/ou base URL (WAPINO_BASE_URL ou WA_API_URL) manquant(s)',
+    );
+  }
+  const digits = (n: string) => n.replace(/[^\d]/g, '');
+  const wapinoSend = async (payload: Record<string, unknown>) => {
+    const res = await fetch(`${baseUrl}/v1/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': apiKey },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) {
+      const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      const msg = typeof data.error === 'string' ? data.error : `HTTP ${res.status}`;
+      throw new Error(`Wapino WhatsApp (instance=${instance || '?'}): ${msg}`);
+    }
+  };
+  return {
+    name: 'wapino',
+    enabled,
+    async send(to, message) {
+      if (!enabled) throw new Error('Wapino WhatsApp provider non configure');
+      await wapinoSend({ to: digits(to), body: message });
+    },
+    async sendDocument(to, docUrl, filename, caption) {
+      if (!enabled) throw new Error('Wapino WhatsApp provider non configure');
+      await wapinoSend({
+        to: digits(to),
+        body: caption || undefined,
+        mediaUrl: docUrl,
+        fileName: filename,
+        mimetype: 'application/pdf',
+      });
+    },
+  };
+}
+
+/**
  * Construit une chaine de fallback a partir d'une liste ordonnee de providers.
  * Essaie chaque provider dans l'ordre ; passe au suivant si le precedent echoue.
  * Seuls les providers enabled sont tentes.
@@ -428,6 +489,7 @@ function makeExpoPushProvider(): ExternalChannelProvider {
 
 function resolveWhatsappProvider(name: string): ExternalChannelProvider | null {
   switch (name) {
+    case 'wapino': return makeWapinoWhatsappProvider();
     case 'twilio': return makeTwilioWhatsappProvider();
     case 'meta': return makeMetaWhatsappProvider();
     case 'africas-talking': return makeAfricasTalkingWhatsappProvider();
