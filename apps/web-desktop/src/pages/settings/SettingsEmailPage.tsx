@@ -14,6 +14,7 @@ import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard, AppCardHeader } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
 import { apiClient } from '@/lib/api/client';
+import { ResendApiKeyCard } from '@/components/settings/ResendApiKeyCard';
 
 interface DnsRecord {
   type: 'MX' | 'TXT' | 'CNAME';
@@ -83,13 +84,17 @@ export default function SettingsEmailPage() {
   if (!mail.data) {
     return (
       <PageTransition>
-        <AppCard>
-          <p className="text-sm text-red-600">
-            Impossible de joindre la messagerie. Verifie que la variable
-            <code className="mx-1">OPS_TENANT_PROXY_TOKEN</code>
-            est configuree cote API.
-          </p>
-        </AppCard>
+        <div className="space-y-6">
+          <AppCard>
+            <p className="text-sm text-red-600">
+              Impossible de joindre la messagerie. Verifie que la variable
+              <code className="mx-1">OPS_TENANT_PROXY_TOKEN</code>
+              est configuree cote API.
+            </p>
+          </AppCard>
+          {/* La cle Resend du tenant reste configurable meme sans proxy mail. */}
+          <ResendApiKeyCard />
+        </div>
       </PageTransition>
     );
   }
@@ -231,6 +236,9 @@ export default function SettingsEmailPage() {
             risquent d&apos;atterrir en spam.
           </div>
         )}
+
+        {/* Cle API Resend propre au tenant */}
+        <ResendApiKeyCard />
 
         {/* Reception placeholder (phase 2) */}
         <AppCard>

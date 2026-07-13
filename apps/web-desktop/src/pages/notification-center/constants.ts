@@ -73,8 +73,11 @@ export const EVENT_KIND_OPTIONS = Object.entries(EVENT_KIND_LABEL).map(([value, 
   label,
 }));
 
-/** Un IN_APP ne se renvoie pas (aucun canal externe). */
-export function canRetry(status: NotificationStatus, type: NotificationChannel): boolean {
-  if (type === 'IN_APP') return false;
-  return status === 'FAILED' || status === 'PENDING';
+/**
+ * Un IN_APP ne se renvoie pas (aucun canal externe). Tous les autres statuts
+ * (y compris SENT/READ) restent renvoyables : le backend rejoue le meme
+ * payload sur le meme canal.
+ */
+export function canRetry(_status: NotificationStatus, type: NotificationChannel): boolean {
+  return type !== 'IN_APP';
 }

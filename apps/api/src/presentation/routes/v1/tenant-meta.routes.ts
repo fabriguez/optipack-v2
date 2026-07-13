@@ -562,6 +562,35 @@ router.patch(
 );
 
 /**
+ * GET /api/v1/tenant-meta/email-config
+ * AUTH admin. Renvoie la config email du tenant (secrets masques :
+ * seul `apiKeyHint` expose les 4 derniers caracteres de la cle).
+ * Utilise par la page reglages Messagerie pour afficher l'etat courant.
+ */
+router.get(
+  '/email-config',
+  authenticate,
+  tenantGuard,
+  authorize('SUPER_ADMIN', 'ADMIN'),
+  requirePermission('system.config'),
+  async (req, res, next) => {
+    try {
+      const orgId = getOrgId(req);
+      const org = (await prisma.organization.findUnique({
+        where: { id: orgId },
+        select: { emailConfig: true },
+      })) as { emailConfig: EmailConfig | null } | null;
+      res.json({
+        success: true,
+        data: publicEmailConfig(org?.emailConfig ?? null),
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
  * PATCH /api/v1/tenant-meta/email-config
  * AUTH admin. Met a jour le provider + sender + credentials.
  * Le secret (apiKey) est conserve en BDD ; le GET ne renvoie que les 4

@@ -52,3 +52,28 @@ export const organizationApi = {
   ): Promise<{ success: boolean; data: OrganizationBranding }> =>
     apiClient.patch('/organization/branding', data).then((r) => r.data),
 };
+
+/** Config email tenant (secrets masques : apiKeyHint = 4 derniers caracteres). */
+export interface TenantEmailConfig {
+  provider: 'shared' | 'resend' | 'sendgrid' | 'ses';
+  senderEmail?: string;
+  senderName?: string;
+  replyTo?: string;
+  apiKeyHint?: string;
+}
+
+export interface TenantEmailConfigPatch {
+  provider?: 'shared' | 'resend';
+  senderEmail?: string;
+  senderName?: string;
+  replyTo?: string;
+  credentials?: { apiKey?: string };
+}
+
+export const emailConfigApi = {
+  get: (): Promise<TenantEmailConfig | null> =>
+    apiClient.get('/tenant-meta/email-config').then((r) => r.data.data),
+
+  save: (patch: TenantEmailConfigPatch): Promise<{ success: boolean }> =>
+    apiClient.patch('/tenant-meta/email-config', patch).then((r) => r.data),
+};
