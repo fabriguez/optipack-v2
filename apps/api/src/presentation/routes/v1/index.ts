@@ -52,6 +52,7 @@ import financeRoutes from './finance.routes';
 import headOfficeRoutes from './head-office.routes';
 import notificationTemplatesRoutes from './notification-templates.routes';
 import whatsappPersonalRoutes from './whatsapp-personal.routes';
+import wapinoRoutes from './wapino.routes';
 
 const router = Router();
 
@@ -123,6 +124,8 @@ router.use(configRoutes);
 router.use(notificationTemplatesRoutes);
 // WhatsApp personnel par tenant (API WhatsApp interne)
 router.use(whatsappPersonalRoutes);
+// Wapino par tenant (fallback WhatsApp apres le canal perso)
+router.use(wapinoRoutes);
 
 // Uploads generiques (recus, justificatifs, photos colis, ...)
 router.use('/uploads', uploadRoutes);

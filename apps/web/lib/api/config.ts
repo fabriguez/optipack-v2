@@ -166,6 +166,50 @@ export const whatsappPersonalApi = {
   clear: () => apiClient.delete('/whatsapp-personal/config').then((r) => r.data),
 };
 
+// ── Wapino (fallback WhatsApp) ─────────────────────────────
+
+/**
+ * Config Wapino du tenant (https://wapino.consolidis.com) — canal WhatsApp de
+ * SECOURS, tenté après le canal personnel. Les deux peuvent être configurés
+ * et connectés en même temps. Pas de statut de session live côté clé API :
+ * l'état se limite à configured/enabled + dernier envoi OK / dernière erreur.
+ */
+export interface WapinoState {
+  enabled: boolean;
+  configured: boolean;
+  instance: string | null;
+  baseUrl: string;
+  lastError: string | null;
+  lastOkAt: string | null;
+}
+
+export interface WapinoConfigInput {
+  enabled?: boolean;
+  /** Chaîne vide = effacer. Absent = inchangé. */
+  apiKey?: string;
+  instance?: string;
+  /** Chaîne vide = base par défaut. Absent = inchangé. */
+  baseUrl?: string;
+}
+
+export const wapinoApi = {
+  getStatus: () =>
+    apiClient
+      .get<{ success: boolean; data: WapinoState }>('/wapino/status')
+      .then((r) => r.data.data),
+
+  saveConfig: (input: WapinoConfigInput) =>
+    apiClient
+      .put<{ success: boolean; data: WapinoState }>('/wapino/config', input)
+      .then((r) => r.data.data),
+
+  /** Envoie un vrai message de test au numéro fourni. */
+  testConnection: (input: { phone: string } & Omit<WapinoConfigInput, 'enabled'>) =>
+    apiClient.post('/wapino/test', input).then((r) => r.data),
+
+  clear: () => apiClient.delete('/wapino/config').then((r) => r.data),
+};
+
 // ── Reports ────────────────────────────────────────────────
 
 export interface ReportParams {

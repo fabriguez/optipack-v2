@@ -322,40 +322,45 @@ function makeTwilioWhatsappProvider(): ExternalChannelProvider {
 }
 
 /**
- * Wapino — session GLOBALE sur l'API WhatsApp interne (multi-sessions Baileys,
- * whatsapp-api.transitsoftservices.com). Sert de fallback juste APRES le canal
- * WhatsApp PERSONNEL du tenant (TenantWhatsAppSessionService, cle par
- * organisation) : mettre 'wapino' en tete de WHATSAPP_PROVIDER_CHAIN.
+ * Wapino GLOBAL (https://wapino.consolidis.com) — compte plateforme partage,
+ * utilise dans le provider chain env. NB : le fallback Wapino PAR TENANT
+ * (TenantWapinoConfig, configure dans les reglages du backoffice) est tente
+ * AVANT ce chain par deliverWhatsapp ; ce provider ne sert que de dernier
+ * recours global.
  *
- * Meme contrat REST que le canal perso : POST {base}/v1/messages, header
- * x-api-key, body { to (digits), body, mediaUrl?, fileName?, mimetype? }.
+ * Contrat (doc https://wapino.consolidis.com/docs) :
+ *   Auth   : Authorization: Bearer wp_live_...
+ *   Texte  : POST {base}/messages/send-text  { instance, number, text }
+ *            (sans WAPINO_INSTANCE : legacy POST {base}/message/send { number, text })
+ *   Media  : POST {base}/messages/send-media { instance, number, mediaUrl, type, fileName?, caption? }
  *
  * Env :
- *   WAPINO_API_KEY   cle API de la session Wapino (wp_live_...)
- *   WAPINO_BASE_URL  base URL de l'API WA (defaut : WA_API_URL global)
- *   WAPINO_INSTANCE  nom de la session (informationnel ; la cle scope la session)
+ *   WAPINO_API_KEY   cle API Wapino (wp_live_...)
+ *   WAPINO_INSTANCE  nom de l'instance Wapino (requis pour send-media)
+ *   WAPINO_BASE_URL  defaut : https://api.wapino.consolidis.com/v1
  */
 function makeWapinoWhatsappProvider(): ExternalChannelProvider {
   const apiKey = process.env.WAPINO_API_KEY ?? '';
-  const baseUrl = (process.env.WAPINO_BASE_URL || process.env.WA_API_URL || '').replace(/\/+$/, '');
+  const baseUrl = (process.env.WAPINO_BASE_URL || 'https://api.wapino.consolidis.com/v1').replace(/\/+$/, '');
   const instance = process.env.WAPINO_INSTANCE ?? '';
-  const enabled = !!apiKey && !!baseUrl;
+  const enabled = !!apiKey;
   if (!enabled) {
-    logger.warn(
-      'Wapino WhatsApp provider non active : WAPINO_API_KEY et/ou base URL (WAPINO_BASE_URL ou WA_API_URL) manquant(s)',
-    );
+    logger.warn('Wapino WhatsApp provider (global) non active : WAPINO_API_KEY manquante');
   }
   const digits = (n: string) => n.replace(/[^\d]/g, '');
-  const wapinoSend = async (payload: Record<string, unknown>) => {
-    const res = await fetch(`${baseUrl}/v1/messages`, {
+  const wapinoPost = async (path: string, payload: Record<string, unknown>) => {
+    const res = await fetch(`${baseUrl}${path}`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-api-key': apiKey },
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) {
       const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-      const msg = typeof data.error === 'string' ? data.error : `HTTP ${res.status}`;
+      const msg =
+        typeof data.error === 'string' ? data.error
+        : typeof data.message === 'string' ? data.message
+        : `HTTP ${res.status}`;
       throw new Error(`Wapino WhatsApp (instance=${instance || '?'}): ${msg}`);
     }
   };
@@ -364,16 +369,22 @@ function makeWapinoWhatsappProvider(): ExternalChannelProvider {
     enabled,
     async send(to, message) {
       if (!enabled) throw new Error('Wapino WhatsApp provider non configure');
-      await wapinoSend({ to: digits(to), body: message });
+      if (instance) {
+        await wapinoPost('/messages/send-text', { instance, number: digits(to), text: message });
+      } else {
+        await wapinoPost('/message/send', { number: digits(to), text: message });
+      }
     },
     async sendDocument(to, docUrl, filename, caption) {
       if (!enabled) throw new Error('Wapino WhatsApp provider non configure');
-      await wapinoSend({
-        to: digits(to),
-        body: caption || undefined,
+      if (!instance) throw new Error('Wapino send-media requiert WAPINO_INSTANCE');
+      await wapinoPost('/messages/send-media', {
+        instance,
+        number: digits(to),
         mediaUrl: docUrl,
+        type: 'document',
         fileName: filename,
-        mimetype: 'application/pdf',
+        caption: caption || undefined,
       });
     },
   };

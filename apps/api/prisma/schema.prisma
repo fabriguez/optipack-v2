@@ -115,6 +115,8 @@ model Organization {
   notificationTemplates   TenantNotificationTemplate[]
   // Config WhatsApp personnel du tenant (API WhatsApp interne).
   whatsAppSession         TenantWhatsAppSession?
+  // Config Wapino (provider WhatsApp externe, fallback du canal perso).
+  wapinoConfig            TenantWapinoConfig?
   // Plannings de travail (horaires RH) scopes a l'organisation.
   workSchedules           WorkSchedule[]
 
@@ -3137,6 +3139,33 @@ model TenantWhatsAppSession {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@map("tenant_whatsapp_sessions")
+}
+
+// Config Wapino du tenant (https://wapino.consolidis.com — provider WhatsApp
+// hébergé). Distinct du canal WhatsApp personnel : les deux peuvent être
+// configurés/connectés en même temps ; l'envoi tente d'abord le canal perso,
+// puis Wapino en fallback.
+model TenantWapinoConfig {
+  id             String    @id @default(cuid())
+  organizationId String    @unique
+  /** Fallback Wapino activé pour ce tenant. */
+  enabled        Boolean   @default(false)
+  /** Clé API Wapino (wp_live_..., header Authorization: Bearer). */
+  apiKey         String?   @db.Text
+  /** Nom de l'instance Wapino (requis par /v1/messages/send-text). Vide => endpoint legacy /v1/message/send. */
+  instance       String?
+  /** Base URL de l'API Wapino (override). Vide => https://api.wapino.consolidis.com/v1. */
+  baseUrl        String?
+  /** Dernière erreur d'envoi / de test. */
+  lastError      String?
+  /** Dernier test / envoi réussi. */
+  lastOkAt       DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_wapino_configs")
 }
 
 // ABAC Phase 2 : traçabilité des uploads pour scoping objet.

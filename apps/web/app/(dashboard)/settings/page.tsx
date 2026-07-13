@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Settings, Globe, Trash2, Plus, Save, Award, Palette, Boxes, Layout, Mail, CreditCard, ShieldAlert, Zap, Bell, MessageCircle } from 'lucide-react';
+import { Settings, Globe, Trash2, Plus, Save, Award, Palette, Boxes, Layout, Mail, CreditCard, ShieldAlert, Zap, Bell, MessageCircle, MessageSquareMore } from 'lucide-react';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -149,6 +149,19 @@ export default function SettingsPage() {
                 <div>
                   <p className="text-sm font-medium">WhatsApp Personnel</p>
                   <p className="text-xs text-gray-500">Connecter votre propre numéro comme canal</p>
+                </div>
+              </div>
+            </AppCard>
+          </Link>
+          <Link href="/settings/wapino" className="block">
+            <AppCard className="hover:border-primary-300 transition">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50">
+                  <MessageSquareMore className="h-5 w-5 text-primary-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Wapino (secours)</p>
+                  <p className="text-xs text-gray-500">Fallback WhatsApp si le canal personnel échoue</p>
                 </div>
               </div>
             </AppCard>

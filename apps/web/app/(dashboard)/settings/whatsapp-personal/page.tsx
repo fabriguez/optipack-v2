@@ -105,9 +105,10 @@ export default function WhatsAppPersonalPage() {
           WhatsApp Personnel
         </h1>
         <p className="mt-1 text-sm text-gray-600">
-          Connectez votre session WhatsApp via l&apos;API Wapino. La connexion (QR code) se fait
-          sur le dashboard Wapino, qui vous fournit une clé API à coller ici. Les notifications de
-          votre organisation partent ensuite depuis cette session.
+          Connectez votre session WhatsApp via l&apos;API WhatsApp interne. La connexion (QR code)
+          se fait sur le dashboard WhatsApp, qui vous fournit une clé API à coller ici. Les
+          notifications de votre organisation partent ensuite depuis cette session. En cas
+          d&apos;échec, le fallback Wapino (Paramètres &gt; Wapino) prend le relais s&apos;il est configuré.
         </p>
       </header>
 
@@ -163,12 +164,12 @@ export default function WhatsAppPersonalPage() {
       <AppCard>
         <AppCardHeader
           title="Variables de la session"
-          description="Clé API Wapino de votre session (générée sur le dashboard Wapino) et base URL de l'API. Laissez la base URL vide pour utiliser celle par défaut du serveur."
+          description="Clé API de votre session (générée sur le dashboard WhatsApp) et base URL de l'API. Laissez la base URL vide pour utiliser celle par défaut du serveur."
         />
 
         <div className="space-y-4">
           <div className="space-y-1">
-            <label className="text-sm font-medium text-gray-700">Clé API Wapino (x-api-key)</label>
+            <label className="text-sm font-medium text-gray-700">Clé API de la session (x-api-key)</label>
             <AppInput
               type="password"
               autoComplete="off"
@@ -177,7 +178,7 @@ export default function WhatsAppPersonalPage() {
               onChange={(e) => setApiKey(e.target.value)}
             />
             <p className="text-xs text-gray-400">
-              Clé wp_live_... scopée à une session, générée sur le dashboard Wapino lors de la connexion de votre numéro.
+              Clé scopée à une session, générée sur le dashboard WhatsApp lors de la connexion de votre numéro.
             </p>
           </div>
 

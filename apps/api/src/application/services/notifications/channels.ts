@@ -1,11 +1,10 @@
 import { prisma } from '../../../config/database';
-import { config } from '../../../config';
-import { minioClient } from '../../../config/minio';
 import { emailService } from '../../../infrastructure/email/EmailService';
 import { logChannelDelivery } from '../../../infrastructure/email/logging';
 import { realtimeService } from '../../../infrastructure/realtime/RealtimeService';
 import { createChildLogger } from '../../../config/logger';
 import { resolveTemplate } from './NotificationTemplateRenderer';
+import { mimeFromFilename, sendWaAttachments } from './waAttachments';
 import { safeFetch } from '../../../infrastructure/http/safeFetch';
 import type {
   ChannelDeliveryResult,
@@ -490,106 +489,30 @@ export const deliverSms = (t: NotificationTarget, p: NotificationPayload) =>
 export const deliverPush = (t: NotificationTarget, p: NotificationPayload) =>
   deliverExternal('PUSH', pushProvider, t, p);
 
-/** Devine le MIME d'une pièce jointe depuis son extension (document vs image). */
-function mimeFromFilename(name: string): string {
-  const ext = name.toLowerCase().split('.').pop() ?? '';
-  switch (ext) {
-    case 'pdf':
-      return 'application/pdf';
-    case 'jpg':
-    case 'jpeg':
-      return 'image/jpeg';
-    case 'png':
-      return 'image/png';
-    case 'webp':
-      return 'image/webp';
-    case 'gif':
-      return 'image/gif';
-    default:
-      return 'application/octet-stream';
+/** Résout le numéro WhatsApp du destinataire (target direct, client ou user). */
+async function resolveWaPhone(t: NotificationTarget): Promise<string | null> {
+  let phone = t.phone ?? null;
+  if (!phone && t.clientId) {
+    const c = await prisma.client.findUnique({ where: { id: t.clientId }, select: { phone: true } });
+    phone = c?.phone ?? null;
   }
-}
-
-/** Ligne de secours (texte) quand l'envoi média échoue : caption + lien. */
-function attachmentLinkLine(a: NotificationAttachment): string {
-  return `${a.caption ? `${a.caption} : ` : ''}${a.url}`;
-}
-
-/** Extrait la clé objet MinIO d'une URL presignée path-style (/<bucket>/<key>). */
-function storageKeyFromUrl(url: string): string | null {
-  try {
-    const p = decodeURIComponent(new URL(url).pathname);
-    const prefix = `/${config.minio.bucket}/`;
-    if (p.startsWith(prefix)) return p.slice(prefix.length);
-    return p.replace(/^\//, '') || null;
-  } catch {
-    return null;
+  if (!phone && t.userId) {
+    const u = await prisma.user.findUnique({ where: { id: t.userId }, select: { phone: true } });
+    phone = u?.phone ?? null;
   }
-}
-
-/** Télécharge un objet MinIO (endpoint INTERNE, toujours joignable) en base64. */
-async function downloadObjectBase64(key: string): Promise<string | null> {
-  try {
-    const stream = await minioClient.getObject(config.minio.bucket, key);
-    const chunks: Buffer[] = [];
-    for await (const c of stream as AsyncIterable<Buffer>) chunks.push(c as Buffer);
-    return Buffer.concat(chunks).toString('base64');
-  } catch (err) {
-    logger.warn({ err, key }, 'WA attachment MinIO download failed (ignored)');
-    return null;
-  }
+  return phone;
 }
 
 /**
- * Envoie les pièces jointes en vrais médias (documents/images) via l'API
- * WhatsApp interne. **Hybride** : on privilégie l'envoi INLINE (base64, octets
- * lus depuis le MinIO interne) qui marche même si le MinIO du tenant n'est PAS
- * exposé sur internet ; sinon on retombe sur l'URL presignée (Baileys fetch,
- * requiert un MinIO public) ; en dernier recours un message texte avec le lien.
- * Best-effort par fichier.
- */
-async function sendWaAttachments(
-  organizationId: string,
-  phone: string,
-  attachments: NotificationAttachment[],
-): Promise<void> {
-  const { tenantWaSessionService } = await import('../whatsapp/TenantWhatsAppSessionService');
-  for (const att of attachments) {
-    const mimetype = mimeFromFilename(att.filename);
-
-    // 1. Inline base64 depuis le MinIO interne (universel, pas besoin de public).
-    const key = storageKeyFromUrl(att.url);
-    const b64 = key ? await downloadObjectBase64(key) : null;
-    let ok = b64
-      ? await tenantWaSessionService.sendDocument(
-          organizationId, phone, { mediaBase64: b64 }, att.filename, att.caption, mimetype,
-        )
-      : false;
-
-    // 2. Fallback URL (tenants avec MinIO public : Baileys telecharge l'URL).
-    if (!ok) {
-      ok = await tenantWaSessionService.sendDocument(
-        organizationId, phone, { mediaUrl: att.url }, att.filename, att.caption, mimetype,
-      );
-    }
-
-    // 3. Dernier recours : lien texte (au moins récupérable si MinIO public).
-    if (!ok) {
-      await tenantWaSessionService
-        .sendMessage(organizationId, phone, attachmentLinkLine(att))
-        .catch(() => {});
-    }
-  }
-}
-
-/**
- * Livraison WhatsApp : emprunte d'abord le canal WhatsApp personnel du tenant
- * (API WhatsApp interne) s'il est configuré + activé, sinon retombe sur le
- * provider chain configuré (Twilio / Meta / Africa's Talking).
+ * Livraison WhatsApp — ordre des canaux :
+ *   1. Canal WhatsApp PERSONNEL du tenant (API WhatsApp interne), si activé.
+ *   2. Wapino (config par tenant, TenantWapinoConfig), en fallback si le canal
+ *      perso échoue OU n'est pas configuré. Les deux peuvent être connectés en
+ *      même temps : perso prioritaire, Wapino en secours.
+ *   3. Provider chain global env (Twilio / Meta / ...) si aucun canal tenant.
  *
  * L'API interne gère la file d'attente et le rate limit par session : on file
- * le message (texte + liens des pièces jointes) et on marque la notif SENT dès
- * acceptation, FAILED sinon.
+ * le message et on marque la notif SENT dès acceptation, FAILED sinon.
  */
 export async function deliverWhatsapp(
   t: NotificationTarget,
@@ -604,23 +527,15 @@ export async function deliverWhatsapp(
     ? await resolveTemplate(organizationId, eventKind, 'WHATSAPP', p.templateVariables ?? {}).catch(() => null)
     : null;
 
-  // Tenter le canal WhatsApp personnel (API interne) en priorité.
+  // Canaux du tenant : perso (prioritaire) puis Wapino (fallback).
   if (organizationId) {
     try {
       const { tenantWaSessionService } = await import('../whatsapp/TenantWhatsAppSessionService');
-      // Canal utilisable seulement si le tenant a activé + renseigné sa clé API.
-      const sendable = await tenantWaSessionService.getSendable(organizationId);
-      if (sendable) {
-        // Résoudre le numéro du destinataire.
-        let phone = t.phone ?? null;
-        if (!phone && t.clientId) {
-          const c = await prisma.client.findUnique({ where: { id: t.clientId }, select: { phone: true } });
-          phone = c?.phone ?? null;
-        }
-        if (!phone && t.userId) {
-          const u = await prisma.user.findUnique({ where: { id: t.userId }, select: { phone: true } });
-          phone = u?.phone ?? null;
-        }
+      const { wapinoService } = await import('../whatsapp/WapinoService');
+      const personal = await tenantWaSessionService.getSendable(organizationId);
+      const wapino = await wapinoService.getSendable(organizationId);
+      if (personal || wapino) {
+        const phone = await resolveWaPhone(t);
         if (phone) {
           const tenantName = await resolveTenantName(organizationId);
           // Template personnalise : corps brut. Defaut : wrapMessage avec branding.
@@ -643,37 +558,62 @@ export async function deliverWhatsapp(
               message: msgToSend,
               status: 'PENDING',
               recipient: phone,
-              provider: 'whatsapp-api',
+              provider: personal ? 'whatsapp-api' : 'wapino',
               attachments: p.attachments,
               metadata: p.metadata,
             }),
           });
 
-          let sent = false;
-          try {
-            sent = await tenantWaSessionService.sendMessage(organizationId, phone, msgToSend);
-          } catch (err) {
-            logger.warn({ err, organizationId, phone }, 'WA personal send threw');
+          // 1. Canal perso. 2. Wapino si le perso echoue ou n'est pas configure.
+          let sentVia: 'whatsapp-api' | 'wapino' | null = null;
+          if (personal) {
+            try {
+              if (await tenantWaSessionService.sendMessage(organizationId, phone, msgToSend)) {
+                sentVia = 'whatsapp-api';
+              }
+            } catch (err) {
+              logger.warn({ err, organizationId, phone }, 'WA personal send threw');
+            }
+          }
+          if (!sentVia && wapino) {
+            if (await wapinoService.sendMessage(organizationId, phone, msgToSend)) {
+              sentVia = 'wapino';
+            }
           }
 
-          if (sent) {
+          if (sentVia) {
             // Pièces jointes en médias réels (best-effort, fallback lien si échec).
             if (p.attachments && p.attachments.length > 0) {
-              await sendWaAttachments(organizationId, phone, p.attachments).catch((err) =>
+              const sendAtts = sentVia === 'whatsapp-api'
+                ? sendWaAttachments(organizationId, phone, p.attachments)
+                : Promise.all(p.attachments.map((att) =>
+                    wapinoService.sendDocument(
+                      organizationId, phone, att.url, att.filename, att.caption, mimeFromFilename(att.filename),
+                    ),
+                  ));
+              await sendAtts.catch((err) =>
                 logger.warn({ err, organizationId, phone }, 'WA attachments send failed (ignored)'),
               );
             }
             await prisma.notification.update({
               where: { id: row.id },
-              data: { status: 'SENT', sentAt: new Date() },
+              data: {
+                status: 'SENT',
+                sentAt: new Date(),
+                metadata: { ...(row.metadata as Record<string, unknown>), provider: sentVia } as never,
+              },
             });
             logChannelDelivery({ status: 'OK', channel: 'WHATSAPP', title: p.title, target: phone, organizationId, event: eventKind });
             return { channel: 'WHATSAPP', status: 'SENT', notificationId: row.id };
           }
 
-          // Echec (API injoignable / clé invalide) : on MARQUE la notif FAILED
+          // Echec des deux canaux tenant : on MARQUE la notif FAILED
           // (visible dans le centre) plutôt que de tomber en silence.
-          const failMsg = 'Envoi WhatsApp échoué (API WhatsApp indisponible ou clé invalide).';
+          const failMsg = personal && wapino
+            ? 'Envoi WhatsApp échoué (canal perso ET fallback Wapino indisponibles).'
+            : personal
+              ? 'Envoi WhatsApp échoué (API WhatsApp indisponible ou clé invalide).'
+              : 'Envoi WhatsApp échoué (Wapino indisponible ou clé invalide).';
           await prisma.notification.update({
             where: { id: row.id },
             data: { status: 'FAILED', error: failMsg },
@@ -683,8 +623,8 @@ export async function deliverWhatsapp(
         }
       }
     } catch (err) {
-      // Erreur inattendue cote canal perso -> on retombe sur le provider chain.
-      logger.warn({ err, organizationId }, 'WA personal path error -> fallback chain');
+      // Erreur inattendue cote canaux tenant -> on retombe sur le provider chain.
+      logger.warn({ err, organizationId }, 'WA tenant channels error -> fallback chain');
     }
   }
 
