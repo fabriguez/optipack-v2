@@ -261,9 +261,18 @@ export class SiteController {
         return;
       }
 
+      // GitHub envoie soit application/json (body = JSON), soit
+      // application/x-www-form-urlencoded (body = "payload=<json url-encodé>").
+      // La signature HMAC est calculée sur le body BRUT dans les deux cas (déjà
+      // vérifiée ci-dessus) ; ici on extrait le JSON pour lire `ref`.
+      const contentType = (req.header('content-type') ?? '').toLowerCase();
+      let jsonStr = raw.toString('utf8');
+      if (contentType.includes('application/x-www-form-urlencoded')) {
+        jsonStr = new URLSearchParams(jsonStr).get('payload') ?? '';
+      }
       let payload: { ref?: string } = {};
       try {
-        payload = JSON.parse(raw.toString('utf8')) as { ref?: string };
+        payload = JSON.parse(jsonStr) as { ref?: string };
       } catch {
         res.status(400).json({ success: false, message: 'payload JSON invalide' });
         return;

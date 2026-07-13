@@ -120,10 +120,13 @@ router.post('/billing/run-autofreeze', authenticateOps, requireSuperAdmin, Billi
 router.post('/billing/webhook/stripe', raw({ type: 'application/json' }), BillingController.stripeWebhook);
 router.post('/billing/webhook/momo', BillingController.momoWebhook);
 // Webhook GitHub push -> auto-deploy du site custom. Public : legitimite via
-// HMAC X-Hub-Signature-256 (webhookSecret du site). raw body requis.
+// HMAC X-Hub-Signature-256 (webhookSecret du site). raw body requis. On capture
+// le body brut QUEL QUE SOIT le content-type : GitHub envoie par defaut en
+// application/x-www-form-urlencoded (payload=<json>), pas seulement en
+// application/json -> sinon body vide et signature toujours invalide (401).
 router.post(
   '/webhooks/github/site/:tenantId',
-  raw({ type: 'application/json' }),
+  raw({ type: () => true, limit: '5mb' }),
   SiteController.webhook,
 );
 
