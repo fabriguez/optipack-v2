@@ -27,6 +27,11 @@ export interface TenantMeta {
    *  les bannieres d'invitation a creer son propre tenant. */
   isMain?: boolean;
   skinCustomization?: SkinCustomization;
+  /** Config app mobile (Studio > App mobile) : nom + liens stores publics. */
+  mobileAppConfig?: {
+    appName?: string;
+    storeLinks?: { ios?: string; android?: string };
+  } | null;
 }
 
 interface Ctx {

@@ -1,5 +1,6 @@
 import { HeroMinimalCalm } from '@/components/marketing/heroes/HeroMinimalCalm';
 import { Features } from '@/components/marketing/Features';
+import { AppDownload } from '@/components/marketing/AppDownload';
 import { CTA } from '@/components/marketing/CTA';
 
 /**
@@ -14,6 +15,7 @@ export function MinimalLayout() {
       <div className="py-16 sm:py-24" style={{ background: 'var(--skin-background)' }}>
         <Features />
       </div>
+      <AppDownload />
       <div className="py-16 sm:py-24">
         <CTA />
       </div>

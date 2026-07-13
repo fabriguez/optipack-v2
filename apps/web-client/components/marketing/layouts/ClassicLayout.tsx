@@ -3,6 +3,7 @@ import { ParcelJourney } from '@/components/marketing/ParcelJourney';
 import { Features } from '@/components/marketing/Features';
 import { Stats } from '@/components/marketing/Stats';
 import { Pricing } from '@/components/marketing/Pricing';
+import { AppDownload } from '@/components/marketing/AppDownload';
 import { CTA } from '@/components/marketing/CTA';
 
 /**
@@ -20,6 +21,7 @@ export function ClassicLayout() {
       <Features />
       <Stats />
       <Pricing />
+      <AppDownload />
       <CTA />
     </>
   );

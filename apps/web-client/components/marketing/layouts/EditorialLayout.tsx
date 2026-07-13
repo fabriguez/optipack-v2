@@ -1,6 +1,7 @@
 import { HeroEditorialTypographic } from '@/components/marketing/heroes/HeroEditorialTypographic';
 import { Features } from '@/components/marketing/Features';
 import { ParcelJourney } from '@/components/marketing/ParcelJourney';
+import { AppDownload } from '@/components/marketing/AppDownload';
 import { CTA } from '@/components/marketing/CTA';
 
 /**
@@ -17,6 +18,9 @@ export function EditorialLayout() {
       </section>
       <section style={{ background: 'var(--skin-background)' }}>
         <ParcelJourney />
+      </section>
+      <section style={{ background: 'var(--skin-surface)' }}>
+        <AppDownload />
       </section>
       <section
         style={{

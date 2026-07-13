@@ -1,6 +1,7 @@
 import { HeroBoldSplit } from '@/components/marketing/heroes/HeroBoldSplit';
 import { Features } from '@/components/marketing/Features';
 import { Pricing } from '@/components/marketing/Pricing';
+import { AppDownload } from '@/components/marketing/AppDownload';
 import { CTA } from '@/components/marketing/CTA';
 
 /**
@@ -22,6 +23,7 @@ export function BoldLayout() {
         <Features />
       </div>
       <Pricing />
+      <AppDownload />
       <div className="relative overflow-hidden">
         <div
           aria-hidden

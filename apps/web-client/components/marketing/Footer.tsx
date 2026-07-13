@@ -11,6 +11,7 @@ const SECTIONS = [
       { label: 'Fonctionnalites', href: '#features' },
       { label: 'Tarifs', href: '#pricing' },
       { label: 'Suivre un colis', href: '/track' },
+      { label: 'Application mobile', href: '/#app' },
       { label: 'Status', href: '/status' },
     ],
   },
