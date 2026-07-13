@@ -87,6 +87,9 @@ export function ParcelHandoverDialog({ open, onClose, parcel, untracked, onSucce
     onSuccess: () => {
       toast.success('Colis remis au client');
       qc.invalidateQueries({ queryKey: ['parcels'] });
+      // Le colis remis libere sa zone de rangement : rafraichit les compteurs
+      // de zones + stats magasin (['warehouses', id, 'spaces'] et 'summary').
+      qc.invalidateQueries({ queryKey: ['warehouses'] });
       onSuccess?.();
       onClose();
     },
