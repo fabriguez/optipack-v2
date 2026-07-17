@@ -255,6 +255,30 @@ export class BillingUseCases {
   }
 
   /**
+   * Cron : annule les paiements restes `pending` au-dela de `staleMinutes`
+   * (defaut 30 min) sans confirmation. Concerne les paiements automatiques
+   * (mtn/orange/stripe) dont le push USSD / la session a expire. Les paiements
+   * `manual` sont EXCLUS : ils attendent une validation humaine de l'ops admin.
+   */
+  async runCancelStalePendingPaymentsCron(
+    staleMinutes = Number(process.env.OPS_PENDING_PAYMENT_TTL_MIN ?? '30'),
+  ): Promise<{ cancelled: number }> {
+    const cutoff = new Date(Date.now() - staleMinutes * 60 * 1000);
+    const { count } = await prisma.payment.updateMany({
+      where: {
+        status: 'pending',
+        provider: { not: 'manual' },
+        createdAt: { lt: cutoff },
+      },
+      data: { status: 'cancelled' },
+    });
+    if (count > 0) {
+      logger.info({ cancelled: count, staleMinutes }, '[billing] paiements pending expires -> annules');
+    }
+    return { cancelled: count };
+  }
+
+  /**
    * Cron quotidien : freeze les tenants dont la subscription a expire.
    */
   async runAutoFreezeCron(): Promise<{ frozen: number }> {

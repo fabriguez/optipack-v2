@@ -267,6 +267,14 @@ async function runTenantHealthCheck() {
   }
 }
 
+async function runCancelStalePayments() {
+  const billing = container.resolve(BillingUseCases);
+  const result = await billing.runCancelStalePendingPaymentsCron();
+  if (result.cancelled > 0) {
+    logger.info({ cancelled: result.cancelled }, '[monitor] paiements pending expires annules');
+  }
+}
+
 async function runAutoFreeze() {
   const billing = container.resolve(BillingUseCases);
   const result = await billing.runAutoFreezeCron();
@@ -519,6 +527,7 @@ export function startMonitoringWorker(): Worker {
         await runVpsHeartbeat();
       } else if (job.data.type === 'TENANT_HEALTH') {
         await runTenantHealthCheck();
+        await runCancelStalePayments();
       } else if (job.data.type === 'AUTO_FREEZE') {
         await runAutoFreeze();
       } else if (job.data.type === 'RELEASE_SYNC') {
