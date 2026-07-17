@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { useMe } from '@/lib/useMe';
 import { StatusBadge } from '@/components/StatusBadge';
 import { formatDate } from '@/lib/utils';
 
@@ -54,10 +55,16 @@ function fmtMoney(amount: number | string, currency: string): string {
 export function TenantBilling({ tenantId }: { tenantId: string }) {
   const router = useRouter();
   const qc = useQueryClient();
+  const { isTenantUser } = useMe();
   const [months, setMonths] = useState(1);
   const [operator, setOperator] = useState<'mtn' | 'orange'>('mtn');
   const [phone, setPhone] = useState('');
   const [checkoutMsg, setCheckoutMsg] = useState<string | null>(null);
+  // Paiement hors ligne (ops admin global uniquement)
+  const [offMonths, setOffMonths] = useState(1);
+  const [offAmount, setOffAmount] = useState('');
+  const [offNote, setOffNote] = useState('');
+  const [offMsg, setOffMsg] = useState<string | null>(null);
 
   const billing = useQuery<BillingData>({
     queryKey: ['tenant-billing', tenantId],
@@ -85,6 +92,35 @@ export function TenantBilling({ tenantId }: { tenantId: string }) {
     onError: (e: unknown) => {
       const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
       setCheckoutMsg(msg || 'Echec du paiement.');
+    },
+  });
+
+  // Paiement HORS LIGNE : l'ops admin encaisse (especes / virement) sans MoMo.
+  // Etend l'abonnement et degele le tenant -> pas de freeze au prochain cron.
+  const offlinePay = useMutation({
+    mutationFn: async () => {
+      const body: { months: number; amount?: number; note?: string } = { months: offMonths };
+      if (offAmount.trim()) body.amount = Number(offAmount);
+      if (offNote.trim()) body.note = offNote.trim();
+      return (await api.post(`/tenants/${tenantId}/billing/offline-payment`, body)).data?.data as {
+        amount: number;
+        months: number;
+        expiresAt: string | null;
+      };
+    },
+    onSuccess: (data) => {
+      setOffMsg(
+        `Paiement enregistre. Abonnement etendu de ${data.months} mois` +
+          (data.expiresAt ? ` — expire le ${formatDate(data.expiresAt)}.` : '.'),
+      );
+      setOffAmount('');
+      setOffNote('');
+      qc.invalidateQueries({ queryKey: ['tenant-billing', tenantId] });
+      qc.invalidateQueries({ queryKey: ['tenant', tenantId] });
+    },
+    onError: (e: unknown) => {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setOffMsg(msg || 'Echec de l\'enregistrement du paiement.');
     },
   });
 
@@ -167,6 +203,64 @@ export function TenantBilling({ tenantId }: { tenantId: string }) {
         </div>
         {checkoutMsg && <p className="mt-2 text-xs text-gray-700">{checkoutMsg}</p>}
       </div>
+
+      {/* Paiement hors ligne — ops admin global uniquement (especes / virement) */}
+      {!isTenantUser && (
+        <div className="rounded-md border border-emerald-200 bg-emerald-50/60 p-3">
+          <h3 className="mb-1 text-xs font-semibold uppercase text-emerald-800">
+            Encaisser un paiement hors ligne
+          </h3>
+          <p className="mb-2 text-[11px] text-emerald-700">
+            Especes, virement ou geste commercial. Etend l&apos;abonnement immediatement et degele
+            le tenant si besoin — aucun passage par Mobile Money.
+          </p>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="text-xs">
+              <span className="block text-gray-500">Mois</span>
+              <input
+                type="number"
+                min={1}
+                max={36}
+                value={offMonths}
+                onChange={(e) => setOffMonths(Math.max(1, Number(e.target.value)))}
+                className="mt-0.5 w-16 rounded border px-2 py-1 text-sm"
+              />
+            </label>
+            <label className="text-xs">
+              <span className="block text-gray-500">
+                Montant (optionnel){sub ? ` — defaut ${fmtMoney(Number(sub.pricePerMonth) * offMonths, sub.currency)}` : ''}
+              </span>
+              <input
+                type="number"
+                min={0}
+                value={offAmount}
+                onChange={(e) => setOffAmount(e.target.value)}
+                placeholder="auto"
+                className="mt-0.5 w-32 rounded border px-2 py-1 text-sm"
+              />
+            </label>
+            <label className="text-xs flex-1 min-w-[160px]">
+              <span className="block text-gray-500">Reference / note (optionnel)</span>
+              <input
+                type="text"
+                value={offNote}
+                onChange={(e) => setOffNote(e.target.value)}
+                placeholder="Virement BICEC #1234"
+                className="mt-0.5 w-full rounded border px-2 py-1 text-sm"
+              />
+            </label>
+            <button
+              type="button"
+              disabled={!sub || offlinePay.isPending}
+              onClick={() => { setOffMsg(null); offlinePay.mutate(); }}
+              className="rounded-md bg-emerald-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
+            >
+              {offlinePay.isPending ? 'Enregistrement...' : 'Enregistrer le paiement'}
+            </button>
+          </div>
+          {offMsg && <p className="mt-2 text-xs text-gray-700">{offMsg}</p>}
+        </div>
+      )}
 
       {/* Plan en attente de paiement */}
       {d.pendingPlanChange && (

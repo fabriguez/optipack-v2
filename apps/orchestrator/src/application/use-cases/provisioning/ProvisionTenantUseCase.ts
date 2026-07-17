@@ -5,11 +5,8 @@ import { config } from '../../../config';
 import { logger } from '../../../infrastructure/logger';
 import { DockerService, DOCKER_SERVICE } from '../../../infrastructure/docker/DockerService';
 import { computeServiceLimits } from '../../services/resourceLimits';
-import {
-  CaddyService,
-  CADDY_SERVICE,
-  type TenantCaddyEntry,
-} from '../../../infrastructure/caddy/CaddyService';
+import { CaddyService, CADDY_SERVICE } from '../../../infrastructure/caddy/CaddyService';
+import { loadTenantCaddyEntries } from '../../../infrastructure/caddy/tenantCaddyEntries';
 import { UFWService, UFW_SERVICE } from '../../../infrastructure/ufw/UFWService';
 import { PortAllocator } from '../../../infrastructure/provisioning/PortAllocator';
 import {
@@ -679,28 +676,11 @@ rm -f ${tmpScript} ${tmpData}
     // already in use" et faisaient echouer le provisioning a chaque essai.
     // Compose gere lui-meme : container_name, ports, env, cpus, mem_limit.
 
-    // 10. Update Caddy config (full replace) avec tous les tenants ACTIVE/PROVISIONING de ce VPS
+    // 10. Update Caddy config (full replace) via le builder centralise : charge
+    //     TenantSite -> preserve les sites custom live des voisins.
     await log(`[provision] reload Caddy config`);
-    const allTenants = await prisma.tenant.findMany({
-      where: { vpsId: tenant.vpsId, status: { in: ['ACTIVE', 'PROVISIONING'] } },
-      include: { site: true },
-    });
-    const caddyEntries: TenantCaddyEntry[] = allTenants
-      .filter((t) => t.apiPort && t.webPort)
-      .map((t) => ({
-        slug: t.slug,
-        customDomain: t.customDomain,
-        apiPort: t.apiPort!,
-        webPort: t.webPort!,
-        webClientPort: t.webClientPort ?? undefined,
-        // Site custom live -> prend la main sur les hosts publics (preserve au
-        // (re-)provisioning : on ne casse pas un site custom deja deploye).
-        customSitePort:
-          t.site && t.site.status === 'live' && t.site.sitePort ? t.site.sitePort : undefined,
-        isFrozen: false,
-        isMain: (t as { isMain?: boolean }).isMain ?? false,
-      }));
-    // Inclure le tenant courant meme s'il n'est pas encore ACTIVE
+    const caddyEntries = await loadTenantCaddyEntries(tenant.vpsId);
+    // Inclure le tenant courant meme s'il n'est pas encore visible dans la requete.
     if (!caddyEntries.find((e) => e.slug === tenant.slug)) {
       caddyEntries.push({
         slug: tenant.slug,

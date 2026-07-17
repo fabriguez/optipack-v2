@@ -210,6 +210,37 @@ export class BillingController {
   }
 
   /**
+   * POST /ops/tenants/:id/billing/offline-payment — l'ops admin encaisse un
+   * paiement hors ligne (especes / virement) pour le tenant, sans MoMo/Stripe.
+   * Etend l'abonnement + degele si FROZEN. Superadmin uniquement.
+   */
+  static async recordOfflinePayment(req: Request, res: Response, next: NextFunction) {
+    try {
+      const tenantId = req.params.id;
+      const { months, amount, note } = req.body as {
+        months?: number;
+        amount?: number;
+        note?: string;
+      };
+      const result = await container.resolve(BillingUseCases).recordOfflinePayment({
+        tenantId,
+        months: Number(months ?? 1),
+        amount: amount != null ? Number(amount) : undefined,
+        note: typeof note === 'string' ? note : undefined,
+      });
+      await container.resolve(AuditLogger).log(req, {
+        action: 'PAYMENT_RECORDED_OFFLINE',
+        entityType: 'Tenant',
+        entityId: tenantId,
+        payload: result,
+      });
+      res.json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
    * POST /ops/billing/webhook/stripe — webhook public (sans auth) signe par Stripe.
    * La route utilise `express.raw()` upstream : `req.body` est un Buffer.
    */

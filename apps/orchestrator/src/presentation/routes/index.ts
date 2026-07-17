@@ -113,6 +113,8 @@ router.get('/billing/overview', authenticateOps, requireGlobalOps, BillingContro
 // scope (un compte tenant ne peut payer QUE pour son propre tenant).
 router.post('/billing/checkout', authenticateOps, BillingController.startCheckout);
 router.post('/billing/confirm-manual', authenticateOps, requireSuperAdmin, BillingController.confirmManualPayment);
+// Paiement hors ligne (especes / virement) encaisse par l'ops admin pour un tenant.
+router.post('/tenants/:id/billing/offline-payment', authenticateOps, requireSuperAdmin, BillingController.recordOfflinePayment);
 router.post('/billing/run-autofreeze', authenticateOps, requireSuperAdmin, BillingController.runAutoFreeze);
 
 // Webhooks publics (signature verifiee dans le controller)

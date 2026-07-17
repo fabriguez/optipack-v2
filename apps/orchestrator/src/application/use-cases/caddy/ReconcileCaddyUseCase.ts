@@ -1,10 +1,7 @@
 import { inject, injectable } from 'tsyringe';
 import { prisma } from '../../../config/database';
-import {
-  CaddyService,
-  CADDY_SERVICE,
-  type TenantCaddyEntry,
-} from '../../../infrastructure/caddy/CaddyService';
+import { CaddyService, CADDY_SERVICE } from '../../../infrastructure/caddy/CaddyService';
+import { loadTenantCaddyEntries } from '../../../infrastructure/caddy/tenantCaddyEntries';
 import { SSHService, SSH_SERVICE } from '../../../infrastructure/ssh/SSHService';
 import { BusinessError } from '../../../domain/errors/BusinessError';
 
@@ -89,30 +86,8 @@ export class ReconcileCaddyUseCase {
 
     for (const vps of vpsList) {
       try {
-        const tenants = await prisma.tenant.findMany({
-          where: {
-            vpsId: vps.id,
-            status: { in: ['ACTIVE', 'PROVISIONING', 'FROZEN'] },
-          },
-          include: { site: true },
-        });
-
-        const entries: TenantCaddyEntry[] = tenants
-          .filter((t) => t.apiPort && t.webPort)
-          .map((t) => ({
-            slug: t.slug,
-            customDomain: t.customDomain,
-            apiPort: t.apiPort!,
-            webPort: t.webPort!,
-            webClientPort: t.webClientPort ?? undefined,
-            // Site custom live -> prend la main sur les hosts publics.
-            customSitePort:
-              t.site && t.site.status === 'live' && t.site.sitePort
-                ? t.site.sitePort
-                : undefined,
-            isFrozen: t.status === 'FROZEN',
-            isMain: (t as { isMain?: boolean }).isMain ?? false,
-          }));
+        // Builder centralise : charge TenantSite -> customSitePort preserve.
+        const entries = await loadTenantCaddyEntries(vps.id);
 
         const isSelf = vps.name === SELF_VPS_NAME;
         await this.caddy.applyForVps(

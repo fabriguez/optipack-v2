@@ -2,7 +2,8 @@ import { inject, injectable } from 'tsyringe';
 import { prisma } from '../../../config/database';
 import { config } from '../../../config';
 import { DockerService, DOCKER_SERVICE } from '../../../infrastructure/docker/DockerService';
-import { CaddyService, CADDY_SERVICE, type TenantCaddyEntry } from '../../../infrastructure/caddy/CaddyService';
+import { CaddyService, CADDY_SERVICE } from '../../../infrastructure/caddy/CaddyService';
+import { loadTenantCaddyEntries } from '../../../infrastructure/caddy/tenantCaddyEntries';
 import { SSHService, SSH_SERVICE, type SshConnection } from '../../../infrastructure/ssh/SSHService';
 import { ScpService, SCP_SERVICE } from '../../../infrastructure/ssh/ScpService';
 import { PortAllocator } from '../../../infrastructure/provisioning/PortAllocator';
@@ -226,18 +227,8 @@ export class MigrateTenantUseCase {
   }
 
   private async refreshCaddy(vpsId: string, creds: SshConnection): Promise<void> {
-    const tenants = await prisma.tenant.findMany({
-      where: { vpsId, status: { in: ['ACTIVE', 'FROZEN', 'PROVISIONING', 'MIGRATING'] } },
-    });
-    const entries: TenantCaddyEntry[] = tenants
-      .filter((t) => t.apiPort && t.webPort)
-      .map((t) => ({
-        slug: t.slug,
-        customDomain: t.customDomain,
-        apiPort: t.apiPort!,
-        webPort: t.webPort!,
-        isFrozen: t.status === 'FROZEN',
-      }));
+    // Builder centralise (charge TenantSite -> preserve les sites custom live).
+    const entries = await loadTenantCaddyEntries(vpsId, { extraStatuses: ['MIGRATING'] });
     const vps = await prisma.vPS.findUnique({ where: { id: vpsId }, select: { name: true } });
     await this.caddy.applyForVps(
       { name: vps?.name ?? '', ...creds },

@@ -2,7 +2,8 @@ import { inject, injectable } from 'tsyringe';
 import { prisma } from '../../../config/database';
 import { config } from '../../../config';
 import { DockerService, DOCKER_SERVICE } from '../../../infrastructure/docker/DockerService';
-import { CaddyService, CADDY_SERVICE, type TenantCaddyEntry } from '../../../infrastructure/caddy/CaddyService';
+import { CaddyService, CADDY_SERVICE } from '../../../infrastructure/caddy/CaddyService';
+import { loadTenantCaddyEntries } from '../../../infrastructure/caddy/tenantCaddyEntries';
 import { SSHService, SSH_SERVICE, type SshConnection } from '../../../infrastructure/ssh/SSHService';
 import { ProvisioningJobLogger } from './ProvisioningJobLogger';
 import { BusinessError, NotFoundError } from '../../../domain/errors/BusinessError';
@@ -34,23 +35,9 @@ async function refreshCaddy(
   creds: SshConnection,
   freezeOverride?: { slug: string; isFrozen: boolean },
 ) {
-  const tenants = await prisma.tenant.findMany({
-    where: { vpsId, status: { in: ['ACTIVE', 'FROZEN', 'PROVISIONING'] } },
-  });
-  const entries: TenantCaddyEntry[] = tenants
-    .filter((t) => t.apiPort && t.webPort)
-    .map((t) => ({
-      slug: t.slug,
-      customDomain: t.customDomain,
-      apiPort: t.apiPort!,
-      webPort: t.webPort!,
-      webClientPort: t.webClientPort ?? undefined,
-      isFrozen:
-        freezeOverride && freezeOverride.slug === t.slug
-          ? freezeOverride.isFrozen
-          : t.status === 'FROZEN',
-      isMain: (t as { isMain?: boolean }).isMain ?? false,
-    }));
+  // Builder centralise : charge TenantSite et preserve customSitePort pour ne pas
+  // faire retomber les sites custom live sur le web-client. Voir tenantCaddyEntries.
+  const entries = await loadTenantCaddyEntries(vpsId, { freezeOverride });
   // Merge dans le Caddyfile du VPS (self -> mount+API, distant -> SSH).
   const vps = await prisma.vPS.findUnique({ where: { id: vpsId }, select: { name: true } });
   await caddy.applyForVps(

@@ -159,6 +159,16 @@ export class BillingUseCases {
       logger.info({ planChangeId: change.id }, '[billing] plan change apply job started');
     }
 
+    // Confirmation par paymentId seul (ex: bouton "confirmer" de la liste
+    // paiements en attente) : on retrouve le tenant via la subscription du paiement.
+    if (!tenantId && opts.paymentId) {
+      const pay = await prisma.payment.findUnique({
+        where: { id: opts.paymentId },
+        include: { subscription: { select: { tenantId: true } } },
+      });
+      tenantId = pay?.subscription?.tenantId ?? undefined;
+    }
+
     if (!tenantId) throw new BusinessError('tenantId ou planChangeId requis');
 
     // Update subscription expiresAt
@@ -190,6 +200,58 @@ export class BillingUseCases {
       await unfreezeQueue.add('unfreeze', { tenantId, provisioningJobId: job.id }, { jobId: job.id });
       logger.info({ tenantId }, '[billing] unfreeze enqueued after payment');
     }
+  }
+
+  /**
+   * Paiement HORS LIGNE saisi par l'ops admin (especes / virement bancaire /
+   * geste commercial). Aucun passage par Mobile Money ou Stripe : on enregistre
+   * directement un Payment "manual" deja `succeeded`, on etend l'abonnement et
+   * on degele le tenant s'il etait FROZEN. Le tenant ne sera donc PAS regele au
+   * prochain cron (expiresAt repousse dans le futur).
+   */
+  async recordOfflinePayment(opts: {
+    tenantId: string;
+    months: number;
+    amount?: number;
+    note?: string;
+  }): Promise<{ paymentId: string; amount: number; months: number; expiresAt: Date | null }> {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: opts.tenantId },
+      include: { subscription: true },
+    });
+    if (!tenant) throw new NotFoundError('Tenant', opts.tenantId);
+    if (!tenant.subscription) {
+      throw new BusinessError("Ce tenant n'a pas d'abonnement a regler");
+    }
+
+    const months = Math.max(1, Math.floor(opts.months));
+    const amount =
+      opts.amount != null && opts.amount >= 0
+        ? Math.round(opts.amount)
+        : Math.round(Number(tenant.subscription.pricePerMonth) * months);
+
+    const payment = await prisma.payment.create({
+      data: {
+        subscriptionId: tenant.subscription.id,
+        amount,
+        currency: tenant.subscription.currency || 'XAF',
+        provider: 'manual',
+        status: 'succeeded',
+        paidAt: new Date(),
+        externalRef: opts.note?.trim() ? `offline:${opts.note.trim()}` : 'offline',
+      },
+    });
+
+    // Reutilise la logique centrale : marque le paiement, etend expiresAt et
+    // declenche l'UNFREEZE si le tenant etait gele.
+    await this.confirmPayment({ paymentId: payment.id, tenantId: opts.tenantId, months });
+
+    const sub = await prisma.subscription.findUnique({ where: { tenantId: opts.tenantId } });
+    logger.info(
+      { tenantId: opts.tenantId, amount, months, expiresAt: sub?.expiresAt },
+      '[billing] paiement hors ligne enregistre',
+    );
+    return { paymentId: payment.id, amount, months, expiresAt: sub?.expiresAt ?? null };
   }
 
   /**
