@@ -595,6 +595,25 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
           <p className="text-sm text-gray-500">Date creation</p>
           <p className="mt-1 text-lg font-bold">{formatDate(container.createdAt)}</p>
         </AppCard>
+        <AppCard>
+          <p className="text-sm text-gray-500">Date de depart</p>
+          <p className="mt-1 text-lg font-bold">
+            {container.departureDate ? formatDate(container.departureDate) : '-'}
+          </p>
+        </AppCard>
+        <AppCard>
+          <p className="text-sm text-gray-500">Date d&apos;arrivee</p>
+          <p className="mt-1 text-lg font-bold">
+            {container.actualArrivalDate
+              ? formatDate(container.actualArrivalDate)
+              : container.estimatedArrivalDate
+                ? formatDate(container.estimatedArrivalDate)
+                : '-'}
+          </p>
+          {!container.actualArrivalDate && container.estimatedArrivalDate && (
+            <p className="text-[11px] text-gray-400 mt-0.5">estimee</p>
+          )}
+        </AppCard>
       </div>
 
       <ContainerLinksGraph container={container as any} />

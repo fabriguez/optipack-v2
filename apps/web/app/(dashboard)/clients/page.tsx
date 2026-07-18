@@ -43,11 +43,13 @@ function ClientsContent() {
 
   const agencyFilter = searchParams.get('agencyId') || '';
   const loyaltyTierFilter = searchParams.get('loyaltyTier') || '';
+  const isPartnerFilter = searchParams.get('isPartner') || '';
 
   const { data, isLoading } = useClients({
     ...queryParams,
     agencyId: agencyFilter || undefined,
     loyaltyTier: loyaltyTierFilter || undefined,
+    isPartner: isPartnerFilter || undefined,
   } as any);
 
   // Import XLSX desormais entierement gere cote backend via /imports/clients.
@@ -84,6 +86,15 @@ function ClientsContent() {
         { value: 'SILVER', label: 'Silver' },
         { value: 'GOLD', label: 'Gold' },
         { value: 'VIP', label: 'VIP' },
+      ],
+    },
+    {
+      key: 'isPartner',
+      label: 'Partenaire',
+      type: 'select' as const,
+      options: [
+        { value: 'true', label: 'Partenaire' },
+        { value: 'false', label: 'Non partenaire' },
       ],
     },
   ];

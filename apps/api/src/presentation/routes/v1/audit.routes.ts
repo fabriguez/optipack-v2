@@ -18,12 +18,23 @@ router.get('/', requirePermission('audit.read'), validate(paginationSchema, 'que
     const entityType = req.query.entityType as string | undefined;
     const userId = req.query.userId as string | undefined;
 
+    // Plage de dates (createdAt). Attend 'YYYY-MM-DD'. dateTo inclusif (fin de journee).
+    const dateFrom = req.query.dateFrom as string | undefined;
+    const dateTo = req.query.dateTo as string | undefined;
+    const gte = dateFrom ? new Date(`${dateFrom}T00:00:00.000`) : undefined;
+    const lte = dateTo ? new Date(`${dateTo}T23:59:59.999`) : undefined;
+    const createdAtFilter = {
+      ...(gte && !Number.isNaN(gte.getTime()) && { gte }),
+      ...(lte && !Number.isNaN(lte.getTime()) && { lte }),
+    };
+
     // Scope agence (etape 2) : merge en AND, sans toucher au OR de recherche.
     const scopeWhere = auditLogScope.where(scopeCtx(req));
     const where: any = {
       ...(action && { action }),
       ...(entityType && { entityType }),
       ...(userId && { userId }),
+      ...(Object.keys(createdAtFilter).length > 0 && { createdAt: createdAtFilter }),
       ...(search && {
         OR: [
           { entityType: { contains: search, mode: 'insensitive' } },

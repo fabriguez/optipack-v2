@@ -2,13 +2,15 @@
 
 import { use } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, CreditCard, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, FileText, Download, Eye } from 'lucide-react';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard, AppCardHeader } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppBadge } from '@/components/ui/AppBadge';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { AuthedImage, openAuthedFile } from '@/components/shared/AuthedImage';
+import { ImageLightbox } from '@/components/shared/ImageLightbox';
 import { Can } from '@/lib/components/Can';
 import { useQuery } from '@tanstack/react-query';
 import { useVoidPayment } from '@/lib/hooks/usePayments';
@@ -16,6 +18,15 @@ import { apiClient } from '@/lib/api/client';
 import { formatAmount, formatDateTime } from '@transitsoftservices/shared';
 import { MaskedValue, isMasked } from '@/components/ui/MaskedValue';
 import { useState } from 'react';
+
+interface PaymentAttachment {
+  id: string;
+  url: string;
+  key: string;
+  kind: 'IMAGE' | 'PDF' | 'OTHER';
+  caption: string | null;
+  createdAt?: string;
+}
 
 const METHOD_LABELS: Record<string, string> = {
   CASH: 'Especes', MOBILE_MONEY: 'Mobile Money', BANK_TRANSFER: 'Virement', CARD: 'Carte', CHECK: 'Cheque',
@@ -102,6 +113,10 @@ export default function PaymentDetailPage({ params }: { params: Promise<{ id: st
           </AppCard>
         </div>
 
+        {payment.attachments?.length > 0 && (
+          <PaymentAttachments attachments={payment.attachments} />
+        )}
+
         <ConfirmDialog
           open={showVoid}
           onClose={() => setShowVoid(false)}
@@ -117,6 +132,91 @@ export default function PaymentDetailPage({ params }: { params: Promise<{ id: st
         />
       </div>
     </PageTransition>
+  );
+}
+
+/**
+ * Pieces jointes du paiement (photos + justificatifs), en lecture seule.
+ * Les images sont fournies embarquees dans GET /payments/:id (payment.attachments)
+ * — pas d'endpoint /payments/:id/attachments dedie. URLs protegees -> AuthedImage.
+ */
+function PaymentAttachments({ attachments }: { attachments: PaymentAttachment[] }) {
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const images = attachments.filter((a) => a.kind === 'IMAGE');
+  const docs = attachments.filter((a) => a.kind !== 'IMAGE');
+
+  return (
+    <AppCard>
+      <AppCardHeader
+        title={`Pieces jointes (${attachments.length})`}
+        description="Photos et justificatifs ajoutes lors de l'encaissement"
+      />
+      <div className="space-y-4">
+        {images.length > 0 && (
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-2">Images ({images.length})</p>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+              {images.map((img, idx) => (
+                <div key={img.id} className="group relative overflow-hidden rounded-xl border border-gray-100">
+                  <button
+                    type="button"
+                    onClick={() => setLightboxIndex(idx)}
+                    className="block h-28 w-full cursor-zoom-in"
+                    aria-label="Agrandir image"
+                  >
+                    <AuthedImage src={img.url} alt={img.caption || 'Justificatif'} className="h-28 w-full object-cover transition-transform group-hover:scale-105" />
+                  </button>
+                  {img.caption && (
+                    <p className="px-2 py-1 text-xs text-gray-600 truncate">{img.caption}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {docs.length > 0 && (
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-2">Documents ({docs.length})</p>
+            <ul className="divide-y divide-gray-50 rounded-xl border border-gray-100">
+              {docs.map((d) => (
+                <li key={d.id} className="flex items-center justify-between gap-2 p-3">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <FileText className="h-4 w-4 shrink-0 text-red-500" />
+                    <p className="truncate text-sm font-medium text-gray-900">{d.caption || '(sans legende)'}</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => void openAuthedFile(d.url).catch(() => {})}
+                      className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-primary-700"
+                      title="Ouvrir"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void openAuthedFile(d.url, d.caption || `document-${d.id}`, true).catch(() => {})}
+                      className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-primary-700"
+                      title="Telecharger"
+                    >
+                      <Download className="h-4 w-4" />
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+
+      <ImageLightbox
+        images={images.map((img) => ({ url: img.url, caption: img.caption }))}
+        index={lightboxIndex}
+        onClose={() => setLightboxIndex(null)}
+        onIndexChange={setLightboxIndex}
+      />
+    </AppCard>
   );
 }
 

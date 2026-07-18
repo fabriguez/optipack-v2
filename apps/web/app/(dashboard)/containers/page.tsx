@@ -16,6 +16,7 @@ import { CsvImportDialog } from '@/components/shared/CsvImportDialog';
 import { RowActions } from '@/components/shared/RowActions';
 import { useContainers } from '@/lib/hooks/useContainers';
 import { apiClient } from '@/lib/api/client';
+import { searchers } from '@/lib/api/searchers';
 import { formatDate } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
 import { ContainerFormDialog } from './ContainerFormDialog';
@@ -38,12 +39,16 @@ export default function ContainersPage() {
 
   const statusFilter = searchParams.get('status') || '';
   const typeFilter = searchParams.get('type') || '';
+  const departureAgencyFilter = searchParams.get('departureAgencyId') || '';
+  const arrivalAgencyFilter = searchParams.get('arrivalAgencyId') || '';
 
   const { data, isLoading } = useContainers({
     page,
     limit: 20,
     status: statusFilter || undefined,
     type: typeFilter || undefined,
+    departureAgencyId: departureAgencyFilter || undefined,
+    arrivalAgencyId: arrivalAgencyFilter || undefined,
   } as any);
 
   const handleImport = async (rows: Record<string, string>[]) => {
@@ -104,6 +109,18 @@ export default function ContainersPage() {
         { value: 'true', label: 'Acheminement uniquement' },
         { value: 'false', label: 'Standard uniquement' },
       ],
+    },
+    {
+      key: 'departureAgencyId',
+      label: 'Agence de depart',
+      type: 'search-select' as const,
+      searcher: searchers.agencies,
+    },
+    {
+      key: 'arrivalAgencyId',
+      label: 'Agence d\'arrivee',
+      type: 'search-select' as const,
+      searcher: searchers.agencies,
     },
   ];
 

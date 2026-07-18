@@ -5,7 +5,13 @@ export interface IClientRepository {
   findById(id: string): Promise<Client | null>;
   findByPhone(phone: string): Promise<Client | null>;
   findAll(
-    filters: { organizationId?: string; agencyId?: string; scopeWhere?: object | null },
+    filters: {
+      organizationId?: string;
+      agencyId?: string;
+      loyaltyTier?: string;
+      isPartner?: boolean;
+      scopeWhere?: object | null;
+    },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<Client>>;
   create(data: Prisma.ClientCreateInput): Promise<Client>;

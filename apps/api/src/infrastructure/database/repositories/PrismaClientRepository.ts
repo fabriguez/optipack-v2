@@ -45,7 +45,13 @@ export class PrismaClientRepository implements IClientRepository {
   }
 
   async findAll(
-    filters: { organizationId?: string; agencyId?: string; scopeWhere?: object | null },
+    filters: {
+      organizationId?: string;
+      agencyId?: string;
+      loyaltyTier?: string;
+      isPartner?: boolean;
+      scopeWhere?: object | null;
+    },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<Client>> {
     const { page, limit, sortBy, sortOrder, search } = pagination;
@@ -56,6 +62,13 @@ export class PrismaClientRepository implements IClientRepository {
       isDeleted: false,
       ...(filters.organizationId && { organizationId: filters.organizationId }),
       ...(filters.agencyId && { agencyId: filters.agencyId }),
+      ...(filters.loyaltyTier && {
+        loyaltyTier: filters.loyaltyTier as Prisma.ClientWhereInput['loyaltyTier'],
+      }),
+      // Partenaire = possede au moins une grille PartnerPricing (cf. memoire projet).
+      ...(filters.isPartner !== undefined && {
+        partnerPricings: filters.isPartner ? { some: {} } : { none: {} },
+      }),
       // Scope agence (etape 2) : merge en AND pour ne pas ecraser le OR de recherche.
       ...(filters.scopeWhere && { AND: [filters.scopeWhere as Prisma.ClientWhereInput] }),
       ...(search && {

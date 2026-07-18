@@ -9,7 +9,13 @@ export class ListClientsUseCase {
   ) {}
 
   async execute(
-    filters: { organizationId?: string; agencyId?: string; scopeWhere?: object | null },
+    filters: {
+      organizationId?: string;
+      agencyId?: string;
+      loyaltyTier?: string;
+      isPartner?: boolean;
+      scopeWhere?: object | null;
+    },
     pagination: PaginationInput,
   ) {
     return this.clientRepo.findAll(filters, pagination);

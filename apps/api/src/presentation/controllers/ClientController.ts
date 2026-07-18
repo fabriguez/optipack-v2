@@ -34,10 +34,16 @@ export class ClientController {
     try {
       const useCase = container.resolve(ListClientsUseCase);
       const agencyId = req.query.agencyId as string | undefined;
+      const loyaltyTier = (req.query.loyaltyTier as string | undefined) || undefined;
+      // Filtre "partenaire" : 'true' -> a au moins une grille PartnerPricing,
+      // 'false' -> aucune. Absent/vide -> pas de filtre.
+      const isPartnerRaw = req.query.isPartner as string | undefined;
+      const isPartner =
+        isPartnerRaw === 'true' ? true : isPartnerRaw === 'false' ? false : undefined;
       // Scope agence (etape 2) : fragment merge en AND dans le repo.
       const scopeWhere = clientScope.where(scopeCtx(req)) ?? null;
       const result = await useCase.execute(
-        { organizationId: getOrgId(req), agencyId, scopeWhere },
+        { organizationId: getOrgId(req), agencyId, loyaltyTier, isPartner, scopeWhere },
         req.query as never,
       );
       res.json({ success: true, ...result });
