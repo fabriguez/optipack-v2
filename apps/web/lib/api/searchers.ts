@@ -82,12 +82,17 @@ export const searchers = {
   }, 'searchers.warehouses'),
 
   agencies: tag(async (q: string, limit = DEFAULT_LIMIT): Promise<SearchOption[]> => {
-    const items = await searchPaginated<{ id: string; name: string; city: string }>('/agencies', q, limit);
-    return items.map((a) => ({ value: a.id, label: a.name, sublabel: a.city }));
+    const items = await searchPaginated<{ id: string; name: string; city: string; isActive?: boolean }>('/agencies', q, limit);
+    // Une agence desactivee n'est pas selectionnable pour un enregistrement
+    // (colis/finances/personnel). La page de gestion des agences utilise
+    // useAgencies (pas ce searcher) et continue d'afficher les inactives.
+    return items.filter((a) => a.isActive !== false).map((a) => ({ value: a.id, label: a.name, sublabel: a.city }));
   }, 'searchers.agencies'),
 
   carriers: tag(async (q: string, limit = DEFAULT_LIMIT): Promise<SearchOption[]> => {
-    const items = await searchPaginated<{ id: string; name: string; phone?: string | null; carrierType?: string | null }>('/carriers', q, limit);
+    // activeOnly : un transporteur desactive ne doit pas etre selectionnable
+    // (ex. creation de conteneur).
+    const items = await searchPaginated<{ id: string; name: string; phone?: string | null; carrierType?: string | null }>('/carriers', q, limit, { activeOnly: true });
     return items.map((c) => ({
       value: c.id,
       label: c.name,

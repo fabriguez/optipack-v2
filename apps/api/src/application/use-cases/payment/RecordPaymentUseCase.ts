@@ -6,6 +6,7 @@ import { INVOICE_REPOSITORY, type IInvoiceRepository } from '../../interfaces/II
 import { CASH_REGISTER_REPOSITORY, type ICashRegisterRepository } from '../../interfaces/ICashRegisterRepository';
 import { JOURNAL_ENTRY_REPOSITORY, type IJournalEntryRepository } from '../../interfaces/IJournalEntryRepository';
 import { BusinessError, NotFoundError } from '../../../domain/errors/BusinessError';
+import { assertAgencyActive } from '../../services/scope/agencyScope';
 import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 import { prisma } from '../../../config/database';
 import { LoyaltyConfigService } from '../../services/LoyaltyConfigService';
@@ -48,6 +49,9 @@ export class RecordPaymentUseCase {
     // agencyId cote serveur depuis invoice.agencyId et on l'utilise pour le
     // Payment, la caisse, le journal et les evenements.
     const agencyId = invoice.agencyId;
+
+    // Agence desactivee : aucun encaissement (caisse, journal) possible.
+    await assertAgencyActive(agencyId);
 
     if (invoice.status === 'PAID') {
       throw new BusinessError('Cette facture est deja soldee');

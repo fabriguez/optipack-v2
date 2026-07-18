@@ -9,7 +9,13 @@ export class GetLedgerUseCase {
   ) {}
 
   async execute(
-    filters: { agencyId?: string; sourceType?: string; scopeWhere?: object | null },
+    filters: {
+      agencyId?: string;
+      sourceType?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      scopeWhere?: object | null;
+    },
     pagination: PaginationInput,
   ) {
     return this.journalRepo.findAll(filters, pagination);

@@ -6,6 +6,7 @@ import { CASH_REGISTER_REPOSITORY, type ICashRegisterRepository } from '../../in
 import { HEAD_OFFICE_CASH_REGISTER_REPOSITORY, type IHeadOfficeCashRegisterRepository } from '../../interfaces/IHeadOfficeCashRegisterRepository';
 import { JOURNAL_ENTRY_REPOSITORY, type IJournalEntryRepository } from '../../interfaces/IJournalEntryRepository';
 import { InsufficientBalanceError, BusinessError } from '../../../domain/errors/BusinessError';
+import { assertAgencyActive } from '../../services/scope/agencyScope';
 import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 
 @injectable()
@@ -30,6 +31,11 @@ export class CreateFundTransferUseCase {
     // Pas de HQ -> HQ.
     if (sourceType === 'HQ' && input.destinationType === 'HQ') {
       throw new BusinessError("Un transfert siege -> siege n'est pas autorise.");
+    }
+
+    // Agence source desactivee : aucun transfert depuis cette agence.
+    if (sourceType === 'AGENCY' && input.sourceAgencyId) {
+      await assertAgencyActive(input.sourceAgencyId);
     }
 
     const reference = generateReference('TRF', Date.now() % 10000);

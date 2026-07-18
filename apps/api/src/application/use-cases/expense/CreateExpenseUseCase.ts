@@ -1,5 +1,6 @@
 import { inject, injectable } from 'tsyringe';
 import { EXPENSE_REPOSITORY, type IExpenseRepository } from '../../interfaces/IExpenseRepository';
+import { assertAgencyActive } from '../../services/scope/agencyScope';
 
 interface CreateExpenseInput {
   agencyId: string;
@@ -18,6 +19,8 @@ export class CreateExpenseUseCase {
   ) {}
 
   async execute(input: CreateExpenseInput, userId: string) {
+    // Agence desactivee : aucune depense enregistrable.
+    await assertAgencyActive(input.agencyId);
     return this.expenseRepo.create({
       title: input.title,
       reason: input.reason,

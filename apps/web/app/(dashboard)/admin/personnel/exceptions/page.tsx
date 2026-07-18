@@ -66,9 +66,11 @@ export default function ExceptionsPage() {
   const [showAddForm, setShowAddForm] = useState(false);
 
   // Load all employees (admin-only page, manageable volume).
+  // limit plafonne a 200 par paginationSchema (common.schema.ts) : au-dela,
+  // validate() rejette la requete -> 4xx -> select vide. On reste donc a 200.
   const { data: employeesResp, isLoading: empLoading } = useQuery({
     queryKey: ['employees', 'all'],
-    queryFn: () => apiClient.get('/employees', { params: { limit: 500 } }).then((r) => r.data),
+    queryFn: () => apiClient.get('/employees', { params: { limit: 200 } }).then((r) => r.data),
   });
   const employees: EmployeeSummary[] = useMemo(
     () => ((employeesResp as any)?.data ?? []) as EmployeeSummary[],

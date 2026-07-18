@@ -2,7 +2,7 @@ import type { Prisma } from '@prisma/client';
 import type { Request } from 'express';
 import { prisma } from '../../../config/database';
 import { config } from '../../../config';
-import { NotFoundError } from '../../../domain/errors/BusinessError';
+import { NotFoundError, ConflictError } from '../../../domain/errors/BusinessError';
 import { getPolicy } from '../../../presentation/middleware/policyContext';
 
 /**
@@ -51,6 +51,25 @@ export function scopeCtx(req: Request): ScopeCtx {
     agencyIds: policy.agencyIds,
     unrestricted: policy.isAdmin,
   };
+}
+
+/**
+ * Bloque toute operation d'enregistrement (colis, finances, personnel) ciblant
+ * une agence desactivee. A appeler dans les use-cases de creation une fois
+ * l'agencyId cible resolu. Agence introuvable -> NotFoundError ; agence
+ * desactivee -> ConflictError (409).
+ */
+export async function assertAgencyActive(agencyId: string): Promise<void> {
+  const agency = await prisma.agency.findUnique({
+    where: { id: agencyId },
+    select: { isActive: true },
+  });
+  if (!agency) throw new NotFoundError('Agence', agencyId);
+  if (!agency.isActive) {
+    throw new ConflictError(
+      "Agence desactivee : aucune operation d'enregistrement (colis, finances, personnel) n'est possible.",
+    );
+  }
 }
 
 type AnyWhere = Record<string, unknown>;

@@ -10,6 +10,7 @@ import { emailService } from '../../../infrastructure/email/EmailService';
 import { notificationService } from '../../services/notifications/NotificationService';
 import { provisionClientPortalAccess } from '../../services/ClientPortalAccessService';
 import { syncEmployeeAgencies } from '../../services/EmployeeAgencyService';
+import { assertAgencyActive } from '../../services/scope/agencyScope';
 
 interface CreateEmployeeInput {
   agencyId: string;
@@ -79,6 +80,9 @@ export class CreateEmployeeUseCase {
   ) {}
 
   async execute(input: CreateEmployeeInput, organizationId?: string) {
+    // Agence desactivee : aucun enregistrement de personnel.
+    await assertAgencyActive(input.agencyId);
+
     // Un employe est AUSSI un client : on cree systematiquement sa fiche client
     // (sauf syncClient=false explicite). Comme Client.phone est obligatoire et
     // unique, le telephone devient requis pour creer un employe.

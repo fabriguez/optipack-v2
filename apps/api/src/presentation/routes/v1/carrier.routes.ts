@@ -17,9 +17,14 @@ router.get('/', validate(paginationSchema, 'query'), requirePermission('carrier.
     const { page = 1, limit = 20, search } = req.query as any;
     const skip = (Number(page) - 1) * Number(limit);
     const organizationId = req.user!.organizationId;
+    // activeOnly=true : n'expose que les transporteurs actifs (ex. select de
+    // creation conteneur, ou un transporteur desactive ne doit plus apparaitre).
+    // Par defaut la liste admin renvoie tout (actifs + inactifs) avec badge.
+    const activeOnly = (req.query as any).activeOnly === 'true' || (req.query as any).activeOnly === true;
     const where: any = {
       organizationId,
       ...(search && { name: { contains: search, mode: 'insensitive' } }),
+      ...(activeOnly && { isActive: true }),
     };
     const [data, total] = await Promise.all([
       prisma.carrier.findMany({ where, skip, take: Number(limit), orderBy: { name: 'asc' } }),

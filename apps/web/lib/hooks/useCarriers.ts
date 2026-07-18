@@ -46,3 +46,16 @@ export function useDeleteCarrier() {
     onError: (e) => toast.error(extractApiError(e, 'Erreur lors de la suppression')),
   });
 }
+
+export function useReactivateCarrier() {
+  const qc = useQueryClient();
+  return useMutation({
+    // Reactivation via PATCH { isActive: true } (updateCarrierSchema l'autorise).
+    mutationFn: (id: string) => apiClient.patch(`/carriers/${id}`, { isActive: true }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['carriers'] });
+      toast.success('Transporteur reactive');
+    },
+    onError: (e) => toast.error(extractApiError(e, 'Erreur lors de la reactivation')),
+  });
+}

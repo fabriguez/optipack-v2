@@ -9,11 +9,17 @@ export class AccountingController {
   static async getLedger(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(GetLedgerUseCase);
-      const { agencyId, sourceType } = req.query;
+      const { agencyId, sourceType, dateFrom, dateTo } = req.query;
       // Scope agence (etape 2) : fragment merge en AND dans le where du repo.
       const scopeWhere = journalEntryScope.where(scopeCtx(req)) ?? null;
       const result = await useCase.execute(
-        { agencyId: agencyId as string, sourceType: sourceType as string, scopeWhere },
+        {
+          agencyId: agencyId as string,
+          sourceType: sourceType as string,
+          dateFrom: dateFrom as string | undefined,
+          dateTo: dateTo as string | undefined,
+          scopeWhere,
+        },
         req.query as any,
       );
       res.json({ success: true, ...result });

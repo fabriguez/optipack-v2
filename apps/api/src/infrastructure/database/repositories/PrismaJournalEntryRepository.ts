@@ -27,15 +27,30 @@ export class PrismaJournalEntryRepository implements IJournalEntryRepository {
   }
 
   async findAll(
-    filters: { agencyId?: string; sourceType?: string; scopeWhere?: object | null },
+    filters: {
+      agencyId?: string;
+      sourceType?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      scopeWhere?: object | null;
+    },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<JournalEntryWithLines>> {
     const { page, limit, search } = pagination;
     const skip = (page - 1) * limit;
 
+    // Plage de dates (JournalEntry.date). Attend 'YYYY-MM-DD'. dateTo inclusif.
+    const gte = filters.dateFrom ? new Date(`${filters.dateFrom}T00:00:00.000`) : undefined;
+    const lte = filters.dateTo ? new Date(`${filters.dateTo}T23:59:59.999`) : undefined;
+    const dateFilter = {
+      ...(gte && !Number.isNaN(gte.getTime()) && { gte }),
+      ...(lte && !Number.isNaN(lte.getTime()) && { lte }),
+    };
+
     const where: Prisma.JournalEntryWhereInput = {
       ...(filters.agencyId && { agencyId: filters.agencyId }),
       ...(filters.sourceType && { sourceType: filters.sourceType as any }),
+      ...(Object.keys(dateFilter).length > 0 && { date: dateFilter }),
       // Scope agence (etape 2) : merge en AND, ne touche pas au OR de recherche.
       ...(filters.scopeWhere && { AND: [filters.scopeWhere as Prisma.JournalEntryWhereInput] }),
       ...(search && {
@@ -46,7 +61,7 @@ export class PrismaJournalEntryRepository implements IJournalEntryRepository {
       }),
     };
 
-    const [data, total] = await Promise.all([
+    const [data, total, totalsAgg] = await Promise.all([
       prisma.journalEntry.findMany({
         where,
         skip,
@@ -55,12 +70,27 @@ export class PrismaJournalEntryRepository implements IJournalEntryRepository {
         include: JOURNAL_INCLUDE,
       }),
       prisma.journalEntry.count({ where }),
+      // Totaux debit/credit sur TOUT l'ensemble filtre (pas seulement la page),
+      // pour le pied de page "totaux de la periode".
+      prisma.journalEntryLine.aggregate({
+        where: { journalEntry: where },
+        _sum: { debitAmount: true, creditAmount: true },
+      }),
     ]);
 
     return {
       data: data as JournalEntryWithLines[],
-      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
-    };
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+        totals: {
+          debit: Number(totalsAgg._sum.debitAmount ?? 0),
+          credit: Number(totalsAgg._sum.creditAmount ?? 0),
+        },
+      },
+    } as PaginatedResponse<JournalEntryWithLines>;
   }
 
   async create(data: Prisma.JournalEntryCreateInput): Promise<JournalEntry> {

@@ -2,6 +2,7 @@ import { inject, injectable } from 'tsyringe';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../../../config/database';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
+import { assertAgencyActive } from '../../services/scope/agencyScope';
 
 interface Input {
   containerId: string;
@@ -62,6 +63,9 @@ export class CreateContainerExpenseUseCase {
     }
 
     const agencyId = input.agencyId ?? container.departureAgencyId;
+
+    // Agence de rattachement desactivee : aucune depense conteneur enregistrable.
+    await assertAgencyActive(agencyId);
 
     return prisma.$transaction(async (tx) => {
       const expense = await tx.expense.create({

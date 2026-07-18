@@ -3,7 +3,7 @@
 import { Suspense, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Eye, Edit, Trash2, Truck } from 'lucide-react';
+import { Plus, Eye, Edit, Trash2, Truck, RotateCcw } from 'lucide-react';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
@@ -15,7 +15,7 @@ import { SearchBar } from '@/components/shared/SearchBar';
 import { ExportButton } from '@/components/shared/ExportButton';
 import { RowActions } from '@/components/shared/RowActions';
 import { useServerPagination } from '@/lib/hooks/useServerPagination';
-import { useCarriers, useDeleteCarrier, type CarrierItem } from '@/lib/hooks/useCarriers';
+import { useCarriers, useDeleteCarrier, useReactivateCarrier, type CarrierItem } from '@/lib/hooks/useCarriers';
 import { CarrierFormDialog, type CarrierLike } from '../containers/CarrierFormDialog';
 
 function CarriersContent() {
@@ -24,6 +24,7 @@ function CarriersContent() {
   const [showForm, setShowForm] = useState(false);
   const [editTarget, setEditTarget] = useState<CarrierLike | null>(null);
   const deleteMutation = useDeleteCarrier();
+  const reactivateMutation = useReactivateCarrier();
   // Permission ABAC : modification / desactivation d'un transporteur.
   const canManageCarrier = usePermission('carrier.manage');
 
@@ -114,7 +115,9 @@ function CarriersContent() {
             ...(canManageCarrier
               ? [
                   { label: 'Modifier', icon: <Edit className="h-4 w-4" />, onClick: () => openEdit(row) },
-                  { label: 'Desactiver', icon: <Trash2 className="h-4 w-4" />, onClick: () => deleteMutation.mutate(row.id), variant: 'destructive' as const, disabled: !row.isActive },
+                  ...(row.isActive
+                    ? [{ label: 'Desactiver', icon: <Trash2 className="h-4 w-4" />, onClick: () => deleteMutation.mutate(row.id), variant: 'destructive' as const }]
+                    : [{ label: 'Reactiver', icon: <RotateCcw className="h-4 w-4" />, onClick: () => reactivateMutation.mutate(row.id) }]),
                 ]
               : []),
           ]}

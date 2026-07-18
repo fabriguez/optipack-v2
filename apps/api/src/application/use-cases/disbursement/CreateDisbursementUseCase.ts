@@ -5,6 +5,7 @@ import { DISBURSEMENT_REPOSITORY, type IDisbursementRepository } from '../../int
 import { CASH_REGISTER_REPOSITORY, type ICashRegisterRepository } from '../../interfaces/ICashRegisterRepository';
 import { JOURNAL_ENTRY_REPOSITORY, type IJournalEntryRepository } from '../../interfaces/IJournalEntryRepository';
 import { InsufficientBalanceError } from '../../../domain/errors/BusinessError';
+import { assertAgencyActive } from '../../services/scope/agencyScope';
 import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 
 @injectable()
@@ -16,6 +17,9 @@ export class CreateDisbursementUseCase {
   ) {}
 
   async execute(input: CreateDisbursementInput, userId: string) {
+    // Agence desactivee : aucun decaissement possible.
+    await assertAgencyActive(input.agencyId);
+
     // 1. Get or create cash register
     const cashRegister = await this.cashRegisterRepo.findOrCreateForToday(input.agencyId);
 

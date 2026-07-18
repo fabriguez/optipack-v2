@@ -7,6 +7,7 @@ import { WAREHOUSE_REPOSITORY, type IWarehouseRepository } from '../../interface
 import { TRANSIT_ROUTE_REPOSITORY, type ITransitRouteRepository } from '../../interfaces/ITransitRouteRepository';
 import { INVOICE_REPOSITORY, type IInvoiceRepository } from '../../interfaces/IInvoiceRepository';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
+import { assertAgencyActive } from '../../services/scope/agencyScope';
 import { PricingService } from '../../services/PricingService';
 import { HistoryService } from '../../services/HistoryService';
 import { StorageChargeService } from '../../services/StorageChargeService';
@@ -43,6 +44,9 @@ export class CreateParcelUseCase {
     if (!warehouse) throw new NotFoundError('Magasin', input.warehouseId);
     if (!transitRoute) throw new NotFoundError('Route de transit', input.transitRouteId);
     if (!destinationAgency) throw new NotFoundError('Agence de destination', input.destinationAgencyId);
+
+    // Agence desactivee : aucun enregistrement de colis (ni facture derivee).
+    await assertAgencyActive(warehouse.agencyId);
 
     // Blocage nouvelle expedition si client a cumul dettes > seuil. Defaut
     // active via DebtBlockConfigService.

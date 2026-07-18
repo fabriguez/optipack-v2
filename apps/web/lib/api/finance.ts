@@ -13,7 +13,7 @@ export const cashRegisterApi = {
 };
 
 export const accountingApi = {
-  getLedger: (params?: Partial<PaginationInput> & { agencyId?: string; sourceType?: string }) =>
+  getLedger: (params?: Partial<PaginationInput> & { agencyId?: string; sourceType?: string; dateFrom?: string; dateTo?: string }) =>
     apiClient.get('/accounting', { params }).then((r) => r.data),
   getEntry: (id: string) =>
     apiClient.get(`/accounting/${id}`).then((r) => r.data),

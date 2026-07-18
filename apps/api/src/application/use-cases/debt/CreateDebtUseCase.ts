@@ -3,6 +3,7 @@ import type { CreateDebtInput } from '@transitsoftservices/shared';
 import { generateReference } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
 import { BusinessError, NotFoundError } from '../../../domain/errors/BusinessError';
+import { assertAgencyActive } from '../../services/scope/agencyScope';
 
 /**
  * Cree une dette typee (CLIENT / EMPLOYEE / AGENCY / CARRIER).
@@ -25,6 +26,9 @@ export class CreateDebtUseCase {
       select: { id: true, organizationId: true },
     });
     if (!agency) throw new NotFoundError('Agence', input.agencyId);
+
+    // Agence desactivee : aucune dette enregistrable.
+    await assertAgencyActive(input.agencyId);
 
     // 2. Validation metier des FKs (zod fait la presence ; on verifie l'existence).
     if (input.clientId) {
