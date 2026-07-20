@@ -109,7 +109,10 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
 
   const netAmount = Number(invoice.netAmount || 0);
   const paidAmount = Number(invoice.paidAmount || 0);
-  const balance = Number(invoice.balance || 0);
+  // Solde a payer = balance + magasinage pas encore cristallise. L'API expose
+  // amountDue ; fallback sur balance pour les reponses anterieures.
+  const pendingStorage = Number(invoice.pendingStorageFees || 0);
+  const balance = Number(invoice.amountDue ?? invoice.balance ?? 0);
   const paidPercent = netAmount > 0 ? Math.round((paidAmount / netAmount) * 100) : 0;
 
   const paymentColumns = [
@@ -226,6 +229,11 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             <div>
               <p className="text-xs text-gray-500 mb-1">Solde restant</p>
               <p className="text-xl font-bold text-red-600">{formatAmount(balance)}</p>
+              {pendingStorage > 0 && (
+                <p className="text-[11px] text-gray-400 mt-0.5">
+                  dont {formatAmount(pendingStorage)} de magasinage
+                </p>
+              )}
             </div>
             <div>
               <p className="text-xs text-gray-500 mb-2">Progression</p>

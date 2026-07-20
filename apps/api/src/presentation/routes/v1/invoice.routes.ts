@@ -438,6 +438,14 @@ router.get('/:id', requirePermission('invoice.read'), async (req, res, next) => 
       }),
     ]);
 
+    // Montant reellement du = solde stocke + magasinage pas encore cristallise.
+    // Le magasinage deja facture est deja dans `balance`, d'ou le filtre sur les
+    // charges non billed (pendingForParcels) pour ne pas compter deux fois.
+    const pendingStorage = await container
+      .resolve(StorageChargeService)
+      .pendingForParcels(scope.parcelIds);
+    const amountDue = Math.max(0, Number(invoice.balance ?? 0) + pendingStorage);
+
     const enriched = {
       ...invoice,
       parcels: parcelDetails.map((p) => ({
@@ -448,6 +456,10 @@ router.get('/:id', requirePermission('invoice.read'), async (req, res, next) => 
       })),
       payments: paymentList,
       storageFeesTotal: storage.total,
+      /** Magasinage accumule mais pas encore injecte dans `balance`. */
+      pendingStorageFees: pendingStorage,
+      /** Montant a payer = balance + pendingStorageFees. A afficher au client. */
+      amountDue,
       isAggregate: scope.groupId != null,
       groupId: scope.groupId,
       discountHistory: discountAudit,

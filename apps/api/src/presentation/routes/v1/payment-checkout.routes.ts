@@ -167,7 +167,16 @@ router.post('/payments/checkout', authenticateClient, async (req, res, next) => 
     if (!invoice || invoice.clientId !== clientId) {
       return res.status(404).json({ success: false, message: 'Facture introuvable' });
     }
-    const balance = Number(invoice.balance ?? 0);
+    // Montant du = solde stocke + frais de magasinage pas encore cristallises.
+    // La cristallisation a lieu au reglement (OnlinePaymentSettlementService) ;
+    // ici on ne fait que lire, donc on ajoute la part en cours d'accumulation
+    // sinon le plafond refuserait le paiement des frais.
+    const { container: diContainer } = await import('../../../container');
+    const { StorageChargeService } = await import('../../../application/services/StorageChargeService');
+    const pendingStorage = await diContainer
+      .resolve(StorageChargeService)
+      .pendingForInvoice(invoice.id);
+    const balance = Number(invoice.balance ?? 0) + pendingStorage;
     if (balance <= 0) {
       return res.status(400).json({ success: false, message: 'Facture deja payee' });
     }

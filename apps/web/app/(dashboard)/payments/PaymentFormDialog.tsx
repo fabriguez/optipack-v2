@@ -274,7 +274,13 @@ export function PaymentFormDialog({ open, onClose, invoiceId, parcelTracking }: 
               </div>
               <div>
                 <p className="text-[10px] uppercase tracking-wider text-gray-500">Reste a payer</p>
-                <p className="text-base font-bold text-red-700">{Number(activeInvoice.balance ?? 0).toLocaleString()} XAF</p>
+                {/* amountDue = balance + magasinage pas encore cristallise. */}
+                <p className="text-base font-bold text-red-700">{Number(activeInvoice.amountDue ?? activeInvoice.balance ?? 0).toLocaleString()} XAF</p>
+                {Number(activeInvoice.pendingStorageFees ?? 0) > 0 && (
+                  <p className="text-[10px] text-gray-500">
+                    dont {Number(activeInvoice.pendingStorageFees).toLocaleString()} de magasinage
+                  </p>
+                )}
               </div>
             </div>
             {parcelTracking && (() => {
@@ -293,15 +299,15 @@ export function PaymentFormDialog({ open, onClose, invoiceId, parcelTracking }: 
                 </p>
               );
             })()}
-            {Number(activeInvoice.balance ?? 0) > 0 && (
+            {Number(activeInvoice.amountDue ?? activeInvoice.balance ?? 0) > 0 && (
               <div className="mt-2 flex justify-end">
                 <AppButton
                   type="button"
                   size="sm"
                   variant="outline"
-                  onClick={() => setValue('amount', Number(activeInvoice.balance), { shouldValidate: true })}
+                  onClick={() => setValue('amount', Number(activeInvoice.amountDue ?? activeInvoice.balance), { shouldValidate: true })}
                 >
-                  Payer le solde ({Number(activeInvoice.balance).toLocaleString()} XAF)
+                  Payer le solde ({Number(activeInvoice.amountDue ?? activeInvoice.balance).toLocaleString()} XAF)
                 </AppButton>
               </div>
             )}

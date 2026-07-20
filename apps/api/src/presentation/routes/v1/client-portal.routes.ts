@@ -245,6 +245,16 @@ router.get('/invoices/:id', authenticateClient, async (req, res, next) => {
       }
     }
 
+    // Reste a payer = solde stocke + magasinage pas encore cristallise (celui
+    // deja facture est deja dans balance). La cristallisation a lieu au
+    // paiement ; sans ce complement le client verrait un montant sous-evalue.
+    const { container: diContainer } = await import('../../../container');
+    const { StorageChargeService } = await import('../../../application/services/StorageChargeService');
+    const pendingStorage = await diContainer
+      .resolve(StorageChargeService)
+      .pendingForParcels(parcelIds);
+    const remaining = Math.max(0, Number(invoice.balance ?? 0) + pendingStorage);
+
     res.json({
       success: true,
       data: {
@@ -260,7 +270,9 @@ router.get('/invoices/:id', authenticateClient, async (req, res, next) => {
           tax: Number(invoice.tva ?? 0),
           net: Number(invoice.netAmount ?? 0),
           advances: Number(invoice.paidAmount ?? 0),
-          remaining: Number(invoice.balance ?? 0),
+          remaining,
+          /** Part de `remaining` pas encore injectee dans balance. */
+          pendingStorage,
         },
       },
     });

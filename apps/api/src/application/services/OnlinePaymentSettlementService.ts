@@ -230,9 +230,17 @@ export class OnlinePaymentSettlementService {
     txRef: string | null,
   ): Promise<SettlementEffect | null> {
     if (amount <= 0) return null;
-    const invoice = await tx.invoice.findUnique({ where: { id: invoiceId } });
+    let invoice = await tx.invoice.findUnique({ where: { id: invoiceId } });
     if (!invoice) return null;
-    if (invoice.status === 'PAID' || invoice.status === 'CANCELLED') return null;
+    if (invoice.status === 'CANCELLED') return null;
+
+    // Frais de magasinage : meme regle que RecordPaymentUseCase — on cristallise
+    // avant de calculer le solde du, sinon un paiement en ligne ne pourrait
+    // jamais solder les frais accumules (et une facture PAID non retiree
+    // resterait bloquee).
+    await this.storageCharges.crystallizeForInvoice({ invoiceId, reason: 'PAYMENT', tx });
+    invoice = (await tx.invoice.findUnique({ where: { id: invoiceId } })) ?? invoice;
+    if (invoice.status === 'PAID') return null;
 
     // On borne le montant au solde restant (securite : un provider ne devrait
     // jamais encaisser plus que du). Tout surplus eventuel est ignore ici.

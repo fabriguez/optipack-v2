@@ -3529,6 +3529,11 @@ model ParcelStorageCharge {
   // Sortie recomputable a la lecture, materialisee au stop pour eviter recalc.
   chargedDays Int          @default(0)
   feeAmount   Decimal      @default(0) @db.Decimal(15, 2)
+  // Facturation : une charge n'est repercutee sur la facture qu'une seule fois
+  // (cristallisation). billedAt non-null = feeAmount deja injecte dans
+  // Invoice.totalAmount => ne jamais refacturer. Garantit l'idempotence.
+  billedAt        DateTime?
+  billedInvoiceId String?
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
@@ -3540,6 +3545,7 @@ model ParcelStorageCharge {
   @@index([warehouseId])
   @@index([agencyId])
   @@index([parcelId, stoppedAt])
+  @@index([billedAt])
   @@map("parcel_storage_charges")
 }
 

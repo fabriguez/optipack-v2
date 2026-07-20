@@ -229,6 +229,164 @@ export class StorageChargeService {
   }
 
   /**
+   * Montant de magasinage NON encore facture pour une facture donnee.
+   * Lecture seule : ne stoppe rien, ne marque rien. Pour les charges actives,
+   * recompute l'accrual live jusqu'a now().
+   *
+   * Sert au calcul du "montant a payer" affiche : Invoice.balance ne contient
+   * que le magasinage deja cristallise, ce helper apporte le reste.
+   */
+  async pendingForInvoice(invoiceId: string, tx?: Prisma.TransactionClient): Promise<number> {
+    const db = this.db(tx);
+    const parcels = await db.parcel.findMany({
+      where: { invoiceId },
+      select: { id: true },
+    });
+    return this.pendingForParcels(parcels.map((p) => p.id), tx);
+  }
+
+  /**
+   * Idem `pendingForInvoice` mais pour un set de colis. Utile pour les factures
+   * AGREGAT de groupe, dont les colis sont portes par les factures membres.
+   */
+  async pendingForParcels(parcelIds: string[], tx?: Prisma.TransactionClient): Promise<number> {
+    if (parcelIds.length === 0) return 0;
+    const db = this.db(tx);
+    const charges = await db.parcelStorageCharge.findMany({
+      where: { parcelId: { in: parcelIds }, billedAt: null },
+    });
+    const now = new Date();
+    return charges.reduce((sum, c) => {
+      const { feeAmount } =
+        c.stoppedAt == null ? computeAccrual(c, now) : { feeAmount: Number(c.feeAmount) };
+      return sum + feeAmount;
+    }, 0);
+  }
+
+  /**
+   * Cristallise le magasinage d'une facture : materialise les charges non
+   * encore facturees, les marque billed (idempotent) et injecte le montant
+   * dans Invoice.totalAmount / netAmount / balance / status.
+   *
+   * Une charge encore active est arretee a now() puis, si le colis reste
+   * stocke (phase DESTINATION), une NOUVELLE charge est ouverte immediatement
+   * (freeDays=0, grace deja consommee) afin que les frais continuent de courir
+   * tant que le colis n'est pas retire. Les colis listes dans `finalParcelIds`
+   * (ceux qu'on remet au client) ne sont PAS rouverts — important car une
+   * facture peut couvrir plusieurs colis dont un seul est retire.
+   *
+   * Une facture deja PAID repasse en PARTIAL si de nouveaux frais tombent.
+   * Les factures CANCELLED sont ignorees.
+   *
+   * @returns montant cristallise (0 si rien a facturer).
+   */
+  async crystallizeForInvoice(input: {
+    invoiceId: string;
+    reason: StopReason;
+    /**
+     * Colis remis au client : leurs charges sont arretees definitivement, sans
+     * reouverture d'un nouveau segment. Les autres colis de la facture, eux,
+     * continuent d'accumuler des frais.
+     */
+    finalParcelIds?: string[];
+    tx?: Prisma.TransactionClient;
+  }): Promise<number> {
+    const db = this.db(input.tx);
+
+    const invoice = await db.invoice.findUnique({
+      where: { id: input.invoiceId },
+      select: {
+        id: true, totalAmount: true, discount: true, tva: true,
+        paidAmount: true, status: true,
+      },
+    });
+    if (!invoice || invoice.status === 'CANCELLED') return 0;
+
+    const parcels = await db.parcel.findMany({
+      where: { invoiceId: input.invoiceId },
+      select: { id: true },
+    });
+    if (parcels.length === 0) return 0;
+
+    const charges = await db.parcelStorageCharge.findMany({
+      where: { parcelId: { in: parcels.map((p) => p.id) }, billedAt: null },
+    });
+    if (charges.length === 0) return 0;
+
+    const now = new Date();
+    let billedTotal = 0;
+
+    for (const c of charges) {
+      let feeAmount: number;
+      let chargedDays: number;
+
+      if (c.stoppedAt == null) {
+        // Charge active : on la materialise a now().
+        ({ chargedDays, feeAmount } = computeAccrual(c, now));
+        await db.parcelStorageCharge.update({
+          where: { id: c.id },
+          data: {
+            stoppedAt: now,
+            stopReason: input.reason,
+            chargedDays,
+            feeAmount,
+            billedAt: now,
+            billedInvoiceId: input.invoiceId,
+          },
+        });
+
+        // Le colis reste stocke : on rouvre un segment pour que les frais
+        // continuent a courir (sans re-offrir la franchise).
+        if (!input.finalParcelIds?.includes(c.parcelId) && c.phase === 'DESTINATION') {
+          await db.parcelStorageCharge.create({
+            data: {
+              parcelId: c.parcelId,
+              warehouseId: c.warehouseId,
+              agencyId: c.agencyId,
+              dailyRate: c.dailyRate,
+              freeDays: 0,
+              ruleLabel: c.ruleLabel,
+              phase: c.phase,
+              startedAt: now,
+            },
+          });
+        }
+      } else {
+        // Charge deja stoppee mais jamais facturee : on la marque billed.
+        feeAmount = Number(c.feeAmount);
+        await db.parcelStorageCharge.update({
+          where: { id: c.id },
+          data: { billedAt: now, billedInvoiceId: input.invoiceId },
+        });
+      }
+
+      billedTotal += feeAmount;
+    }
+
+    if (billedTotal <= 0) return 0;
+
+    // Injection dans la facture. Invariants existants conserves :
+    //   netAmount = totalAmount - discount + tva
+    //   balance   = netAmount - paidAmount
+    const newTotal = Number(invoice.totalAmount) + billedTotal;
+    const newNet = newTotal - Number(invoice.discount) + Number(invoice.tva);
+    const paid = Number(invoice.paidAmount);
+    const newBalance = newNet - paid;
+
+    await db.invoice.update({
+      where: { id: input.invoiceId },
+      data: {
+        totalAmount: newTotal,
+        netAmount: newNet,
+        balance: newBalance,
+        status: newBalance <= 0 ? 'PAID' : paid > 0 ? 'PARTIAL' : 'UNPAID',
+      },
+    });
+
+    return billedTotal;
+  }
+
+  /**
    * Aggrege toutes les charges (actives + stoppees) pour un set de colis.
    * Pour les actives, recompute live l'accrual jusqu'a now().
    */

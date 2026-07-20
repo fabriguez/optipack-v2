@@ -109,7 +109,20 @@ export class HandoverParcelUseCase {
       recipient: { connect: { id: receiver.id } },
     });
 
-    // Stop toute charge de magasinage active (le colis quitte le magasin).
+    // Le colis quitte le magasin : on cristallise d'abord les frais de
+    // magasinage sur la facture (ils deviennent dus et entrent dans le solde),
+    // sans reouvrir de segment pour CE colis. Les autres colis de la meme
+    // facture, eux, continuent d'accumuler des frais.
+    if (parcel.invoiceId) {
+      await this.storageCharges.crystallizeForInvoice({
+        invoiceId: parcel.invoiceId,
+        reason: 'HANDOVER',
+        finalParcelIds: [parcelId],
+      });
+    }
+
+    // Filet de securite : plus aucune charge active pour ce colis apres la
+    // remise (couvre le cas d'un colis sans facture liee).
     await this.storageCharges.stopActive({
       parcelId,
       reason: 'HANDOVER',

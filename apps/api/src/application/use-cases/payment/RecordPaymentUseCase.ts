@@ -39,7 +39,7 @@ export class RecordPaymentUseCase {
 
   async execute(input: RecordPaymentInput, userId: string): Promise<any> {
     // 1. Validate invoice
-    const invoice = await this.invoiceRepo.findById(input.invoiceId);
+    let invoice = await this.invoiceRepo.findById(input.invoiceId);
     if (!invoice) throw new NotFoundError('Facture', input.invoiceId);
 
     // SECURITE (integrite financiere) : l'agence d'imputation du paiement est
@@ -52,6 +52,37 @@ export class RecordPaymentUseCase {
 
     // Agence desactivee : aucun encaissement (caisse, journal) possible.
     await assertAgencyActive(agencyId);
+
+    // Frais de magasinage : cristallisation AVANT tout controle de solde, pour
+    // qu'ils fassent partie du montant a payer. Consequence voulue : une facture
+    // deja soldee dont le colis n'a pas ete retire repasse en PARTIAL et
+    // redevient payable a hauteur des frais accumules.
+    const storageGroupId = (invoice as { parcelGroupId?: string | null }).parcelGroupId;
+    if (storageGroupId) {
+      // Facture agregat : elle n'a pas de colis lies, le magasinage vit sur les
+      // factures membres. On cristallise chaque membre puis on resynchronise.
+      const memberParcels = await prisma.parcel.findMany({
+        where: { parcelGroupId: storageGroupId, isDeleted: false },
+        select: { invoiceId: true },
+      });
+      const memberInvoiceIds = [
+        ...new Set(memberParcels.map((p) => p.invoiceId).filter((v): v is string => !!v)),
+      ];
+      let billed = 0;
+      for (const memberId of memberInvoiceIds) {
+        billed += await this.storageCharges.crystallizeForInvoice({
+          invoiceId: memberId,
+          reason: 'PAYMENT',
+        });
+      }
+      if (billed > 0) await this.groupInvoice.sync(storageGroupId);
+    } else {
+      await this.storageCharges.crystallizeForInvoice({
+        invoiceId: invoice.id,
+        reason: 'PAYMENT',
+      });
+    }
+    invoice = (await this.invoiceRepo.findById(input.invoiceId)) ?? invoice;
 
     if (invoice.status === 'PAID') {
       throw new BusinessError('Cette facture est deja soldee');
@@ -181,25 +212,10 @@ export class RecordPaymentUseCase {
       status: newStatus,
     });
 
-    // Paiement gele les frais de magasinage en phase DEPARTURE pour les
-    // colis de la facture. Phase DESTINATION continue (le paiement
-    // n'arrete pas les frais une fois le colis arrive a destination).
-    const invoiceParcels = await prisma.parcel.findMany({
-      where: { invoiceId: invoice.id, isDeleted: false },
-      select: { id: true },
-    });
-    for (const p of invoiceParcels) {
-      const activeDeparture = await prisma.parcelStorageCharge.findFirst({
-        where: { parcelId: p.id, stoppedAt: null, phase: 'DEPARTURE' },
-      });
-      if (activeDeparture) {
-        await this.storageCharges.stopActive({
-          parcelId: p.id,
-          warehouseId: activeDeparture.warehouseId,
-          reason: 'PAYMENT',
-        });
-      }
-    }
+    // NB : les frais de magasinage ont deja ete cristallises (et factures) en
+    // debut d'execute. Les charges DEPARTURE sont donc stoppees, et les charges
+    // DESTINATION ont ete rouvertes sur un nouveau segment : les frais
+    // continuent de courir tant que le colis n'est pas retire.
 
     // Si cette facture est celle d'un colis appartenant a un groupe, on
     // resynchronise la facture agregat du groupe (montants + statut).
