@@ -20,6 +20,21 @@ const SEED_MARKER_KEY = 'seed_version';
 async function main() {
   console.log('Seeding database...');
 
+  // Garde-fou securite : le contenu ci-dessous (org "TransitSoftServices" a UUID
+  // FIXE 00000000-...-0001, admin@transitsoftservices.com / Admin123! en
+  // SUPER_ADMIN, agences DLA/YDE/BFM) est du seed de demo/tenant PRINCIPAL. Il ne
+  // doit JAMAIS atterrir dans la base d'un tenant secondaire : sinon chaque tenant
+  // embarque une organisation fantome + des identifiants par defaut CONNUS avec
+  // role super-admin (faille critique). Reserve donc au tenant principal et au dev
+  // via SEED_DEMO_DATA=true. Les tenants secondaires (provisionnes par
+  // l'orchestrator) obtiennent leurs postes/permissions et leur plan comptable via
+  // le self-heal au boot de l'API (PermissionSeedService / AccountingAccountService),
+  // pas via ce seed.
+  if (process.env.SEED_DEMO_DATA !== 'true') {
+    console.log('SEED_DEMO_DATA != "true" -> seed de demo/principal ignore (tenant secondaire).');
+    return;
+  }
+
   // Guard: skip if the same seed version was already applied for this org
   const existingMarker = await prisma.systemConfig.findUnique({
     where: { organizationId_key: { organizationId: ORG_ID, key: SEED_MARKER_KEY } },

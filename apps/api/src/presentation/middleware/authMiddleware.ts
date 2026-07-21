@@ -144,7 +144,9 @@ export function requireAgency(req: Request, _res: Response, next: NextFunction):
 
   const agencyId = req.params.agencyId || req.body?.agencyId || req.query.agencyId;
 
-  if (agencyId && !req.user.agencyIds.includes(agencyId) && req.user.role !== 'SUPER_ADMIN') {
+  // ADMIN tenant / SUPER_ADMIN plateforme : aucune restriction d'agence.
+  const isAdmin = req.user.role === 'SUPER_ADMIN' || req.user.role === 'ADMIN';
+  if (agencyId && !req.user.agencyIds.includes(agencyId) && !isAdmin) {
     return next(new AuthorizationError("Acces non autorise a cette agence"));
   }
 

@@ -76,7 +76,7 @@ export class ParcelController {
       const scopeWhere = parcelScope.where(scopeCtx(req)) ?? null;
       const scope = scopeEnforced()
         ? null
-        : req.user!.role === 'SUPER_ADMIN' ? null : req.user!.agencyIds;
+        : scopeCtx(req).unrestricted ? null : req.user!.agencyIds;
       // archived : 'true' = uniquement archives, 'all' = tout, defaut/null = exclus.
       const archivedFilter: 'true' | 'all' | 'false' | undefined =
         archived === 'true' ? 'true' : archived === 'all' ? 'all' : undefined;
@@ -121,7 +121,7 @@ export class ParcelController {
       const scopeWhere = parcelScope.where(scopeCtx(req)) ?? null;
       const scope = scopeEnforced()
         ? null
-        : req.user!.role === 'SUPER_ADMIN' ? null : req.user!.agencyIds;
+        : scopeCtx(req).unrestricted ? null : req.user!.agencyIds;
       const archivedFilter: 'true' | 'all' | undefined =
         archived === 'true' ? 'true' : archived === 'all' ? 'all' : undefined;
       const facets = await repo.findFilterFacets({

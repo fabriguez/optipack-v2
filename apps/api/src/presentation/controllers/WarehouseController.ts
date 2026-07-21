@@ -73,7 +73,8 @@ export class WarehouseController {
     try {
       const repo = container.resolve<any>(WAREHOUSE_REPOSITORY);
       const { agencyId } = req.query;
-      const scope = req.user!.role === 'SUPER_ADMIN' ? null : req.user!.agencyIds;
+      // ADMIN tenant / SUPER_ADMIN : aucune restriction (unrestricted = isAdmin).
+      const scope = scopeCtx(req).unrestricted ? null : req.user!.agencyIds;
       // Scope agence (etape 2) : fragment AND additionnel, actif en enforce.
       const scopeWhere = warehouseScope.where(scopeCtx(req)) ?? null;
       const result = await repo.findByAgencies(

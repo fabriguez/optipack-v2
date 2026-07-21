@@ -157,6 +157,21 @@ async function start(): Promise<void> {
       }
     })();
 
+    // Self-heal ABAC : garantit que chaque organisation dispose de ses postes
+    // systeme et de la matrice de permissions. Repare les tenants secondaires
+    // provisionnes par l'orchestrator sans seed ABAC (0 poste => tous les
+    // employes non-admin bloques en mode enforce). Non bloquant.
+    void (async () => {
+      try {
+        const { PermissionSeedService } = await import(
+          './application/services/PermissionSeedService'
+        );
+        await new PermissionSeedService().ensureAllOrganizations();
+      } catch (err) {
+        logger.warn({ err }, 'ensureAllOrganizations permissions ABAC a echoue (ignore)');
+      }
+    })();
+
     // Start cron jobs
     startCronJobs();
 

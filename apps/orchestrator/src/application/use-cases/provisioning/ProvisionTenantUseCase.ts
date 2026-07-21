@@ -201,6 +201,11 @@ export class ProvisionTenantUseCase {
     const envContent = [
       `NODE_ENV=production`,
       `TENANT_SLUG=${tenant.slug}`,
+      // Tenant secondaire : ne JAMAIS lancer le seed de demo/principal (org
+      // fantome + admin par defaut connu). SEED_DEMO_DATA reste absent => meme si
+      // RUN_SEED etait force a true, seed.ts s'arrete. Les postes/permissions et
+      // le plan comptable sont garantis par le self-heal au boot de l'API.
+      `RUN_SEED=false`,
       `DATABASE_URL=postgresql://${pgUser}:${pgPass}@postgres:5432/${dbName}?schema=public`,
       `REDIS_URL=redis://redis:6379`,
       `JWT_SECRET=${jwtSecret}`,
@@ -606,7 +611,13 @@ const p = new PrismaClient();
         passwordHash: hash,
         firstName: data.ownerUsername,
         lastName: 'Owner',
-        role: 'SUPER_ADMIN',
+        // ADMIN = administrateur DU tenant (wildcard '*' sur son organisation via
+        // PermissionService, aucune restriction d'agence). SUPER_ADMIN est le role
+        // PLATEFORME (cross-tenant) : l'attribuer a l'owner d'un tenant secondaire
+        // lui donnait a tort le bypass du principe des 4 yeux (transferts de fonds)
+        // et des privileges plateforme. L'owner reste super-utilisateur de SON
+        // tenant, sans les pouvoirs plateforme.
+        role: 'ADMIN',
         isActive: true,
         isVerified: true,
       },

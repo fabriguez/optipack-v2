@@ -12,6 +12,10 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-transitsoftservices}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-transitsoftservices}?schema=public
       REDIS_URL: redis://redis:6379
+      # Tenant PRINCIPAL : autorise le seed de demo/bootstrap (org + admin +
+      # agences). Les tenants secondaires ne posent JAMAIS ce flag -> leur base
+      # ne recoit pas l'org fantome ni les identifiants par defaut. Cf. seed.ts.
+      SEED_DEMO_DATA: "true"
       MINIO_ENDPOINT: minio
       MINIO_PORT: "9000"
       # URL publique du MinIO : liens presignes notif-center/email. RECOMMANDEE.
