@@ -8,6 +8,7 @@ import { HistoryService } from '../../services/HistoryService';
 import { StorageChargeService } from '../../services/StorageChargeService';
 import { prisma } from '../../../config/database';
 import { propagateForwardingExpense } from '../expense/CreateContainerExpenseUseCase';
+import { assertAgencyActive } from '../../services/scope/agencyScope';
 
 @injectable()
 export class DepartContainerUseCase {
@@ -22,6 +23,9 @@ export class DepartContainerUseCase {
   async execute(containerId: string, userId: string) {
     const container = await this.containerRepo.findById(containerId);
     if (!container) throw new NotFoundError('Conteneur', containerId);
+
+    // Agence de depart desactivee : aucun depart de conteneur possible.
+    await assertAgencyActive(container.departureAgencyId);
 
     if (container.status !== 'LOADING') {
       throw new BusinessError(

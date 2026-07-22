@@ -6,6 +6,7 @@ import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessErr
 import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 import { createChildLogger } from '../../../config/logger';
 import { prisma } from '../../../config/database';
+import { assertAgencyActive } from '../../services/scope/agencyScope';
 
 const logger = createChildLogger('ConfirmFundTransfer');
 
@@ -42,6 +43,12 @@ export class ConfirmFundTransferUseCase {
       throw new BusinessError(
         `Transfert ne peut etre confirme : statut courant = ${transfer.status} (attendu PENDING).`,
       );
+    }
+
+    // Agence de destination desactivee : on ne peut pas y confirmer l'arrivee
+    // des fonds (creation/credit de caisse).
+    if (transfer.destinationType === 'AGENCY' && transfer.destinationAgencyId) {
+      await assertAgencyActive(transfer.destinationAgencyId);
     }
 
     // Principe des 4 yeux : confirmateur != initiateur, sauf override SUPER_ADMIN.

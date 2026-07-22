@@ -7,6 +7,7 @@ import { HistoryService } from '../../services/HistoryService';
 import { StorageChargeService } from '../../services/StorageChargeService';
 import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 import { prisma } from '../../../config/database';
+import { assertAgencyActive } from '../../services/scope/agencyScope';
 
 interface UnloadResult {
   parcelId: string;
@@ -56,6 +57,9 @@ export class UnloadParcelUseCase {
 
     const warehouse = await this.warehouseRepo.findById(warehouseId);
     if (!warehouse) throw new NotFoundError('Magasin', warehouseId);
+
+    // Agence de reception desactivee : aucun dechargement possible.
+    await assertAgencyActive(warehouse.agencyId);
 
     // Resolution du space cible (action != not_found uniquement) :
     // - si options.spaceId fourni : on l'utilise (apres verification)

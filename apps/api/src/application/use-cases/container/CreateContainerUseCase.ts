@@ -6,6 +6,7 @@ import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessErr
 import { HistoryService } from '../../services/HistoryService';
 import { prisma } from '../../../config/database';
 import { realtimeService } from '../../../infrastructure/realtime/RealtimeService';
+import { assertAgencyActive } from '../../services/scope/agencyScope';
 
 /**
  * Genere une designation automatique unique de la forme :
@@ -96,6 +97,9 @@ export class CreateContainerUseCase {
 
     if (!depAgency) throw new NotFoundError('Agence de depart', input.departureAgencyId);
     if (!arrAgency) throw new NotFoundError("Agence d'arrivee", input.arrivalAgencyId);
+
+    // Agence de depart desactivee : aucune creation de conteneur possible.
+    await assertAgencyActive(input.departureAgencyId);
 
     const carrier = input.carrier?.trim() || null;
     const carrierCost = input.carrierCost != null && Number(input.carrierCost) > 0 ? Number(input.carrierCost) : 0;
