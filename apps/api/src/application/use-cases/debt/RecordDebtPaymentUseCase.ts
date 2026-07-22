@@ -3,6 +3,7 @@ import type { RecordDebtPaymentInput } from '@transitsoftservices/shared';
 import { generateReference } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
 import { BusinessError, NotFoundError } from '../../../domain/errors/BusinessError';
+import { assertAgencyActive } from '../../services/scope/agencyScope';
 
 /**
  * Enregistre un paiement de dette (jamais de modification directe du Debt).
@@ -28,6 +29,9 @@ export class RecordDebtPaymentUseCase {
     if (debt.status === 'CLEARED') {
       throw new BusinessError('Dette deja soldee.');
     }
+
+    // Agence desactivee : aucun encaissement de dette possible.
+    await assertAgencyActive(input.agencyId);
 
     const remaining = Number(debt.remainingAmount);
     if (input.amount > remaining + 0.01) {

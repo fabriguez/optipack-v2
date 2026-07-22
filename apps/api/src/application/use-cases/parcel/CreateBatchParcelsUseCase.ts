@@ -11,6 +11,7 @@ import { PricingService } from '../../services/PricingService';
 import { HistoryService } from '../../services/HistoryService';
 import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 import { prisma } from '../../../config/database';
+import { assertAgencyActive } from '../../services/scope/agencyScope';
 
 /**
  * Audit fix #5 : creation N colis avec UNE seule facture qui les couvre tous.
@@ -42,6 +43,9 @@ export class CreateBatchParcelsUseCase {
     if (!client) throw new NotFoundError('Client', input.clientId);
     if (!warehouse) throw new NotFoundError('Magasin', input.warehouseId);
     if (!transitRoute) throw new NotFoundError('Route de transit', input.transitRouteId);
+
+    // Agence desactivee : aucun enregistrement de colis possible.
+    await assertAgencyActive(warehouse.agencyId);
 
     // Pre-charge toutes les agences referencees pour deriver "destination"
     // (ville) en un seul aller-retour DB.

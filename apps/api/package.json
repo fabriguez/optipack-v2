@@ -10,6 +10,7 @@
     "type-check": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "backfill:storage": "tsx prisma/backfill-storage-crystallization.ts",
     "clean": "rm -rf dist .turbo"
   },
   "prisma": {

@@ -104,8 +104,13 @@ export default function InvoiceDetailPage() {
 
   const netAmount = Number(invoice.netAmount || 0);
   const paidAmount = Number(invoice.paidAmount || 0);
-  const balance = Number(invoice.balance || 0);
+  // Solde a payer = balance + magasinage pas encore cristallise (amountDue).
+  const pendingStorage = Number(invoice.pendingStorageFees || 0);
+  const balance = Number(invoice.amountDue ?? invoice.balance ?? 0);
   const paidPercent = netAmount > 0 ? Math.round((paidAmount / netAmount) * 100) : 0;
+  // Statut effectif (magasinage en cours compris) : badge + verrou paiement.
+  const effStatus: string = invoice.effectiveStatus ?? invoice.status;
+  const isSettled = effStatus === 'PAID';
 
   const paymentColumns = [
     {
@@ -147,7 +152,7 @@ export default function InvoiceDetailPage() {
             <div>
               <div className="flex items-center gap-3">
                 <h1 className="text-2xl font-bold text-gray-900">Facture {invoice.reference}</h1>
-                <StatusBadge status={invoice.status} type="invoice" />
+                <StatusBadge status={effStatus} type="invoice" />
               </div>
               <p className="text-sm text-gray-500 mt-0.5">Emise le {formatDate(invoice.issuedAt)}</p>
             </div>
@@ -164,13 +169,13 @@ export default function InvoiceDetailPage() {
               </AppButton>
             </Can>
             <Can permission="invoice.discount">
-              <AppButton variant="outline" onClick={() => setShowDiscount(true)} disabled={invoice.status === 'PAID'}>
+              <AppButton variant="outline" onClick={() => setShowDiscount(true)} disabled={isSettled}>
                 <Percent className="h-4 w-4" />
                 Remise
               </AppButton>
             </Can>
             <Can permission="payment.record">
-              <AppButton onClick={() => setShowPayment(true)} disabled={invoice.status === 'PAID' || allLost}>
+              <AppButton onClick={() => setShowPayment(true)} disabled={isSettled || allLost}>
                 <Plus className="h-4 w-4" />
                 Enregistrer paiement
               </AppButton>
@@ -553,7 +558,7 @@ export default function InvoiceDetailPage() {
             <h3 className="text-base font-semibold text-gray-900">Paiements ({paymentsData?.data?.length || 0})</h3>
             <div className="flex items-center gap-2">
               <Can permission="payment.record">
-                <AppButton size="sm" onClick={() => setShowPayment(true)} disabled={invoice.status === 'PAID' || allLost}>
+                <AppButton size="sm" onClick={() => setShowPayment(true)} disabled={isSettled || allLost}>
                   <Plus className="h-3.5 w-3.5" />
                   Enregistrer paiement
                 </AppButton>

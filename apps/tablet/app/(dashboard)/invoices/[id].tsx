@@ -53,10 +53,14 @@ export default function InvoiceDetailScreen() {
   if (isLoading) return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator size="large" color={colors.primary[500]} /></View>;
   if (!inv) return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing['3xl'] }}><Text style={{ color: colors.gray[500] }}>Facture introuvable</Text></View>;
 
-  const net = Number(inv.netAmount ?? 0); const paid = Number(inv.paidAmount ?? 0); const balance = Number(inv.balance ?? 0);
+  const net = Number(inv.netAmount ?? 0); const paid = Number(inv.paidAmount ?? 0);
+  // Solde a payer = magasinage en cours inclus (amountDue), fallback balance.
+  const balance = Number(inv.amountDue ?? inv.balance ?? 0);
   const pct = net > 0 ? Math.min(100, Math.round((paid / net) * 100)) : 0;
   const parcels: any[] = inv.parcels ?? [];
-  const isPaid = inv.status === 'PAID';
+  // Statut effectif (magasinage en cours compris).
+  const effStatus: string = inv.effectiveStatus ?? inv.status;
+  const isPaid = effStatus === 'PAID';
   const allLost = parcels.length > 0 && parcels.every((p) => p.status === 'LOST');
 
   const paymentColumns: Column<any>[] = [
@@ -85,7 +89,7 @@ export default function InvoiceDetailScreen() {
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' }}>
                 <Text style={{ fontSize: 22, fontWeight: '700', color: colors.gray[900] }}>Facture {inv.reference}</Text>
-                <Badge variant={STATUS_VARIANT[inv.status] ?? 'default'}>{inv.status}</Badge>
+                <Badge variant={STATUS_VARIANT[effStatus] ?? 'default'}>{effStatus}</Badge>
               </View>
               <Text style={{ fontSize: 13, color: colors.gray[500], marginTop: 2 }}>Emise le {inv.issuedAt ? formatDate(inv.issuedAt) : '-'}</Text>
             </View>

@@ -5,6 +5,7 @@ import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessErr
 import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 import { HistoryService } from '../../services/HistoryService';
 import { prisma } from '../../../config/database';
+import { assertAgencyActive } from '../../services/scope/agencyScope';
 
 const LOADABLE_STATUSES = new Set(['EMPTY', 'LOADING']);
 
@@ -19,6 +20,9 @@ export class LoadParcelsUseCase {
   async execute(containerId: string, parcelIds: string[], userId: string) {
     const container = await this.containerRepo.findById(containerId);
     if (!container) throw new NotFoundError('Conteneur', containerId);
+
+    // Agence de depart desactivee : aucun chargement possible.
+    await assertAgencyActive(container.departureAgencyId);
 
     if (!LOADABLE_STATUSES.has(container.status)) {
       throw new BusinessError(

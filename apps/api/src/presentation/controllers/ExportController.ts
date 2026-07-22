@@ -18,8 +18,7 @@ import {
 export class ExportController {
   static async parcels(req: Request, res: Response, next: NextFunction) {
     try {
-      // ADMIN tenant / SUPER_ADMIN : export non restreint (unrestricted = isAdmin).
-      const scope = scopeCtx(req).unrestricted ? null : req.user!.agencyIds;
+      const scope = req.user!.role === 'SUPER_ADMIN' ? null : req.user!.agencyIds;
       const parcels = await prisma.parcel.findMany({
         // Scoping agence en AND par-dessus la restriction de role existante.
         where: andWhere(

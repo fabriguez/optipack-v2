@@ -127,14 +127,15 @@ function InvoicesContent() {
       key: 'balance',
       label: 'Solde',
       render: (row: any) => {
-        const balance = Number(row.balance);
+        // amountDue = solde + magasinage en cours (fallback balance).
+        const balance = Number(row.amountDue ?? row.balance);
         return <span className={`text-sm font-bold ${balance > 0 ? 'text-red-600' : 'text-primary-700'}`}>{formatAmount(balance)}</span>;
       },
     },
     {
       key: 'status',
       label: 'Statut',
-      render: (row: any) => <StatusBadge status={row.status} type="invoice" />,
+      render: (row: any) => <StatusBadge status={row.effectiveStatus ?? row.status} type="invoice" />,
     },
     { key: 'issuedAt', label: 'Date', render: (row: any) => <span className="text-xs text-gray-500">{formatDate(row.issuedAt)}</span> },
     {
@@ -145,7 +146,7 @@ function InvoicesContent() {
         <RowActions actions={[
           { label: 'Voir les details', icon: <Eye className="h-4 w-4" />, onClick: () => router.push(`/invoices/${row.id}`) },
           ...(canExport ? [{ label: 'Imprimer PDF', icon: <Printer className="h-4 w-4" />, onClick: () => handlePrint(row.id) }] : []),
-          ...(canRecordPayment ? [{ label: 'Enregistrer paiement', icon: <CreditCard className="h-4 w-4" />, onClick: () => router.push(`/payments?invoiceId=${row.id}`), disabled: row.status === 'PAID' }] : []),
+          ...(canRecordPayment ? [{ label: 'Enregistrer paiement', icon: <CreditCard className="h-4 w-4" />, onClick: () => router.push(`/payments?invoiceId=${row.id}`), disabled: (row.effectiveStatus ?? row.status) === 'PAID' }] : []),
         ]} />
       ),
     },

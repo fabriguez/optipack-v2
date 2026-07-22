@@ -16,6 +16,12 @@ export class ListContainersUseCase {
       isForwarding?: boolean;
       agencyIds?: string[];
       carrierId?: string;
+      /** Plage sur la date de depart du conteneur. */
+      departureDateFrom?: string;
+      departureDateTo?: string;
+      /** Plage sur la date d'arrivee effective. */
+      arrivalDateFrom?: string;
+      arrivalDateTo?: string;
       /** Scope agence (fragment Prisma) merge en AND par le repo. */
       scopeWhere?: object | null;
     },

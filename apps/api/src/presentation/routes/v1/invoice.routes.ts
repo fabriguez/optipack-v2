@@ -11,6 +11,7 @@ import { container } from '../../../container';
 import { StorageService } from '../../../infrastructure/storage/StorageService';
 import { safeFetch } from '../../../infrastructure/http/safeFetch';
 import { StorageChargeService } from '../../../application/services/StorageChargeService';
+import { deriveInvoiceView } from '../../../application/services/invoiceView';
 import { invoiceScope, scopeCtx } from '../../../application/services/scope/agencyScope';
 import { applyFieldPolicy, INVOICE_FIELD_POLICY } from '../../serializers/fieldPolicy';
 import { getPolicy } from '../../middleware/policyContext';
@@ -376,8 +377,19 @@ router.get('/', validate(paginationSchema, 'query'), requirePermission('invoice.
       prisma.invoice.count({ where }),
     ]);
 
+    // Enrichit chaque facture avec le magasinage non cristallise (batch
+    // anti-N+1) pour exposer amountDue / displayTotal / effectiveStatus dans
+    // les listes, sans attendre le passage du cron de cristallisation.
+    const pendingMap = await container
+      .resolve(StorageChargeService)
+      .pendingByInvoice(data.map((i) => i.id));
+    const enrichedData = data.map((inv) => ({
+      ...inv,
+      ...deriveInvoiceView(inv as any, pendingMap.get(inv.id) ?? 0),
+    }));
+
     const policy = getPolicy(req);
-    const maskedData = policy ? applyFieldPolicy(data, INVOICE_FIELD_POLICY, policy) : data;
+    const maskedData = policy ? applyFieldPolicy(enrichedData, INVOICE_FIELD_POLICY, policy) : enrichedData;
     res.json({
       success: true,
       data: maskedData,
@@ -444,7 +456,9 @@ router.get('/:id', requirePermission('invoice.read'), async (req, res, next) => 
     const pendingStorage = await container
       .resolve(StorageChargeService)
       .pendingForParcels(scope.parcelIds);
-    const amountDue = Math.max(0, Number(invoice.balance ?? 0) + pendingStorage);
+    // Champs d'affichage derives (total incluant magasinage, reste du, statut
+    // effectif). Voir deriveInvoiceView pour la garantie anti double-comptage.
+    const view = deriveInvoiceView(invoice as any, pendingStorage);
 
     const enriched = {
       ...invoice,
@@ -457,9 +471,13 @@ router.get('/:id', requirePermission('invoice.read'), async (req, res, next) => 
       payments: paymentList,
       storageFeesTotal: storage.total,
       /** Magasinage accumule mais pas encore injecte dans `balance`. */
-      pendingStorageFees: pendingStorage,
+      pendingStorageFees: view.pendingStorageFees,
+      /** Total a payer, magasinage non cristallise inclus (= netAmount + pending). */
+      displayTotal: view.displayTotal,
       /** Montant a payer = balance + pendingStorageFees. A afficher au client. */
-      amountDue,
+      amountDue: view.amountDue,
+      /** Statut tenant compte du magasinage en cours (peut differer de `status` DB entre deux cron). */
+      effectiveStatus: view.effectiveStatus,
       isAggregate: scope.groupId != null,
       groupId: scope.groupId,
       discountHistory: discountAudit,
@@ -666,6 +684,20 @@ async function __buildPdfFromInvoice(invoice: any): Promise<Buffer> {
       paidAmount: Number((invoice as any).paidAmount ?? 0),
       balance: Number((invoice as any).balance ?? 0),
       storageFeesTotal: storage.total,
+      // Magasinage non cristallise + totaux derives (magasinage inclus). On
+      // passe le pending (billedAt=null) et non storage.total pour eviter le
+      // double-comptage avec netAmount.
+      ...(await (async () => {
+        const pending = await container
+          .resolve(StorageChargeService)
+          .pendingForParcels(scope.parcelIds);
+        const v = deriveInvoiceView(invoice as any, pending);
+        return {
+          pendingStorageFees: v.pendingStorageFees,
+          displayTotal: v.displayTotal,
+          amountDue: v.amountDue,
+        };
+      })()),
       discountHistory: discountAudit.map((e: any) => {
         const c = (e.changes ?? {}) as Record<string, unknown>;
         const userName = e.user

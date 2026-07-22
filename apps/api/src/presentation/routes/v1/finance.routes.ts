@@ -18,14 +18,13 @@ router.get('/timeline', requirePermission('finance.history.read'), FinanceContro
 router.get('/debt-dashboard', requirePermission('finance.dashboard.read'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const organizationId = req.user!.organizationId;
-    // ADMIN tenant / SUPER_ADMIN plateforme : dashboard non restreint par agence.
-    const unrestricted = scopeCtx(req).unrestricted;
-    const agencyIds = unrestricted ? null : (req.user!.agencyIds ?? []);
+    const isSuper = req.user!.role === 'SUPER_ADMIN';
+    const agencyIds = isSuper ? null : (req.user!.agencyIds ?? []);
     // Scope agence (etape 2) : fragments merges en AND (undefined = admin/shadow).
     const ctx = scopeCtx(req);
     const paymentFrag = paymentScope.where(ctx);
     const debtWhere: any = andWhere({ organizationId }, debtScope.where(ctx));
-    if (!unrestricted) debtWhere.agencyId = { in: agencyIds && agencyIds.length > 0 ? agencyIds : ['__none__'] };
+    if (!isSuper) debtWhere.agencyId = { in: agencyIds && agencyIds.length > 0 ? agencyIds : ['__none__'] };
     const now = new Date();
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -58,7 +57,7 @@ router.get('/debt-dashboard', requirePermission('finance.dashboard.read'), async
           _sum: { amount: true },
         }),
         prisma.payment.aggregate({
-          where: andWhere({ isVoided: false, createdAt: { gte: startOfDay }, ...(unrestricted ? {} : { agencyId: { in: agencyIds && agencyIds.length > 0 ? agencyIds : ['__none__'] } }) }, paymentFrag),
+          where: andWhere({ isVoided: false, createdAt: { gte: startOfDay }, ...(isSuper ? {} : { agencyId: { in: agencyIds && agencyIds.length > 0 ? agencyIds : ['__none__'] } }) }, paymentFrag),
           _sum: { amount: true },
         }),
       ]),
@@ -69,7 +68,7 @@ router.get('/debt-dashboard', requirePermission('finance.dashboard.read'), async
           _sum: { amount: true },
         }),
         prisma.payment.aggregate({
-          where: andWhere({ isVoided: false, createdAt: { gte: startOfMonth }, ...(unrestricted ? {} : { agencyId: { in: agencyIds && agencyIds.length > 0 ? agencyIds : ['__none__'] } }) }, paymentFrag),
+          where: andWhere({ isVoided: false, createdAt: { gte: startOfMonth }, ...(isSuper ? {} : { agencyId: { in: agencyIds && agencyIds.length > 0 ? agencyIds : ['__none__'] } }) }, paymentFrag),
           _sum: { amount: true },
         }),
       ]),

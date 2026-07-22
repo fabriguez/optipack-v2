@@ -3,6 +3,7 @@ import { generateReference } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
 import { CASH_REGISTER_REPOSITORY, type ICashRegisterRepository } from '../../interfaces/ICashRegisterRepository';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
+import { assertAgencyActive } from '../../services/scope/agencyScope';
 
 interface PayEmployeeInput {
   /** Periode au format YYYY-MM. Defaut : mois courant. */
@@ -60,6 +61,9 @@ export class PayEmployeeFromCashRegisterUseCase {
     const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
     if (!employee) throw new NotFoundError('Employe', employeeId);
     if (!employee.isActive) throw new BusinessError('Employe inactif, paiement impossible.');
+
+    // Agence desactivee : aucun versement de salaire possible.
+    await assertAgencyActive(employee.agencyId);
 
     const period = input.period ?? this.currentPeriod();
     const baseRef = input.amount ?? Number(employee.baseSalary);

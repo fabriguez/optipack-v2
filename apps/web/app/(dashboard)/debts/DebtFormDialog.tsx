@@ -264,7 +264,7 @@ export function DebtFormDialog({ open, onClose, defaultBucket = 'client' }: Prop
                   value={field.value ?? null}
                   onChange={(v) => field.onChange(v ?? undefined)}
                   search={async (q, limit) => {
-                    const r = await apiClient.get('/carriers', { params: { search: q, limit } });
+                    const r = await apiClient.get('/carriers', { params: { search: q, limit, activeOnly: true } });
                     return (r.data?.data || []).map((c: any) => ({
                       value: c.id,
                       label: c.name,

@@ -52,10 +52,11 @@ interface EmployeeSummary {
 
 interface Override {
   id: string;
-  permissionKey: string;
+  // L'API renvoie la relation `permission` (avec sa cle), pas un champ plat
+  // `permissionKey`. La cle a utiliser pour l'API est donc `permission.key`.
   granted: boolean;
   reason?: string | null;
-  permission?: { label: string } | null;
+  permission?: { key: string; label: string } | null;
 }
 
 export default function ExceptionsPage() {
@@ -126,8 +127,8 @@ export default function ExceptionsPage() {
     );
   }
 
-  function handleRemove(key: string) {
-    if (!selectedEmployee?.userId) return;
+  function handleRemove(key?: string | null) {
+    if (!selectedEmployee?.userId || !key) return;
     removeOverride.mutate({ userId: selectedEmployee.userId, permissionKey: key });
   }
 
@@ -172,13 +173,13 @@ export default function ExceptionsPage() {
                   )}
                   <ul className="space-y-2">
                     {overrides.map((ov) => (
-                      <li key={ov.permissionKey} className="flex items-center justify-between rounded-lg border px-3 py-2">
+                      <li key={ov.permission?.key ?? ov.id} className="flex items-center justify-between rounded-lg border px-3 py-2">
                         <div className="flex items-center gap-2">
                           {ov.granted
                             ? <ShieldCheck className="h-4 w-4 text-green-600" />
                             : <ShieldX className="h-4 w-4 text-red-500" />}
                           <div>
-                            <p className="text-sm font-medium text-gray-800">{ov.permissionKey}</p>
+                            <p className="text-sm font-medium text-gray-800">{ov.permission?.key}</p>
                             {ov.permission?.label && (
                               <p className="text-xs text-gray-500">{ov.permission.label}</p>
                             )}
@@ -191,7 +192,7 @@ export default function ExceptionsPage() {
                         <AppButton
                           size="sm"
                           variant="ghost"
-                          onClick={() => handleRemove(ov.permissionKey)}
+                          onClick={() => handleRemove(ov.permission?.key)}
                           disabled={removeOverride.isPending}
                         >
                           <Trash2 className="h-4 w-4 text-red-500" />

@@ -91,12 +91,32 @@ export class PrismaContainerRepository implements IContainerRepository {
       isForwarding?: boolean;
       agencyIds?: string[];
       carrierId?: string;
+      /** Plage sur departureDate (date de depart du conteneur). */
+      departureDateFrom?: string;
+      departureDateTo?: string;
+      /** Plage sur actualArrivalDate (date d'arrivee effective). */
+      arrivalDateFrom?: string;
+      arrivalDateTo?: string;
       scopeWhere?: object | null;
     },
     pagination: PaginationInput,
   ): Promise<PaginatedResponse<ContainerWithRelations>> {
     const { page, limit, sortBy, sortOrder, search } = pagination;
     const skip = (page - 1) * limit;
+
+    // Plage de dates inclusive : gte = debut du jour "from", lte = fin du jour "to".
+    const dayRange = (from?: string, to?: string): { gte?: Date; lte?: Date } | undefined => {
+      const r: { gte?: Date; lte?: Date } = {};
+      if (from) r.gte = new Date(from);
+      if (to) {
+        const d = new Date(to);
+        d.setHours(23, 59, 59, 999);
+        r.lte = d;
+      }
+      return r.gte || r.lte ? r : undefined;
+    };
+    const departureDateRange = dayRange(filters.departureDateFrom, filters.departureDateTo);
+    const arrivalDateRange = dayRange(filters.arrivalDateFrom, filters.arrivalDateTo);
 
     // status peut etre une liste separee par virgule (ex : "EMPTY,LOADING")
     const statusFilter = filters.status?.includes(',')
@@ -112,6 +132,8 @@ export class PrismaContainerRepository implements IContainerRepository {
       ...(statusFilter !== undefined && { status: statusFilter }),
       ...(filters.isForwarding !== undefined && { isForwarding: filters.isForwarding }),
       ...(filters.carrierId && { carrierId: filters.carrierId }),
+      ...(departureDateRange && { departureDate: departureDateRange }),
+      ...(arrivalDateRange && { actualArrivalDate: arrivalDateRange }),
       ...(filters.agencyIds?.length && {
         OR: [
           { departureAgencyId: { in: filters.agencyIds } },

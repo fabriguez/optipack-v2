@@ -14,6 +14,8 @@ import {
   HandoverUntrackedParcelUseCase,
 } from '../../application/use-cases/parcel/HandoverParcelUseCase';
 import { ComputeStorageFeeUseCase } from '../../application/use-cases/parcel/ComputeStorageFeeUseCase';
+import { StorageChargeService } from '../../application/services/StorageChargeService';
+import { deriveInvoiceView } from '../../application/services/invoiceView';
 import {
   ArchiveParcelsUseCase,
   UnarchiveParcelsUseCase,
@@ -76,7 +78,7 @@ export class ParcelController {
       const scopeWhere = parcelScope.where(scopeCtx(req)) ?? null;
       const scope = scopeEnforced()
         ? null
-        : scopeCtx(req).unrestricted ? null : req.user!.agencyIds;
+        : req.user!.role === 'SUPER_ADMIN' ? null : req.user!.agencyIds;
       // archived : 'true' = uniquement archives, 'all' = tout, defaut/null = exclus.
       const archivedFilter: 'true' | 'all' | 'false' | undefined =
         archived === 'true' ? 'true' : archived === 'all' ? 'all' : undefined;
@@ -121,7 +123,7 @@ export class ParcelController {
       const scopeWhere = parcelScope.where(scopeCtx(req)) ?? null;
       const scope = scopeEnforced()
         ? null
-        : scopeCtx(req).unrestricted ? null : req.user!.agencyIds;
+        : req.user!.role === 'SUPER_ADMIN' ? null : req.user!.agencyIds;
       const archivedFilter: 'true' | 'all' | undefined =
         archived === 'true' ? 'true' : archived === 'all' ? 'all' : undefined;
       const facets = await repo.findFilterFacets({
@@ -141,7 +143,16 @@ export class ParcelController {
     try {
       await parcelScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(GetParcelUseCase);
-      const parcel = await useCase.execute(req.params.id);
+      const parcel: any = await useCase.execute(req.params.id);
+      // Enrichit la facture liee avec le magasinage en cours (non cristallise)
+      // pour exposer statut effectif + reste a payer magasinage inclus des le
+      // detail colis, sans attendre le cron de cristallisation.
+      if (parcel?.invoice?.id) {
+        const pending = await container
+          .resolve(StorageChargeService)
+          .pendingForInvoice(parcel.invoice.id);
+        parcel.invoice = { ...parcel.invoice, ...deriveInvoiceView(parcel.invoice, pending) };
+      }
       const policy = getPolicy(req);
       res.json({ success: true, data: policy ? applyFieldPolicy(parcel, PARCEL_FIELD_POLICY, policy) : parcel });
     } catch (err) {
@@ -321,7 +332,8 @@ export class ParcelController {
     try {
       await parcelScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(HandoverParcelUseCase);
-      const result = await useCase.execute(req.params.id, req.body, req.user!.userId);
+      const isAdmin = req.user!.role === 'SUPER_ADMIN' || req.user!.role === 'ADMIN';
+      const result = await useCase.execute(req.params.id, req.body, req.user!.userId, isAdmin);
       res.json({ success: true, data: result });
     } catch (err) {
       next(err);

@@ -41,6 +41,10 @@ export default function ContainersPage() {
   const typeFilter = searchParams.get('type') || '';
   const departureAgencyFilter = searchParams.get('departureAgencyId') || '';
   const arrivalAgencyFilter = searchParams.get('arrivalAgencyId') || '';
+  const departureDateFrom = searchParams.get('departureDateFrom') || '';
+  const departureDateTo = searchParams.get('departureDateTo') || '';
+  const arrivalDateFrom = searchParams.get('arrivalDateFrom') || '';
+  const arrivalDateTo = searchParams.get('arrivalDateTo') || '';
 
   const { data, isLoading } = useContainers({
     page,
@@ -49,6 +53,10 @@ export default function ContainersPage() {
     type: typeFilter || undefined,
     departureAgencyId: departureAgencyFilter || undefined,
     arrivalAgencyId: arrivalAgencyFilter || undefined,
+    departureDateFrom: departureDateFrom || undefined,
+    departureDateTo: departureDateTo || undefined,
+    arrivalDateFrom: arrivalDateFrom || undefined,
+    arrivalDateTo: arrivalDateTo || undefined,
   } as any);
 
   const handleImport = async (rows: Record<string, string>[]) => {
@@ -122,6 +130,10 @@ export default function ContainersPage() {
       type: 'search-select' as const,
       searcher: searchers.agencies,
     },
+    { key: 'departureDateFrom', label: 'Depart - du', type: 'date' as const },
+    { key: 'departureDateTo', label: 'Depart - au', type: 'date' as const },
+    { key: 'arrivalDateFrom', label: 'Arrivee - du', type: 'date' as const },
+    { key: 'arrivalDateTo', label: 'Arrivee - au', type: 'date' as const },
   ];
 
   const columns = [

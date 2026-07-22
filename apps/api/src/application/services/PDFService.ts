@@ -94,9 +94,17 @@ export interface InvoiceData {
   netAmount: number;
   paidAmount: number;
   balance: number;
-  // Total des frais de magasinage cumules sur tous les colis de la facture.
-  // Si > 0, on affiche une ligne dediee dans le bloc total.
+  // Total des frais de magasinage cumules sur tous les colis de la facture
+  // (cristallises + en cours). Sert au bloc de detail par charge.
   storageFeesTotal?: number;
+  // Magasinage NON encore cristallise dans netAmount/balance (billedAt=null).
+  // Ajoute au "Total a payer" / "Reste a payer" sans double-compter le
+  // magasinage deja injecte dans netAmount.
+  pendingStorageFees?: number;
+  // Total a payer, magasinage en cours inclus (= netAmount + pending).
+  displayTotal?: number;
+  // Reste a encaisser, magasinage en cours inclus (= balance + pending).
+  amountDue?: number;
   // Historique des remises (audit log). Affiche en bas de la facture.
   discountHistory?: InvoiceDiscountEntry[];
   /** Branding tenant pour entete/pied de la facture. */
@@ -741,25 +749,33 @@ export class PDFService {
     y += 15;
     const summaryX = 320;
     const summaryW = pageWidth - 270;
+    // Magasinage en cours (non encore cristallise) et totaux derives. On
+    // n'ajoute JAMAIS storageFeesTotal (qui inclut le magasinage deja dans
+    // netAmount) au total : seul `pending` s'ajoute, sinon double-comptage.
+    const pending = Math.max(0, Number(invoiceData.pendingStorageFees ?? 0));
+    const displayTotal = invoiceData.displayTotal ?? Number(invoiceData.netAmount) + pending;
+    const amountDue = invoiceData.amountDue ?? Math.max(0, Number(invoiceData.balance) + pending);
     const summaryLines: [string, string][] = [
-      ['Total transport', formatCurrency(invoiceData.totalAmount)],
-      ...(invoiceData.storageFeesTotal && invoiceData.storageFeesTotal > 0
-        ? [['Frais magasinage', formatCurrency(invoiceData.storageFeesTotal)] as [string, string]]
-        : []),
+      ['Total facture', formatCurrency(invoiceData.totalAmount)],
       ['Remise', formatCurrency(invoiceData.discount)],
       ['TVA', formatCurrency(invoiceData.tax)],
-      ['Net a payer', formatCurrency(invoiceData.netAmount)],
+      ['Net facture', formatCurrency(invoiceData.netAmount)],
+      ...(pending > 0
+        ? [['Magasinage en cours', formatCurrency(pending)] as [string, string]]
+        : []),
+      ['Total a payer', formatCurrency(displayTotal)],
       ['Montant paye', formatCurrency(invoiceData.paidAmount)],
-      ['Solde', formatCurrency(invoiceData.balance)],
+      ['Reste a payer', formatCurrency(amountDue)],
     ];
 
     for (const [label, value] of summaryLines) {
-      const isBold = label === 'Net a payer' || label === 'Solde';
+      const isBold = label === 'Total a payer' || label === 'Reste a payer';
       doc.fontSize(isBold ? 10 : 9).fillColor(COLORS.dark);
       if (isBold) {
         doc.rect(summaryX - 5, y - 2, summaryW + 10, 18).fill(COLORS.lightGray);
-        doc.fillColor(COLORS.dark);
       }
+      // Reste a payer en rouge s'il est > 0 (magasinage en cours compris).
+      doc.fillColor(label === 'Reste a payer' && amountDue > 0 ? '#B71C1C' : COLORS.dark);
       doc.text(label, summaryX, y, { continued: false });
       doc.text(value, summaryX + 120, y, { width: summaryW - 120, align: 'right' });
       y += 18;
@@ -1259,8 +1275,11 @@ export class PDFService {
     },
     qrBuffer: Buffer,
     branding?: PDFBranding | null,
+    // Si fourni, on dessine l'etiquette sur ce document existant (impression
+    // groupee multi-pages) au lieu d'en creer/finaliser un nouveau.
+    existingDoc?: PDFKit.PDFDocument,
   ): Promise<Buffer> {
-    const doc = new PDFDocument({ size: [283, 425], margin: 15 }); // ~100x150mm label
+    const doc = existingDoc ?? new PDFDocument({ size: [283, 425], margin: 15 }); // ~100x150mm label
     const w = 283 - 30;
     const pageW = 283;
     const pageH = 425;
@@ -1445,6 +1464,27 @@ export class PDFService {
       15, 400, { width: w, align: 'center' },
     );
 
+    // Impression groupee : le document est finalise par l'appelant.
+    if (existingDoc) return Buffer.alloc(0);
+    return collectBuffer(doc);
+  }
+
+  /**
+   * Etiquettes de plusieurs colis dans UN seul PDF (une etiquette par page).
+   * Reutilise generateLabelPDF (meme rendu) en lui passant un document partage.
+   */
+  static async generateLabelsPDF(
+    items: Array<{
+      parcel: Parameters<typeof PDFService.generateLabelPDF>[0];
+      qrBuffer: Buffer;
+      branding?: PDFBranding | null;
+    }>,
+  ): Promise<Buffer> {
+    const doc = new PDFDocument({ size: [283, 425], margin: 15 });
+    for (let i = 0; i < items.length; i++) {
+      if (i > 0) doc.addPage({ size: [283, 425], margin: 15 });
+      await PDFService.generateLabelPDF(items[i].parcel, items[i].qrBuffer, items[i].branding, doc);
+    }
     return collectBuffer(doc);
   }
 

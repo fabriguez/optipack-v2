@@ -2,6 +2,7 @@ import { injectable } from 'tsyringe';
 import type { CreateAgencyChargeInput } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
+import { assertAgencyActive } from '../../services/scope/agencyScope';
 
 interface CreateInput extends CreateAgencyChargeInput {
   isAmountFlexible?: boolean;
@@ -16,6 +17,9 @@ export class CreateAgencyChargeUseCase {
     if (!agency || agency.organizationId !== organizationId) {
       throw new NotFoundError('Agence', agencyId);
     }
+
+    // Agence desactivee : aucune creation de charge possible.
+    await assertAgencyActive(agencyId);
 
     // SALARY est gere automatiquement (PayrollChargeService) : pas de creation manuelle.
     if (input.type === 'SALARY') {

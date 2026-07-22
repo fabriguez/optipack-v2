@@ -60,7 +60,14 @@ const PARCEL_INCLUDE = {
     },
   },
   transitRoute: { select: { id: true, name: true, type: true } },
-  invoice: { select: { id: true, reference: true, status: true } },
+  // netAmount/paidAmount/balance : necessaires au calcul du statut effectif et
+  // du reste a payer magasinage inclus sur le detail colis (voir getById).
+  invoice: {
+    select: {
+      id: true, reference: true, status: true,
+      netAmount: true, paidAmount: true, balance: true,
+    },
+  },
   // Premier conteneur traverse par le colis : derive du 1er evenement
   // d'historique portant un containerId (ordre chronologique asc). Sert a
   // l'affichage "conteneur d'origine" dans les listes magasin.

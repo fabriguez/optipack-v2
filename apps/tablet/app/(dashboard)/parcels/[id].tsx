@@ -142,7 +142,7 @@ function InfoTab({ parcel: p }: { parcel: any }) {
           <Row icon="cash-outline" label="Montant" value={formatAmount(Number(p.price ?? 0))} />
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8 }}>
             <Text style={{ fontSize: 13, color: colors.gray[500] }}>Statut</Text>
-            <Badge variant={p.invoice.status === 'PAID' ? 'success' : 'warning'}>{p.invoice.status}</Badge>
+            <Badge variant={(p.invoice.effectiveStatus ?? p.invoice.status) === 'PAID' ? 'success' : 'warning'}>{p.invoice.effectiveStatus ?? p.invoice.status}</Badge>
           </View>
         </SectionCard>
       )}

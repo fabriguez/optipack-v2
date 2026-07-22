@@ -90,7 +90,8 @@ export default function ParcelDetail() {
   const payments = p?.payments ?? [];
   const fees = p?.fees;
   const movements = p?.financialMovements ?? [];
-  const remaining = invoice ? Number(invoice.balance ?? 0) : 0;
+  // Reste a payer = magasinage en cours inclus (amountDue), fallback balance.
+  const remaining = invoice ? Number(invoice.amountDue ?? invoice.balance ?? 0) : 0;
 
   const payMutation = useMutation({
     mutationFn: () =>
@@ -268,8 +269,8 @@ export default function ParcelDetail() {
                 title="Facture"
                 subtitle={invoice.reference}
                 right={
-                  <Badge variant={invoice.status === 'PAID' ? 'success' : invoice.status === 'OVERDUE' ? 'error' : 'warning'}>
-                    {invoiceStatusLabel(invoice.status)}
+                  <Badge variant={(invoice.effectiveStatus ?? invoice.status) === 'PAID' ? 'success' : (invoice.effectiveStatus ?? invoice.status) === 'OVERDUE' ? 'error' : 'warning'}>
+                    {invoiceStatusLabel(invoice.effectiveStatus ?? invoice.status)}
                   </Badge>
                 }
               />

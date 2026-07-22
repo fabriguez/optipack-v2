@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Edit, Trash2, Truck, User, Phone, Mail, MapPin, Container as ContainerIcon } from 'lucide-react';
+import { ArrowLeft, Edit, Trash2, Truck, User, Phone, Mail, MapPin, Container as ContainerIcon, RotateCcw } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard, AppCardHeader } from '@/components/ui/AppCard';
@@ -10,7 +10,7 @@ import { AppBadge } from '@/components/ui/AppBadge';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { apiClient } from '@/lib/api/client';
-import { useCarrier, useDeleteCarrier } from '@/lib/hooks/useCarriers';
+import { useCarrier, useDeleteCarrier, useReactivateCarrier } from '@/lib/hooks/useCarriers';
 import { CarrierFormDialog, type CarrierLike } from './CarrierFormDialog';
 import { Can } from '@/lib/components/Can';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
@@ -29,6 +29,7 @@ export default function CarrierDetailPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [confirmDeactivate, setConfirmDeactivate] = useState(false);
   const deleteMutation = useDeleteCarrier();
+  const reactivateMutation = useReactivateCarrier();
 
   const { data, isLoading } = useCarrier(id);
   const carrier = data?.data;
@@ -84,14 +85,24 @@ export default function CarrierDetailPage() {
                 <Edit className="h-4 w-4" />
                 Modifier
               </AppButton>
-              <AppButton
-                variant="outline"
-                onClick={() => setConfirmDeactivate(true)}
-                disabled={!carrier.isActive}
-              >
-                <Trash2 className="h-4 w-4" />
-                Desactiver
-              </AppButton>
+              {carrier.isActive ? (
+                <AppButton
+                  variant="outline"
+                  onClick={() => setConfirmDeactivate(true)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Desactiver
+                </AppButton>
+              ) : (
+                <AppButton
+                  variant="outline"
+                  onClick={() => reactivateMutation.mutate(id)}
+                  loading={reactivateMutation.isPending}
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  Reactiver
+                </AppButton>
+              )}
             </Can>
           </div>
         </div>

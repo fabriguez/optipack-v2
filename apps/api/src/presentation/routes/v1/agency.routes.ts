@@ -28,7 +28,7 @@ router.get('/', requirePermission('agency.read'), validate(paginationSchema, 'qu
 router.get('/:id', requirePermission('agency.read'), AgencyController.getById);
 router.post('/', authorize('SUPER_ADMIN', 'ADMIN'), requirePermission('agency.manage'), validate(createAgencySchema), AgencyController.create);
 router.patch('/:id', authorize('SUPER_ADMIN', 'ADMIN'), requirePermission('agency.manage'), validate(updateAgencySchema), AgencyController.update);
-router.delete('/:id', authorize('SUPER_ADMIN', 'ADMIN'), requirePermission('agency.manage'), AgencyController.delete);
+router.delete('/:id', authorize('SUPER_ADMIN'), requirePermission('agency.manage'), AgencyController.delete);
 
 // Charges recurrentes (eau, electricite, loyer, salaires, ...)
 router.get('/:id/charges', requirePermission('agency.read'), AgencyController.listCharges);

@@ -59,16 +59,18 @@ export class ContainerController {
   static async list(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(ListContainersUseCase);
-      const { departureAgencyId, arrivalAgencyId, status, isForwarding, carrierId } = req.query;
+      const {
+        departureAgencyId, arrivalAgencyId, status, isForwarding, carrierId,
+        departureDateFrom, departureDateTo, arrivalDateFrom, arrivalDateTo,
+      } = req.query;
       const isForwardingFlag =
         isForwarding === 'true' ? true : isForwarding === 'false' ? false : undefined;
-      // ADMIN tenant / SUPER_ADMIN plateforme : aucune restriction d'agence
-      // (voir tous les conteneurs). Les autres sont filtres par leurs agences.
-      // Sans ce bypass, un admin avec agencyIds=[] verrait LA LISTE VIDE -- bug
-      // observe sur le formulaire de conteneur d'acheminement (parentContainer
-      // empty). unrestricted = policy.isAdmin (ADMIN || SUPER_ADMIN).
+      // SUPER_ADMIN voit tous les conteneurs (pas de scope agence). Les autres
+      // sont filtres par leurs agences. Sans ce bypass, un SUPER_ADMIN avec
+      // agencyIds=[] verrait LA LISTE VIDE -- bug observe sur le formulaire
+      // de creation de conteneur d'acheminement (parentContainer empty).
       const agencyIds =
-        scopeCtx(req).unrestricted ? undefined : req.user!.agencyIds;
+        req.user!.role === 'SUPER_ADMIN' ? undefined : req.user!.agencyIds;
       // Scope agence (etape 2) : fragment AND additionnel, actif en enforce.
       const scopeWhere = containerScope.where(scopeCtx(req)) ?? null;
       const result = await useCase.execute(
@@ -79,6 +81,10 @@ export class ContainerController {
           isForwarding: isForwardingFlag,
           agencyIds,
           carrierId: carrierId as string | undefined,
+          departureDateFrom: departureDateFrom as string | undefined,
+          departureDateTo: departureDateTo as string | undefined,
+          arrivalDateFrom: arrivalDateFrom as string | undefined,
+          arrivalDateTo: arrivalDateTo as string | undefined,
           scopeWhere,
         },
         req.query as any,
