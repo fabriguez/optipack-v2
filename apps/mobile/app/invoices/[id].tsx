@@ -29,7 +29,15 @@ export default function InvoiceDetail() {
   const i = data?.data;
   const total = Number(i?.totalAmount ?? 0);
   const paid = Number(i?.paidAmount ?? 0);
-  const remaining = i?.balance != null ? Number(i.balance) : Math.max(total - paid, 0);
+  // Restant = magasinage en cours inclus (amountDue), fallback balance.
+  const remaining =
+    i?.amountDue != null
+      ? Number(i.amountDue)
+      : i?.balance != null
+        ? Number(i.balance)
+        : Math.max(total - paid, 0);
+  // Statut effectif (magasinage en cours compris).
+  const effStatus: string = i?.effectiveStatus ?? i?.status;
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -78,8 +86,8 @@ export default function InvoiceDetail() {
         >
           <Card>
             <View style={{ alignItems: 'center', gap: 6, paddingVertical: 8 }}>
-              <Badge variant={i.status === 'PAID' ? 'success' : i.status === 'OVERDUE' || i.status === 'CANCELLED' ? 'error' : 'warning'}>
-                {invoiceStatusLabel(i.status)}
+              <Badge variant={effStatus === 'PAID' ? 'success' : effStatus === 'OVERDUE' || effStatus === 'CANCELLED' ? 'error' : 'warning'}>
+                {invoiceStatusLabel(effStatus)}
               </Badge>
               <Text style={{ fontSize: 28, fontWeight: '700', color: colors.gray[900], marginTop: 6 }}>{formatAmount(total)}</Text>
               <Text style={{ fontSize: 12, color: colors.gray[500] }}>Total facture</Text>

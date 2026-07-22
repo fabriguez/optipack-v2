@@ -14,6 +14,8 @@ import {
   HandoverUntrackedParcelUseCase,
 } from '../../application/use-cases/parcel/HandoverParcelUseCase';
 import { ComputeStorageFeeUseCase } from '../../application/use-cases/parcel/ComputeStorageFeeUseCase';
+import { StorageChargeService } from '../../application/services/StorageChargeService';
+import { deriveInvoiceView } from '../../application/services/invoiceView';
 import {
   ArchiveParcelsUseCase,
   UnarchiveParcelsUseCase,
@@ -141,7 +143,16 @@ export class ParcelController {
     try {
       await parcelScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(GetParcelUseCase);
-      const parcel = await useCase.execute(req.params.id);
+      const parcel: any = await useCase.execute(req.params.id);
+      // Enrichit la facture liee avec le magasinage en cours (non cristallise)
+      // pour exposer statut effectif + reste a payer magasinage inclus des le
+      // detail colis, sans attendre le cron de cristallisation.
+      if (parcel?.invoice?.id) {
+        const pending = await container
+          .resolve(StorageChargeService)
+          .pendingForInvoice(parcel.invoice.id);
+        parcel.invoice = { ...parcel.invoice, ...deriveInvoiceView(parcel.invoice, pending) };
+      }
       const policy = getPolicy(req);
       res.json({ success: true, data: policy ? applyFieldPolicy(parcel, PARCEL_FIELD_POLICY, policy) : parcel });
     } catch (err) {

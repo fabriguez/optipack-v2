@@ -254,11 +254,25 @@ router.get('/invoices/:id', authenticateClient, async (req, res, next) => {
       .resolve(StorageChargeService)
       .pendingForParcels(parcelIds);
     const remaining = Math.max(0, Number(invoice.balance ?? 0) + pendingStorage);
+    // Statut effectif + total incluant le magasinage en cours (le client doit
+    // voir le magasinage dans le total meme avant cristallisation).
+    const effectiveStatus =
+      invoice.status === 'CANCELLED'
+        ? 'CANCELLED'
+        : remaining <= 0
+          ? 'PAID'
+          : Number(invoice.paidAmount ?? 0) > 0
+            ? 'PARTIAL'
+            : 'UNPAID';
 
     res.json({
       success: true,
       data: {
         ...invoice,
+        effectiveStatus,
+        amountDue: remaining,
+        displayTotal: Number(invoice.netAmount ?? 0) + pendingStorage,
+        pendingStorageFees: pendingStorage,
         parcels: parcelsWithFees,
         storageLines,
         discounts,

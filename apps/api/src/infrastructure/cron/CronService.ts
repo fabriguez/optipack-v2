@@ -5,6 +5,7 @@ import { CoherenceService } from '../../application/services/CoherenceService';
 import { AutoCloseCashRegistersUseCase } from '../../application/use-cases/cash-register/AutoCloseCashRegistersUseCase';
 import { CheckChargeAlertsUseCase } from '../../application/use-cases/agency/CheckChargeAlertsUseCase';
 import { AutoMarkAbsentUseCase } from '../../application/use-cases/employee/AutoMarkAbsentUseCase';
+import { CrystallizeStorageFeesUseCase } from '../../application/use-cases/storage/CrystallizeStorageFeesUseCase';
 import { prisma } from '../../config/database';
 import { eventBus, DomainEvents } from '../events/EventBus';
 import { createChildLogger } from '../../config/logger';
@@ -125,8 +126,26 @@ export function startCronJobs(): void {
     }
   });
 
+  // Cristallisation du magasinage : chaque jour a 4h. Injecte dans chaque
+  // facture concernee les frais de magasinage hors franchise accumules depuis
+  // la veille, de sorte que le total du a payer reste a jour tant que le colis
+  // est stocke. Une facture soldee dont le colis reste en magasin repasse en
+  // PARTIAL. Selectif (charges hors franchise seulement) et idempotent.
+  cron.schedule('0 4 * * *', async () => {
+    logger.info('Running daily storage-fee crystallization...');
+    try {
+      const useCase = container.resolve(CrystallizeStorageFeesUseCase);
+      const result = await useCase.execute();
+      if (result.invoicesBilled > 0) {
+        logger.info(result, 'Storage-fee crystallization completed');
+      }
+    } catch (err) {
+      logger.error({ err }, 'Storage-fee crystallization failed');
+    }
+  });
+
   logger.info(
-    'Cron jobs scheduled: penalty (2AM), debt alerts (8AM), overdue debts (1AM), parcel coherence (every 6h), auto cash+report close (every 15s), charge alerts (7AM), delay detection (6AM)',
+    'Cron jobs scheduled: penalty (2AM), debt alerts (8AM), overdue debts (1AM), parcel coherence (every 6h), auto cash+report close (every 15s), charge alerts (7AM), delay detection (6AM), storage crystallization (4AM)',
   );
 }
 

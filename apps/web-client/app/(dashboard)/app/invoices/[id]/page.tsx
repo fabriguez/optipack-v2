@@ -44,6 +44,8 @@ interface InvoiceDetail {
   id: string;
   reference: string;
   status: string;
+  /** Statut tenant compte du magasinage en cours (peut differer de status). */
+  effectiveStatus?: string;
   currency: string;
   createdAt: string;
   agency?: { name: string; city?: string; country?: string; phone?: string } | null;
@@ -100,7 +102,8 @@ export default function InvoiceDetailPage() {
     );
   }
 
-  const tone = STATUS_TONE[data.status] ?? {
+  const shownStatus = data.effectiveStatus ?? data.status;
+  const tone = STATUS_TONE[shownStatus] ?? {
     bg: 'color-mix(in oklab, var(--skin-primary) 12%, transparent)',
     fg: 'var(--skin-primary)',
   };
@@ -130,7 +133,7 @@ export default function InvoiceDetailPage() {
             className="px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide skin-radius-sm"
             style={{ background: tone.bg, color: tone.fg }}
           >
-            {data.status}
+            {shownStatus}
           </span>
         </div>
         <p className="mt-1 text-sm" style={{ color: 'var(--skin-muted)' }}>

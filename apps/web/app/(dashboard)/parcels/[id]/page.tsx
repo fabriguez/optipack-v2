@@ -236,8 +236,21 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
             <div className="space-y-3">
               <Row label="Reference" value={parcel.invoice.reference} mono />
               <Row label="Montant" value={formatAmount(Number(parcel.price))} bold />
+              {Number(parcel.invoice.amountDue ?? parcel.invoice.balance ?? 0) > 0 && (
+                <Row
+                  label="Reste a payer"
+                  value={formatAmount(Number(parcel.invoice.amountDue ?? parcel.invoice.balance ?? 0))}
+                  bold
+                />
+              )}
+              {Number(parcel.invoice.pendingStorageFees ?? 0) > 0 && (
+                <Row
+                  label="dont magasinage en cours"
+                  value={formatAmount(Number(parcel.invoice.pendingStorageFees))}
+                />
+              )}
               <Row label="Statut">
-                <StatusBadge status={parcel.invoice.status} type="invoice" />
+                <StatusBadge status={parcel.invoice.effectiveStatus ?? parcel.invoice.status} type="invoice" />
               </Row>
               <div className="pt-3 border-t border-gray-100 space-y-2">
                 <Link href={`/invoices/${parcel.invoice.id}`}>
@@ -246,7 +259,7 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
                     Voir la facture
                   </AppButton>
                 </Link>
-                {parcel.invoice.status !== 'PAID' && parcel.status !== 'LOST' && (
+                {(parcel.invoice.effectiveStatus ?? parcel.invoice.status) !== 'PAID' && parcel.status !== 'LOST' && (
                   // Ouvre le dialog directement plutot que de rediriger vers
                   // la page /payments. La facture est pre-fixee et grisee dans
                   // le formulaire pour eviter toute mauvaise selection.

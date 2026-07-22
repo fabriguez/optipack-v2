@@ -12,6 +12,7 @@ export type StopReason =
   | 'CONTAINER_ARRIVE_INTERMEDIATE'
   | 'TRANSFER'
   | 'HANDOVER'
+  | 'CRON'
   | 'MANUAL';
 
 interface OpenChargeInput {
@@ -264,6 +265,47 @@ export class StorageChargeService {
   }
 
   /**
+   * Magasinage NON encore facture (billedAt = null), agrege PAR FACTURE, pour
+   * un lot de factures. Batch anti-N+1 pour les listes. Les factures agregat
+   * de groupe renvoient 0 ici (leurs colis portent l'invoiceId des factures
+   * membres, pas celui de l'agregat) : le detail utilise `pendingForInvoice`
+   * qui, lui, resout le scope de groupe.
+   */
+  async pendingByInvoice(
+    invoiceIds: string[],
+    tx?: Prisma.TransactionClient,
+  ): Promise<Map<string, number>> {
+    const map = new Map<string, number>();
+    if (invoiceIds.length === 0) return map;
+    const db = this.db(tx);
+    const charges = await db.parcelStorageCharge.findMany({
+      where: { billedAt: null, parcel: { invoiceId: { in: invoiceIds } } },
+      select: {
+        startedAt: true,
+        stoppedAt: true,
+        freeDays: true,
+        dailyRate: true,
+        feeAmount: true,
+        parcel: { select: { invoiceId: true } },
+      },
+    });
+    const now = new Date();
+    for (const c of charges) {
+      const invId = c.parcel?.invoiceId;
+      if (!invId) continue;
+      const fee =
+        c.stoppedAt == null
+          ? computeAccrual(
+              { startedAt: c.startedAt, freeDays: c.freeDays, dailyRate: c.dailyRate },
+              now,
+            ).feeAmount
+          : Number(c.feeAmount);
+      map.set(invId, (map.get(invId) ?? 0) + fee);
+    }
+    return map;
+  }
+
+  /**
    * Cristallise le magasinage d'une facture : materialise les charges non
    * encore facturees, les marque billed (idempotent) et injecte le montant
    * dans Invoice.totalAmount / netAmount / balance / status.
@@ -323,6 +365,14 @@ export class StorageChargeService {
       if (c.stoppedAt == null) {
         // Charge active : on la materialise a now().
         ({ chargedDays, feeAmount } = computeAccrual(c, now));
+
+        // Garde franchise : une charge active encore dans sa periode de
+        // gratuite (aucun jour facturable) ne doit PAS etre stoppee, facturee
+        // ni rouverte. Sinon un declencheur recurrent (cron quotidien)
+        // consommerait la franchise a vide et reinitialiserait startedAt a
+        // chaque passage. On la laisse simplement courir.
+        if (chargedDays <= 0) continue;
+
         await db.parcelStorageCharge.update({
           where: { id: c.id },
           data: {
@@ -384,6 +434,48 @@ export class StorageChargeService {
     });
 
     return billedTotal;
+  }
+
+  /**
+   * Recense les ids de factures portant au moins une charge de magasinage non
+   * encore facturee ET deja hors franchise (fee > 0 a l'instant present).
+   * Sert au cron de cristallisation periodique et au backfill one-shot :
+   * on ne declenche `crystallizeForInvoice` que sur ces factures pour eviter
+   * de toucher inutilement les factures dont le magasinage court encore en
+   * franchise (grace period non depassee).
+   */
+  async findInvoicesWithAccruedStorage(tx?: Prisma.TransactionClient): Promise<string[]> {
+    const db = this.db(tx);
+    const now = new Date();
+    const charges = await db.parcelStorageCharge.findMany({
+      where: {
+        billedAt: null,
+        phase: { not: 'TRANSIT' },
+        parcel: { isDeleted: false },
+      },
+      select: {
+        startedAt: true,
+        stoppedAt: true,
+        freeDays: true,
+        dailyRate: true,
+        feeAmount: true,
+        parcel: { select: { invoiceId: true } },
+      },
+    });
+    const invoiceIds = new Set<string>();
+    for (const c of charges) {
+      const invoiceId = c.parcel?.invoiceId;
+      if (!invoiceId) continue;
+      const fee =
+        c.stoppedAt == null
+          ? computeAccrual(
+              { startedAt: c.startedAt, freeDays: c.freeDays, dailyRate: c.dailyRate },
+              now,
+            ).feeAmount
+          : Number(c.feeAmount);
+      if (fee > 0) invoiceIds.add(invoiceId);
+    }
+    return [...invoiceIds];
   }
 
   /**
