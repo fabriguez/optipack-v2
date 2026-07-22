@@ -59,7 +59,10 @@ export class ContainerController {
   static async list(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(ListContainersUseCase);
-      const { departureAgencyId, arrivalAgencyId, status, isForwarding, carrierId } = req.query;
+      const {
+        departureAgencyId, arrivalAgencyId, status, isForwarding, carrierId,
+        departureDateFrom, departureDateTo, arrivalDateFrom, arrivalDateTo,
+      } = req.query;
       const isForwardingFlag =
         isForwarding === 'true' ? true : isForwarding === 'false' ? false : undefined;
       // ADMIN tenant / SUPER_ADMIN plateforme : aucune restriction d'agence
@@ -79,6 +82,10 @@ export class ContainerController {
           isForwarding: isForwardingFlag,
           agencyIds,
           carrierId: carrierId as string | undefined,
+          departureDateFrom: departureDateFrom as string | undefined,
+          departureDateTo: departureDateTo as string | undefined,
+          arrivalDateFrom: arrivalDateFrom as string | undefined,
+          arrivalDateTo: arrivalDateTo as string | undefined,
           scopeWhere,
         },
         req.query as any,
