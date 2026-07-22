@@ -36,7 +36,12 @@ export class HandoverParcelUseCase {
     private debtBlockConfig: DebtBlockConfigService,
   ) {}
 
-  async execute(parcelId: string, input: HandoverInput, userId: string) {
+  /**
+   * @param isAdmin true si l'utilisateur a le role ADMIN / SUPER_ADMIN. Seul un
+   *   admin peut remettre un colis dont la facture n'est pas totalement reglee
+   *   (frais de magasinage inclus).
+   */
+  async execute(parcelId: string, input: HandoverInput, userId: string, isAdmin = false) {
     const parcel = await this.parcelRepo.findById(parcelId);
     if (!parcel) throw new NotFoundError('Colis', parcelId);
     if (parcel.status === 'DELIVERED') {
@@ -96,6 +101,26 @@ export class HandoverParcelUseCase {
               `Retrait bloque : ${receiver.fullName} a un cumul de dettes impayees de ${cumul} (seuil ${cfg.handoverThreshold}). Apurer la dette avant la remise.`,
             );
           }
+        }
+      }
+    }
+
+    // Verrou financier : seul un admin peut remettre un colis dont la facture
+    // n'est pas totalement reglee, frais de magasinage EN COURS inclus (on
+    // ajoute le pending non encore cristallise au solde stocke). Un non-admin
+    // doit avoir une facture soldee avant la remise.
+    if (parcel.invoiceId) {
+      const inv = await prisma.invoice.findUnique({
+        where: { id: parcel.invoiceId },
+        select: { balance: true, status: true },
+      });
+      if (inv && inv.status !== 'CANCELLED') {
+        const pending = await this.storageCharges.pendingForInvoice(parcel.invoiceId);
+        const amountDue = Math.max(0, Number(inv.balance) + pending);
+        if (amountDue > 0 && !isAdmin) {
+          throw new BusinessError(
+            `Seul un administrateur peut remettre ce colis : la facture n'est pas totalement reglee (reste ${amountDue} a payer, frais de magasinage inclus).`,
+          );
         }
       }
     }

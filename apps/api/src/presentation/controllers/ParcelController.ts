@@ -332,7 +332,8 @@ export class ParcelController {
     try {
       await parcelScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(HandoverParcelUseCase);
-      const result = await useCase.execute(req.params.id, req.body, req.user!.userId);
+      const isAdmin = req.user!.role === 'SUPER_ADMIN' || req.user!.role === 'ADMIN';
+      const result = await useCase.execute(req.params.id, req.body, req.user!.userId, isAdmin);
       res.json({ success: true, data: result });
     } catch (err) {
       next(err);
