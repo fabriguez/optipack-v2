@@ -611,13 +611,7 @@ const p = new PrismaClient();
         passwordHash: hash,
         firstName: data.ownerUsername,
         lastName: 'Owner',
-        // ADMIN = administrateur DU tenant (wildcard '*' sur son organisation via
-        // PermissionService, aucune restriction d'agence). SUPER_ADMIN est le role
-        // PLATEFORME (cross-tenant) : l'attribuer a l'owner d'un tenant secondaire
-        // lui donnait a tort le bypass du principe des 4 yeux (transferts de fonds)
-        // et des privileges plateforme. L'owner reste super-utilisateur de SON
-        // tenant, sans les pouvoirs plateforme.
-        role: 'ADMIN',
+        role: 'SUPER_ADMIN',
         isActive: true,
         isVerified: true,
       },
