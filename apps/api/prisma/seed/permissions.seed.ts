@@ -3,6 +3,10 @@
 // prisma/seed.ts) et le self-heal runtime (src/index.ts -> PermissionSeedService).
 // `prisma/` etant exclu du build tsc, aucune donnee de seed ne doit y rester :
 // ce module n'est plus qu'un point d'entree retro-compatible.
+//
+// IMPORTANT : on importe les FONCTIONS PURES depuis `permission-seed` et NON la
+// classe `PermissionSeedService`, qui tire tsyringe -> exige un polyfill
+// reflect-metadata absent du process seed CLI (tsx prisma/seed.ts).
 export {
   PERMISSION_CATALOG,
   POSITION_CATALOG,
@@ -12,4 +16,4 @@ export {
   seedPermissionsAndPositions,
   migrateLegacyRolePositions,
   ensurePermissionCatalog,
-} from '../../src/application/services/PermissionSeedService';
+} from '../../src/application/services/permission-seed';
