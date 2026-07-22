@@ -87,7 +87,7 @@ export const searchers = {
   }, 'searchers.agencies'),
 
   carriers: tag(async (q: string, limit = DEFAULT_LIMIT): Promise<SearchOption[]> => {
-    const items = await searchPaginated<{ id: string; name: string; phone?: string | null; carrierType?: string | null }>('/carriers', q, limit);
+    const items = await searchPaginated<{ id: string; name: string; phone?: string | null; carrierType?: string | null }>('/carriers', q, limit, { activeOnly: true });
     return items.map((c) => ({
       value: c.id,
       label: c.name,
