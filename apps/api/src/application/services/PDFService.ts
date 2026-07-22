@@ -1275,8 +1275,11 @@ export class PDFService {
     },
     qrBuffer: Buffer,
     branding?: PDFBranding | null,
+    // Si fourni, on dessine l'etiquette sur ce document existant (impression
+    // groupee multi-pages) au lieu d'en creer/finaliser un nouveau.
+    existingDoc?: PDFKit.PDFDocument,
   ): Promise<Buffer> {
-    const doc = new PDFDocument({ size: [283, 425], margin: 15 }); // ~100x150mm label
+    const doc = existingDoc ?? new PDFDocument({ size: [283, 425], margin: 15 }); // ~100x150mm label
     const w = 283 - 30;
     const pageW = 283;
     const pageH = 425;
@@ -1461,6 +1464,27 @@ export class PDFService {
       15, 400, { width: w, align: 'center' },
     );
 
+    // Impression groupee : le document est finalise par l'appelant.
+    if (existingDoc) return Buffer.alloc(0);
+    return collectBuffer(doc);
+  }
+
+  /**
+   * Etiquettes de plusieurs colis dans UN seul PDF (une etiquette par page).
+   * Reutilise generateLabelPDF (meme rendu) en lui passant un document partage.
+   */
+  static async generateLabelsPDF(
+    items: Array<{
+      parcel: Parameters<typeof PDFService.generateLabelPDF>[0];
+      qrBuffer: Buffer;
+      branding?: PDFBranding | null;
+    }>,
+  ): Promise<Buffer> {
+    const doc = new PDFDocument({ size: [283, 425], margin: 15 });
+    for (let i = 0; i < items.length; i++) {
+      if (i > 0) doc.addPage({ size: [283, 425], margin: 15 });
+      await PDFService.generateLabelPDF(items[i].parcel, items[i].qrBuffer, items[i].branding, doc);
+    }
     return collectBuffer(doc);
   }
 

@@ -44,6 +44,101 @@ router.get('/', requirePermission('parcel.read'), validate(paginationSchema, 'qu
 // Valeurs de filtre presentes dans un listing (selects scopes). Avant /:id.
 router.get('/facets', requirePermission('parcel.read'), ParcelController.facets);
 router.get('/tracking/:tracking', requirePermission('parcel.read'), ParcelController.getByTracking);
+
+// Etiquettes groupees : un seul PDF (1 etiquette/page) pour une selection de
+// colis (?ids=a,b,c). Declaree AVANT /:id pour ne pas etre captee par ce dernier.
+router.get('/labels', requirePermission('parcel.read'), async (req, res, next) => {
+  try {
+    const idsParam = String(req.query.ids ?? '').trim();
+    const ids = idsParam ? idsParam.split(',').map((s) => s.trim()).filter(Boolean) : [];
+    if (ids.length === 0) {
+      return res.status(400).json({ success: false, message: 'Aucun colis selectionne' });
+    }
+    // Autorisation : chaque colis doit etre dans le scope agence de l'utilisateur.
+    for (const pid of ids) await parcelScope.assert(pid, scopeCtx(req));
+
+    const parcels = await prisma.parcel.findMany({
+      where: { id: { in: ids } },
+      include: {
+        client: { select: { fullName: true, phone: true } },
+        recipient: { select: { fullName: true, phone: true } },
+        warehouse: { include: { agency: { select: { name: true, city: true } } } },
+        transitRoute: { select: { name: true, type: true } },
+        parcelGroup: { select: { id: true, reference: true } },
+        invoice: { select: { netAmount: true, balance: true } },
+      },
+    });
+    const byId = new Map(parcels.map((p) => [p.id, p]));
+
+    const items: Array<{ parcel: Parameters<typeof PDFService.generateLabelPDF>[0]; qrBuffer: Buffer; branding: Awaited<ReturnType<typeof loadPdfBranding>> }> = [];
+    // On respecte l'ordre demande dans ?ids.
+    for (const pid of ids) {
+      const parcel = byId.get(pid);
+      if (!parcel) continue;
+
+      let groupIndex: number | null = null;
+      let groupSize: number | null = null;
+      if (parcel.parcelGroupId) {
+        const siblings = await prisma.parcel.findMany({
+          where: { parcelGroupId: parcel.parcelGroupId, isDeleted: false },
+          orderBy: { createdAt: 'asc' },
+          select: { id: true },
+        });
+        groupSize = siblings.length;
+        const idx = siblings.findIndex((s) => s.id === parcel.id);
+        if (idx >= 0) groupIndex = idx + 1;
+      }
+
+      const qrBuffer = await QRCodeService.generateParcelQR(parcel.trackingNumber, parcel.id);
+      items.push({
+        parcel: {
+          trackingNumber: parcel.trackingNumber,
+          trackingFournisseur: parcel.trackingFournisseur ?? null,
+          designation: parcel.designation,
+          weight: parcel.weight ? Number(parcel.weight) : null,
+          volume: parcel.volume ? Number(parcel.volume) : null,
+          destination: parcel.destination,
+          origin: parcel.origin ?? null,
+          clientName: parcel.client?.fullName ?? '-',
+          clientPhone: parcel.client?.phone ?? null,
+          recipientName: parcel.recipient?.fullName ?? null,
+          recipientPhone: parcel.recipient?.phone ?? null,
+          transitRoute: parcel.transitRoute?.name ?? null,
+          transitType: parcel.transitRoute?.type ?? null,
+          agencyName: parcel.warehouse?.agency
+            ? `${parcel.warehouse.agency.name} (${parcel.warehouse.agency.city})`
+            : null,
+          observation: parcel.observation ?? null,
+          price: parcel.price ? Number(parcel.price) : null,
+          invoiceTotal: parcel.invoice?.netAmount != null ? Number(parcel.invoice.netAmount) : null,
+          invoiceBalance: parcel.invoice?.balance != null ? Number(parcel.invoice.balance) : null,
+          isFragile: parcel.isFragile,
+          isHazardous: parcel.isHazardous,
+          groupIndex,
+          groupSize,
+          groupReference: parcel.parcelGroup?.reference ?? null,
+        },
+        qrBuffer,
+        branding: await loadPdfBranding((parcel as { organizationId?: string }).organizationId),
+      });
+    }
+
+    if (items.length === 0) {
+      return res.status(404).json({ success: false, message: 'Aucune etiquette a imprimer' });
+    }
+
+    const pdf = await PDFService.generateLabelsPDF(items);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="etiquettes-${items.length}.pdf"`,
+      'Content-Length': pdf.length.toString(),
+    });
+    res.send(pdf);
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get('/:id', requirePermission('parcel.read'), ParcelController.getById);
 router.post('/', requirePermission('parcel.create'), validate(createParcelSchema), ParcelController.create);
 router.post('/batch', requirePermission('parcel.create'), validate(createBatchParcelsSchema), ParcelController.createBatch);

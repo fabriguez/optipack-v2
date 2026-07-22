@@ -3,7 +3,7 @@
 import { use, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { AlertTriangle, ArrowLeft, Package, Plus, Eye, Edit, Trash2, ArrowRightLeft, ClipboardCheck, PlayCircle, QrCode, HandCoins, MapPin, Camera, ScanLine, Boxes } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Package, Plus, Eye, Edit, Trash2, ArrowRightLeft, ClipboardCheck, PlayCircle, QrCode, HandCoins, MapPin, Camera, ScanLine, Boxes, Printer } from 'lucide-react';
 import { BatchScanCollector } from '@/components/shared/BatchScanCollector';
 import { ParcelPickerList } from '@/components/shared/ParcelPickerList';
 import { normalizeScannedTracking } from '@/lib/utils/scanNormalize';
@@ -34,6 +34,8 @@ import { WarehouseFormDialog } from '../WarehouseFormDialog';
 import { AgencyAvatar } from '@/components/shared/AgencyAvatar';
 import { SpacesSection } from './SpacesSection';
 import { MoveToSpaceDialog } from './MoveToSpaceDialog';
+import { BulkMoveToSpaceDialog, BulkLoadContainerDialog } from './BulkParcelActions';
+import { ExportButton } from '@/components/shared/ExportButton';
 import { Can } from '@/lib/components/Can';
 import { usePermission } from '@/lib/hooks/usePermission';
 
@@ -82,6 +84,10 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
   // checkboxes). Pre-rempli la modale de transfert quand on l'ouvre depuis
   // le bouton "Transferer la selection".
   const [selectedParcelIds, setSelectedParcelIds] = useState<Set<string>>(new Set());
+  // Actions groupees sur la selection (deplacer vers zone / charger conteneur / etiquettes).
+  const [bulkMoveOpen, setBulkMoveOpen] = useState(false);
+  const [bulkLoadOpen, setBulkLoadOpen] = useState(false);
+  const [printingLabels, setPrintingLabels] = useState(false);
   // Permissions ABAC : resolues au top-level (regle des hooks), utilisees
   // dans les renders de colonnes (actions de lignes).
   const canUpdateParcel = usePermission('parcel.update');
@@ -452,6 +458,46 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
   // (IN_STOCK) sont eligibles. Les lignes non eligibles ne montrent pas
   // de checkbox.
   const visibleParcels: any[] = parcelsData?.data || [];
+  // Selection courante (parmi la page chargee) + lignes d'export.
+  const selectedParcels = visibleParcels.filter((p) => selectedParcelIds.has(p.id));
+  const parcelExportColumns = [
+    { key: 'trackingNumber', label: 'Tracking' },
+    { key: 'designation', label: 'Designation' },
+    { key: 'client', label: 'Client' },
+    { key: 'weight', label: 'Masse' },
+    { key: 'volume', label: 'Volume' },
+    { key: 'destination', label: 'Destination' },
+    { key: 'price', label: 'Prix' },
+    { key: 'status', label: 'Statut' },
+  ];
+  const parcelExportRows = selectedParcels.map((p) => ({
+    trackingNumber: p.trackingNumber,
+    designation: p.designation,
+    client: p.client?.fullName ?? '',
+    weight: p.weight ?? '',
+    volume: p.volume ?? '',
+    destination: p.destination,
+    price: p.price ?? '',
+    status: p.status,
+  }));
+  const handlePrintLabels = async () => {
+    const ids = Array.from(selectedParcelIds);
+    if (ids.length === 0) return;
+    setPrintingLabels(true);
+    try {
+      const res = await apiClient.get('/parcels/labels', {
+        params: { ids: ids.join(',') },
+        responseType: 'blob',
+      });
+      const url = URL.createObjectURL(res.data as Blob);
+      window.open(url, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Echec impression des etiquettes');
+    } finally {
+      setPrintingLabels(false);
+    }
+  };
   const selectableParcels = visibleParcels.filter(canModifyParcel);
   const allVisibleSelected =
     selectableParcels.length > 0 && selectableParcels.every((r) => selectedParcelIds.has(r.id));
@@ -923,6 +969,27 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
                         Transferer {selectedParcelIds.size} colis
                       </AppButton>
                     </Can>
+                    <Can permission="container.manage">
+                      <AppButton size="sm" variant="outline" onClick={() => setBulkLoadOpen(true)}>
+                        <Boxes className="h-3.5 w-3.5" />
+                        Charger dans un conteneur
+                      </AppButton>
+                    </Can>
+                    <Can permission="parcel.update">
+                      <AppButton size="sm" variant="outline" onClick={() => setBulkMoveOpen(true)}>
+                        <MapPin className="h-3.5 w-3.5" />
+                        Deplacer vers une zone
+                      </AppButton>
+                    </Can>
+                    <AppButton size="sm" variant="outline" onClick={handlePrintLabels} loading={printingLabels}>
+                      <Printer className="h-3.5 w-3.5" />
+                      Imprimer les etiquettes
+                    </AppButton>
+                    <ExportButton
+                      data={parcelExportRows}
+                      columns={parcelExportColumns}
+                      fileName={`colis-selection-${selectedParcelIds.size}`}
+                    />
                     <button
                       type="button"
                       onClick={() => setSelectedParcelIds(new Set())}
@@ -1031,6 +1098,22 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
         onClose={() => setMoveSpaceParcel(null)}
         warehouseId={id}
         parcel={moveSpaceParcel}
+      />
+
+      {/* Actions groupees sur la selection */}
+      <BulkMoveToSpaceDialog
+        open={bulkMoveOpen}
+        onClose={() => setBulkMoveOpen(false)}
+        warehouseId={id}
+        parcelIds={Array.from(selectedParcelIds)}
+        onDone={() => { invalidateAll(); setSelectedParcelIds(new Set()); }}
+      />
+      <BulkLoadContainerDialog
+        open={bulkLoadOpen}
+        onClose={() => setBulkLoadOpen(false)}
+        parcelIds={Array.from(selectedParcelIds)}
+        agencyId={currentAgencyId}
+        onDone={() => { invalidateAll(); setSelectedParcelIds(new Set()); }}
       />
 
       {/* Batch ajouter : scan + selection manuelle dans la liste paginee. */}
