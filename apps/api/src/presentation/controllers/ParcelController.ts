@@ -21,7 +21,7 @@ import {
   UnarchiveParcelsUseCase,
 } from '../../application/use-cases/parcel/ArchiveParcelsUseCase';
 import { DeleteParcelUseCase } from '../../application/use-cases/parcel/DeleteParcelUseCase';
-import { parcelScope, scopeCtx, scopeEnforced } from '../../application/services/scope/agencyScope';
+import { parcelScope, scopeCtx } from '../../application/services/scope/agencyScope';
 import { PARCEL_REPOSITORY, type IParcelRepository } from '../../application/interfaces/IParcelRepository';
 import { applyFieldPolicy, PARCEL_FIELD_POLICY } from '../serializers/fieldPolicy';
 import { getPolicy } from '../middleware/policyContext';
@@ -72,13 +72,9 @@ export class ParcelController {
         onlyPresent,
         archived,
       } = req.query;
-      // Scope agence (etape 2) : en enforce, le scope complet (entrepots,
-      // agence destination, conteneurs) remplace le filtre legacy warehouse-only ;
-      // en shadow, comportement actuel conserve a l'identique.
-      const scopeWhere = parcelScope.where(scopeCtx(req)) ?? null;
-      const scope = scopeEnforced()
-        ? null
-        : req.user!.role === 'SUPER_ADMIN' ? null : req.user!.agencyIds;
+      // Colis : la LECTURE n'est PAS scopee par agence — un colis transite entre
+      // agences, tout personnel avec parcel.read voit tous les colis. Le scope
+      // agence ne s'applique qu'aux ACTIONS (assert dans update/handover/etc.).
       // archived : 'true' = uniquement archives, 'all' = tout, defaut/null = exclus.
       const archivedFilter: 'true' | 'all' | 'false' | undefined =
         archived === 'true' ? 'true' : archived === 'all' ? 'all' : undefined;
@@ -94,8 +90,6 @@ export class ParcelController {
           clientId: clientId as string,
           status: status as string,
           transitType: transitType as string,
-          agencyIds: scope,
-          scopeWhere,
           onlyPresent: onlyPresent === 'true' || onlyPresent === '1',
           archived: archivedFilter,
         },
@@ -120,16 +114,11 @@ export class ParcelController {
     try {
       const repo = container.resolve<IParcelRepository>(PARCEL_REPOSITORY);
       const { warehouseId, onlyPresent, archived } = req.query;
-      const scopeWhere = parcelScope.where(scopeCtx(req)) ?? null;
-      const scope = scopeEnforced()
-        ? null
-        : req.user!.role === 'SUPER_ADMIN' ? null : req.user!.agencyIds;
+      // Facettes calculees sur le meme perimetre que la liste : lecture non scopee.
       const archivedFilter: 'true' | 'all' | undefined =
         archived === 'true' ? 'true' : archived === 'all' ? 'all' : undefined;
       const facets = await repo.findFilterFacets({
         warehouseId: warehouseId as string,
-        agencyIds: scope,
-        scopeWhere,
         onlyPresent: onlyPresent === 'true' || onlyPresent === '1',
         archived: archivedFilter,
       });
@@ -141,7 +130,7 @@ export class ParcelController {
 
   static async getById(req: Request, res: Response, next: NextFunction) {
     try {
-      await parcelScope.assert(req.params.id, scopeCtx(req));
+      // Lecture non scopee : voir n'importe quel colis (toutes agences).
       const useCase = container.resolve(GetParcelUseCase);
       const parcel: any = await useCase.execute(req.params.id);
       // Enrichit la facture liee avec le magasinage en cours (non cristallise)
@@ -162,12 +151,7 @@ export class ParcelController {
 
   static async getByTracking(req: Request, res: Response, next: NextFunction) {
     try {
-      // Resolution tracking -> id pour appliquer le scope agence.
-      const found = await prisma.parcel.findFirst({
-        where: { trackingNumber: req.params.tracking },
-        select: { id: true },
-      });
-      if (found) await parcelScope.assert(found.id, scopeCtx(req));
+      // Lecture non scopee : voir n'importe quel colis par son tracking.
       const useCase = container.resolve(GetParcelUseCase);
       const parcel = await useCase.execute(req.params.tracking);
       res.json({ success: true, data: parcel });
@@ -240,7 +224,7 @@ export class ParcelController {
 
   static async listImages(req: Request, res: Response, next: NextFunction) {
     try {
-      await parcelScope.assert(req.params.id, scopeCtx(req));
+      // Lecture non scopee : voir la galerie de n'importe quel colis.
       const images = await prisma.parcelImage.findMany({
         where: { parcelId: req.params.id },
         orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
@@ -354,7 +338,7 @@ export class ParcelController {
   // remise/facturation. Renvoie le breakdown complet (jours, taux, total).
   static async storageFee(req: Request, res: Response, next: NextFunction) {
     try {
-      await parcelScope.assert(req.params.id, scopeCtx(req));
+      // Lecture (preview) non scopee.
       const useCase = container.resolve(ComputeStorageFeeUseCase);
       const data = await useCase.execute(req.params.id);
       res.json({ success: true, data });

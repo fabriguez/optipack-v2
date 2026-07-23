@@ -7,7 +7,11 @@ import { prisma } from '../../../config/database';
 import { QRCodeService } from '../../../application/services/QRCodeService';
 import { PDFService } from '../../../application/services/PDFService';
 import { loadPdfBranding } from '../../../application/services/PdfBrandingService';
-import { parcelScope, scopeCtx } from '../../../application/services/scope/agencyScope';
+
+// Colis : la LECTURE n'est pas scopee par agence (un colis transite entre
+// agences, tout le monde avec parcel.read le voit). Seules les ACTIONS
+// (handover, maj statut, suppression, archivage, images) sont limitees a
+// l'agence via parcelScope.assert dans ParcelController.
 
 const router = Router();
 
@@ -16,7 +20,6 @@ router.use(authenticate);
 // QR code (rendu via AuthedImage cote front-end : fetch + blob URL)
 router.get('/:id/qrcode', requirePermission('parcel.read'), async (req, res, next) => {
   try {
-    await parcelScope.assert(req.params.id, scopeCtx(req));
     const parcel = await prisma.parcel.findUnique({
       where: { id: req.params.id },
       select: { id: true, trackingNumber: true },
@@ -54,9 +57,7 @@ router.get('/labels', requirePermission('parcel.read'), async (req, res, next) =
     if (ids.length === 0) {
       return res.status(400).json({ success: false, message: 'Aucun colis selectionne' });
     }
-    // Autorisation : chaque colis doit etre dans le scope agence de l'utilisateur.
-    for (const pid of ids) await parcelScope.assert(pid, scopeCtx(req));
-
+    // Lecture/impression : pas de scope agence (voir plus haut).
     const parcels = await prisma.parcel.findMany({
       where: { id: { in: ids } },
       include: {
@@ -167,7 +168,6 @@ router.post('/handover-untracked', requirePermission('parcel.deliver'), ParcelCo
 // Etiquette enrichie
 router.get('/:id/label', requirePermission('parcel.read'), async (req, res, next) => {
   try {
-    await parcelScope.assert(req.params.id, scopeCtx(req));
     const parcel = await prisma.parcel.findUnique({
       where: { id: req.params.id },
       include: {
@@ -250,7 +250,6 @@ router.get('/:id/label', requirePermission('parcel.read'), async (req, res, next
 router.get('/:id/history', requirePermission('parcel.read'), async (req, res, next) => {
   try {
     const parcelId = req.params.id;
-    await parcelScope.assert(parcelId, scopeCtx(req));
     const [history, parcel] = await Promise.all([
       prisma.parcelHistory.findMany({
         where: { parcelId },
