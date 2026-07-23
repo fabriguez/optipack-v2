@@ -21,7 +21,7 @@ import {
   UnarchiveParcelsUseCase,
 } from '../../application/use-cases/parcel/ArchiveParcelsUseCase';
 import { DeleteParcelUseCase } from '../../application/use-cases/parcel/DeleteParcelUseCase';
-import { parcelScope, scopeCtx } from '../../application/services/scope/agencyScope';
+import { parcelScope, parcelInScope, scopeCtx } from '../../application/services/scope/agencyScope';
 import { PARCEL_REPOSITORY, type IParcelRepository } from '../../application/interfaces/IParcelRepository';
 import { applyFieldPolicy, PARCEL_FIELD_POLICY } from '../serializers/fieldPolicy';
 import { getPolicy } from '../middleware/policyContext';
@@ -95,11 +95,13 @@ export class ParcelController {
         },
         req.query as any,
       );
+      // inAgencyScope : indique a l'UI si le user peut AGIR sur le colis (son
+      // agence intersecte le jeu d'agences du colis). La lecture reste ouverte.
+      const ctx = scopeCtx(req);
+      const items = (result.data as any[]).map((p) => ({ ...p, inAgencyScope: parcelInScope(p, ctx) }));
       const policy = getPolicy(req);
-      const data = policy
-        ? { ...result, data: applyFieldPolicy(result.data, PARCEL_FIELD_POLICY, policy) }
-        : result;
-      res.json({ success: true, ...data });
+      const data = policy ? applyFieldPolicy(items, PARCEL_FIELD_POLICY, policy) : items;
+      res.json({ success: true, ...result, data });
     } catch (err) {
       next(err);
     }
@@ -142,8 +144,9 @@ export class ParcelController {
           .pendingForInvoice(parcel.invoice.id);
         parcel.invoice = { ...parcel.invoice, ...deriveInvoiceView(parcel.invoice, pending) };
       }
+      const withScope = { ...parcel, inAgencyScope: parcelInScope(parcel, scopeCtx(req)) };
       const policy = getPolicy(req);
-      res.json({ success: true, data: policy ? applyFieldPolicy(parcel, PARCEL_FIELD_POLICY, policy) : parcel });
+      res.json({ success: true, data: policy ? applyFieldPolicy(withScope, PARCEL_FIELD_POLICY, policy) : withScope });
     } catch (err) {
       next(err);
     }

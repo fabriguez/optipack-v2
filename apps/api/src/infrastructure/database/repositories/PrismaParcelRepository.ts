@@ -30,6 +30,9 @@ const PARCEL_INCLUDE = {
       agency: { select: { id: true, name: true, city: true } },
     },
   },
+  // Entrepot d'origine (1er magasin) : necessaire au calcul `inAgencyScope`
+  // (mirror de parcelScope, qui inclut originalWarehouse.agencyId).
+  originalWarehouse: { select: { id: true, agencyId: true } },
   // Agence d'arrivee (destination) du colis : affichee comme "Agence d'arrivee"
   // sur les clients (le depart vient de warehouse.agency).
   destinationAgency: { select: { id: true, name: true, city: true } },

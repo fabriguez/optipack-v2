@@ -204,6 +204,33 @@ export const parcelScope = makeScope<Prisma.ParcelWhereInput>(
   }),
 );
 
+/**
+ * Jeu d'agences d'un colis calcule EN MEMOIRE depuis les relations chargees
+ * (PARCEL_INCLUDE). Doit couvrir les memes sources que le filtre parcelScope
+ * ci-dessus. Sert a exposer `inAgencyScope` sur le DTO (UI : active/desactive
+ * les boutons d'action). L'autorite reste `parcelScope.assert` cote API.
+ */
+export function parcelAgencyIdSet(parcel: unknown): string[] {
+  const p = (parcel ?? {}) as Record<string, any>;
+  const ids = new Set<string>();
+  const add = (v?: string | null) => { if (v) ids.add(v); };
+  add(p.warehouse?.agencyId ?? p.warehouse?.agency?.id);
+  add(p.originalWarehouse?.agencyId ?? p.originalWarehouse?.agency?.id);
+  add(p.destinationAgencyId ?? p.destinationAgency?.id);
+  add(p.container?.departureAgencyId ?? p.container?.departureAgency?.id);
+  add(p.container?.arrivalAgencyId ?? p.container?.arrivalAgency?.id);
+  add(p.lastContainer?.departureAgencyId ?? p.lastContainer?.departureAgency?.id);
+  add(p.lastContainer?.arrivalAgencyId ?? p.lastContainer?.arrivalAgency?.id);
+  return [...ids];
+}
+
+/** true si le colis (relations chargees) intersecte les agences du user. Admin => true. */
+export function parcelInScope(parcel: unknown, ctx: ScopeCtx): boolean {
+  if (ctx.unrestricted) return true;
+  const set = parcelAgencyIdSet(parcel);
+  return set.some((id) => ctx.agencyIds.includes(id));
+}
+
 /** Conteneur : agence de depart ou d'arrivee (champs requis au schema). */
 export const containerScope = makeScope<Prisma.ContainerWhereInput>(
   'Container',

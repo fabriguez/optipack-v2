@@ -37,6 +37,7 @@ import { AuthedImage } from '@/components/shared/AuthedImage';
 import { ImageLightbox } from '@/components/shared/ImageLightbox';
 import { uploadImage } from '@/lib/api/uploads';
 import { Can } from '@/lib/components/Can';
+import { parcelCanAct } from '@/lib/permissions/parcelScope';
 import { toast } from 'sonner';
 
 interface PricingBreakdown {
@@ -144,6 +145,10 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
   const API_BASE = getApiBaseUrl();
 
   const parcel = data?.data;
+  // Le colis est visible partout, mais on ne peut AGIR que si son agence
+  // intersecte celle du user (backend: parcelScope.assert). canAct pilote les
+  // boutons d'action ; la lecture reste ouverte.
+  const canAct = parcelCanAct(parcel);
   const history = historyData?.data || [];
   const images = imagesData?.data || [];
 
@@ -449,6 +454,7 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
     <AppCard>
       <AppCardHeader title={`Galerie (${images.length} image${images.length > 1 ? 's' : ''})`} />
       <div className="space-y-4">
+        {canAct && (
         <Can permission="parcel.update">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <ImageInput
@@ -469,6 +475,7 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
             </div>
           </div>
         </Can>
+        )}
 
         {images.length === 0 ? (
           <div className="flex flex-col items-center py-8">
@@ -490,6 +497,7 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
                 {img.caption && (
                   <p className="px-2 py-1 text-xs text-gray-600 truncate">{img.caption}</p>
                 )}
+                {canAct && (
                 <Can permission="parcel.update">
                   <button
                     type="button"
@@ -500,6 +508,7 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
                     <Trash2 className="h-4 w-4 text-red-600" />
                   </button>
                 </Can>
+                )}
               </div>
             ))}
           </div>
@@ -605,12 +614,18 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
               </div>
             </div>
           </div>
-          <Can permission="parcel.update">
-            <AppButton variant="outline" onClick={() => setEditOpen(true)}>
-              <Edit className="h-4 w-4" />
-              Modifier
-            </AppButton>
-          </Can>
+          {canAct ? (
+            <Can permission="parcel.update">
+              <AppButton variant="outline" onClick={() => setEditOpen(true)}>
+                <Edit className="h-4 w-4" />
+                Modifier
+              </AppButton>
+            </Can>
+          ) : (
+            <span className="inline-flex items-center rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700">
+              Autre agence — lecture seule
+            </span>
+          )}
         </div>
 
         <AppCard>
