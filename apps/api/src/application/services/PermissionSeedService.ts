@@ -37,13 +37,24 @@ export class PermissionSeedService {
     const systemPositions = await prisma.position.count({
       where: { organizationId, agencyId: null, isSystem: true },
     });
-    if (systemPositions > 0) return;
+
+    // Reseed force (FORCE_PERMISSION_RESEED=true) : rejoue l'UNION des presets
+    // sur les postes systeme existants pour propager les NOUVELLES cles ajoutees
+    // au catalogue (ex. expense.update/expense.delete) sans devoir exec un script
+    // dans le conteneur prod. A activer le temps d'UN redemarrage puis retirer.
+    // ATTENTION : l'union (skipDuplicates) n'ajoute que les cles manquantes du
+    // preset, mais ressuscite donc une cle de preset qu'un admin aurait retiree
+    // d'un poste SYSTEME. Sans le flag, on ne rejoue jamais l'union (defaut sur).
+    const forceReseed = process.env.FORCE_PERMISSION_RESEED === 'true';
+    if (systemPositions > 0 && !forceReseed) return;
 
     await seedPermissionsAndPositions(prisma, organizationId);
     await migrateLegacyRolePositions(prisma, organizationId);
     logger.warn(
-      { organizationId },
-      'Permissions & postes systeme auto-repares (tenant provisionne sans seed ABAC)',
+      { organizationId, forceReseed },
+      forceReseed
+        ? 'Permissions & postes systeme re-seedes (FORCE_PERMISSION_RESEED)'
+        : 'Permissions & postes systeme auto-repares (tenant provisionne sans seed ABAC)',
     );
   }
 
