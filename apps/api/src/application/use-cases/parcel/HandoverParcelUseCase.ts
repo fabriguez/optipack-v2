@@ -5,6 +5,7 @@ import { HistoryService } from '../../services/HistoryService';
 import { StorageChargeService } from '../../services/StorageChargeService';
 import { DebtBlockConfigService } from '../../services/DebtBlockConfigService';
 import { prisma } from '../../../config/database';
+import { assertAgencyActive } from '../../services/scope/agencyScope';
 import { generateReference } from '@transitsoftservices/shared';
 
 interface HandoverInput {
@@ -47,6 +48,10 @@ export class HandoverParcelUseCase {
     if (parcel.status === 'DELIVERED') {
       throw new BusinessError('Ce colis a deja ete remis.');
     }
+
+    // Agence desactivee : aucune remise possible dans une agence morte.
+    const handoverAgencyId = (parcel as any).warehouse?.agency?.id ?? (parcel as any).warehouse?.agencyId ?? null;
+    if (handoverAgencyId) await assertAgencyActive(handoverAgencyId);
 
     const receiver = await prisma.client.findUnique({
       where: { id: input.receivedByClientId },

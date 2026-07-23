@@ -6,7 +6,7 @@ import { INVOICE_REPOSITORY, type IInvoiceRepository } from '../../interfaces/II
 import { CASH_REGISTER_REPOSITORY, type ICashRegisterRepository } from '../../interfaces/ICashRegisterRepository';
 import { JOURNAL_ENTRY_REPOSITORY, type IJournalEntryRepository } from '../../interfaces/IJournalEntryRepository';
 import { BusinessError, NotFoundError } from '../../../domain/errors/BusinessError';
-import { assertAgencyActive } from '../../services/scope/agencyScope';
+import { assertAgencyActive, assertAgencyInScope, type ScopeCtx } from '../../services/scope/agencyScope';
 import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 import { prisma } from '../../../config/database';
 import { LoyaltyConfigService } from '../../services/LoyaltyConfigService';
@@ -37,7 +37,7 @@ export class RecordPaymentUseCase {
     private accountingAccounts: AccountingAccountService,
   ) {}
 
-  async execute(input: RecordPaymentInput, userId: string): Promise<any> {
+  async execute(input: RecordPaymentInput, userId: string, ctx?: ScopeCtx): Promise<any> {
     // 1. Validate invoice
     let invoice = await this.invoiceRepo.findById(input.invoiceId);
     if (!invoice) throw new NotFoundError('Facture', input.invoiceId);
@@ -49,6 +49,10 @@ export class RecordPaymentUseCase {
     // agencyId cote serveur depuis invoice.agencyId et on l'utilise pour le
     // Payment, la caisse, le journal et les evenements.
     const agencyId = invoice.agencyId;
+
+    // SECURITE (scope agence) : un personnel ne peut encaisser que pour une de
+    // SES agences. Garde dure (independante du mode shadow), admin bypass.
+    if (ctx) assertAgencyInScope(agencyId, ctx);
 
     // Agence desactivee : aucun encaissement (caisse, journal) possible.
     await assertAgencyActive(agencyId);
@@ -111,6 +115,7 @@ export class RecordPaymentUseCase {
         const r = await this.execute(
           { ...input, invoiceId: s.invoiceId, amount: s.amount },
           userId,
+          ctx,
         );
         subPayments.push(r);
       }

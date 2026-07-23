@@ -194,7 +194,7 @@ export default function EmailSettingsPage() {
                 (1-30 min), clique &laquo; Verifier &raquo;.
               </p>
             </header>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto scroll-x-top">
               <table className="w-full text-xs">
                 <thead className="border-b bg-gray-50 text-gray-500">
                   <tr>

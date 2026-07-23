@@ -560,6 +560,11 @@ model User {
   // Embed comme `pv` dans le JWT ; le middleware rejette les tokens dont le `pv`
   // ne correspond plus (401), forcant un refresh qui embarque les nouvelles perms.
   permissionVersion Int       @default(0)
+  // Cascade desactivation agence : si non-null, ce compte a ete desactive
+  // AUTOMATIQUEMENT parce que son unique agence a ete desactivee. Sert a le
+  // reactiver quand l'agence est reactivee, SANS ressusciter un compte suspendu
+  // manuellement (dont ce champ reste null). Cf. AgencyCascadeService.
+  deactivatedByAgencyId String?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 

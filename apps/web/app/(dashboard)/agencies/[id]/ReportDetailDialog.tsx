@@ -130,7 +130,7 @@ function WindowBanner({ w }: { w?: any }) {
 
 function DetailTable({ head, rows, truncatedCount }: { head: string[]; rows: ReactNode[][]; truncatedCount?: number }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-gray-100 p-2">
+    <div className="overflow-x-auto scroll-x-top rounded-xl border border-gray-100 p-2">
       <table className="w-full text-xs">
         <thead className="text-left text-gray-500">
           <tr>

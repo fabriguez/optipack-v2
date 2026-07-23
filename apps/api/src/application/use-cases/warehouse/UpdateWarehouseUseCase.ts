@@ -9,6 +9,7 @@ interface UpdateWarehouseInput {
   location?: string;
   storageFreeDays?: number;
   storageDailyRate?: number;
+  isActive?: boolean;
 }
 
 @injectable()

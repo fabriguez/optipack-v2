@@ -19,7 +19,7 @@ import {
   useSetScheduleDays,
 } from '@/lib/hooks/useHR';
 import type { WorkScheduleDTO, WorkScheduleDayDTO } from '@/lib/api/hr';
-import { Plus, Pencil, Trash2, Save } from 'lucide-react';
+import { Plus, Pencil, Trash2, Save, Power, PowerOff } from 'lucide-react';
 
 const DAYS = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
 
@@ -161,6 +161,15 @@ function ScheduleDaysEditor({
         </div>
         <Can permission="schedule.manage">
           <div className="flex items-center gap-1">
+            <AppButton
+              variant="ghost"
+              size="sm"
+              loading={updateMut.isPending}
+              onClick={() => updateMut.mutate({ id: schedule.id, data: { isActive: !schedule.isActive } })}
+            >
+              {schedule.isActive ? <PowerOff className="h-4 w-4 text-amber-600" /> : <Power className="h-4 w-4 text-green-600" />}
+              {schedule.isActive ? 'Desactiver' : 'Activer'}
+            </AppButton>
             <AppButton variant="ghost" size="sm" onClick={() => setEditingMeta(true)}>
               <Pencil className="h-4 w-4" />
             </AppButton>

@@ -6,6 +6,7 @@ import Link from 'next/link';
 import {
   ArrowLeft, Building2, Warehouse, Users, MapPin, Phone, Mail, Globe, Edit,
   Plus, Package, CreditCard, Receipt, UserCog, Eye, Vault, Container, Trash2, Wallet,
+  Power, PowerOff,
 } from 'lucide-react';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { Can } from '@/lib/components/Can';
@@ -20,7 +21,7 @@ import { AppDataTable } from '@/components/ui/AppDataTable';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { RowActions } from '@/components/shared/RowActions';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
-import { useAgency } from '@/lib/hooks/useAgencies';
+import { useAgency, useUpdateAgency } from '@/lib/hooks/useAgencies';
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
@@ -52,6 +53,7 @@ export default function AgencyDetailPage({ params }: { params: Promise<{ id: str
   const { id } = use(params);
   const router = useRouter();
   const { data, isLoading } = useAgency(id);
+  const updateMutation = useUpdateAgency();
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const deleteMutation = useDeleteAgency();
@@ -355,6 +357,14 @@ export default function AgencyDetailPage({ params }: { params: Promise<{ id: str
               <AppButton variant="outline" onClick={() => setShowEdit(true)}>
                 <Edit className="h-4 w-4" />
                 Modifier
+              </AppButton>
+              <AppButton
+                variant="outline"
+                loading={updateMutation.isPending}
+                onClick={() => updateMutation.mutate({ id: agency.id, data: { isActive: !agency.isActive } })}
+              >
+                {agency.isActive ? <PowerOff className="h-4 w-4 text-amber-600" /> : <Power className="h-4 w-4 text-green-600" />}
+                {agency.isActive ? 'Desactiver' : 'Activer'}
               </AppButton>
               <AppButton variant="outline" onClick={() => setShowDelete(true)}>
                 <Trash2 className="h-4 w-4 text-red-600" />

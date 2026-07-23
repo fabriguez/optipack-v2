@@ -4,6 +4,7 @@ import { PARCEL_REPOSITORY, type IParcelRepository } from '../../interfaces/IPar
 import { NotFoundError, InvalidStatusTransitionError } from '../../../domain/errors/BusinessError';
 import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 import { HistoryService } from '../../services/HistoryService';
+import { assertAgencyActive } from '../../services/scope/agencyScope';
 
 @injectable()
 export class UpdateParcelStatusUseCase {
@@ -22,6 +23,10 @@ export class UpdateParcelStatusUseCase {
     if (!parcel) {
       throw new NotFoundError('Colis', parcelId);
     }
+
+    // Agence desactivee : aucune action sur les colis qui y sont (dead agency).
+    const parcelAgencyId = (parcel as any).warehouse?.agency?.id ?? (parcel as any).warehouse?.agencyId ?? null;
+    if (parcelAgencyId) await assertAgencyActive(parcelAgencyId);
 
     const oldStatus = parcel.status;
     const isStatusChange = newStatus !== oldStatus;

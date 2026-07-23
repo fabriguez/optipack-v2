@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Upload, Eye } from 'lucide-react';
+import { Plus, Upload, Eye, Power, PowerOff } from 'lucide-react';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
@@ -15,12 +15,12 @@ import { ExportButton } from '@/components/shared/ExportButton';
 import { CsvImportDialog } from '@/components/shared/CsvImportDialog';
 import { RowActions } from '@/components/shared/RowActions';
 import { searchers } from '@/lib/api/searchers';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { toast } from 'sonner';
 import { WarehouseFormDialog } from './WarehouseFormDialog';
 import { Can } from '@/lib/components/Can';
-import { useAgencyIds, useIsTenantAdmin } from '@/lib/hooks/usePermission';
+import { useAgencyIds, useIsTenantAdmin, usePermission } from '@/lib/hooks/usePermission';
 
 export default function WarehousesPage() {
   const router = useRouter();
@@ -32,6 +32,9 @@ export default function WarehousesPage() {
   const agencyIdFilter = searchParams.get('agencyId') || '';
   const isAdmin = useIsTenantAdmin();
   const agencyIds = useAgencyIds();
+  const qc = useQueryClient();
+  // Permission ABAC : activation / desactivation d'un magasin.
+  const canManageWarehouse = usePermission('warehouse.manage');
   // Employe d'une seule agence : verrouille la creation au magasin de son agence.
   const singleUserAgencyId = !isAdmin && agencyIds.length === 1 ? agencyIds[0] : undefined;
 
@@ -45,6 +48,17 @@ export default function WarehousesPage() {
         agencyId: agencyIdFilter || undefined,
       },
     }).then((r) => r.data),
+  });
+
+  const toggleActiveMutation = useMutation({
+    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
+      apiClient.patch(`/warehouses/${id}`, { isActive }).then((r) => r.data),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ['warehouses'] });
+      toast.success(vars.isActive ? 'Magasin active' : 'Magasin desactive');
+    },
+    onError: (e: { response?: { data?: { message?: string } } }) =>
+      toast.error(e?.response?.data?.message || 'Erreur lors de la mise a jour'),
   });
 
   const handleImport = async (rows: Record<string, string>[]) => {
@@ -90,6 +104,11 @@ export default function WarehousesPage() {
       render: (row: any) => (
         <RowActions actions={[
           { label: 'Voir details', icon: <Eye className="h-4 w-4" />, onClick: () => router.push(`/warehouses/${row.id}`) },
+          ...(canManageWarehouse ? [{
+            label: row.isActive ? 'Desactiver' : 'Activer',
+            icon: row.isActive ? <PowerOff className="h-4 w-4" /> : <Power className="h-4 w-4" />,
+            onClick: () => toggleActiveMutation.mutate({ id: row.id, isActive: !row.isActive }),
+          }] : []),
         ]} />
       ),
     },

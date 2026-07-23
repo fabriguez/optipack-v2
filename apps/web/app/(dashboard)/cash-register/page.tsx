@@ -227,7 +227,7 @@ export default function CashRegisterPage() {
                 <p className="text-sm text-gray-400">Aucun mouvement sur cette caisse.</p>
               ) : (
                 <>
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto scroll-x-top">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="text-left text-xs text-gray-500">

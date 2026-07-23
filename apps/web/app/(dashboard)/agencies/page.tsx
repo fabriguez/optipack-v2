@@ -3,7 +3,7 @@
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Upload, Eye, Edit, Trash2 } from 'lucide-react';
+import { Plus, Upload, Eye, Edit, Trash2, Power, PowerOff } from 'lucide-react';
 import { AgencyAvatar } from '@/components/shared/AgencyAvatar';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard } from '@/components/ui/AppCard';
@@ -18,7 +18,7 @@ import { RowActions } from '@/components/shared/RowActions';
 import { Can } from '@/lib/components/Can';
 import { usePermission } from '@/lib/hooks/usePermission';
 import { useServerPagination } from '@/lib/hooks/useServerPagination';
-import { useAgencies, useDeleteAgency } from '@/lib/hooks/useAgencies';
+import { useAgencies, useDeleteAgency, useUpdateAgency } from '@/lib/hooks/useAgencies';
 import { AgencyFormDialog } from './AgencyFormDialog';
 import { apiClient } from '@/lib/api/client';
 import { toast } from 'sonner';
@@ -30,6 +30,7 @@ function AgenciesContent() {
   const [showCreate, setShowCreate] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const deleteMutation = useDeleteAgency();
+  const updateMutation = useUpdateAgency();
   // Permission ABAC : creation/suppression d'agence = agency.manage
   const canManageAgency = usePermission('agency.manage');
 
@@ -117,6 +118,11 @@ function AgenciesContent() {
           actions={[
             { label: 'Voir', icon: <Eye className="h-4 w-4" />, onClick: () => router.push(`/agencies/${row.id}`) },
             { label: 'Modifier', icon: <Edit className="h-4 w-4" />, onClick: () => router.push(`/agencies/${row.id}`) },
+            ...(canManageAgency ? [{
+              label: row.isActive ? 'Desactiver' : 'Activer',
+              icon: row.isActive ? <PowerOff className="h-4 w-4" /> : <Power className="h-4 w-4" />,
+              onClick: () => updateMutation.mutate({ id: row.id, data: { isActive: !row.isActive } }),
+            }] : []),
             ...(canManageAgency ? [{ label: 'Supprimer', icon: <Trash2 className="h-4 w-4" />, onClick: () => deleteMutation.mutate(row.id), variant: 'destructive' as const }] : []),
           ]}
         />

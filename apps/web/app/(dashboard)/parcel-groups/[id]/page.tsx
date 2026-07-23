@@ -96,7 +96,7 @@ export default function ParcelGroupDetailPage({ params }: { params: Promise<{ id
           <div className="px-2 py-2">
             <h3 className="text-sm font-semibold text-gray-700">Colis du groupe ({parcels.length})</h3>
           </div>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto scroll-x-top">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-xs text-gray-500">
                 <tr>

@@ -3,6 +3,7 @@ import type { UpdateAgencyInput } from '@transitsoftservices/shared';
 import { AGENCY_REPOSITORY, type IAgencyRepository } from '../../interfaces/IAgencyRepository';
 import { NotFoundError } from '../../../domain/errors/BusinessError';
 import { realtimeService } from '../../../infrastructure/realtime/RealtimeService';
+import { cascadeDeactivateAgency, cascadeReactivateAgency } from '../../services/AgencyCascadeService';
 
 @injectable()
 export class UpdateAgencyUseCase {
@@ -27,7 +28,16 @@ export class UpdateAgencyUseCase {
       ...(input.responsibleUserId !== undefined && {
         responsibleUser: { connect: { id: input.responsibleUserId } },
       }),
+      // Activer / desactiver l'agence (toggle depuis le listing / le detail).
+      ...(input.isActive !== undefined && { isActive: input.isActive }),
     });
+
+    // Cascade sur bascule d'etat : desactiver -> coupe+deconnecte les employes ;
+    // reactiver -> reactive uniquement ceux coupes par la cascade.
+    if (input.isActive !== undefined && input.isActive !== agency.isActive) {
+      if (input.isActive) await cascadeReactivateAgency(id);
+      else await cascadeDeactivateAgency(id);
+    }
 
     realtimeService.emitResourceChange(agency.organizationId, 'agencies', 'updated', id);
     return updated;

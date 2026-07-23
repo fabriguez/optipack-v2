@@ -16,7 +16,7 @@ import {
   useUpdatePosition,
   useDeletePosition,
 } from '@/lib/hooks/useHR';
-import { Pencil, Trash2, Plus, Lock } from 'lucide-react';
+import { Pencil, Trash2, Plus, Lock, Power, PowerOff } from 'lucide-react';
 
 interface PositionRow {
   id: string;
@@ -37,6 +37,7 @@ export default function PositionsPage() {
   const [creating, setCreating] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<PositionRow | null>(null);
   const deleteMut = useDeletePosition();
+  const updateMut = useUpdatePosition();
 
   return (
     <div className="space-y-4">
@@ -53,7 +54,7 @@ export default function PositionsPage() {
       </div>
 
       <AppCard>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto scroll-x-top">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500">
               <tr>
@@ -103,6 +104,18 @@ export default function PositionsPage() {
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
                       <Can permission="position.manage">
+                        <button
+                          onClick={() => updateMut.mutate({ id: p.id, data: { isActive: !p.isActive } })}
+                          disabled={updateMut.isPending}
+                          className="rounded p-1.5 text-gray-500 hover:bg-gray-100 disabled:opacity-50"
+                          title={p.isActive ? 'Desactiver' : 'Activer'}
+                        >
+                          {p.isActive ? (
+                            <PowerOff className="h-4 w-4 text-amber-600" />
+                          ) : (
+                            <Power className="h-4 w-4 text-green-600" />
+                          )}
+                        </button>
                         <button
                           onClick={() => setEditing(p)}
                           className="rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-900"

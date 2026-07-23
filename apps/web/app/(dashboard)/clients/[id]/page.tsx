@@ -3,7 +3,7 @@
 import { use, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, User, Package, CreditCard, Star, FileText, AlertTriangle, Plus, Eye, CheckCircle } from 'lucide-react';
+import { ArrowLeft, User, Package, CreditCard, Star, FileText, AlertTriangle, Plus, Eye, CheckCircle, Power, PowerOff } from 'lucide-react';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard, AppCardHeader } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
@@ -14,7 +14,7 @@ import { StatusBadge } from '@/components/shared/StatusBadge';
 import { RowActions } from '@/components/shared/RowActions';
 import { Can } from '@/lib/components/Can';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
-import { useClient } from '@/lib/hooks/useClients';
+import { useClient, useUpdateClient } from '@/lib/hooks/useClients';
 import { useParcels } from '@/lib/hooks/useParcels';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
@@ -37,6 +37,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   const { id } = use(params);
   const router = useRouter();
   const { data, isLoading } = useClient(id);
+  const updateMut = useUpdateClient();
   const [parcelPage, setParcelPage] = useState(1);
   const [invoicePage, setInvoicePage] = useState(1);
   const [debtPage, setDebtPage] = useState(1);
@@ -289,6 +290,16 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
             </div>
             <p className="text-sm text-gray-500 mt-0.5">{client.phone} {client.email ? `-- ${client.email}` : ''}</p>
           </div>
+          <Can permission="client.update">
+            <AppButton
+              variant="outline"
+              loading={updateMut.isPending}
+              onClick={() => updateMut.mutate({ id: client.id, data: { isActive: !client.isActive } })}
+            >
+              {client.isActive ? <PowerOff className="h-4 w-4 text-amber-600" /> : <Power className="h-4 w-4 text-green-600" />}
+              {client.isActive ? 'Desactiver' : 'Activer'}
+            </AppButton>
+          </Can>
         </div>
 
         {/* Reste a payer cumule (factures + dettes) */}

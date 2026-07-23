@@ -2,16 +2,17 @@
 
 import { use, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Route, MapPin, Clock, DollarSign, Plane, Ship, Truck, Edit } from 'lucide-react';
+import { ArrowLeft, Route, MapPin, Clock, DollarSign, Plane, Ship, Truck, Edit, Power, PowerOff } from 'lucide-react';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppBadge } from '@/components/ui/AppBadge';
 import { AppButton } from '@/components/ui/AppButton';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 import { TransitRouteFormDialog } from '../TransitRouteFormDialog';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { formatAmount } from '@transitsoftservices/shared';
+import { toast } from 'sonner';
 import { Can } from '@/lib/components/Can';
 
 const TYPE_CONFIG: Record<string, { label: string; variant: 'info' | 'warning' | 'success'; icon: any }> = {
@@ -31,11 +32,22 @@ function formatAddedValue(value: unknown, type: unknown): string {
 export default function TransitRouteDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const qc = useQueryClient();
 
   const { data, isLoading } = useQuery({
     queryKey: ['transit-routes', id],
     queryFn: () => apiClient.get(`/transit-routes/${id}`).then((r) => r.data),
     enabled: !!id,
+  });
+
+  const toggleActiveMutation = useMutation({
+    mutationFn: (isActive: boolean) =>
+      apiClient.patch(`/transit-routes/${id}`, { isActive }).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['transit-routes'] });
+      toast.success('Statut mis a jour');
+    },
+    onError: () => toast.error('Erreur'),
   });
 
   const [showEdit, setShowEdit] = useState(false);
@@ -71,6 +83,14 @@ export default function TransitRouteDetailPage({ params }: { params: Promise<{ i
             <AppButton variant="outline" onClick={() => setShowEdit(true)}>
               <Edit className="h-4 w-4" />
               Modifier
+            </AppButton>
+            <AppButton
+              variant="outline"
+              loading={toggleActiveMutation.isPending}
+              onClick={() => toggleActiveMutation.mutate(!route.isActive)}
+            >
+              {route.isActive ? <PowerOff className="h-4 w-4 text-amber-600" /> : <Power className="h-4 w-4 text-green-600" />}
+              {route.isActive ? 'Desactiver' : 'Activer'}
             </AppButton>
           </Can>
         </div>

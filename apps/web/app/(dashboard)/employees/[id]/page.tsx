@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowLeft, UserCircle, Building2, Phone, CreditCard, Calendar, Briefcase, Hash, Edit,
-  Clock, ListChecks, Plane, Gavel, Star,
+  Clock, ListChecks, Plane, Gavel, Star, Power,
 } from 'lucide-react';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard } from '@/components/ui/AppCard';
@@ -13,7 +13,7 @@ import { AppBadge } from '@/components/ui/AppBadge';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppTabs } from '@/components/ui/AppTabs';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
 import { EmployeeFormDialog } from '../EmployeeFormDialog';
@@ -35,6 +35,18 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
   const router = useRouter();
   const [showEdit, setShowEdit] = useState(false);
   const [confirmResend, setConfirmResend] = useState(false);
+  const queryClient = useQueryClient();
+
+  // Reactivation : PATCH { isActive: true, endDate: null } (le back n'autorise
+  // l'edition d'un employe inactif que dans ce cas precis).
+  const reactivateMutation = useMutation({
+    mutationFn: () => apiClient.patch(`/employees/${id}`, { isActive: true, endDate: null }),
+    onSuccess: () => {
+      toast.success('Employe reactive');
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Reactivation impossible'),
+  });
 
   const resendMutation = useMutation({
     mutationFn: () => apiClient.post(`/employees/${id}/resend-credentials`),
@@ -181,6 +193,16 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
                 <AppButton variant="outline" onClick={() => setShowEdit(true)}>
                   <Edit className="h-4 w-4" />
                   Modifier
+                </AppButton>
+              )}
+              {!employee.isActive && (
+                <AppButton
+                  variant="outline"
+                  loading={reactivateMutation.isPending}
+                  onClick={() => reactivateMutation.mutate()}
+                >
+                  <Power className="h-4 w-4 text-green-600" />
+                  Reactiver
                 </AppButton>
               )}
             </Can>

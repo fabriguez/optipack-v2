@@ -11,7 +11,10 @@ export const createAgencySchema = z.object({
   responsibleUserId: z.string().uuid('ID responsable invalide').optional(),
 });
 
-export const updateAgencySchema = createAgencySchema.partial();
+export const updateAgencySchema = createAgencySchema.partial().extend({
+  // Activer / desactiver l'agence (toggle depuis le listing / le detail).
+  isActive: z.boolean().optional(),
+});
 
 export const CHARGE_TYPES = [
   'WATER',

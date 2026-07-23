@@ -72,6 +72,19 @@ export async function assertAgencyActive(agencyId: string): Promise<void> {
   }
 }
 
+/**
+ * Un personnel ne peut agir (ex. encaisser un paiement) que pour une de SES
+ * agences. Admin (ADMIN / SUPER_ADMIN) => bypass. Garde DURE, independante du
+ * mode shadow/enforce : contrairement a `makeScope.assert`, elle bloque
+ * toujours. 404 (coherent avec le scope-deny : ne revele pas l'existence).
+ * A appeler une fois l'agence cible resolue (ex. invoice.agencyId).
+ */
+export function assertAgencyInScope(agencyId: string, ctx: ScopeCtx): void {
+  if (ctx.unrestricted) return;
+  if (ctx.agencyIds.includes(agencyId)) return;
+  throw new NotFoundError('Agence', agencyId);
+}
+
 type AnyWhere = Record<string, unknown>;
 
 interface ScopeResolver<TWhere extends AnyWhere = AnyWhere> {

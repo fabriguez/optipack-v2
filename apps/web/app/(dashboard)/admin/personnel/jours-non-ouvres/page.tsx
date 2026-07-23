@@ -63,7 +63,7 @@ export default function HolidaysPage() {
       </div>
 
       <AppCard>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto scroll-x-top">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500">
               <tr>

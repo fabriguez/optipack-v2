@@ -2,6 +2,7 @@ import { inject, injectable } from 'tsyringe';
 import { AGENCY_REPOSITORY, type IAgencyRepository } from '../../interfaces/IAgencyRepository';
 import { NotFoundError } from '../../../domain/errors/BusinessError';
 import { realtimeService } from '../../../infrastructure/realtime/RealtimeService';
+import { cascadeDeactivateAgency } from '../../services/AgencyCascadeService';
 
 @injectable()
 export class DeleteAgencyUseCase {
@@ -15,7 +16,9 @@ export class DeleteAgencyUseCase {
       throw new NotFoundError('Agence', id);
     }
 
-    await this.agencyRepo.delete(id);
+    await this.agencyRepo.delete(id); // soft-delete : isActive=false
+    // Cascade : coupe + deconnecte les comptes des employes de l'agence.
+    await cascadeDeactivateAgency(id);
     realtimeService.emitResourceChange(agency.organizationId, 'agencies', 'deleted', id);
   }
 }

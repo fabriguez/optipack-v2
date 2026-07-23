@@ -3,7 +3,7 @@
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Upload, Users, Eye, Package, CreditCard, Edit, Trash2 } from 'lucide-react';
+import { Plus, Upload, Users, Eye, Package, CreditCard, Edit, Trash2, Power, PowerOff } from 'lucide-react';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
@@ -17,7 +17,7 @@ import { XlsxExportButton } from '@/components/shared/XlsxExportButton';
 import { XlsxImportDialog } from '@/components/shared/XlsxImportDialog';
 import { RowActions } from '@/components/shared/RowActions';
 import { useServerPagination } from '@/lib/hooks/useServerPagination';
-import { useClients, useDeleteClient } from '@/lib/hooks/useClients';
+import { useClients, useDeleteClient, useUpdateClient } from '@/lib/hooks/useClients';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { searchers } from '@/lib/api/searchers';
 import { ClientFormDialog } from './ClientFormDialog';
@@ -36,6 +36,7 @@ function ClientsContent() {
   const [editClient, setEditClient] = useState<any | null>(null);
   const [confirmDeleteClient, setConfirmDeleteClient] = useState<any | null>(null);
   const deleteMut = useDeleteClient();
+  const updateMut = useUpdateClient();
   // Permissions ABAC : modification / suppression client (actions de ligne).
   const canUpdateClient = usePermission('client.update');
   const canDeleteClient = usePermission('client.delete');
@@ -147,7 +148,14 @@ function ClientsContent() {
           { label: 'Voir les colis', icon: <Package className="h-4 w-4" />, onClick: () => router.push(`/parcels?clientId=${row.id}`) },
           { label: 'Voir les factures', icon: <CreditCard className="h-4 w-4" />, onClick: () => router.push(`/invoices?clientId=${row.id}`) },
           ...(canUpdateClient
-            ? [{ label: 'Modifier', icon: <Edit className="h-4 w-4" />, onClick: () => setEditClient(row) }]
+            ? [
+                { label: 'Modifier', icon: <Edit className="h-4 w-4" />, onClick: () => setEditClient(row) },
+                {
+                  label: row.isActive ? 'Desactiver' : 'Activer',
+                  icon: row.isActive ? <PowerOff className="h-4 w-4" /> : <Power className="h-4 w-4" />,
+                  onClick: () => updateMut.mutate({ id: row.id, data: { isActive: !row.isActive } }),
+                },
+              ]
             : []),
           ...(canDeleteClient
             ? [{ label: 'Supprimer', icon: <Trash2 className="h-4 w-4" />, onClick: () => setConfirmDeleteClient(row), variant: 'destructive' as const }]

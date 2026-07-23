@@ -77,6 +77,7 @@ export const updateTransitRouteSchema = z
     estimatedDurationDays: z.number().int().min(0).optional(),
     addedValue: addedValueField,
     addedValueType: addedValueTypeField,
+    isActive: z.boolean().optional(),
   })
   .superRefine((data, ctx) => {
     if (data.type !== undefined) validatePricing(data, ctx);

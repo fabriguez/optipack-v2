@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Upload, Eye, Edit, Trash2 } from 'lucide-react';
+import { Plus, Upload, Eye, Edit, Trash2, Power } from 'lucide-react';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
@@ -37,6 +37,8 @@ export default function EmployeesPage() {
   const queryClient = useQueryClient();
   // Permission ABAC : DELETE /employees/:id exige personnel.delete.
   const canDeleteEmployee = usePermission('personnel.delete');
+  // Permission ABAC : PATCH /employees/:id (reactivation) exige personnel.update.
+  const canUpdateEmployee = usePermission('personnel.update');
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => apiClient.delete(`/employees/${id}`),
@@ -47,6 +49,19 @@ export default function EmployeesPage() {
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.message || 'Suppression impossible');
+    },
+  });
+
+  // Reactivation : PATCH { isActive: true, endDate: null } (le back n'autorise
+  // l'edition d'un employe inactif que dans ce cas precis).
+  const reactivateMutation = useMutation({
+    mutationFn: (id: string) => apiClient.patch(`/employees/${id}`, { isActive: true, endDate: null }),
+    onSuccess: () => {
+      toast.success('Employe reactive');
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.message || 'Reactivation impossible');
     },
   });
 
@@ -134,6 +149,11 @@ export default function EmployeesPage() {
             icon: <Trash2 className="h-4 w-4" />,
             variant: 'destructive' as const,
             onClick: () => setToDelete({ id: row.id, fullName: row.fullName }),
+          }] : []),
+          ...(!row.isActive && canUpdateEmployee ? [{
+            label: 'Reactiver',
+            icon: <Power className="h-4 w-4" />,
+            onClick: () => reactivateMutation.mutate(row.id),
           }] : []),
         ]} />
       ),

@@ -22,7 +22,9 @@ export class PaymentController {
       // fait jamais confiance a body.agencyId (attribution d'encaissement a une
       // agence arbitraire, credit caisse + ecriture journal frauduleux).
       const useCase = container.resolve(RecordPaymentUseCase);
-      const result = await useCase.execute(req.body, req.user!.userId);
+      // ctx : garde dure "agence encaisseuse dans mes agences" (admin bypass),
+      // appliquee dans le use-case sur invoice.agencyId, meme en mode shadow.
+      const result = await useCase.execute(req.body, req.user!.userId, scopeCtx(req));
       // Realtime : notifie le client proprietaire de la facture
       try {
         const invoiceId = (result as { invoiceId?: string })?.invoiceId;

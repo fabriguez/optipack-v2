@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Upload, Route, Eye, Edit } from 'lucide-react';
+import { Plus, Upload, Route, Eye, Edit, Power, PowerOff } from 'lucide-react';
 import { PageTransition } from '@/components/shared/PageTransition';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppButton } from '@/components/ui/AppButton';
@@ -14,12 +14,13 @@ import { FilterDialog } from '@/components/shared/FilterDialog';
 import { ExportButton } from '@/components/shared/ExportButton';
 import { CsvImportDialog } from '@/components/shared/CsvImportDialog';
 import { RowActions } from '@/components/shared/RowActions';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { formatAmount } from '@transitsoftservices/shared';
 import { toast } from 'sonner';
 import { TransitRouteFormDialog } from './TransitRouteFormDialog';
 import { Can } from '@/lib/components/Can';
+import { usePermission } from '@/lib/hooks/usePermission';
 
 const TYPE_COLORS: Record<string, string> = {
   AIR: 'bg-blue-50 text-blue-700',
@@ -44,8 +45,22 @@ export default function TransitRoutesPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
 
+  const qc = useQueryClient();
+  // Permission ABAC : modification / (des)activation d'une route de transit.
+  const canManageRoute = usePermission('transitroute.manage');
+
   const typeFilter = searchParams.get('type') || '';
   const isActiveFilter = searchParams.get('isActive') || '';
+
+  const toggleActiveMutation = useMutation({
+    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
+      apiClient.patch(`/transit-routes/${id}`, { isActive }).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['transit-routes'] });
+      toast.success('Statut mis a jour');
+    },
+    onError: () => toast.error('Erreur'),
+  });
 
   const { data, isLoading } = useQuery({
     queryKey: ['transit-routes', { page, type: typeFilter, isActive: isActiveFilter }],
@@ -129,6 +144,11 @@ export default function TransitRoutesPage() {
         <RowActions actions={[
           { label: 'Voir details', icon: <Eye className="h-4 w-4" />, onClick: () => router.push(`/transit-routes/${row.id}`) },
           { label: 'Modifier', icon: <Edit className="h-4 w-4" />, onClick: () => router.push(`/transit-routes/${row.id}`) },
+          ...(canManageRoute ? [{
+            label: row.isActive ? 'Desactiver' : 'Activer',
+            icon: row.isActive ? <PowerOff className="h-4 w-4" /> : <Power className="h-4 w-4" />,
+            onClick: () => toggleActiveMutation.mutate({ id: row.id, isActive: !row.isActive }),
+          }] : []),
         ]} />
       ),
     },

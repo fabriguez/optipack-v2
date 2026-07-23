@@ -3,7 +3,7 @@
 import { use, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { AlertTriangle, ArrowLeft, Package, Plus, Eye, Edit, Trash2, ArrowRightLeft, ClipboardCheck, PlayCircle, QrCode, HandCoins, MapPin, Camera, ScanLine, Boxes, Printer } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Package, Plus, Eye, Edit, Trash2, ArrowRightLeft, ClipboardCheck, PlayCircle, QrCode, HandCoins, MapPin, Camera, ScanLine, Boxes, Printer, Power, PowerOff } from 'lucide-react';
 import { BatchScanCollector } from '@/components/shared/BatchScanCollector';
 import { ParcelPickerList } from '@/components/shared/ParcelPickerList';
 import { normalizeScannedTracking } from '@/lib/utils/scanNormalize';
@@ -22,7 +22,7 @@ import { StatusBadge } from '@/components/shared/StatusBadge';
 import { RowActions } from '@/components/shared/RowActions';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParcels, useParcelFacets } from '@/lib/hooks/useParcels';
 import { WarehouseParcelFilters, type ParcelFilterValues } from './WarehouseParcelFilters';
 import { apiClient } from '@/lib/api/client';
@@ -102,6 +102,18 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
     enabled: !!id,
   });
   const warehouseAgencyId: string | undefined = data?.data?.agency?.id;
+
+  const toggleActiveMutation = useMutation({
+    mutationFn: (isActive: boolean) =>
+      apiClient.patch(`/warehouses/${id}`, { isActive }).then((r) => r.data),
+    onSuccess: (_data, isActive) => {
+      qc.invalidateQueries({ queryKey: ['warehouses'] });
+      qc.invalidateQueries({ queryKey: ['warehouses', id] });
+      toast.success(isActive ? 'Magasin active' : 'Magasin desactive');
+    },
+    onError: (e: { response?: { data?: { message?: string } } }) =>
+      toast.error(e?.response?.data?.message || 'Erreur lors de la mise a jour'),
+  });
 
   const { data: summaryData } = useQuery({
     queryKey: ['warehouses', id, 'summary'],
@@ -499,7 +511,9 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
       setPrintingLabels(false);
     }
   };
-  const selectableParcels = visibleParcels.filter(canModifyParcel);
+  // Selectionnable = colis en stock ET de mon agence (les actions groupees
+  // sont scopees agence cote API). Hors agence : visible mais non selectionnable.
+  const selectableParcels = visibleParcels.filter((p) => canModifyParcel(p) && parcelCanAct(p));
   const allVisibleSelected =
     selectableParcels.length > 0 && selectableParcels.every((r) => selectedParcelIds.has(r.id));
   const toggleAllVisible = () => {
@@ -528,7 +542,7 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
       label: '',
       className: 'w-8',
       render: (row: any) =>
-        canModifyParcel(row) ? (
+        canModifyParcel(row) && parcelCanAct(row) ? (
           <span onClick={(e) => e.stopPropagation()} className="inline-flex">
             <AppCheckbox
               checked={selectedParcelIds.has(row.id)}
@@ -702,6 +716,15 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
             <AppButton variant="outline" size="sm" onClick={() => setEditWarehouseOpen(true)}>
               <Edit className="h-3.5 w-3.5" />
               Modifier
+            </AppButton>
+            <AppButton
+              variant="outline"
+              size="sm"
+              loading={toggleActiveMutation.isPending}
+              onClick={() => toggleActiveMutation.mutate(!warehouse.isActive)}
+            >
+              {warehouse.isActive ? <PowerOff className="h-3.5 w-3.5 text-amber-600" /> : <Power className="h-3.5 w-3.5 text-green-600" />}
+              {warehouse.isActive ? 'Desactiver' : 'Activer'}
             </AppButton>
           </Can>
         </div>

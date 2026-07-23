@@ -82,16 +82,20 @@ function ParcelsContent() {
   const archiveMut = useArchiveParcels();
   const unarchiveMut = useUnarchiveParcels();
   const visibleRows: any[] = data?.data || [];
-  const allChecked = visibleRows.length > 0 && visibleRows.every((r) => selectedIds.has(r.id));
-  const someChecked = visibleRows.some((r) => selectedIds.has(r.id));
+  // Seuls les colis de mon agence sont selectionnables (les actions groupees
+  // archive/desarchive sont scopees agence cote API). Un colis hors agence
+  // reste visible mais non selectionnable.
+  const selectableRows = visibleRows.filter((r) => parcelCanAct(r));
+  const allChecked = selectableRows.length > 0 && selectableRows.every((r) => selectedIds.has(r.id));
+  const someChecked = selectableRows.some((r) => selectedIds.has(r.id));
 
   const toggleAllVisible = () => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (allChecked) {
-        for (const r of visibleRows) next.delete(r.id);
+        for (const r of selectableRows) next.delete(r.id);
       } else {
-        for (const r of visibleRows) next.add(r.id);
+        for (const r of selectableRows) next.add(r.id);
       }
       return next;
     });
@@ -239,17 +243,19 @@ function ParcelsContent() {
       // un bouton flottant dans la colonne via render).
       label: '',
       className: 'w-8',
-      render: (row: any) => (
-        <span
-          onClick={(e) => {
-            e.stopPropagation();
-            toggleOne(row.id);
-          }}
-          className="inline-flex items-center"
-        >
-          <AppCheckbox checked={selectedIds.has(row.id)} onCheckedChange={() => toggleOne(row.id)} />
-        </span>
-      ),
+      // Colis hors agence : non selectionnable (pas de case a cocher).
+      render: (row: any) =>
+        parcelCanAct(row) ? (
+          <span
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleOne(row.id);
+            }}
+            className="inline-flex items-center"
+          >
+            <AppCheckbox checked={selectedIds.has(row.id)} onCheckedChange={() => toggleOne(row.id)} />
+          </span>
+        ) : null,
     },
     {
       key: 'trackingNumber',

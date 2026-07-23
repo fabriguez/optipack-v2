@@ -12,7 +12,10 @@ export const createWarehouseSchema = z.object({
   storageDailyRate: z.number().nonnegative().optional(),
 });
 
-export const updateWarehouseSchema = createWarehouseSchema.omit({ agencyId: true }).partial();
+export const updateWarehouseSchema = createWarehouseSchema
+  .omit({ agencyId: true })
+  .partial()
+  .extend({ isActive: z.boolean().optional() });
 
 export type CreateWarehouseInput = z.infer<typeof createWarehouseSchema>;
 export type UpdateWarehouseInput = z.infer<typeof updateWarehouseSchema>;

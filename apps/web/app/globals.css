@@ -258,3 +258,14 @@ body {
 
 /* Hide react-country-state-city default styles (we use custom components) */
 .react-country-state-city { display: none; }
+
+/* ============================================================
+   Listings : barre de defilement horizontale en HAUT du tableau
+   (au lieu d'en bas). Technique rotateX double-flip : le conteneur
+   overflow-x-auto est retourne verticalement, ses enfants directs
+   sont remis a l'endroit -> visuellement identique, mais l'ascenseur
+   horizontal s'affiche en haut. A poser sur le conteneur scrollable
+   de chaque listing (`overflow-x-auto scroll-x-top`).
+   ============================================================ */
+.scroll-x-top { transform: rotateX(180deg); }
+.scroll-x-top > * { transform: rotateX(180deg); }
