@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Download } from 'lucide-react';
 import { AppButton } from '@/components/ui/AppButton';
+import { Can } from '@/lib/components/Can';
 import { apiClient } from '@/lib/api/client';
 import { toast } from 'sonner';
 
@@ -47,10 +48,14 @@ export function XlsxExportButton({ endpoint, fileName, params, label }: XlsxExpo
     }
   };
 
+  // L'API /exports impose deja report.export ; on aligne l'UI pour ne pas
+  // afficher un bouton qui repondrait 403.
   return (
-    <AppButton variant="outline" size="sm" onClick={onClick} loading={busy}>
-      <Download className="h-3.5 w-3.5" />
-      {label ?? 'Exporter (XLSX)'}
-    </AppButton>
+    <Can permission="report.export">
+      <AppButton variant="outline" size="sm" onClick={onClick} loading={busy}>
+        <Download className="h-3.5 w-3.5" />
+        {label ?? 'Exporter (XLSX)'}
+      </AppButton>
+    </Can>
   );
 }

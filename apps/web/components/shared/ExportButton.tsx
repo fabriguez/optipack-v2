@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Download } from 'lucide-react';
 import { AppButton } from '@/components/ui/AppButton';
+import { Can } from '@/lib/components/Can';
 import { toast } from 'sonner';
 
 interface ExportButtonProps {
@@ -86,10 +87,13 @@ export function ExportButton({ data, columns, fileName, sheetName }: ExportButto
     }
   };
 
+  // L'export de donnees (PII/financier) est une capacite dediee : report.export.
   return (
-    <AppButton variant="outline" size="sm" onClick={exportXlsx} loading={exporting}>
-      <Download className="h-3.5 w-3.5" />
-      Exporter
-    </AppButton>
+    <Can permission="report.export">
+      <AppButton variant="outline" size="sm" onClick={exportXlsx} loading={exporting}>
+        <Download className="h-3.5 w-3.5" />
+        Exporter
+      </AppButton>
+    </Can>
   );
 }

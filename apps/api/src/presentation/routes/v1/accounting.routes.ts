@@ -1,13 +1,14 @@
 import { Router } from 'express';
 import { AccountingController } from '../../controllers/AccountingController';
-import { authenticate, authorize, requirePermission } from '../../middleware/authMiddleware';
+import { authenticate, requirePermission } from '../../middleware/authMiddleware';
 import { validate } from '../../middleware/validate';
 import { paginationSchema } from '@transitsoftservices/shared';
 
 const router = Router();
 
 router.use(authenticate);
-router.use(authorize('SUPER_ADMIN', 'ADMIN', 'COMPTABLE'));
+// X1 : le garde de role legacy est retire — accounting.read (accorde aux postes
+// Comptable ET Chef d'agence) est desormais le seul gardien. Cf. audit X1.
 
 // Lecture du journal comptable
 router.get('/', validate(paginationSchema, 'query'), requirePermission('accounting.read'), AccountingController.getLedger);

@@ -1,13 +1,14 @@
 import { Router } from 'express';
 import { ReportController } from '../../controllers/ReportController';
-import { authenticate, authorize, requirePermission } from '../../middleware/authMiddleware';
+import { authenticate, requirePermission } from '../../middleware/authMiddleware';
 import { validate } from '../../middleware/validate';
 import { paginationSchema } from '@transitsoftservices/shared';
 
 const router = Router();
 
 router.use(authenticate);
-router.use(authorize('SUPER_ADMIN', 'ADMIN', 'COMPTABLE'));
+// X1 : garde de role legacy retire — report.read (accorde a Comptable ET Chef
+// d'agence) est le seul gardien. Les agregats sont deja scopes par agence. Cf. audit X1.
 
 router.get('/parcels', requirePermission('report.read'), validate(paginationSchema, 'query'), ReportController.parcels);
 router.get('/payments', requirePermission('report.read'), validate(paginationSchema, 'query'), ReportController.payments);

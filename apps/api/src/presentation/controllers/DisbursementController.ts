@@ -5,6 +5,8 @@ import { VoidDisbursementUseCase } from '../../application/use-cases/disbursemen
 import { DISBURSEMENT_REPOSITORY } from '../../application/interfaces/IDisbursementRepository';
 import { NotFoundError } from '../../domain/errors/BusinessError';
 import { disbursementScope, scopeCtx } from '../../application/services/scope/agencyScope';
+import { applyFieldPolicy, DISBURSEMENT_FIELD_POLICY } from '../serializers/fieldPolicy';
+import { getPolicy } from '../middleware/policyContext';
 
 export class DisbursementController {
   static async create(req: Request, res: Response, next: NextFunction) {
@@ -36,7 +38,9 @@ export class DisbursementController {
         },
         req.query,
       );
-      res.json({ success: true, ...result });
+      const policy = getPolicy(req);
+      const data = policy ? applyFieldPolicy(result.data, DISBURSEMENT_FIELD_POLICY, policy) : result.data;
+      res.json({ success: true, ...result, data });
     } catch (err) {
       next(err);
     }
@@ -48,7 +52,8 @@ export class DisbursementController {
       const repo = container.resolve<any>(DISBURSEMENT_REPOSITORY);
       const item = await repo.findById(req.params.id);
       if (!item) throw new NotFoundError('Bon de decaissement', req.params.id);
-      res.json({ success: true, data: item });
+      const policy = getPolicy(req);
+      res.json({ success: true, data: policy ? applyFieldPolicy(item, DISBURSEMENT_FIELD_POLICY, policy) : item });
     } catch (err) {
       next(err);
     }

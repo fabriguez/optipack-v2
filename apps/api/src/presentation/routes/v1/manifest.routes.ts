@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { ManifestController } from '../../controllers/ManifestController';
-import { authenticate, authorize, requirePermission } from '../../middleware/authMiddleware';
+// X1 : gardes de role legacy retires — manifest.read/manifest.manage (accordes
+// aux postes logistiques : Chef, Magasinier, Logisticien) sont les seuls gardiens.
+import { authenticate, requirePermission } from '../../middleware/authMiddleware';
 import { validate } from '../../middleware/validate';
 import { paginationSchema } from '@transitsoftservices/shared';
 
@@ -15,13 +17,11 @@ router.get('/comparison/:containerId/pdf', requirePermission('manifest.read'), M
 router.get('/discrepancies/:containerId', requirePermission('manifest.read'), ManifestController.listDiscrepancies);
 router.post(
   '/discrepancies/:containerId',
-  authorize('SUPER_ADMIN', 'ADMIN'),
   requirePermission('manifest.manage'),
   ManifestController.addDiscrepancy,
 );
 router.delete(
   '/discrepancies/:containerId/:discrepancyId',
-  authorize('SUPER_ADMIN', 'ADMIN'),
   requirePermission('manifest.manage'),
   ManifestController.removeDiscrepancy,
 );
@@ -29,14 +29,12 @@ router.delete(
 // Cree un vrai Parcel + lie une discrepancy au container pour audit.
 router.post(
   '/discrepancies/:containerId/register-extra',
-  authorize('SUPER_ADMIN', 'ADMIN', 'AGENT', 'MAGASINIER'),
   requirePermission('manifest.manage'),
   ManifestController.registerExtraParcel,
 );
 // Marque un colis declare comme NON RECU physiquement (MISSING_PHYSICAL).
 router.post(
   '/discrepancies/:containerId/parcels/:parcelId/missing',
-  authorize('SUPER_ADMIN', 'ADMIN', 'AGENT', 'MAGASINIER'),
   requirePermission('manifest.manage'),
   ManifestController.markParcelMissing,
 );
@@ -45,13 +43,11 @@ router.get('/:id/pdf', requirePermission('manifest.read'), ManifestController.ge
 router.get('/:id/xlsx', requirePermission('manifest.read'), ManifestController.getXLSX);
 router.post(
   '/dispatch/:containerId',
-  authorize('SUPER_ADMIN', 'ADMIN', 'AGENT'),
   requirePermission('manifest.manage'),
   ManifestController.createDispatch,
 );
 router.post(
   '/reception/:containerId',
-  authorize('SUPER_ADMIN', 'ADMIN', 'AGENT'),
   requirePermission('manifest.manage'),
   ManifestController.createReception,
 );

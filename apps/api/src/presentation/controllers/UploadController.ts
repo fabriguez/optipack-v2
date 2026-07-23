@@ -142,7 +142,14 @@ export class UploadController {
           logger.warn({ key, requesterOrgId, ownerOrgId: record.organizationId }, 'Upload access denied — org mismatch');
           return res.status(403).end();
         }
+      } else if (process.env.UPLOADS_STRICT_OBJECT_ACCESS === 'true') {
+        // Mode strict (a activer APRES backfill des uploadObject existants) :
+        // un objet sans fiche de propriete est refuse plutot que servi a tous.
+        logger.warn({ key }, 'Upload object without ownership record — denied (strict mode)');
+        return res.status(404).end();
       } else {
+        // Compat legacy (defaut) : objets anterieurs au tracking d'ownership.
+        // NB : trou IDOR connu tant que le backfill+strict ne sont pas actives.
         logger.warn({ key }, 'Upload object without ownership record — allowing (legacy)');
       }
 

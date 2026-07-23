@@ -11,7 +11,13 @@ export class PermissionController {
       const items = await prisma.permission.findMany({
         orderBy: [{ category: 'asc' }, { key: 'asc' }],
       });
-      res.json({ success: true, data: items });
+      // `adminOnly` : cle reservee au role admin, NON assignable a un poste/override
+      // (l'UI matrice la masque ou la desactive). Cf. ADMIN_ONLY_PERMISSION_KEYS.
+      const data = items.map((p) => ({
+        ...p,
+        adminOnly: ADMIN_ONLY_PERMISSION_KEYS.includes(p.key),
+      }));
+      res.json({ success: true, data });
     } catch (err) {
       next(err);
     }

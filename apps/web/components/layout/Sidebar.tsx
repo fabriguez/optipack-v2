@@ -85,10 +85,13 @@ const adminNav: NavItem[] = [
     permissions: ['position.manage', 'permission.manage', 'schedule.manage', 'holiday.manage'],
   },
   {
+    // /admin/loyalty tape /system/loyalty-config, verrouille cote API par
+    // authorize('ADMIN','SUPER_ADMIN') -> adminOnly (evite d'afficher un lien
+    // qui menerait a un 403 pour un non-admin dote de system.config).
     label: 'Politique fidelite',
     href: '/admin/loyalty',
     icon: Star,
-    permissions: ['system.config'],
+    adminOnly: true,
   },
 ];
 

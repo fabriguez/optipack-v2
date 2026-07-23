@@ -74,6 +74,9 @@ export default function PermissionsMatrixPage() {
   const grouped = useMemo(() => {
     const map = new Map<string, PermissionDTO[]>();
     for (const p of catalog) {
+      // Les cles reservees au role admin (adminOnly) ne sont jamais assignables
+      // a un poste — l'API les rejette. On les masque de la matrice.
+      if ((p as { adminOnly?: boolean }).adminOnly) continue;
       if (!map.has(p.category)) map.set(p.category, []);
       map.get(p.category)!.push(p);
     }

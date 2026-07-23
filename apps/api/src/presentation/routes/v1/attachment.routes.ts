@@ -100,25 +100,26 @@ function buildHandlers(type: AttachmentType) {
   };
 }
 
-// Lecture : authenticate seul pour l'instant (scoping objet a venir).
+// Lecture de pieces jointes financieres : gardee par la permission de lecture
+// de la ressource porteuse (ces pieces = justificatifs sensibles).
 const expenseHandlers = buildHandlers('expense');
-router.get('/expenses/:id/attachments', authenticate, expenseHandlers.list);
+router.get('/expenses/:id/attachments', authenticate, requirePermission('expense.read'), expenseHandlers.list);
 router.post('/expenses/:id/attachments', authenticate, requirePermission('expense.create'), expenseHandlers.add);
 router.delete('/expenses/:id/attachments/:attId', authenticate, requirePermission('expense.create'), expenseHandlers.remove);
 
 const disbursementHandlers = buildHandlers('disbursement');
-router.get('/disbursements/:id/attachments', authenticate, disbursementHandlers.list);
+router.get('/disbursements/:id/attachments', authenticate, requirePermission('disbursement.read'), disbursementHandlers.list);
 router.post('/disbursements/:id/attachments', authenticate, requirePermission('disbursement.create'), disbursementHandlers.add);
 router.delete('/disbursements/:id/attachments/:attId', authenticate, requirePermission('disbursement.create'), disbursementHandlers.remove);
 
 const debtHandlers = buildHandlers('debt');
-router.get('/debts/:id/attachments', authenticate, debtHandlers.list);
+router.get('/debts/:id/attachments', authenticate, requirePermission('debt.read'), debtHandlers.list);
 router.post('/debts/:id/attachments', authenticate, requirePermission('debt.update'), debtHandlers.add);
 router.delete('/debts/:id/attachments/:attId', authenticate, requirePermission('debt.update'), debtHandlers.remove);
 
 // Transferts de fonds : justificatifs portes par la permission d'initiation.
 const fundTransferHandlers = buildHandlers('fund-transfer');
-router.get('/fund-transfers/:id/attachments', authenticate, fundTransferHandlers.list);
+router.get('/fund-transfers/:id/attachments', authenticate, requirePermission('transfer.read'), fundTransferHandlers.list);
 router.post('/fund-transfers/:id/attachments', authenticate, requirePermission('transfer.initiate'), fundTransferHandlers.add);
 router.delete('/fund-transfers/:id/attachments/:attId', authenticate, requirePermission('transfer.initiate'), fundTransferHandlers.remove);
 

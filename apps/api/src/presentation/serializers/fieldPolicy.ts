@@ -154,11 +154,14 @@ export const EXPENSE_FIELD_POLICY: FieldPolicy = {
   createdBy:  { require: 'personnel.read', redact: 'ref' },
 };
 
-/** Décaissement — ordonnateur, créé par. */
+/** Décaissement — émetteur, ordonnateur, approbateur (personnel) + client.
+ *  Noms de champs alignés sur PrismaDisbursementRepository (issuedBy,
+ *  ordererUser, approvedBy, client). */
 export const DISBURSEMENT_FIELD_POLICY: FieldPolicy = {
-  orderedBy:  { require: 'personnel.read', redact: 'ref' },
-  approvedBy: { require: 'personnel.read', redact: 'ref' },
-  client:     { require: 'client.read',    redact: 'ref' },
+  issuedBy:    { require: 'personnel.read', redact: 'ref' },
+  approvedBy:  { require: 'personnel.read', redact: 'ref' },
+  ordererUser: { require: 'personnel.read', redact: 'ref' },
+  client:      { require: 'client.read',    redact: 'ref' },
 };
 
 /** Conversation support — PII client. */
@@ -172,8 +175,10 @@ export const EMPLOYEE_FIELD_POLICY: FieldPolicy = {
   'agency.phone':   { require: 'personnel.read', redact: 'null' },
 };
 
-/** Pénalité — client, colis. */
+/** Pénalité — client (+ PII contact), colis. */
 export const PENALTY_FIELD_POLICY: FieldPolicy = {
-  client:  { require: 'client.read',  redact: 'ref' },
-  parcel:  { require: 'parcel.read',  redact: 'ref' },
+  client:         { require: 'client.read',         redact: 'ref'  },
+  'client.phone': { require: 'client.contact.read', redact: 'null' },
+  'client.email': { require: 'client.contact.read', redact: 'null' },
+  parcel:         { require: 'parcel.read',          redact: 'ref'  },
 };

@@ -131,7 +131,11 @@ export class NotificationController {
     try {
       const repo = container.resolve<any>(NOTIFICATION_REPOSITORY);
       const notification = await repo.findById(req.params.id);
-      if (!notification) throw new NotFoundError('Notification', req.params.id);
+      // Une notification appartient a son destinataire (userId). On renvoie 404
+      // (et non 403) pour ne pas reveler l'existence d'un id d'un autre user.
+      if (!notification || notification.userId !== req.user!.userId) {
+        throw new NotFoundError('Notification', req.params.id);
+      }
       res.json({ success: true, data: notification });
     } catch (err) {
       next(err);
@@ -142,7 +146,9 @@ export class NotificationController {
     try {
       const repo = container.resolve<any>(NOTIFICATION_REPOSITORY);
       const notification = await repo.findById(req.params.id);
-      if (!notification) throw new NotFoundError('Notification', req.params.id);
+      if (!notification || notification.userId !== req.user!.userId) {
+        throw new NotFoundError('Notification', req.params.id);
+      }
       const updated = await repo.markAsRead(req.params.id);
       res.json({ success: true, data: updated });
     } catch (err) {

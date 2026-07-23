@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { ContainerController } from '../../controllers/ContainerController';
-import { authenticate, authorize, requirePermission } from '../../middleware/authMiddleware';
+// X1 : gardes de role legacy retires — container.manage (accorde aux postes
+// logistiques : Chef, Magasinier, Logisticien) est le seul gardien.
+import { authenticate, requirePermission } from '../../middleware/authMiddleware';
 import { validate } from '../../middleware/validate';
 import {
   createContainerSchema,
@@ -23,19 +25,19 @@ router.get('/:id/arrival-snapshot', requirePermission('container.read'), Contain
 router.get('/:id/loadable-parcels', requirePermission('container.read'), ContainerController.getLoadableParcels);
 router.get('/:id/history', requirePermission('container.read'), ContainerController.getHistory);
 // Mutations et actions du cycle de vie du conteneur
-router.post('/', authorize('SUPER_ADMIN', 'ADMIN', 'AGENT'), requirePermission('container.manage'), validate(createContainerSchema), ContainerController.create);
-router.patch('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'AGENT'), requirePermission('container.manage'), validate(updateContainerSchema), ContainerController.update);
-router.post('/:id/load', authorize('SUPER_ADMIN', 'ADMIN', 'AGENT', 'MAGASINIER'), requirePermission('container.manage'), validate(loadParcelsSchema), ContainerController.loadParcels);
-router.post('/:id/load-by-qr', authorize('SUPER_ADMIN', 'ADMIN', 'AGENT', 'MAGASINIER'), requirePermission('container.manage'), validate(loadByQrSchema), ContainerController.loadByQr);
-router.post('/:id/remove-parcel', authorize('SUPER_ADMIN', 'ADMIN', 'AGENT', 'MAGASINIER'), requirePermission('container.manage'), validate(removeParcelFromContainerSchema), ContainerController.removeParcel);
-router.post('/:id/depart', authorize('SUPER_ADMIN', 'ADMIN', 'AGENT'), requirePermission('container.manage'), ContainerController.depart);
-router.post('/:id/arrive', authorize('SUPER_ADMIN', 'ADMIN', 'AGENT'), requirePermission('container.manage'), ContainerController.arrive);
-router.post('/:id/unload', authorize('SUPER_ADMIN', 'ADMIN', 'AGENT', 'MAGASINIER'), requirePermission('container.manage'), ContainerController.unloadParcel);
+router.post('/', requirePermission('container.manage'), validate(createContainerSchema), ContainerController.create);
+router.patch('/:id', requirePermission('container.manage'), validate(updateContainerSchema), ContainerController.update);
+router.post('/:id/load', requirePermission('container.manage'), validate(loadParcelsSchema), ContainerController.loadParcels);
+router.post('/:id/load-by-qr', requirePermission('container.manage'), validate(loadByQrSchema), ContainerController.loadByQr);
+router.post('/:id/remove-parcel', requirePermission('container.manage'), validate(removeParcelFromContainerSchema), ContainerController.removeParcel);
+router.post('/:id/depart', requirePermission('container.manage'), ContainerController.depart);
+router.post('/:id/arrive', requirePermission('container.manage'), ContainerController.arrive);
+router.post('/:id/unload', requirePermission('container.manage'), ContainerController.unloadParcel);
 
 // Documents / images du conteneur (max 10)
 router.get('/:id/documents', requirePermission('container.read'), ContainerController.listDocuments);
-router.post('/:id/documents', authorize('SUPER_ADMIN', 'ADMIN', 'AGENT', 'COMPTABLE'), requirePermission('container.manage'), ContainerController.addDocument);
-router.patch('/:id/documents/:documentId', authorize('SUPER_ADMIN', 'ADMIN', 'AGENT', 'COMPTABLE'), requirePermission('container.manage'), ContainerController.updateDocument);
-router.delete('/:id/documents/:documentId', authorize('SUPER_ADMIN', 'ADMIN', 'AGENT', 'COMPTABLE'), requirePermission('container.manage'), ContainerController.deleteDocument);
+router.post('/:id/documents', requirePermission('container.manage'), ContainerController.addDocument);
+router.patch('/:id/documents/:documentId', requirePermission('container.manage'), ContainerController.updateDocument);
+router.delete('/:id/documents/:documentId', requirePermission('container.manage'), ContainerController.deleteDocument);
 
 export default router;

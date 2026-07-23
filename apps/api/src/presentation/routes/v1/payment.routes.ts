@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { PaymentController } from '../../controllers/PaymentController';
-import { authenticate, authorize, requirePermission } from '../../middleware/authMiddleware';
+import { authenticate, requirePermission } from '../../middleware/authMiddleware';
 import { validate } from '../../middleware/validate';
 import { recordPaymentSchema, voidPaymentSchema, paginationSchema } from '@transitsoftservices/shared';
 
@@ -15,6 +15,8 @@ router.get('/invoice/:invoiceId', requirePermission('payment.read'), PaymentCont
 // Enregistrement d'un paiement
 router.post('/', validate(recordPaymentSchema), requirePermission('payment.record'), PaymentController.record);
 // Seul ADMIN+ peut annuler un paiement
-router.post('/:id/void', authorize('SUPER_ADMIN', 'ADMIN'), requirePermission('payment.void'), validate(voidPaymentSchema), PaymentController.void);
+// X1 : payment.void (accorde a Comptable + Chef) est le seul gardien ; le garde
+// de role legacy est retire (il bloquait a tort les Comptables).
+router.post('/:id/void', requirePermission('payment.void'), validate(voidPaymentSchema), PaymentController.void);
 
 export default router;

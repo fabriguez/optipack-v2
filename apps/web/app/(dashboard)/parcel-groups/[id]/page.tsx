@@ -3,6 +3,7 @@
 import { use, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { Can } from '@/lib/components/Can';
 import { ArrowLeft, Boxes, CreditCard } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
@@ -73,13 +74,15 @@ export default function ParcelGroupDetailPage({ params }: { params: Promise<{ id
               <div className="flex items-center gap-2">
                 <StatusBadge status={groupInvoice.status} type="invoice" />
                 {groupInvoice.status !== 'PAID' && (
-                  <AppButton
-                    size="sm"
-                    onClick={() => setPayTarget({ invoiceId: groupInvoice.id })}
-                  >
-                    <CreditCard className="h-3.5 w-3.5" />
-                    Payer le groupe
-                  </AppButton>
+                  <Can permission="payment.record">
+                    <AppButton
+                      size="sm"
+                      onClick={() => setPayTarget({ invoiceId: groupInvoice.id })}
+                    >
+                      <CreditCard className="h-3.5 w-3.5" />
+                      Payer le groupe
+                    </AppButton>
+                  </Can>
                 )}
               </div>
             </div>
@@ -123,16 +126,18 @@ export default function ParcelGroupDetailPage({ params }: { params: Promise<{ id
                       <td className="p-2 text-right">{inv ? formatAmount(Number(inv.balance)) : '-'}</td>
                       <td className="p-2 text-right">
                         {inv && inv.status !== 'PAID' && (
-                          <AppButton
-                            size="sm"
-                            variant="outline"
-                            onClick={() =>
-                              setPayTarget({ invoiceId: inv.id, parcelTracking: p.trackingNumber })
-                            }
-                          >
-                            <CreditCard className="h-3.5 w-3.5" />
-                            Payer
-                          </AppButton>
+                          <Can permission="payment.record">
+                            <AppButton
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                setPayTarget({ invoiceId: inv.id, parcelTracking: p.trackingNumber })
+                              }
+                            >
+                              <CreditCard className="h-3.5 w-3.5" />
+                              Payer
+                            </AppButton>
+                          </Can>
                         )}
                       </td>
                     </tr>

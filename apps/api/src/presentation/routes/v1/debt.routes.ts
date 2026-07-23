@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { DebtController } from '../../controllers/DebtController';
-import { authenticate, authorize, requirePermission } from '../../middleware/authMiddleware';
+import { authenticate, requirePermission } from '../../middleware/authMiddleware';
 import { validate } from '../../middleware/validate';
 import {
   paginationSchema,
@@ -20,37 +20,32 @@ router.get('/:id', requirePermission('debt.read'), DebtController.getById);
 router.get('/client/:clientId', requirePermission('debt.read'), DebtController.getByClient);
 router.post('/', requirePermission('debt.create'), validate(createDebtSchema), DebtController.create);
 
-// Paiement d'une dette : permission cassiere / agent / admin.
+// X1 : les gardes de role legacy sont retires — la permission dediee est le
+// seul gardien (debt.pay accorde a Agent/Chef/Comptable ; debt.void/debt.update
+// accordes a Comptable, que authorize('ADMIN') bloquait a tort).
 router.post(
   '/:id/payments',
-  authorize('SUPER_ADMIN', 'ADMIN', 'AGENT'),
   requirePermission('debt.pay'),
   validate(recordDebtPaymentSchema),
   DebtController.recordPayment,
 );
 
-// Annulation : admin uniquement.
 router.post(
   '/:id/void',
-  authorize('SUPER_ADMIN', 'ADMIN'),
   requirePermission('debt.void'),
   validate(voidDebtSchema),
   DebtController.voidDebt,
 );
 
-// Ajustement du montant ou de l'echeance : admin uniquement.
 router.post(
   '/:id/adjust',
-  authorize('SUPER_ADMIN', 'ADMIN'),
   requirePermission('debt.update'),
   validate(adjustDebtSchema),
   DebtController.adjust,
 );
 
-// Bascule en LITIGATED : admin uniquement.
 router.post(
   '/:id/litigated',
-  authorize('SUPER_ADMIN', 'ADMIN'),
   requirePermission('debt.update'),
   validate(markDebtLitigatedSchema),
   DebtController.markLitigated,

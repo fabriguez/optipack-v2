@@ -21,7 +21,7 @@ router.get('/agency/:agencyId', requirePermission('client.read'), validate(pagin
 });
 router.get('/:id', requirePermission('client.read'), ClientController.getById);
 router.post('/', requirePermission('client.create'), validate(createClientSchema), ClientController.create);
-router.patch('/:id', requirePermission('client.create'), validate(updateClientSchema), ClientController.update);
-router.delete('/:id', requirePermission('client.create'), ClientController.delete);
+router.patch('/:id', requirePermission('client.update'), validate(updateClientSchema), ClientController.update);
+router.delete('/:id', requirePermission('client.delete'), ClientController.delete);
 
 export default router;

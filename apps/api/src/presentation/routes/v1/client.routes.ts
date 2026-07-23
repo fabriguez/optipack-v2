@@ -49,7 +49,9 @@ router.delete('/:id/image/:slot', requirePermission('client.update'), ClientCont
 // Tarification partenaire. Mutations : cle dediee `client.partner.manage`
 // (role specifique "gestion partenaires"), plus de verrou role admin — la
 // cle est assignable a un poste via la matrice.
-router.get('/:clientId/pricings', requirePermission('loyalty.read'), PartnerPricingController.list);
+// Lecture des tarifs partenaire = donnee commerciale du client (pas de la fidelite) :
+// gardee par client.read (l'ecriture reste sous client.partner.manage plus bas).
+router.get('/:clientId/pricings', requirePermission('client.read'), PartnerPricingController.list);
 router.post(
   '/:clientId/pricings',
   requirePermission('client.partner.manage'),

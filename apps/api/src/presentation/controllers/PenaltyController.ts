@@ -4,6 +4,8 @@ import { CalculatePenaltiesUseCase } from '../../application/use-cases/penalty/C
 import { PENALTY_REPOSITORY } from '../../application/interfaces/IPenaltyRepository';
 import { NotFoundError } from '../../domain/errors/BusinessError';
 import { penaltyScope, scopeCtx } from '../../application/services/scope/agencyScope';
+import { applyFieldPolicy, PENALTY_FIELD_POLICY } from '../serializers/fieldPolicy';
+import { getPolicy } from '../middleware/policyContext';
 
 export class PenaltyController {
   static async list(req: Request, res: Response, next: NextFunction) {
@@ -16,7 +18,9 @@ export class PenaltyController {
         { agencyId: agencyId as string, clientId: clientId as string, isPaid: isPaid === 'true', scopeWhere },
         req.query,
       );
-      res.json({ success: true, ...result });
+      const policy = getPolicy(req);
+      const data = policy ? applyFieldPolicy(result.data, PENALTY_FIELD_POLICY, policy) : result.data;
+      res.json({ success: true, ...result, data });
     } catch (err) {
       next(err);
     }
@@ -28,7 +32,8 @@ export class PenaltyController {
       const repo = container.resolve<any>(PENALTY_REPOSITORY);
       const penalty = await repo.findById(req.params.id);
       if (!penalty) throw new NotFoundError('Penalite', req.params.id);
-      res.json({ success: true, data: penalty });
+      const policy = getPolicy(req);
+      res.json({ success: true, data: policy ? applyFieldPolicy(penalty, PENALTY_FIELD_POLICY, policy) : penalty });
     } catch (err) {
       next(err);
     }

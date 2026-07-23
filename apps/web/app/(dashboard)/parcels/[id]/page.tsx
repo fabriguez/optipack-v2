@@ -263,14 +263,16 @@ export default function ParcelDetailPage({ params }: { params: Promise<{ id: str
                   // Ouvre le dialog directement plutot que de rediriger vers
                   // la page /payments. La facture est pre-fixee et grisee dans
                   // le formulaire pour eviter toute mauvaise selection.
-                  <AppButton
-                    className="w-full"
-                    size="sm"
-                    onClick={() => setPaymentOpen(true)}
-                  >
-                    <CreditCard className="h-4 w-4" />
-                    Enregistrer paiement
-                  </AppButton>
+                  <Can permission="payment.record">
+                    <AppButton
+                      className="w-full"
+                      size="sm"
+                      onClick={() => setPaymentOpen(true)}
+                    >
+                      <CreditCard className="h-4 w-4" />
+                      Enregistrer paiement
+                    </AppButton>
+                  </Can>
                 )}
                 {parcel.status === 'LOST' && (
                   <p className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">

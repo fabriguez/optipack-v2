@@ -42,10 +42,6 @@ const WHITELIST: Array<{ file: string; method: string; path: string; reason: str
   { file: 'notification.routes.ts', method: 'get', path: '/:id', reason: 'self' },
   { file: 'notification.routes.ts', method: 'post', path: '/:id/read', reason: 'self' },
   { file: 'notification.routes.ts', method: 'post', path: '/read-all', reason: 'self' },
-  { file: 'attachment.routes.ts', method: 'get', path: '/expenses/:id/attachments', reason: 'lecture — scoping objet etape 2' },
-  { file: 'attachment.routes.ts', method: 'get', path: '/disbursements/:id/attachments', reason: 'lecture — scoping objet etape 2' },
-  { file: 'attachment.routes.ts', method: 'get', path: '/debts/:id/attachments', reason: 'lecture — scoping objet etape 2' },
-  { file: 'attachment.routes.ts', method: 'get', path: '/fund-transfers/:id/attachments', reason: 'lecture — scoping objet etape 2' },
   { file: 'notification-templates.routes.ts', method: 'get', path: '/notification-events', reason: 'authentifie ; renvoie un registre statique d\'events (catalogue, aucune donnee tenant)' },
 ];
 

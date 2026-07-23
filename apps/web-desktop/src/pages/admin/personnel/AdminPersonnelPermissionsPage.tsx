@@ -72,6 +72,8 @@ export default function AdminPersonnelPermissionsPage() {
   const grouped = useMemo(() => {
     const map = new Map<string, PermissionDTO[]>();
     for (const p of catalog) {
+      // Cles reservees au role admin (adminOnly) : non assignables, masquees.
+      if ((p as { adminOnly?: boolean }).adminOnly) continue;
       if (!map.has(p.category)) map.set(p.category, []);
       map.get(p.category)!.push(p);
     }

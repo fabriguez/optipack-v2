@@ -3,7 +3,7 @@
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Upload, Package, Eye, RefreshCw, QrCode, HandCoins, Boxes, ChevronDown, Archive, ArchiveRestore } from 'lucide-react';
+import { Plus, Upload, Package, Eye, RefreshCw, QrCode, HandCoins, Boxes, ChevronDown, Archive, ArchiveRestore, Printer, MapPin } from 'lucide-react';
 import { ParcelQRDialog } from '@/components/shared/ParcelQRDialog';
 import { ParcelHandoverDialog } from '@/components/shared/ParcelHandoverDialog';
 import { ParcelGroupFormDialog } from './ParcelGroupFormDialog';
@@ -17,9 +17,11 @@ import { MaskedValue, isMasked } from '@/components/ui/MaskedValue';
 import { SearchBar } from '@/components/shared/SearchBar';
 import { FilterDialog } from '@/components/shared/FilterDialog';
 import { XlsxExportButton } from '@/components/shared/XlsxExportButton';
+import { ExportButton } from '@/components/shared/ExportButton';
+import { BulkLoadContainerDialog, BulkMoveToSpaceDialog } from '../warehouses/[id]/BulkParcelActions';
 import { CsvImportDialog } from '@/components/shared/CsvImportDialog';
 import { RowActions } from '@/components/shared/RowActions';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useServerPagination } from '@/lib/hooks/useServerPagination';
 import { useParcels, useArchiveParcels, useUnarchiveParcels } from '@/lib/hooks/useParcels';
 import { AppCheckbox } from '@/components/ui/AppCheckbox';
@@ -58,6 +60,11 @@ function ParcelsContent() {
   });
   // Selection multi-lignes : Set d'IDs (compatible header "tout cocher").
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // Actions groupees repliquees depuis le magasin (impression, chargement, zone).
+  const [printingLabels, setPrintingLabels] = useState(false);
+  const [bulkLoadOpen, setBulkLoadOpen] = useState(false);
+  const [bulkMoveOpen, setBulkMoveOpen] = useState(false);
+  const queryClient = useQueryClient();
 
   const statusFilter = searchParams.get('status') || '';
   const clientIdFilter = searchParams.get('clientId') || '';
@@ -111,6 +118,55 @@ function ParcelsContent() {
       { ids: Array.from(selectedIds) },
       { onSuccess: () => clearSelection() },
     );
+  };
+
+  // Colis selectionnes presents dans la page courante (pour export + zone).
+  const selectedParcels = visibleRows.filter((r) => selectedIds.has(r.id));
+  const parcelExportColumns = [
+    { key: 'trackingNumber', label: 'Tracking' },
+    { key: 'designation', label: 'Designation' },
+    { key: 'client', label: 'Client' },
+    { key: 'weight', label: 'Masse' },
+    { key: 'volume', label: 'Volume' },
+    { key: 'destination', label: 'Destination' },
+    { key: 'price', label: 'Prix' },
+    { key: 'status', label: 'Statut' },
+  ];
+  const parcelExportRows = selectedParcels.map((p) => ({
+    trackingNumber: p.trackingNumber,
+    designation: p.designation,
+    client: p.client?.fullName ?? '',
+    weight: p.weight ?? '',
+    volume: p.volume ?? '',
+    destination: p.destination,
+    price: p.price ?? '',
+    status: p.status,
+  }));
+
+  // Impression groupee des etiquettes : un seul PDF multi-pages (GET /parcels/labels).
+  const handlePrintLabels = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setPrintingLabels(true);
+    try {
+      const res = await apiClient.get('/parcels/labels', {
+        params: { ids: ids.join(',') },
+        responseType: 'blob',
+      });
+      const url = URL.createObjectURL(res.data as Blob);
+      window.open(url, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Echec impression des etiquettes');
+    } finally {
+      setPrintingLabels(false);
+    }
+  };
+
+  // Apres chargement / deplacement en lot : refetch + vide la selection.
+  const onBulkDone = () => {
+    queryClient.invalidateQueries({ queryKey: ['parcels'] });
+    clearSelection();
   };
 
   // Quand on change d'onglet, on vide la selection (les IDs cibles sont
@@ -514,6 +570,29 @@ function ParcelsContent() {
           <div className="flex flex-wrap items-center gap-2">
             {selectedIds.size > 0 && (
               <>
+                <Can permission="container.manage">
+                  <AppButton size="sm" variant="outline" onClick={() => setBulkLoadOpen(true)}>
+                    <Boxes className="h-3.5 w-3.5" />
+                    Charger dans un conteneur
+                  </AppButton>
+                </Can>
+                {warehouseIdFilter && (
+                  <Can permission="parcel.update">
+                    <AppButton size="sm" variant="outline" onClick={() => setBulkMoveOpen(true)}>
+                      <MapPin className="h-3.5 w-3.5" />
+                      Deplacer vers une zone
+                    </AppButton>
+                  </Can>
+                )}
+                <AppButton size="sm" variant="outline" onClick={handlePrintLabels} loading={printingLabels}>
+                  <Printer className="h-3.5 w-3.5" />
+                  Imprimer les etiquettes
+                </AppButton>
+                <ExportButton
+                  data={parcelExportRows}
+                  columns={parcelExportColumns}
+                  fileName={`colis-selection-${selectedIds.size}`}
+                />
                 <Can permission="parcel.archive">
                   {tab === 'active' ? (
                     <AppButton size="sm" variant="outline" onClick={handleArchiveSelected} loading={archiveMut.isPending}>
@@ -555,6 +634,22 @@ function ParcelsContent() {
         </>
         )}
 
+        <BulkLoadContainerDialog
+          open={bulkLoadOpen}
+          onClose={() => setBulkLoadOpen(false)}
+          parcelIds={Array.from(selectedIds)}
+          agencyId={selectedParcels[0]?.warehouse?.agency?.id ?? null}
+          onDone={onBulkDone}
+        />
+        {warehouseIdFilter && (
+          <BulkMoveToSpaceDialog
+            open={bulkMoveOpen}
+            onClose={() => setBulkMoveOpen(false)}
+            warehouseId={warehouseIdFilter}
+            parcelIds={Array.from(selectedIds)}
+            onDone={onBulkDone}
+          />
+        )}
         <ParcelFormDialog open={showCreate} onClose={() => setShowCreate(false)} />
         <ParcelGroupFormDialog open={showCreateGroup} onClose={() => setShowCreateGroup(false)} />
         <ParcelQRDialog open={!!qrParcel} onClose={() => setQrParcel(null)} parcel={qrParcel} />

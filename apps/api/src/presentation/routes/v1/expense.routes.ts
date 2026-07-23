@@ -16,10 +16,8 @@ router.post('/container/:containerId/close', requirePermission('expense.approve'
 // Propagation forwarding : cree des depenses enfants sur les conteneurs parents.
 router.post('/container/:containerId/propagate-forwarding', requirePermission('expense.create'), ExpenseController.propagateForwardingExpenses);
 router.post('/:id/pay', requirePermission('expense.pay'), ExpenseController.pay);
-// Pas de cle expense.update au catalogue : expense.create est la cle de mutation la plus proche.
-router.patch('/:id', requirePermission('expense.create'), ExpenseController.update);
-// Pas de cle expense.delete au catalogue : expense.create est la cle de mutation la plus proche.
-router.delete('/:id', requirePermission('expense.create'), ExpenseController.delete);
+router.patch('/:id', requirePermission('expense.update'), ExpenseController.update);
+router.delete('/:id', requirePermission('expense.delete'), ExpenseController.delete);
 router.get('/:id', requirePermission('expense.read'), ExpenseController.getById);
 router.post('/', requirePermission('expense.create'), ExpenseController.create);
 

@@ -2,50 +2,13 @@ import { Link, useLocation } from 'react-router-dom';
 import { ShieldX } from 'lucide-react';
 import { usePermission, useIsTenantAdmin } from '@/lib/hooks/usePermission';
 import { useAuthStore } from '@/lib/auth/authStore';
-
-const ROUTE_PERMISSION_MAP: Array<{ prefix: string; keys: string[]; adminOnly?: boolean }> = [
-  { prefix: '/agencies',        keys: ['agency.read'] },
-  { prefix: '/warehouses',      keys: ['warehouse.read'] },
-  { prefix: '/clients',         keys: ['client.read'] },
-  { prefix: '/parcels',         keys: ['parcel.read'] },
-  { prefix: '/parcel-groups',   keys: ['parcel.read', 'parcelgroup.manage'] },
-  { prefix: '/containers',      keys: ['container.read'] },
-  { prefix: '/transit-routes',  keys: ['transitroute.read'] },
-  { prefix: '/invoices',        keys: ['invoice.read'] },
-  { prefix: '/payments',        keys: ['payment.read'] },
-  { prefix: '/cash-register',   keys: ['cashregister.read'] },
-  { prefix: '/disbursements',   keys: ['disbursement.read'] },
-  { prefix: '/fund-transfers',  keys: ['transfer.read'] },
-  { prefix: '/accounting',      keys: ['accounting.read'] },
-  { prefix: '/expenses',        keys: ['expense.read'] },
-  { prefix: '/debts',           keys: ['debt.read'] },
-  { prefix: '/finance-history', keys: ['finance.history.read', 'finance.dashboard.read'] },
-  { prefix: '/employees',       keys: ['personnel.read'] },
-  { prefix: '/loyalty',         keys: ['loyalty.read'] },
-  { prefix: '/penalties',       keys: ['penalty.read'] },
-  { prefix: '/chat',            keys: ['support.read'] },
-  { prefix: '/reports',         keys: ['report.read'] },
-  { prefix: '/audit-log',       keys: ['audit.read'] },
-  { prefix: '/carriers',        keys: ['carrier.read'] },
-  { prefix: '/notification-center', keys: ['notification.read'] },
-  { prefix: '/notifications',   keys: ['notification.read'] },
-  // Personnalisation (/settings/branding), Studio site (/settings/site) et
-  // Parametres (/settings) : reserves a l'admin tenant.
-  { prefix: '/settings',        keys: [], adminOnly: true },
-];
-
-function policyForPath(pathname: string): { keys: string[]; adminOnly: boolean } {
-  const match = ROUTE_PERMISSION_MAP.find(
-    (m) => pathname === m.prefix || pathname.startsWith(m.prefix + '/'),
-  );
-  return { keys: match?.keys ?? [], adminOnly: !!match?.adminOnly };
-}
+import { matchRoutePolicy } from '@/lib/permissions/dashboardPolicy';
 
 export function PermissionGate({ children }: { children: React.ReactNode }) {
   const pathname = useLocation().pathname ?? '/';
   const status = useAuthStore((s) => s.status);
   const isAdmin = useIsTenantAdmin();
-  const { keys: requiredKeys, adminOnly } = policyForPath(pathname);
+  const { anyOf: requiredKeys, adminOnly } = matchRoutePolicy(pathname);
   const hasKeys = usePermission(requiredKeys, 'any');
   // adminOnly : les permissions ne suffisent pas, seul le rôle admin passe.
   const allowed = adminOnly ? false : hasKeys;
