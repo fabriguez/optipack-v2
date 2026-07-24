@@ -76,7 +76,7 @@ function InvoicesContent() {
       key: 'agencyId',
       label: 'Agence',
       type: 'search-select' as const,
-      searcher: searchers.agencies,
+      searcher: searchers.myAgencies,
     },
     { key: 'startDate', label: 'Date debut', type: 'date' as const },
     { key: 'endDate', label: 'Date fin', type: 'date' as const },

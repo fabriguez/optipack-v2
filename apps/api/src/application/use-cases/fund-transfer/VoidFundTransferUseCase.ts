@@ -5,6 +5,7 @@ import { CASH_REGISTER_REPOSITORY, type ICashRegisterRepository } from '../../in
 import { HEAD_OFFICE_CASH_REGISTER_REPOSITORY, type IHeadOfficeCashRegisterRepository } from '../../interfaces/IHeadOfficeCashRegisterRepository';
 import { JOURNAL_ENTRY_REPOSITORY, type IJournalEntryRepository } from '../../interfaces/IJournalEntryRepository';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
+import { assertAgencyActive } from '../../services/scope/agencyScope';
 import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 import { prisma } from '../../../config/database';
 
@@ -21,6 +22,11 @@ export class VoidFundTransferUseCase {
     const transfer = await this.transferRepo.findById(id);
     if (!transfer) throw new NotFoundError('Transfert de fonds', id);
     if (transfer.isVoided) throw new BusinessError('Ce transfert est deja annule');
+
+    // Agence source OU destination desactivee : annulation gelee (409).
+    // Les deux ids sont nullables (transfert depuis/vers le siege) -> skip si absent.
+    if (transfer.sourceAgencyId) await assertAgencyActive(transfer.sourceAgencyId);
+    if (transfer.destinationAgencyId) await assertAgencyActive(transfer.destinationAgencyId);
 
     const amount = Number(transfer.amount);
     const wasConfirmed = transfer.status === 'CONFIRMED';

@@ -24,7 +24,9 @@ export default function CashRegisterPage() {
   const [viewAll, setViewAll] = useState<boolean>(false);
   const qc = useQueryClient();
 
-  const { data: agencies } = useAgencies({ limit: 100 });
+  // Caisse : seule une de MES agences actives peut etre selectionnee
+  // (l'API scope via ?mine&active ; l'admin voit toutes les actives).
+  const { data: agencies } = useAgencies({ limit: 100, mine: true, active: true } as any);
   const agencyId = selectedAgency || agencies?.data?.[0]?.id || '';
 
   const { data: register, isLoading } = useQuery({

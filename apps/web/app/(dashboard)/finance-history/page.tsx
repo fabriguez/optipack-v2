@@ -191,7 +191,7 @@ export default function FinanceHistoryPage() {
               <AppSearchSelect
                 value={agencyId}
                 onChange={(v) => setAgencyId(v ?? '')}
-                search={searchers.agencies}
+                search={searchers.myAgencies}
                 placeholder="Toutes agences"
               />
             </div>

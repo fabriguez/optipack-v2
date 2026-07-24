@@ -2,6 +2,7 @@ import { injectable } from 'tsyringe';
 import type { AdjustDebtInput } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
 import { BusinessError, NotFoundError } from '../../../domain/errors/BusinessError';
+import { assertAgencyActive } from '../../services/scope/agencyScope';
 
 /**
  * Ajuste le montant total et/ou l'echeance d'une dette. Reserve admin.
@@ -22,6 +23,10 @@ export class AdjustDebtUseCase {
         `Le nouveau montant (${input.newTotalAmount}) est inferieur au montant deja paye (${paid}).`,
       );
     }
+
+    // Agence de rattachement desactivee : ajustement gele (409). agencyId
+    // absent (dette non rattachee a une agence) -> pas de verrou.
+    if (debt.agencyId) await assertAgencyActive(debt.agencyId);
 
     const newRemaining = Math.max(0, input.newTotalAmount - paid);
     const newStatus = newRemaining <= 0 ? 'CLEARED' : paid > 0 ? 'PARTIALLY_PAID' : 'ACTIVE';

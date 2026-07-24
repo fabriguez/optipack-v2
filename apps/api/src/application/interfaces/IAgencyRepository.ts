@@ -7,6 +7,7 @@ export interface IAgencyRepository {
   findAll(
     organizationId: string,
     pagination: PaginationInput,
+    filters?: { agencyIds?: string[]; activeOnly?: boolean },
   ): Promise<PaginatedResponse<Agency>>;
   create(data: Prisma.AgencyCreateInput): Promise<Agency>;
   update(id: string, data: Prisma.AgencyUpdateInput): Promise<Agency>;

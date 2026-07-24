@@ -68,7 +68,7 @@ export function NewConversationDialog({ open, onClose, onCreated }: NewConversat
           placeholder="Selectionner une agence"
           value={agencyId}
           onChange={(v) => setAgencyId(v ?? '')}
-          search={searchers.agencies}
+          search={searchers.myAgencies}
           required
         />
       </div>

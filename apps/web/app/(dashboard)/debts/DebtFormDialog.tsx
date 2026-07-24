@@ -125,7 +125,7 @@ export function DebtFormDialog({ open, onClose, defaultBucket = 'client' }: Prop
               label="Agence"
               value={field.value}
               onChange={(v) => field.onChange(v ?? '')}
-              search={searchers.agencies}
+              search={searchers.myAgencies}
               error={errors.agencyId?.message}
               placeholder="Selectionner l'agence rattachee"
               required

@@ -7,13 +7,19 @@ import { AdjustDebtUseCase } from '../../application/use-cases/debt/AdjustDebtUs
 import { MarkDebtLitigatedUseCase } from '../../application/use-cases/debt/MarkDebtLitigatedUseCase';
 import { DEBT_REPOSITORY } from '../../application/interfaces/IDebtRepository';
 import { NotFoundError } from '../../domain/errors/BusinessError';
-import { clientScope, debtScope, scopeCtx } from '../../application/services/scope/agencyScope';
+import { assertAgencyInScope, clientScope, debtScope, scopeCtx } from '../../application/services/scope/agencyScope';
 import { applyFieldPolicy, DEBT_FIELD_POLICY } from '../serializers/fieldPolicy';
 import { getPolicy } from '../middleware/policyContext';
+import { prisma } from '../../config/database';
 
 export class DebtController {
   static async create(req: Request, res: Response, next: NextFunction) {
     try {
+      // Garde dure : creer une dette n'est possible que pour une de SES agences
+      // (agence cible dans le body). Admin => bypass (ctx.unrestricted).
+      const ctx = scopeCtx(req);
+      const agencyId = req.body?.agencyId as string | undefined;
+      if (agencyId) assertAgencyInScope(agencyId, ctx);
       const useCase = container.resolve(CreateDebtUseCase);
       const result = await useCase.execute(req.body, req.user!.userId);
       res.status(201).json({ success: true, data: result });
@@ -79,7 +85,15 @@ export class DebtController {
 
   static async recordPayment(req: Request, res: Response, next: NextFunction) {
     try {
-      await debtScope.assert(req.params.id, scopeCtx(req));
+      const ctx = scopeCtx(req);
+      await debtScope.assert(req.params.id, ctx);
+      // Garde dure : encaisser un paiement de dette n'est possible que pour une
+      // de SES agences. L'agence est portee par la dette (chargement minimal).
+      const debt = await prisma.debt.findUnique({
+        where: { id: req.params.id },
+        select: { agencyId: true },
+      });
+      if (debt) assertAgencyInScope(debt.agencyId, ctx);
       const useCase = container.resolve(RecordDebtPaymentUseCase);
       const result = await useCase.execute(req.params.id, req.body, req.user!.userId);
       res.status(201).json({ success: true, data: result });

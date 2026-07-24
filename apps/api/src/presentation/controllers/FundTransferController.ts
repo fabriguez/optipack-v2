@@ -5,11 +5,18 @@ import { ConfirmFundTransferUseCase } from '../../application/use-cases/fund-tra
 import { VoidFundTransferUseCase } from '../../application/use-cases/fund-transfer/VoidFundTransferUseCase';
 import { FUND_TRANSFER_REPOSITORY } from '../../application/interfaces/IFundTransferRepository';
 import { NotFoundError } from '../../domain/errors/BusinessError';
-import { fundTransferScope, scopeCtx } from '../../application/services/scope/agencyScope';
+import { assertAgencyInScope, fundTransferScope, scopeCtx } from '../../application/services/scope/agencyScope';
 
 export class FundTransferController {
   static async create(req: Request, res: Response, next: NextFunction) {
     try {
+      // Garde dure : un personnel n'initie un transfert que DEPUIS une de SES
+      // agences (sourceAgencyId). L'agence DESTINATION n'est volontairement PAS
+      // scopee. Absent quand la source est le siege (sourceType=HQ). Admin =>
+      // bypass (ctx.unrestricted).
+      const ctx = scopeCtx(req);
+      const sourceAgencyId = req.body?.sourceAgencyId as string | undefined;
+      if (sourceAgencyId) assertAgencyInScope(sourceAgencyId, ctx);
       const useCase = container.resolve(CreateFundTransferUseCase);
       const result = await useCase.execute(req.body, req.user!.userId);
       res.status(201).json({ success: true, data: result });

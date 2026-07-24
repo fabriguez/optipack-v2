@@ -119,7 +119,7 @@ export function EmployeeFormDialog({ open, onClose, defaultAgency, employee }: P
   const agencyOptionCache = useRef<Map<string, SearchOption>>(new Map());
   const primaryAgencyId = watch('agencyId') as string | undefined;
   const searchExtraAgencies = async (q: string, limit: number) => {
-    const opts = await searchers.agencies(q, limit);
+    const opts = await searchers.myAgencies(q, limit);
     opts.forEach((o) => agencyOptionCache.current.set(o.value, o));
     // Exclut l'agence principale et celles deja selectionnees.
     return opts.filter(
@@ -295,7 +295,7 @@ export function EmployeeFormDialog({ open, onClose, defaultAgency, employee }: P
                 label="Agence"
                 value={field.value as string | null | undefined}
                 onChange={(v) => field.onChange(v ?? '')}
-                search={searchers.agencies}
+                search={searchers.myAgencies}
                 selectedOption={defaultAgency ? toSearchOption.agency(defaultAgency) : undefined}
                 required
                 disabled={!!defaultAgency || !!editableId}

@@ -28,6 +28,7 @@ import { WAREHOUSE_REPOSITORY } from '../../application/interfaces/IWarehouseRep
 import { NotFoundError } from '../../domain/errors/BusinessError';
 import { prisma } from '../../config/database';
 import {
+  assertAgencyInScope,
   parcelScope,
   scopeCtx,
   scopeEnforced,
@@ -55,12 +56,11 @@ async function assertStorageRuleScope(req: Request): Promise<void> {
 export class WarehouseController {
   static async create(req: Request, res: Response, next: NextFunction) {
     try {
-      const user = req.user!;
-      const isAdmin = user.role === 'SUPER_ADMIN' || user.role === 'ADMIN';
-      if (!isAdmin && req.body.agencyId && !user.agencyIds.includes(req.body.agencyId)) {
-        const { AuthorizationError } = await import('../../domain/errors/BusinessError');
-        throw new AuthorizationError('Creation de magasin restreinte a votre agence');
-      }
+      // Garde dure : on ne cree un magasin que dans une de SES agences (agence
+      // cible dans le body). Admin => bypass (ctx.unrestricted).
+      const ctx = scopeCtx(req);
+      const agencyId = req.body?.agencyId as string | undefined;
+      if (agencyId) assertAgencyInScope(agencyId, ctx);
       const useCase = container.resolve(CreateWarehouseUseCase);
       const warehouse = await useCase.execute(req.body);
       res.status(201).json({ success: true, data: warehouse });

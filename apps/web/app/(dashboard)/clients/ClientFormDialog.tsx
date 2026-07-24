@@ -345,7 +345,7 @@ export function ClientFormDialog({ open, onClose, defaultAgency, client }: Clien
                 label="Agence d'enregistrement (optionnel)"
                 value={field.value}
                 onChange={(v) => field.onChange(v ?? null)}
-                search={searchers.agencies}
+                search={searchers.myAgencies}
                 selectedOption={defaultAgency ? toSearchOption.agency(defaultAgency) : undefined}
                 error={errors.agencyId?.message}
                 disabled={!!defaultAgency || !!editableId}

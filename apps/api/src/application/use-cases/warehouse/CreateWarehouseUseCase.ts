@@ -2,6 +2,7 @@ import { inject, injectable } from 'tsyringe';
 import { WAREHOUSE_REPOSITORY, type IWarehouseRepository } from '../../interfaces/IWarehouseRepository';
 import { AGENCY_REPOSITORY, type IAgencyRepository } from '../../interfaces/IAgencyRepository';
 import { NotFoundError } from '../../../domain/errors/BusinessError';
+import { assertAgencyActive } from '../../services/scope/agencyScope';
 import { realtimeService } from '../../../infrastructure/realtime/RealtimeService';
 
 interface CreateWarehouseInput {
@@ -24,6 +25,8 @@ export class CreateWarehouseUseCase {
     if (!agency) {
       throw new NotFoundError('Agence', input.agencyId);
     }
+    // Interdit la creation d'un magasin dans une agence desactivee (frozen).
+    await assertAgencyActive(input.agencyId);
 
     const warehouse = await this.warehouseRepo.create({
       name: input.name,

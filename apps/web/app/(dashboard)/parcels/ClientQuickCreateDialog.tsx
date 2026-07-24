@@ -157,7 +157,7 @@ export function ClientQuickCreateDialog({
               label="Agence"
               value={field.value}
               onChange={(v) => field.onChange(v ?? '')}
-              search={searchers.agencies}
+              search={searchers.myAgencies}
               error={errors.agencyId?.message}
               required
               placeholder="Selectionner une agence"

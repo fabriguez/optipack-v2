@@ -2,6 +2,7 @@ import { injectable } from 'tsyringe';
 import { prisma } from '../../../config/database';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
 import { HistoryService } from '../../services/HistoryService';
+import { assertAgencyActive } from '../../services/scope/agencyScope';
 
 interface Input {
   /** Colis enregistre lors de l'inventaire (designation libre) */
@@ -37,6 +38,9 @@ export class RegisterExtraInventoryParcelUseCase {
       throw new BusinessError("L'inventaire n'est pas en cours.");
     }
     if (!input.designation?.trim()) throw new BusinessError('Designation obligatoire');
+
+    // Aucune ecriture sur une agence desactivee (agence du magasin inventorie).
+    if (inventory.warehouse.agencyId) await assertAgencyActive(inventory.warehouse.agencyId);
 
     const client = await prisma.client.findUnique({ where: { id: input.clientId } });
     if (!client) throw new NotFoundError('Client', input.clientId);

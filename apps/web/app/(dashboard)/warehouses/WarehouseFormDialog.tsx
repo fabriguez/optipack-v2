@@ -131,7 +131,7 @@ export function WarehouseFormDialog({ open, onClose, defaultAgency, defaultAgenc
               label="Agence"
               value={field.value}
               onChange={(v) => field.onChange(v ?? '')}
-              search={searchers.agencies}
+              search={searchers.myAgencies}
               selectedOption={
                 resolvedAgency
                   ? toSearchOption.agency(resolvedAgency)

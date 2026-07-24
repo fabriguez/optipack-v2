@@ -21,6 +21,8 @@ import { StorageService } from '../../infrastructure/storage/StorageService';
 import { prisma } from '../../config/database';
 import { NotFoundError } from '../../domain/errors/BusinessError';
 import { getOrgId } from '../middleware/tenantGuard';
+import { getPolicy } from '../middleware/policyContext';
+import { assertAgencyInScope, scopeCtx } from '../../application/services/scope/agencyScope';
 
 export class AgencyController {
   static async create(req: Request, res: Response, next: NextFunction) {
@@ -36,7 +38,16 @@ export class AgencyController {
   static async list(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(ListAgenciesUseCase);
-      const result = await useCase.execute(getOrgId(req), req.query as never);
+      // Selects operationnels : `?mine=true` restreint aux agences du user
+      // (admin bypass -> voit toutes), `?active=true` exclut les desactivees.
+      const policy = getPolicy(req);
+      const activeOnly = req.query.active === 'true';
+      const scopeMine = req.query.mine === 'true' && policy != null && !policy.isAdmin;
+      const filters = {
+        agencyIds: scopeMine ? policy!.agencyIds : undefined,
+        activeOnly,
+      };
+      const result = await useCase.execute(getOrgId(req), req.query as never, filters);
       res.json({ success: true, ...result });
     } catch (err) {
       next(err);
@@ -90,6 +101,9 @@ export class AgencyController {
 
   static async createCharge(req: Request, res: Response, next: NextFunction) {
     try {
+      // Garde dure : creer une charge n'est possible que pour une de SES agences
+      // (agence cible = :id). Admin => bypass (ctx.unrestricted).
+      assertAgencyInScope(req.params.id, scopeCtx(req));
       const useCase = container.resolve(CreateAgencyChargeUseCase);
       const charge = await useCase.execute(req.params.id, req.body, req.user!.userId, getOrgId(req));
       res.status(201).json({ success: true, data: charge });
@@ -120,6 +134,13 @@ export class AgencyController {
 
   static async payCharge(req: Request, res: Response, next: NextFunction) {
     try {
+      // Garde dure : payer une charge n'est possible que pour une de SES agences.
+      // La route porte :chargeId (pas d'agence en param) -> agence via la charge.
+      const charge = await prisma.agencyCharge.findUnique({
+        where: { id: req.params.chargeId },
+        select: { agencyId: true },
+      });
+      if (charge) assertAgencyInScope(charge.agencyId, scopeCtx(req));
       const useCase = container.resolve(PayAgencyChargeUseCase);
       const expense = await useCase.execute(req.params.chargeId, req.body, req.user!.userId, getOrgId(req));
       res.status(201).json({ success: true, data: expense });
@@ -247,6 +268,9 @@ export class AgencyController {
 
   static async generateDailyReport(req: Request, res: Response, next: NextFunction) {
     try {
+      // Garde dure : generer/cloturer le rapport journalier n'est possible que
+      // pour une de SES agences (agence cible = :id). Admin => bypass.
+      assertAgencyInScope(req.params.id, scopeCtx(req));
       const date = req.body?.date ? new Date(req.body.date) : new Date();
       // Regen manuelle : possible UNIQUEMENT tant que le rapport n'est pas
       // cloture. Un rapport cloture est immuable : le service retourne le

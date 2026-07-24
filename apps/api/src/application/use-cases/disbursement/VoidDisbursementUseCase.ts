@@ -4,6 +4,7 @@ import { DISBURSEMENT_REPOSITORY, type IDisbursementRepository } from '../../int
 import { CASH_REGISTER_REPOSITORY, type ICashRegisterRepository } from '../../interfaces/ICashRegisterRepository';
 import { JOURNAL_ENTRY_REPOSITORY, type IJournalEntryRepository } from '../../interfaces/IJournalEntryRepository';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
+import { assertAgencyActive } from '../../services/scope/agencyScope';
 import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 
 @injectable()
@@ -18,6 +19,9 @@ export class VoidDisbursementUseCase {
     const disbursement = await this.disbursementRepo.findById(id);
     if (!disbursement) throw new NotFoundError('Bon de decaissement', id);
     if (disbursement.isVoided) throw new BusinessError('Ce bon est deja annule');
+
+    // Agence de rattachement desactivee : annulation gelee (409).
+    await assertAgencyActive(disbursement.agencyId);
 
     // Create reverse disbursement entry
     const reverseRef = generateReference('DEC-ANN', Date.now() % 10000);

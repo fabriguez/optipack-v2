@@ -30,12 +30,17 @@ export class PrismaAgencyRepository implements IAgencyRepository {
   async findAll(
     organizationId: string,
     pagination: PaginationInput,
+    filters?: { agencyIds?: string[]; activeOnly?: boolean },
   ): Promise<PaginatedResponse<Agency>> {
     const { page, limit, sortBy, sortOrder, search } = pagination;
     const skip = (page - 1) * limit;
 
     const where: Prisma.AgencyWhereInput = {
       organizationId,
+      // Scope "mes agences" (selects operationnels) : restreint aux agences du user.
+      ...(filters?.agencyIds && { id: { in: filters.agencyIds } }),
+      // Selects : une agence desactivee n'est jamais selectionnable.
+      ...(filters?.activeOnly && { isActive: true }),
       ...(search && {
         OR: [
           { name: { contains: search, mode: 'insensitive' } },

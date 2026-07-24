@@ -2,6 +2,7 @@ import { injectable } from 'tsyringe';
 import type { MarkDebtLitigatedInput } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
 import { BusinessError, NotFoundError } from '../../../domain/errors/BusinessError';
+import { assertAgencyActive } from '../../services/scope/agencyScope';
 
 /**
  * Bascule une dette en statut LITIGATED. Empeche les relances automatiques
@@ -16,6 +17,10 @@ export class MarkDebtLitigatedUseCase {
     if (['CANCELLED', 'CLEARED'].includes(debt.status)) {
       throw new BusinessError(`Statut ${debt.status} : litige non applicable.`);
     }
+
+    // Agence de rattachement desactivee : bascule en litige gelee (409).
+    // agencyId absent (dette non rattachee a une agence) -> pas de verrou.
+    if (debt.agencyId) await assertAgencyActive(debt.agencyId);
 
     return prisma.$transaction(async (tx) => {
       const updated = await tx.debt.update({

@@ -61,7 +61,7 @@ function PaymentsContent() {
       key: 'agencyId',
       label: 'Agence',
       type: 'search-select' as const,
-      searcher: searchers.agencies,
+      searcher: searchers.myAgencies,
     },
     {
       key: 'paymentMethod',

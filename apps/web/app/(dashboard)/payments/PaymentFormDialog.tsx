@@ -9,7 +9,6 @@ import { AppInput } from '@/components/ui/AppInput';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppSelect } from '@/components/ui/AppSelect';
 import { AppSearchSelect, type SearchOption } from '@/components/ui/AppSearchSelect';
-import { searchers } from '@/lib/api/searchers';
 import { useRecordPayment } from '@/lib/hooks/usePayments';
 import { usePaymentMethods, useCreatePaymentMethod, type PaymentMethodItem } from '@/lib/hooks/usePaymentMethods';
 import { Plus } from 'lucide-react';
@@ -95,6 +94,14 @@ export function PaymentFormDialog({ open, onClose, invoiceId, parcelTracking }: 
   });
   const activeInvoice = pinnedInvoice ?? selectedInvoiceData?.data;
   const linkedParcels: any[] = activeInvoice?.parcels || [];
+
+  // Agence encaisseuse = agence de la FACTURE (le backend impute a
+  // invoice.agencyId et rejette si ce n'est pas une de vos agences). On la
+  // derive au lieu de la faire choisir : un choix libre serait ignore + permet
+  // de croire qu'on encaisse pour une autre agence.
+  useEffect(() => {
+    if (activeInvoice?.agencyId) setValue('agencyId', activeInvoice.agencyId);
+  }, [activeInvoice?.agencyId, setValue]);
 
   // Searcher facture : reference, client, telephone, tracking colis (le
   // backend gere les 4 dans /invoices?search=...).
@@ -338,21 +345,20 @@ export function PaymentFormDialog({ open, onClose, invoiceId, parcelTracking }: 
           />
         )}
 
-        <Controller
-          name="agencyId"
-          control={control}
-          render={({ field }) => (
-            <AppSearchSelect
-              label="Agence encaisseuse"
-              value={field.value}
-              onChange={(v) => field.onChange(v ?? '')}
-              search={searchers.agencies}
-              error={errors.agencyId?.message}
-              placeholder="Selectionner une agence"
-              required
-            />
-          )}
-        />
+        {/* Agence encaisseuse : DERIVEE de la facture (non modifiable). Le
+            backend impute l'encaissement a invoice.agencyId et le refuse si ce
+            n'est pas une de vos agences. */}
+        <div>
+          <label className="mb-1 block text-xs font-medium text-gray-700">Agence encaisseuse</label>
+          <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900">
+            {activeInvoice?.agency?.name
+              ? `${activeInvoice.agency.name}${activeInvoice.agency.city ? ` — ${activeInvoice.agency.city}` : ''}`
+              : activeInvoice
+                ? "Agence de la facture"
+                : "Selectionnez d'abord une facture"}
+          </div>
+          <input type="hidden" {...register('agencyId')} />
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <AppInput

@@ -13,7 +13,10 @@ const paymentAttachmentSchema = z.object({
 
 export const recordPaymentSchema = z.object({
   invoiceId: z.string().uuid('ID facture invalide'),
-  agencyId: z.string().uuid("ID agence d'encaissement invalide"),
+  // Agence d'encaissement : DERIVEE cote serveur de invoice.agencyId (jamais
+  // du body — un agencyId arbitraire attribuerait l'encaissement a une autre
+  // agence). Optionnel : ignore par RecordPaymentUseCase. Cf. PaymentController.
+  agencyId: z.string().uuid("ID agence d'encaissement invalide").optional(),
   // Scope optionnel sur un colis precis (facture multi-colis ou client paie
   // un seul colis a la fois).
   parcelId: z.string().uuid().optional(),

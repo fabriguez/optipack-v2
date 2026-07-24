@@ -4,13 +4,18 @@ import { CreateDisbursementUseCase } from '../../application/use-cases/disbursem
 import { VoidDisbursementUseCase } from '../../application/use-cases/disbursement/VoidDisbursementUseCase';
 import { DISBURSEMENT_REPOSITORY } from '../../application/interfaces/IDisbursementRepository';
 import { NotFoundError } from '../../domain/errors/BusinessError';
-import { disbursementScope, scopeCtx } from '../../application/services/scope/agencyScope';
+import { assertAgencyInScope, disbursementScope, scopeCtx } from '../../application/services/scope/agencyScope';
 import { applyFieldPolicy, DISBURSEMENT_FIELD_POLICY } from '../serializers/fieldPolicy';
 import { getPolicy } from '../middleware/policyContext';
 
 export class DisbursementController {
   static async create(req: Request, res: Response, next: NextFunction) {
     try {
+      // Garde dure : un personnel n'ordonne un decaissement que pour une de SES
+      // agences (agence cible dans le body). Admin => bypass (ctx.unrestricted).
+      const ctx = scopeCtx(req);
+      const agencyId = req.body?.agencyId as string | undefined;
+      if (agencyId) assertAgencyInScope(agencyId, ctx);
       const useCase = container.resolve(CreateDisbursementUseCase);
       const result = await useCase.execute(req.body, req.user!.userId);
       res.status(201).json({ success: true, data: result });

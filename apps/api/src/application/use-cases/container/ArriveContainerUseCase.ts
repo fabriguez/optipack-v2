@@ -4,6 +4,7 @@ import { PARCEL_REPOSITORY, type IParcelRepository } from '../../interfaces/IPar
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
 import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 import { HistoryService } from '../../services/HistoryService';
+import { assertAgencyActive } from '../../services/scope/agencyScope';
 
 @injectable()
 export class ArriveContainerUseCase {
@@ -21,6 +22,11 @@ export class ArriveContainerUseCase {
       throw new BusinessError(
         `Le conteneur doit etre en transit pour arriver. Statut actuel: ${container.status}`,
       );
+    }
+
+    // Agence ou le colis atterrit (agence d'arrivee du conteneur) : bloquer si desactivee.
+    if (container.arrivalAgencyId) {
+      await assertAgencyActive(container.arrivalAgencyId);
     }
 
     const arrivalDate = new Date();

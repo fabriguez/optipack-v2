@@ -1,6 +1,7 @@
 import { injectable } from 'tsyringe';
 import { prisma } from '../../../config/database';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
+import { assertAgencyActive } from '../../services/scope/agencyScope';
 
 interface ManualMarkInput {
   parcelId: string;
@@ -30,6 +31,13 @@ export class MarkInventoryItemManuallyUseCase {
     if (inventory.status !== 'IN_PROGRESS') {
       throw new BusinessError("L'inventaire n'est pas en cours.");
     }
+
+    // Aucune ecriture sur une agence desactivee (agence du magasin inventorie).
+    const warehouse = await prisma.warehouse.findUnique({
+      where: { id: inventory.warehouseId },
+      select: { agencyId: true },
+    });
+    if (warehouse?.agencyId) await assertAgencyActive(warehouse.agencyId);
 
     const parcel = await prisma.parcel.findUnique({
       where: { id: input.parcelId },

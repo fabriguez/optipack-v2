@@ -4,6 +4,7 @@ import type { Prisma } from '@prisma/client';
 import { CONTAINER_REPOSITORY, type IContainerRepository } from '../../interfaces/IContainerRepository';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
 import { HistoryService } from '../../services/HistoryService';
+import { assertAgencyActive } from '../../services/scope/agencyScope';
 import { prisma } from '../../../config/database';
 
 // Un conteneur est modifiable tant qu'il n'a pas quitte l'agence de depart :
@@ -26,6 +27,11 @@ export class UpdateContainerUseCase {
       throw new BusinessError(
         `Le conteneur ne peut plus etre modifie (statut ${container.status}). Seuls les conteneurs vides ou en chargement sont modifiables.`,
       );
+    }
+
+    // Agence de depart du conteneur : bloquer l'edition si elle est desactivee.
+    if (container.departureAgencyId) {
+      await assertAgencyActive(container.departureAgencyId);
     }
 
     const data: Prisma.ContainerUpdateInput = {};

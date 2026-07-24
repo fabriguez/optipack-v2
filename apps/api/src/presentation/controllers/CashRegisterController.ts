@@ -3,7 +3,11 @@ import { container } from '../../container';
 import { GetCashRegisterUseCase } from '../../application/use-cases/cash-register/GetCashRegisterUseCase';
 import { CloseCashRegisterUseCase } from '../../application/use-cases/cash-register/CloseCashRegisterUseCase';
 import { GetCashRegisterMovementsUseCase } from '../../application/use-cases/cash-register/GetCashRegisterMovementsUseCase';
-import { scopeCtx, scopeEnforced } from '../../application/services/scope/agencyScope';
+import {
+  assertAgencyInScope as assertAgencyInScopeHard,
+  scopeCtx,
+  scopeEnforced,
+} from '../../application/services/scope/agencyScope';
 import { NotFoundError } from '../../domain/errors/BusinessError';
 
 /**
@@ -58,8 +62,10 @@ export class CashRegisterController {
 
   static async close(req: Request, res: Response, next: NextFunction) {
     try {
-      assertAgencyInScope(req);
       const { agencyId } = req.params;
+      // Cloture = ecriture : garde DURE (independante du mode shadow). Un
+      // caissier ne cloture que la caisse d'une de SES agences. Admin => bypass.
+      assertAgencyInScopeHard(agencyId, scopeCtx(req));
       const useCase = container.resolve(CloseCashRegisterUseCase);
       const register = await useCase.execute(agencyId, req.user!.userId, req.body.notes);
       res.json({ success: true, data: register });

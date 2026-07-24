@@ -8,7 +8,11 @@ export class ListAgenciesUseCase {
     @inject(AGENCY_REPOSITORY) private agencyRepo: IAgencyRepository,
   ) {}
 
-  async execute(organizationId: string, pagination: PaginationInput) {
-    return this.agencyRepo.findAll(organizationId, pagination);
+  async execute(
+    organizationId: string,
+    pagination: PaginationInput,
+    filters?: { agencyIds?: string[]; activeOnly?: boolean },
+  ) {
+    return this.agencyRepo.findAll(organizationId, pagination, filters);
   }
 }

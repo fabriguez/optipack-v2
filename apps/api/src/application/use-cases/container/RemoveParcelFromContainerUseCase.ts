@@ -3,6 +3,8 @@ import { CONTAINER_REPOSITORY, type IContainerRepository } from '../../interface
 import { PARCEL_REPOSITORY, type IParcelRepository } from '../../interfaces/IParcelRepository';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
 import { HistoryService } from '../../services/HistoryService';
+import { assertAgencyActive } from '../../services/scope/agencyScope';
+import { prisma } from '../../../config/database';
 
 /**
  * Retrait d'un colis charge par erreur.
@@ -43,6 +45,21 @@ export class RemoveParcelFromContainerUseCase {
       throw new BusinessError(
         "Impossible de determiner le magasin de retour pour ce colis (aucun magasin d'origine).",
       );
+    }
+
+    // Agence ou le colis atterrit : celle du magasin de retour ; a defaut,
+    // l'agence d'arrivee/depart du conteneur. Bloque le retrait si desactivee.
+    const targetWarehouse = await prisma.warehouse.findUnique({
+      where: { id: targetWarehouseId },
+      select: { agencyId: true },
+    });
+    const landingAgencyId =
+      targetWarehouse?.agencyId ??
+      container.arrivalAgencyId ??
+      container.departureAgencyId ??
+      null;
+    if (landingAgencyId) {
+      await assertAgencyActive(landingAgencyId);
     }
 
     await this.parcelRepo.update(parcelId, {

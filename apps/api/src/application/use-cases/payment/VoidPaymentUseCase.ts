@@ -5,6 +5,7 @@ import { INVOICE_REPOSITORY, type IInvoiceRepository } from '../../interfaces/II
 import { CASH_REGISTER_REPOSITORY, type ICashRegisterRepository } from '../../interfaces/ICashRegisterRepository';
 import { JOURNAL_ENTRY_REPOSITORY, type IJournalEntryRepository } from '../../interfaces/IJournalEntryRepository';
 import { NotFoundError, ImmutabilityError, BusinessError } from '../../../domain/errors/BusinessError';
+import { assertAgencyActive } from '../../services/scope/agencyScope';
 import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 
 @injectable()
@@ -23,6 +24,9 @@ export class VoidPaymentUseCase {
     if (payment.isVoided) {
       throw new BusinessError('Ce paiement est deja annule');
     }
+
+    // Agence de rattachement desactivee : annulation gelee (409).
+    await assertAgencyActive(payment.agencyId);
 
     // Void the payment (no delete, no modify amount)
     await this.paymentRepo.void(paymentId, reason, userId);

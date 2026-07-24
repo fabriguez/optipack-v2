@@ -156,7 +156,7 @@ export function RecordDebtPaymentDialog({
               label="Agence encaisseuse"
               value={field.value || null}
               onChange={(v) => field.onChange(v ?? '')}
-              search={searchers.agencies}
+              search={searchers.myAgencies}
               error={errors.agencyId?.message}
               required
             />

@@ -56,7 +56,7 @@ export function FundTransferFormDialog({ open, onClose }: Props) {
               label="Agence source"
               value={field.value}
               onChange={(v) => field.onChange(v ?? '')}
-              search={searchers.agencies}
+              search={searchers.myAgencies}
               error={errors.sourceAgencyId?.message}
               required
               placeholder="Selectionner une agence"

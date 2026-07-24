@@ -2,6 +2,7 @@ import { injectable } from 'tsyringe';
 import type { VoidDebtInput } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
 import { BusinessError, NotFoundError } from '../../../domain/errors/BusinessError';
+import { assertAgencyActive } from '../../services/scope/agencyScope';
 
 /**
  * Annule une dette (status = CANCELLED). Reserve admin (controle au niveau
@@ -27,6 +28,10 @@ export class VoidDebtUseCase {
         `Impossible d'annuler : ${debt.payments.length} paiement(s) non annule(s) sont rattaches a cette dette.`,
       );
     }
+
+    // Agence de rattachement desactivee : annulation gelee (409). agencyId
+    // absent (dette non rattachee a une agence) -> pas de verrou.
+    if (debt.agencyId) await assertAgencyActive(debt.agencyId);
 
     return prisma.$transaction(async (tx) => {
       const updated = await tx.debt.update({

@@ -2,6 +2,7 @@ import { injectable } from 'tsyringe';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../../../config/database';
 import { NotFoundError } from '../../../domain/errors/BusinessError';
+import { assertAgencyActive } from '../../services/scope/agencyScope';
 
 interface CreateInput {
   warehouseId: string;
@@ -35,6 +36,8 @@ export class CreateWarehouseStorageRuleUseCase {
   async execute(input: CreateInput) {
     const wh = await prisma.warehouse.findUnique({ where: { id: input.warehouseId } });
     if (!wh) throw new NotFoundError('Magasin', input.warehouseId);
+    // Agence gelee : pas de creation de regle de magasinage.
+    await assertAgencyActive(wh.agencyId);
 
     return prisma.warehouseStorageFeeRule.create({
       data: {
@@ -57,8 +60,15 @@ export class CreateWarehouseStorageRuleUseCase {
 @injectable()
 export class UpdateWarehouseStorageRuleUseCase {
   async execute(ruleId: string, input: UpdateInput) {
-    const existing = await prisma.warehouseStorageFeeRule.findUnique({ where: { id: ruleId } });
+    const existing = await prisma.warehouseStorageFeeRule.findUnique({
+      where: { id: ruleId },
+      // Lookup ajoute : la regle ne porte que warehouseId ; on remonte l'agence
+      // via le magasin pour la garde "agence desactivee".
+      include: { warehouse: { select: { agencyId: true } } },
+    });
     if (!existing) throw new NotFoundError('Regle frais magasinage', ruleId);
+    // Agence gelee : pas de modification de regle de magasinage.
+    await assertAgencyActive(existing.warehouse.agencyId);
 
     const data: Prisma.WarehouseStorageFeeRuleUpdateInput = {};
     if (input.transitType !== undefined) data.transitType = input.transitType;

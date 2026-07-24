@@ -1,6 +1,7 @@
 import { injectable } from 'tsyringe';
 import { prisma } from '../../../config/database';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
+import { assertAgencyActive } from '../../services/scope/agencyScope';
 import { HistoryService } from '../../services/HistoryService';
 
 interface SpaceInput {
@@ -37,6 +38,8 @@ export class UpsertWarehouseSpacesUseCase {
   async execute(warehouseId: string, items: SpaceInput[]) {
     const warehouse = await prisma.warehouse.findUnique({ where: { id: warehouseId } });
     if (!warehouse) throw new NotFoundError('Magasin', warehouseId);
+    // Agence gelee : pas de reorganisation des zones (spaces) du magasin.
+    await assertAgencyActive(warehouse.agencyId);
 
     const names = new Set<string>();
     for (const it of items) {
@@ -109,11 +112,16 @@ export class MoveParcelToSpaceUseCase {
   async execute(parcelId: string, spaceId: string | null, userId: string, comment?: string) {
     const parcel = await prisma.parcel.findUnique({
       where: { id: parcelId },
-      include: { space: true },
+      // warehouse inclus pour remonter l'agence (garde "agence desactivee").
+      include: { space: true, warehouse: { select: { agencyId: true } } },
     });
     if (!parcel) throw new NotFoundError('Colis', parcelId);
     if (!parcel.warehouseId) {
       throw new BusinessError("Ce colis n'est pas dans un magasin actuellement.");
+    }
+    // Agence gelee : pas de deplacement de colis entre zones du magasin.
+    if (parcel.warehouse?.agencyId) {
+      await assertAgencyActive(parcel.warehouse.agencyId);
     }
 
     let target: { id: string; name: string } | null = null;

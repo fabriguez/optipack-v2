@@ -223,7 +223,7 @@ function HolidayFormDialog({ open, onClose }: { open: boolean; onClose: () => vo
                 label="Agence"
                 value={field.value as string | null | undefined}
                 onChange={(v) => field.onChange(v ?? '')}
-                search={searchers.agencies}
+                search={searchers.myAgencies}
                 placeholder="Selectionner une agence"
                 required
               />

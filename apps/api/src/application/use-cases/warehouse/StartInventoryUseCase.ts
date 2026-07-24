@@ -1,6 +1,7 @@
 import { injectable } from 'tsyringe';
 import { prisma } from '../../../config/database';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
+import { assertAgencyActive } from '../../services/scope/agencyScope';
 
 /**
  * Demarre un inventaire pour un magasin.
@@ -12,6 +13,9 @@ export class StartInventoryUseCase {
   async execute(warehouseId: string, userId: string, comment?: string) {
     const warehouse = await prisma.warehouse.findUnique({ where: { id: warehouseId } });
     if (!warehouse) throw new NotFoundError('Magasin', warehouseId);
+
+    // Aucune ecriture sur une agence desactivee.
+    if (warehouse.agencyId) await assertAgencyActive(warehouse.agencyId);
 
     const ongoing = await prisma.warehouseInventory.findFirst({
       where: { warehouseId, status: 'IN_PROGRESS' },

@@ -67,7 +67,7 @@ export default function DisbursementsPage() {
   ];
 
   const filterFields = [
-    { key: 'agencyId', label: 'Agence', type: 'search-select' as const, searcher: searchers.agencies },
+    { key: 'agencyId', label: 'Agence', type: 'search-select' as const, searcher: searchers.myAgencies },
     { key: 'ordererUserId', label: 'Ordonnateur', type: 'search-select' as const, searcher: ordererSearcher },
     { key: 'dateFrom', label: 'Date debut', type: 'date' as const },
     { key: 'dateTo', label: 'Date fin', type: 'date' as const },

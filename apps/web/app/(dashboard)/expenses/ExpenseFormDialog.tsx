@@ -56,7 +56,7 @@ export function ExpenseFormDialog({ open, onClose }: Props) {
               label="Agence"
               value={field.value}
               onChange={(v) => field.onChange(v ?? '')}
-              search={searchers.agencies}
+              search={searchers.myAgencies}
               error={errors.agencyId ? 'Agence requise' : undefined}
               required
               placeholder="Selectionner une agence"

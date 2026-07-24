@@ -1,6 +1,7 @@
 import { injectable } from 'tsyringe';
 import { prisma } from '../../../config/database';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
+import { assertAgencyActive } from '../../services/scope/agencyScope';
 
 /**
  * Scanne un colis pendant un inventaire (par tracking ou parcelId).
@@ -19,6 +20,13 @@ export class ScanInventoryParcelUseCase {
     if (inventory.status !== 'IN_PROGRESS') {
       throw new BusinessError("L'inventaire n'est pas en cours.");
     }
+
+    // Aucune ecriture sur une agence desactivee (agence du magasin inventorie).
+    const warehouse = await prisma.warehouse.findUnique({
+      where: { id: inventory.warehouseId },
+      select: { agencyId: true },
+    });
+    if (warehouse?.agencyId) await assertAgencyActive(warehouse.agencyId);
 
     const tracking = this.extractTracking(trackingOrId);
     let parcel = await prisma.parcel.findFirst({

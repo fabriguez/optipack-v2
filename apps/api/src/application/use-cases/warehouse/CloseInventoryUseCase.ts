@@ -1,6 +1,7 @@
 import { injectable } from 'tsyringe';
 import { prisma } from '../../../config/database';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
+import { assertAgencyActive } from '../../services/scope/agencyScope';
 
 /**
  * Cloture un inventaire et calcule le rapport de reconciliation.
@@ -30,6 +31,13 @@ export class CloseInventoryUseCase {
     if (inventory.status !== 'IN_PROGRESS') {
       throw new BusinessError("L'inventaire n'est pas en cours.");
     }
+
+    // Aucune ecriture sur une agence desactivee (agence du magasin inventorie).
+    const warehouse = await prisma.warehouse.findUnique({
+      where: { id: inventory.warehouseId },
+      select: { agencyId: true },
+    });
+    if (warehouse?.agencyId) await assertAgencyActive(warehouse.agencyId);
 
     const matched = inventory.items.filter((i) => i.expected && i.scanned);
     const missing = inventory.items.filter((i) => i.expected && !i.scanned);

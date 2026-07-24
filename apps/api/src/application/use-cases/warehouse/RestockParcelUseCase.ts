@@ -1,6 +1,7 @@
 import { injectable } from 'tsyringe';
 import { prisma } from '../../../config/database';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
+import { assertAgencyActive } from '../../services/scope/agencyScope';
 import { HistoryService } from '../../services/HistoryService';
 
 interface Input {
@@ -31,6 +32,9 @@ export class RestockParcelUseCase {
 
     const warehouse = await prisma.warehouse.findUnique({ where: { id: input.warehouseId } });
     if (!warehouse) throw new NotFoundError('Magasin', input.warehouseId);
+    // Agence gelee : on ne remet pas un colis en stock dans un magasin dont
+    // l'agence (destination du restock) est desactivee.
+    await assertAgencyActive(warehouse.agencyId);
 
     if (input.spaceId) {
       const sp = await prisma.warehouseSpace.findUnique({ where: { id: input.spaceId } });
