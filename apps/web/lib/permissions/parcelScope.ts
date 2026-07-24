@@ -9,6 +9,8 @@
 
 export interface WithAgencyScope {
   inAgencyScope?: boolean;
+  /** Remise possible : colis physiquement en magasin d'une de mes agences (pas en transit). */
+  canHandover?: boolean;
 }
 
 /**
@@ -19,4 +21,14 @@ export interface WithAgencyScope {
  */
 export function parcelCanAct(parcel: WithAgencyScope | null | undefined): boolean {
   return parcel?.inAgencyScope !== false;
+}
+
+/**
+ * true si l'UI doit afficher l'action REMISE. Plus strict que parcelCanAct : le
+ * colis doit etre PHYSIQUEMENT receptionne dans un magasin d'une de mes agences
+ * (jamais en transit). Flag `canHandover` calcule cote API. Absent => on laisse
+ * le backend trancher (bouton affiche, la remise 409 si en transit).
+ */
+export function parcelCanHandover(parcel: WithAgencyScope | null | undefined): boolean {
+  return parcel?.canHandover !== false;
 }

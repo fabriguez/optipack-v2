@@ -37,7 +37,7 @@ import { MoveToSpaceDialog } from './MoveToSpaceDialog';
 import { BulkMoveToSpaceDialog, BulkLoadContainerDialog } from './BulkParcelActions';
 import { ExportButton } from '@/components/shared/ExportButton';
 import { Can } from '@/lib/components/Can';
-import { parcelCanAct } from '@/lib/permissions/parcelScope';
+import { parcelCanAct, parcelCanHandover } from '@/lib/permissions/parcelScope';
 import { usePermission } from '@/lib/hooks/usePermission';
 
 export default function WarehouseDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -629,7 +629,7 @@ export default function WarehouseDetailPage({ params }: { params: Promise<{ id: 
           actions={[
             { label: 'Voir', icon: <Eye className="h-4 w-4" />, onClick: () => router.push(`/parcels/${row.id}`) },
             { label: 'QR / Etiquette', icon: <QrCode className="h-4 w-4" />, onClick: () => setQrParcel(row) },
-            ...(canDeliverParcel && row.status !== 'DELIVERED' && parcelCanAct(row)
+            ...(canDeliverParcel && row.status !== 'DELIVERED' && parcelCanHandover(row)
               ? [{ label: 'Remettre au client', icon: <HandCoins className="h-4 w-4" />, onClick: () => setHandoverParcel(row) }]
               : []),
             ...(canModifyParcel(row) && parcelCanAct(row) ? [

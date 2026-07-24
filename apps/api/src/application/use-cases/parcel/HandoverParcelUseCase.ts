@@ -50,16 +50,18 @@ export class HandoverParcelUseCase {
     }
 
     // Agence desactivee : aucune remise possible dans une agence morte.
-    // Une REMISE se fait la OU le colis est PHYSIQUEMENT present : l'agence de
-    // son entrepot courant DOIT etre une des agences du personnel (garde dure,
-    // mode-independante, admin bypass). Le scope transit large de parcelScope
-    // (destination / conteneurs) ne suffit PAS ici — sinon on remet un colis
-    // present dans une autre agence. Puis : agence active.
+    // Une REMISE ne se fait QUE sur un colis PHYSIQUEMENT receptionne dans un
+    // magasin. Colis en transit (dans un conteneur, sans entrepot courant) =>
+    // remise interdite (409). Sinon : l'agence de cet entrepot DOIT etre une des
+    // miennes (garde dure, mode-independante, admin bypass) et etre active.
     const handoverAgencyId = (parcel as any).warehouse?.agency?.id ?? (parcel as any).warehouse?.agencyId ?? null;
-    if (handoverAgencyId) {
-      if (ctx) assertAgencyInScope(handoverAgencyId, ctx);
-      await assertAgencyActive(handoverAgencyId);
+    if (!handoverAgencyId) {
+      throw new BusinessError(
+        "Colis en transit : remise impossible tant qu'il n'a pas ete receptionne dans un magasin.",
+      );
     }
+    if (ctx) assertAgencyInScope(handoverAgencyId, ctx);
+    await assertAgencyActive(handoverAgencyId);
 
     const receiver = await prisma.client.findUnique({
       where: { id: input.receivedByClientId },

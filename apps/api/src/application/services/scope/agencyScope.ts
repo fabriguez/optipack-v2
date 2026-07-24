@@ -305,6 +305,20 @@ export async function assertParcelActionInScopeMany(ids: string[], ctx: ScopeCtx
   }
 }
 
+/**
+ * REMISE (handover) — regle STRICTE, plus forte que parcelInScope : on ne peut
+ * remettre un colis au client QUE s'il est PHYSIQUEMENT receptionne dans un
+ * magasin (entrepot courant present) d'une de MES agences. PAS de fallback
+ * transit : un colis en transit (dans un conteneur, sans entrepot) n'est jamais
+ * remettable. Sert au flag `canHandover` du DTO (UI : masque le bouton).
+ * Admin => true.
+ */
+export function parcelHandoverInScope(parcel: unknown, ctx: ScopeCtx): boolean {
+  if (ctx.unrestricted) return true;
+  const current = parcelCurrentAgencyId((parcel ?? {}) as Record<string, any>);
+  return !!current && ctx.agencyIds.includes(current);
+}
+
 /** Conteneur : agence de depart ou d'arrivee (champs requis au schema). */
 export const containerScope = makeScope<Prisma.ContainerWhereInput>(
   'Container',
