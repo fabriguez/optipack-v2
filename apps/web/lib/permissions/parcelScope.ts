@@ -15,3 +15,22 @@ export interface WithAgencyScope {
 export function parcelCanAct(parcel: WithAgencyScope | null | undefined): boolean {
   return parcel?.inAgencyScope !== false;
 }
+
+/**
+ * REMISE (handover) : une remise se fait la OU le colis est PHYSIQUEMENT present
+ * (agence de son entrepot courant). Contrairement a `inAgencyScope` (scope
+ * transit large : destination + conteneurs), il faut que l'agence de l'ENTREPOT
+ * COURANT soit une des agences du user. Sinon on remet un colis present ailleurs.
+ * Admin -> toujours autorise. Colis pas en entrepot (agence inconnue) -> on laisse
+ * le backend trancher (garde dure cote API). Miroir de HandoverParcelUseCase.
+ */
+export function parcelHandoverAllowed(
+  parcel: { warehouse?: { agency?: { id?: string | null } | null; agencyId?: string | null } | null } | null | undefined,
+  myAgencyIds: string[],
+  isAdmin: boolean,
+): boolean {
+  if (isAdmin) return true;
+  const currentAgencyId = parcel?.warehouse?.agency?.id ?? parcel?.warehouse?.agencyId ?? null;
+  if (!currentAgencyId) return true;
+  return myAgencyIds.includes(currentAgencyId);
+}

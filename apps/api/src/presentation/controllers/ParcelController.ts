@@ -317,10 +317,12 @@ export class ParcelController {
 
   static async handover(req: Request, res: Response, next: NextFunction) {
     try {
-      await parcelScope.assert(req.params.id, scopeCtx(req));
+      const ctx = scopeCtx(req);
+      await parcelScope.assert(req.params.id, ctx);
       const useCase = container.resolve(HandoverParcelUseCase);
       const isAdmin = req.user!.role === 'SUPER_ADMIN' || req.user!.role === 'ADMIN';
-      const result = await useCase.execute(req.params.id, req.body, req.user!.userId, isAdmin);
+      // ctx : garde dure "colis physiquement dans une de MES agences" (admin bypass).
+      const result = await useCase.execute(req.params.id, req.body, req.user!.userId, isAdmin, ctx);
       res.json({ success: true, data: result });
     } catch (err) {
       next(err);

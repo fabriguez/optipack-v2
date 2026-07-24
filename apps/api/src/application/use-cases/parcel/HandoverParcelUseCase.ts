@@ -5,7 +5,7 @@ import { HistoryService } from '../../services/HistoryService';
 import { StorageChargeService } from '../../services/StorageChargeService';
 import { DebtBlockConfigService } from '../../services/DebtBlockConfigService';
 import { prisma } from '../../../config/database';
-import { assertAgencyActive } from '../../services/scope/agencyScope';
+import { assertAgencyActive, assertAgencyInScope, type ScopeCtx } from '../../services/scope/agencyScope';
 import { generateReference } from '@transitsoftservices/shared';
 
 interface HandoverInput {
@@ -42,7 +42,7 @@ export class HandoverParcelUseCase {
    *   admin peut remettre un colis dont la facture n'est pas totalement reglee
    *   (frais de magasinage inclus).
    */
-  async execute(parcelId: string, input: HandoverInput, userId: string, isAdmin = false) {
+  async execute(parcelId: string, input: HandoverInput, userId: string, isAdmin = false, ctx?: ScopeCtx) {
     const parcel = await this.parcelRepo.findById(parcelId);
     if (!parcel) throw new NotFoundError('Colis', parcelId);
     if (parcel.status === 'DELIVERED') {
@@ -50,8 +50,16 @@ export class HandoverParcelUseCase {
     }
 
     // Agence desactivee : aucune remise possible dans une agence morte.
+    // Une REMISE se fait la OU le colis est PHYSIQUEMENT present : l'agence de
+    // son entrepot courant DOIT etre une des agences du personnel (garde dure,
+    // mode-independante, admin bypass). Le scope transit large de parcelScope
+    // (destination / conteneurs) ne suffit PAS ici — sinon on remet un colis
+    // present dans une autre agence. Puis : agence active.
     const handoverAgencyId = (parcel as any).warehouse?.agency?.id ?? (parcel as any).warehouse?.agencyId ?? null;
-    if (handoverAgencyId) await assertAgencyActive(handoverAgencyId);
+    if (handoverAgencyId) {
+      if (ctx) assertAgencyInScope(handoverAgencyId, ctx);
+      await assertAgencyActive(handoverAgencyId);
+    }
 
     const receiver = await prisma.client.findUnique({
       where: { id: input.receivedByClientId },

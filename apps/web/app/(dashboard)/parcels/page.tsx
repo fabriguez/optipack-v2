@@ -30,8 +30,8 @@ import { cn } from '@/lib/utils/cn';
 import { apiClient } from '@/lib/api/client';
 import { formatAmount, formatDate } from '@transitsoftservices/shared';
 import { Can } from '@/lib/components/Can';
-import { parcelCanAct } from '@/lib/permissions/parcelScope';
-import { usePermission } from '@/lib/hooks/usePermission';
+import { parcelCanAct, parcelHandoverAllowed } from '@/lib/permissions/parcelScope';
+import { usePermission, useAgencyIds, useIsTenantAdmin } from '@/lib/hooks/usePermission';
 import { toast } from 'sonner';
 import { ParcelFormDialog } from './ParcelFormDialog';
 
@@ -53,6 +53,8 @@ function ParcelsContent() {
   const canCreateGroup = usePermission('parcelgroup.manage');
   const canUpdateParcel = usePermission('parcel.update');
   const canDeliverParcel = usePermission('parcel.deliver');
+  const myAgencyIds = useAgencyIds();
+  const isTenantAdmin = useIsTenantAdmin();
 
   const { data: groupsData, isLoading: groupsLoading } = useQuery({
     queryKey: ['parcel-groups'],
@@ -405,7 +407,7 @@ function ParcelsContent() {
         <RowActions actions={[
           { label: 'Voir details', icon: <Eye className="h-4 w-4" />, onClick: () => router.push(`/parcels/${row.id}`) },
           { label: 'QR / Etiquette', icon: <QrCode className="h-4 w-4" />, onClick: () => setQrParcel(row) },
-          ...(canDeliverParcel && row.status !== 'DELIVERED' && parcelCanAct(row)
+          ...(canDeliverParcel && row.status !== 'DELIVERED' && parcelHandoverAllowed(row, myAgencyIds, isTenantAdmin)
             ? [{ label: 'Remettre au client', icon: <HandCoins className="h-4 w-4" />, onClick: () => setHandoverParcel(row) }]
             : []),
           ...(canUpdateParcel && parcelCanAct(row)
