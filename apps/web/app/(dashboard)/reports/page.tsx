@@ -142,10 +142,10 @@ export default function ReportsPage() {
             />
             <AppSearchSelect
               label="Agence"
-              placeholder="Toutes les agences"
+              placeholder="Toutes mes agences"
               value={agencyId}
               onChange={(v) => setAgencyId(v ?? '')}
-              search={searchers.agencies}
+              search={searchers.myAgencies}
               clearable
               className="w-64"
             />

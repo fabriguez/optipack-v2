@@ -82,25 +82,29 @@ export const searchers = {
   }, 'searchers.warehouses'),
 
   agencies: tag(async (q: string, limit = DEFAULT_LIMIT): Promise<SearchOption[]> => {
-    const items = await searchPaginated<{ id: string; name: string; city: string; isActive?: boolean }>('/agencies', q, limit);
-    // Une agence desactivee n'est pas selectionnable pour un enregistrement
-    // (colis/finances/personnel). La page de gestion des agences utilise
-    // useAgencies (pas ce searcher) et continue d'afficher les inactives.
-    // NB : ce searcher renvoie TOUTES les agences actives (org-wide) — reserve aux
-    // selects INTER-agences (ex. agence de DESTINATION d'un colis / transfert).
+    // Selects INTER-agences UNIQUEMENT (destination colis/conteneur/transfert) :
+    // toutes les agences ACTIVES. `all=true` opt-out du scope "mes agences"
+    // (defaut API pour un non-admin). Reserve aux cas ou l'agence n'est PAS
+    // forcement une des siennes.
+    const items = await searchPaginated<{ id: string; name: string; city: string; isActive?: boolean }>(
+      '/agencies',
+      q,
+      limit,
+      { all: true, active: true },
+    );
     return items.filter((a) => a.isActive !== false).map((a) => ({ value: a.id, label: a.name, sublabel: a.city }));
   }, 'searchers.agencies'),
 
   // Selects OPERATIONNELS (agence OU on agit : encaissement, depense, decaissement,
   // dette, magasin, jours non ouvres...) : uniquement MES agences ACTIVES. L'API
-  // scope par `mine` (bypass admin -> toutes) + `active`. A utiliser partout ou
-  // l'agence doit etre une des siennes ; garde-fou UX en plus du garde backend.
+  // scope "mes agences" PAR DEFAUT pour un non-admin (admin -> toutes) ; on ajoute
+  // juste `active`. Garde-fou UX en plus du garde backend.
   myAgencies: tag(async (q: string, limit = DEFAULT_LIMIT): Promise<SearchOption[]> => {
     const items = await searchPaginated<{ id: string; name: string; city: string }>(
       '/agencies',
       q,
       limit,
-      { mine: true, active: true },
+      { active: true },
     );
     return items.map((a) => ({ value: a.id, label: a.name, sublabel: a.city }));
   }, 'searchers.myAgencies'),

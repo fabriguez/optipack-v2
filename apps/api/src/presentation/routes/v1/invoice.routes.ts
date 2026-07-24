@@ -333,7 +333,7 @@ const router = Router();
 router.use(authenticate);
 
 // Lecture des factures (liste)
-router.get('/', validate(paginationSchema, 'query'), requirePermission('invoice.read'), async (req, res, next) => {
+router.get('/', validate(paginationSchema, 'query'), requirePermission('invoice.read', 'payment.record'), async (req, res, next) => {
   try {
     const { page = 1, limit = 20, search, sortOrder = 'desc' } = req.query as any;
     const skip = (Number(page) - 1) * Number(limit);
@@ -399,8 +399,10 @@ router.get('/', validate(paginationSchema, 'query'), requirePermission('invoice.
 });
 
 // Lecture du detail d'une facture
-router.get('/:id', requirePermission('invoice.read'), async (req, res, next) => {
+router.get('/:id', requirePermission('invoice.read', 'payment.record'), async (req, res, next) => {
   try {
+    // Un caissier (payment.record) doit pouvoir lire la facture qu'il encaisse,
+    // meme sans invoice.read. Le scope agence + le field-policy s'appliquent.
     await invoiceScope.assert(req.params.id, scopeCtx(req));
     const invoice = await prisma.invoice.findUnique({
       where: { id: req.params.id },

@@ -38,14 +38,17 @@ export class AgencyController {
   static async list(req: Request, res: Response, next: NextFunction) {
     try {
       const useCase = container.resolve(ListAgenciesUseCase);
-      // Selects operationnels : `?mine=true` restreint aux agences du user
-      // (admin bypass -> voit toutes), `?active=true` exclut les desactivees.
+      // Scope agence PAR DEFAUT : un non-admin ne voit QUE ses agences (listing
+      // + selects operationnels). `?all=true` = opt-out explicite pour les
+      // selects INTER-agences (destination d'un colis/transfert) qui doivent
+      // proposer toutes les agences. Admin (ADMIN/SUPER_ADMIN) voit toujours
+      // tout. `?active=true` exclut les agences desactivees.
       const policy = getPolicy(req);
-      const activeOnly = req.query.active === 'true';
-      const scopeMine = req.query.mine === 'true' && policy != null && !policy.isAdmin;
+      const wantAll = req.query.all === 'true';
+      const scopeMine = policy != null && !policy.isAdmin && !wantAll;
       const filters = {
         agencyIds: scopeMine ? policy!.agencyIds : undefined,
-        activeOnly,
+        activeOnly: req.query.active === 'true',
       };
       const result = await useCase.execute(getOrgId(req), req.query as never, filters);
       res.json({ success: true, ...result });
