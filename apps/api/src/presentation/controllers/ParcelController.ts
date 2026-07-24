@@ -21,7 +21,7 @@ import {
   UnarchiveParcelsUseCase,
 } from '../../application/use-cases/parcel/ArchiveParcelsUseCase';
 import { DeleteParcelUseCase } from '../../application/use-cases/parcel/DeleteParcelUseCase';
-import { parcelScope, parcelInScope, scopeCtx } from '../../application/services/scope/agencyScope';
+import { parcelInScope, assertParcelActionInScope, assertParcelActionInScopeMany, scopeCtx } from '../../application/services/scope/agencyScope';
 import { PARCEL_REPOSITORY, type IParcelRepository } from '../../application/interfaces/IParcelRepository';
 import { applyFieldPolicy, PARCEL_FIELD_POLICY } from '../serializers/fieldPolicy';
 import { getPolicy } from '../middleware/policyContext';
@@ -165,7 +165,7 @@ export class ParcelController {
 
   static async update(req: Request, res: Response, next: NextFunction) {
     try {
-      await parcelScope.assert(req.params.id, scopeCtx(req));
+      await assertParcelActionInScope(req.params.id, scopeCtx(req));
       const useCase = container.resolve(UpdateParcelUseCase);
       const parcel = await useCase.execute(req.params.id, req.body, req.user!.userId);
       res.json({ success: true, data: parcel });
@@ -178,7 +178,7 @@ export class ParcelController {
     try {
       const useCase = container.resolve(ArchiveParcelsUseCase);
       const ids: string[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
-      await parcelScope.assertMany(ids, scopeCtx(req));
+      await assertParcelActionInScopeMany(ids, scopeCtx(req));
       const result = await useCase.execute(ids, req.user!.userId, req.body?.reason);
       res.json({ success: true, data: result });
     } catch (err) {
@@ -190,7 +190,7 @@ export class ParcelController {
     try {
       const useCase = container.resolve(UnarchiveParcelsUseCase);
       const ids: string[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
-      await parcelScope.assertMany(ids, scopeCtx(req));
+      await assertParcelActionInScopeMany(ids, scopeCtx(req));
       const result = await useCase.execute(ids, req.user!.userId, req.body?.reason);
       res.json({ success: true, data: result });
     } catch (err) {
@@ -200,7 +200,7 @@ export class ParcelController {
 
   static async updateStatus(req: Request, res: Response, next: NextFunction) {
     try {
-      await parcelScope.assert(req.params.id, scopeCtx(req));
+      await assertParcelActionInScope(req.params.id, scopeCtx(req));
       const useCase = container.resolve(UpdateParcelStatusUseCase);
       const warehouseChange = Object.prototype.hasOwnProperty.call(req.body, 'warehouseId')
         ? { warehouseId: (req.body.warehouseId as string | null) ?? null }
@@ -244,7 +244,7 @@ export class ParcelController {
       if (!url) {
         return res.status(400).json({ success: false, message: 'url requis' });
       }
-      await parcelScope.assert(req.params.id, scopeCtx(req));
+      await assertParcelActionInScope(req.params.id, scopeCtx(req));
 
       const parcel = await prisma.parcel.findUnique({ where: { id: req.params.id }, select: { id: true, designation: true, trackingNumber: true } });
       if (!parcel) {
@@ -285,7 +285,7 @@ export class ParcelController {
 
   static async deleteImage(req: Request, res: Response, next: NextFunction) {
     try {
-      await parcelScope.assert(req.params.id, scopeCtx(req));
+      await assertParcelActionInScope(req.params.id, scopeCtx(req));
       const image = await prisma.parcelImage.findUnique({
         where: { id: req.params.imageId },
         include: { parcel: { select: { designation: true, trackingNumber: true } } },
@@ -318,7 +318,7 @@ export class ParcelController {
   static async handover(req: Request, res: Response, next: NextFunction) {
     try {
       const ctx = scopeCtx(req);
-      await parcelScope.assert(req.params.id, ctx);
+      await assertParcelActionInScope(req.params.id, ctx);
       const useCase = container.resolve(HandoverParcelUseCase);
       const isAdmin = req.user!.role === 'SUPER_ADMIN' || req.user!.role === 'ADMIN';
       // ctx : garde dure "colis physiquement dans une de MES agences" (admin bypass).
@@ -354,7 +354,7 @@ export class ParcelController {
 
   static async delete(req: Request, res: Response, next: NextFunction) {
     try {
-      await parcelScope.assert(req.params.id, scopeCtx(req));
+      await assertParcelActionInScope(req.params.id, scopeCtx(req));
       const useCase = container.resolve(DeleteParcelUseCase);
       await useCase.execute(req.params.id, req.user!.userId);
       res.json({ success: true, message: 'Colis supprime' });

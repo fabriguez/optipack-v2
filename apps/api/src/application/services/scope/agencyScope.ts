@@ -237,11 +237,72 @@ export function parcelAgencyIdSet(parcel: unknown): string[] {
   return [...ids];
 }
 
-/** true si le colis (relations chargees) intersecte les agences du user. Admin => true. */
+/** Agence PHYSIQUE courante d'un colis = agence de son entrepot courant. */
+function parcelCurrentAgencyId(parcel: Record<string, any>): string | null {
+  return parcel?.warehouse?.agencyId ?? parcel?.warehouse?.agency?.id ?? null;
+}
+
+/**
+ * REGLE D'ACTION sur un colis (produit) : on ne peut AGIR que sur un colis
+ * PHYSIQUEMENT present dans un magasin d'une de SES agences. Donc :
+ *   - colis en magasin  -> l'agence de CE magasin doit etre une des miennes ;
+ *   - colis PAS en magasin (en transit dans un conteneur) -> fallback sur le
+ *     scope transit large (agences de la route) pour ne pas casser les flux de
+ *     reception/dechargement (le colis n'a pas encore d'entrepot).
+ * La LECTURE reste non scopee (tout le monde voit tout). Admin => true.
+ * Sert au flag `inAgencyScope` du DTO (UI). Autorite = assertParcelActionInScope.
+ */
 export function parcelInScope(parcel: unknown, ctx: ScopeCtx): boolean {
   if (ctx.unrestricted) return true;
-  const set = parcelAgencyIdSet(parcel);
-  return set.some((id) => ctx.agencyIds.includes(id));
+  const p = (parcel ?? {}) as Record<string, any>;
+  const current = parcelCurrentAgencyId(p);
+  if (current) return ctx.agencyIds.includes(current);
+  return parcelAgencyIdSet(p).some((id) => ctx.agencyIds.includes(id));
+}
+
+/**
+ * Garde DURE (mode-independante, admin bypass) : refuse toute ACTION sur un
+ * colis qui n'est pas physiquement dans un magasin d'une de mes agences (meme
+ * regle que parcelInScope, appliquee cote serveur). 404 (ne revele pas
+ * l'existence). A appeler dans les use-cases/controllers d'action colis.
+ */
+export async function assertParcelActionInScope(parcelId: string, ctx: ScopeCtx): Promise<void> {
+  if (ctx.unrestricted) return;
+  const parcel = await prisma.parcel.findUnique({
+    where: { id: parcelId },
+    select: {
+      warehouse: { select: { agencyId: true } },
+      originalWarehouse: { select: { agencyId: true } },
+      destinationAgencyId: true,
+      container: { select: { departureAgencyId: true, arrivalAgencyId: true } },
+      lastContainer: { select: { departureAgencyId: true, arrivalAgencyId: true } },
+    },
+  });
+  if (!parcel) throw new NotFoundError('Parcel', parcelId);
+  const current = parcel.warehouse?.agencyId ?? null;
+  if (current) {
+    if (ctx.agencyIds.includes(current)) return;
+    throw new NotFoundError('Parcel', parcelId); // present dans une AUTRE agence
+  }
+  // En transit (pas d'entrepot) : fallback scope transit.
+  const transit = [
+    parcel.originalWarehouse?.agencyId,
+    parcel.destinationAgencyId,
+    parcel.container?.departureAgencyId,
+    parcel.container?.arrivalAgencyId,
+    parcel.lastContainer?.departureAgencyId,
+    parcel.lastContainer?.arrivalAgencyId,
+  ].filter((v): v is string => !!v);
+  if (transit.some((a) => ctx.agencyIds.includes(a))) return;
+  throw new NotFoundError('Parcel', parcelId);
+}
+
+/** Variante batch (archivage/desarchivage) : chaque colis doit passer. */
+export async function assertParcelActionInScopeMany(ids: string[], ctx: ScopeCtx): Promise<void> {
+  if (ctx.unrestricted || ids.length === 0) return;
+  for (const id of Array.from(new Set(ids))) {
+    await assertParcelActionInScope(id, ctx);
+  }
 }
 
 /** Conteneur : agence de depart ou d'arrivee (champs requis au schema). */
