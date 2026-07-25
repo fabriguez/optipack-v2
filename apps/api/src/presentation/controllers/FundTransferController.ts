@@ -29,10 +29,15 @@ export class FundTransferController {
     try {
       const repo = container.resolve<any>(FUND_TRANSFER_REPOSITORY);
       const q = req.query as Record<string, string | undefined>;
-      const scopeWhere = fundTransferScope.where(scopeCtx(req)) ?? null;
+      // Scope agence DUR (mode-independant) : uniquement les transferts dont la
+      // source OU la destination est une agence associee du user. Admin => tous.
+      const scopeWhere = fundTransferScope.restriction(scopeCtx(req)) ?? null;
       const result = await repo.findAll(
         {
-          agencyIds: req.user!.agencyIds,
+          agencyIds:
+            req.user!.role === 'SUPER_ADMIN' || req.user!.role === 'ADMIN'
+              ? undefined
+              : req.user!.agencyIds,
           scopeWhere,
           sourceAgencyId: q.sourceAgencyId,
           destinationAgencyId: q.destinationAgencyId,

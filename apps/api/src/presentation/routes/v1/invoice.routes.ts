@@ -346,7 +346,9 @@ router.get('/', validate(paginationSchema, 'query'), requirePermission('invoice.
     // form paiement de trouver vite la facture via le bordereau papier
     // (tracking) ou un appel client (telephone).
     // Scope agence : merge en AND pour ne pas ecraser le OR de recherche.
-    const scopeWhere = invoiceScope.where(scopeCtx(req)) ?? null;
+    // Scope agence DUR (mode-independant) : un employe ne voit que les factures
+    // de SES agences associees (principale + secondaires). Admin => toutes.
+    const scopeWhere = invoiceScope.restriction(scopeCtx(req)) ?? null;
     const where: any = {
       isActive: true,
       ...(scopeWhere && { AND: [scopeWhere] }),

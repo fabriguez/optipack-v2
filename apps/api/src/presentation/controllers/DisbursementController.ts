@@ -28,10 +28,15 @@ export class DisbursementController {
     try {
       const repo = container.resolve<any>(DISBURSEMENT_REPOSITORY);
       const q = req.query as Record<string, string | undefined>;
-      const scopeWhere = disbursementScope.where(scopeCtx(req)) ?? null;
+      // Scope agence DUR (mode-independant) : uniquement les decaissements des
+      // agences associees du user (principale + secondaires). Admin => toutes.
+      const scopeWhere = disbursementScope.restriction(scopeCtx(req)) ?? null;
       const result = await repo.findAll(
         {
-          agencyIds: req.user!.agencyIds,
+          agencyIds:
+            req.user!.role === 'SUPER_ADMIN' || req.user!.role === 'ADMIN'
+              ? undefined
+              : req.user!.agencyIds,
           scopeWhere,
           agencyId: q.agencyId,
           ordererUserId: q.ordererUserId,

@@ -54,11 +54,16 @@ export class PaymentController {
     try {
       const repo = container.resolve<any>(PAYMENT_REPOSITORY);
       const { agencyId, paymentMethod, startDate, endDate } = req.query;
-      const scopeWhere = paymentScope.where(scopeCtx(req)) ?? null;
+      // Scope agence DUR (mode-independant) : un employe ne voit que les
+      // paiements de SES agences associees (principale + secondaires). Admin => toutes.
+      const scopeWhere = paymentScope.restriction(scopeCtx(req)) ?? null;
       const result = await repo.findAll(
         {
           agencyId: agencyId as string,
-          agencyIds: req.user!.agencyIds,
+          agencyIds:
+            req.user!.role === 'SUPER_ADMIN' || req.user!.role === 'ADMIN'
+              ? undefined
+              : req.user!.agencyIds,
           scopeWhere,
           paymentMethod: paymentMethod as string | undefined,
           startDate: startDate as string | undefined,

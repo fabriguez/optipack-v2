@@ -11,7 +11,9 @@ export class AccountingController {
       const useCase = container.resolve(GetLedgerUseCase);
       const { agencyId, sourceType, dateFrom, dateTo } = req.query;
       // Scope agence (etape 2) : fragment merge en AND dans le where du repo.
-      const scopeWhere = journalEntryScope.where(scopeCtx(req)) ?? null;
+      // Scope agence DUR (mode-independant) : uniquement les ecritures des
+      // agences associees du user (principale + secondaires). Admin => toutes.
+      const scopeWhere = journalEntryScope.restriction(scopeCtx(req)) ?? null;
       const result = await useCase.execute(
         {
           agencyId: agencyId as string,
