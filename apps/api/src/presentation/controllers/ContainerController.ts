@@ -15,7 +15,12 @@ import { CONTAINER_REPOSITORY } from '../../application/interfaces/IContainerRep
 import { PARCEL_REPOSITORY } from '../../application/interfaces/IParcelRepository';
 import { NotFoundError } from '../../domain/errors/BusinessError';
 import { HistoryService } from '../../application/services/HistoryService';
-import { containerScope, scopeCtx } from '../../application/services/scope/agencyScope';
+import {
+  containerScope,
+  scopeCtx,
+  assertContainerDepartureInScope,
+  assertContainerDepartureOrArrivalInScope,
+} from '../../application/services/scope/agencyScope';
 
 export class ContainerController {
   static async create(req: Request, res: Response, next: NextFunction) {
@@ -65,12 +70,11 @@ export class ContainerController {
       } = req.query;
       const isForwardingFlag =
         isForwarding === 'true' ? true : isForwarding === 'false' ? false : undefined;
-      // SUPER_ADMIN voit tous les conteneurs (pas de scope agence). Les autres
-      // sont filtres par leurs agences. Sans ce bypass, un SUPER_ADMIN avec
-      // agencyIds=[] verrait LA LISTE VIDE -- bug observe sur le formulaire
-      // de creation de conteneur d'acheminement (parentContainer empty).
-      const agencyIds =
-        req.user!.role === 'SUPER_ADMIN' ? undefined : req.user!.agencyIds;
+      // Admin tenant (ADMIN) + plateforme (SUPER_ADMIN) voient TOUS les
+      // conteneurs. Un employe ne voit QUE les conteneurs dont l'agence de
+      // depart OU d'arrivee est une de ses agences (repo : OR sur agencyIds).
+      const isAdmin = req.user!.role === 'SUPER_ADMIN' || req.user!.role === 'ADMIN';
+      const agencyIds = isAdmin ? undefined : req.user!.agencyIds;
       // Scope agence (etape 2) : fragment AND additionnel, actif en enforce.
       const scopeWhere = containerScope.where(scopeCtx(req)) ?? null;
       const result = await useCase.execute(
@@ -146,7 +150,11 @@ export class ContainerController {
 
   static async loadParcels(req: Request, res: Response, next: NextFunction) {
     try {
-      await containerScope.assert(req.params.id, scopeCtx(req));
+      const ctx = scopeCtx(req);
+      await containerScope.assert(req.params.id, ctx);
+      // CHARGEMENT : uniquement les conteneurs dont l'agence de DEPART est une
+      // de mes agences (garde dure, mode-independante, admin bypass).
+      await assertContainerDepartureInScope(req.params.id, ctx);
       const useCase = container.resolve(LoadParcelsUseCase);
       const result = await useCase.execute(req.params.id, req.body.parcelIds, req.user!.userId);
       res.json({ success: true, data: result });
@@ -174,7 +182,10 @@ export class ContainerController {
 
   static async loadByQr(req: Request, res: Response, next: NextFunction) {
     try {
-      await containerScope.assert(req.params.id, scopeCtx(req));
+      const ctx = scopeCtx(req);
+      await containerScope.assert(req.params.id, ctx);
+      // CHARGEMENT (scan QR) : agence de DEPART dans mon scope.
+      await assertContainerDepartureInScope(req.params.id, ctx);
       const useCase = container.resolve(LoadByQRCodeUseCase);
       const result = await useCase.execute(
         req.params.id,
@@ -227,7 +238,10 @@ export class ContainerController {
 
   static async unloadParcel(req: Request, res: Response, next: NextFunction) {
     try {
-      await containerScope.assert(req.params.id, scopeCtx(req));
+      const ctx = scopeCtx(req);
+      await containerScope.assert(req.params.id, ctx);
+      // DECHARGEMENT : agence de DEPART OU d'ARRIVEE dans mon scope (garde dure).
+      await assertContainerDepartureOrArrivalInScope(req.params.id, ctx);
       const useCase = container.resolve(UnloadParcelUseCase);
       const { parcelId, action, warehouseId, newWeight, comment } = req.body;
       const result = await useCase.execute(

@@ -270,7 +270,7 @@ export function ContainerFormDialog({ open, onClose, container: editTarget, user
                 label="Agence de depart"
                 value={field.value}
                 onChange={(v) => field.onChange(v ?? '')}
-                search={searchers.agencies}
+                search={searchers.myAgencies}
                 selectedOption={
                   !isEdit && userAgencyId && userAgencyObj
                     ? toSearchOption.agency(userAgencyObj)

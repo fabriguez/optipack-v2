@@ -319,6 +319,38 @@ export function parcelHandoverInScope(parcel: unknown, ctx: ScopeCtx): boolean {
   return !!current && ctx.agencyIds.includes(current);
 }
 
+/**
+ * CHARGEMENT d'un conteneur : possible UNIQUEMENT si l'agence de DEPART du
+ * conteneur est une de MES agences. Garde dure (mode-independante), admin
+ * bypass. 404 (ne revele pas l'existence).
+ */
+export async function assertContainerDepartureInScope(containerId: string, ctx: ScopeCtx): Promise<void> {
+  if (ctx.unrestricted) return;
+  const c = await prisma.container.findUnique({
+    where: { id: containerId },
+    select: { departureAgencyId: true },
+  });
+  if (!c) throw new NotFoundError('Container', containerId);
+  if (c.departureAgencyId && ctx.agencyIds.includes(c.departureAgencyId)) return;
+  throw new NotFoundError('Container', containerId);
+}
+
+/**
+ * DECHARGEMENT d'un conteneur : possible si l'agence de DEPART OU d'ARRIVEE est
+ * une de MES agences. Garde dure (mode-independante), admin bypass. 404.
+ */
+export async function assertContainerDepartureOrArrivalInScope(containerId: string, ctx: ScopeCtx): Promise<void> {
+  if (ctx.unrestricted) return;
+  const c = await prisma.container.findUnique({
+    where: { id: containerId },
+    select: { departureAgencyId: true, arrivalAgencyId: true },
+  });
+  if (!c) throw new NotFoundError('Container', containerId);
+  const set = [c.departureAgencyId, c.arrivalAgencyId].filter((v): v is string => !!v);
+  if (set.some((id) => ctx.agencyIds.includes(id))) return;
+  throw new NotFoundError('Container', containerId);
+}
+
 /** Conteneur : agence de depart ou d'arrivee (champs requis au schema). */
 export const containerScope = makeScope<Prisma.ContainerWhereInput>(
   'Container',
