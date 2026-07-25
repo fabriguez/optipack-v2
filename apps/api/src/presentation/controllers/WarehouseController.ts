@@ -31,7 +31,6 @@ import {
   assertAgencyInScope,
   parcelScope,
   scopeCtx,
-  scopeEnforced,
   warehouseScope,
 } from '../../application/services/scope/agencyScope';
 
@@ -73,9 +72,12 @@ export class WarehouseController {
     try {
       const repo = container.resolve<any>(WAREHOUSE_REPOSITORY);
       const { agencyId } = req.query;
-      const scope = req.user!.role === 'SUPER_ADMIN' ? null : req.user!.agencyIds;
-      // Scope agence (etape 2) : fragment AND additionnel, actif en enforce.
-      const scopeWhere = warehouseScope.where(scopeCtx(req)) ?? null;
+      // Un employe ne voit QUE les magasins de ses agences (scope mode-independant :
+      // toujours applique). Admin (ADMIN/SUPER_ADMIN) => tous. Vaut pour le listing
+      // ET les selects (searchers.warehouses passe par ce meme GET /warehouses).
+      const ctx = scopeCtx(req);
+      const scope = ctx.unrestricted ? null : ctx.agencyIds;
+      const scopeWhere = warehouseScope.where(ctx) ?? null;
       const result = await repo.findByAgencies(
         scope,
         req.query as any,
@@ -91,14 +93,11 @@ export class WarehouseController {
   static async list(req: Request, res: Response, next: NextFunction) {
     try {
       const { agencyId } = req.params;
-      // Scope agence : l'agence demandee doit appartenir au perimetre du user.
+      // Scope agence DUR (mode-independant) : l'agence demandee doit etre une des
+      // miennes. Un employe ne peut pas lister les magasins d'une autre agence.
       const ctx = scopeCtx(req);
       if (!ctx.unrestricted && !ctx.agencyIds.includes(agencyId)) {
-        if (scopeEnforced()) throw new NotFoundError('Agence', agencyId);
-        // eslint-disable-next-line no-console
-        console.warn(
-          `[SCOPE-DENY] user=${ctx.userId} resource=Agency id=${agencyId} agencies=[${ctx.agencyIds.join(',')}]`,
-        );
+        throw new NotFoundError('Agence', agencyId);
       }
       const useCase = container.resolve(ListWarehousesUseCase);
       const result = await useCase.execute(agencyId, req.query as any);

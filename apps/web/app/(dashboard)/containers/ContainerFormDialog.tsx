@@ -280,8 +280,7 @@ export function ContainerFormDialog({ open, onClose, container: editTarget, user
                 }
                 error={errors.departureAgencyId?.message}
                 required
-                disabled={!isEdit && !!userAgencyId}
-                placeholder="Selectionner"
+                placeholder="Selectionner une de vos agences"
               />
             );
           }}

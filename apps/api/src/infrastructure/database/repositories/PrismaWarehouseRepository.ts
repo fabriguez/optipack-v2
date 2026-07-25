@@ -89,12 +89,17 @@ export class PrismaWarehouseRepository implements IWarehouseRepository {
     const { page, limit, sortBy, sortOrder, search } = pagination;
     const skip = (page - 1) * limit;
 
+    // agencyIds=null => admin (pas de scope). Sinon on borne aux agences du user.
+    // Quand une agence precise est demandee (ex. magasins de l'agence de depart
+    // d'un conteneur), on filtre par CETTE agence — mais uniquement si elle est
+    // dans mon scope ; sinon aucun magasin. On evite le combo `{ equals, in }`
+    // (fragile) : quand l'agence est autorisee on prend TOUS ses magasins.
     const agencyFilter: Prisma.WarehouseWhereInput =
       agencyIds === null
-        ? agencyId
-          ? { agencyId }
-          : {}
-        : { agencyId: agencyId ? { equals: agencyId, in: agencyIds } : { in: agencyIds } };
+        ? (agencyId ? { agencyId } : {})
+        : agencyId
+          ? (agencyIds.includes(agencyId) ? { agencyId } : { agencyId: { in: [] } })
+          : { agencyId: { in: agencyIds } };
 
     const where: Prisma.WarehouseWhereInput = {
       ...agencyFilter,
