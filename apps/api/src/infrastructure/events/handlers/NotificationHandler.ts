@@ -743,6 +743,90 @@ function registerHandlers() {
     }
   });
 
+  // DEBT_PAYMENT_RECEIVED -- encaissement sur une dette client. Seules les
+  // dettes CLIENT ont un destinataire a notifier (clientId) ; les paiements
+  // de dettes EMPLOYEE/AGENCY/CARRIER sont des operations internes.
+  eventBus.on(DomainEvents.DEBT_PAYMENT_RECEIVED, async (event: DomainEvent) => {
+    const payload = event.payload as Record<string, any>;
+    const { clientId, agencyId, amount, debtRef, motif, paymentMethod, remainingAmount, agencyName } = payload;
+    if (!clientId) return;
+    const organizationId = await resolveEventOrg(event, payload);
+    const clientName = await getClientName(clientId);
+
+    const methodLabels: Record<string, string> = {
+      CASH: 'Especes', MOBILE_MONEY: 'Mobile Money',
+      BANK_TRANSFER: 'Virement', CARD: 'Carte bancaire', CHECK: 'Cheque',
+    };
+    const remainingStr = String(remainingAmount ?? '0');
+    const isCleared = Number(remainingAmount ?? 0) <= 0;
+
+    const templateVars = {
+      amount: String(amount || ''),
+      debtRef: debtRef || '',
+      motif: motif || '',
+      paymentMethod: methodLabels[paymentMethod] || paymentMethod || '',
+      remainingAmount: remainingStr,
+      clientName,
+      agencyName: agencyName || '',
+    };
+
+    await createNotification({
+      clientId,
+      agencyId: agencyId || event.agencyId,
+      organizationId,
+      title: 'Paiement de dette recu',
+      message: isCleared
+        ? `Votre paiement de ${amount || ''} a ete recu. La dette ${debtRef || ''} est entierement soldee.`
+        : `Votre paiement de ${amount || ''} a ete recu sur la dette ${debtRef || ''}. Solde restant : ${remainingStr}.`,
+      metadata: { debtRef, amount, remainingAmount, kind: 'DEBT_PAYMENT_RECEIVED' } as Prisma.InputJsonValue,
+    });
+
+    const email = await getClientEmail(clientId);
+    if (email) {
+      await sendEmailWithTemplate(
+        email,
+        organizationId,
+        'DEBT_PAYMENT_RECEIVED',
+        templateVars,
+        () =>
+          emailService.send(
+            email,
+            'Paiement de dette recu',
+            `<p>Bonjour ${clientName || ''},</p>` +
+              `<p>Nous confirmons la reception de votre paiement de <strong>${amount || ''} XAF</strong> ` +
+              `(${methodLabels[paymentMethod] || paymentMethod || ''}) sur la dette <strong>${debtRef || ''}</strong>` +
+              `${motif ? ` (${motif})` : ''}.</p>` +
+              (isCleared
+                ? `<p>Cette dette est desormais <strong>entierement soldee</strong>. Merci.</p>`
+                : `<p>Solde restant : <strong>${remainingStr} XAF</strong>.</p>`) +
+              `<p>Agence : ${agencyName || '-'}</p>`,
+            organizationId,
+            { event: 'DEBT_PAYMENT_RECEIVED' },
+          ),
+        undefined,
+        { clientId, agencyId: agencyId || event.agencyId },
+      );
+    }
+
+    await dispatchExternal(
+      { clientId, agencyId: agencyId || event.agencyId, organizationId },
+      {
+        title: 'Paiement de dette recu',
+        message:
+          `Paiement de dette recu\n\n` +
+          `Dette : ${debtRef || '-'}${motif ? ` (${motif})` : ''}\n` +
+          `Montant : ${amount || '-'} XAF\n` +
+          `Mode : ${methodLabels[paymentMethod] || paymentMethod || '-'}\n` +
+          `Solde restant : ${remainingStr} XAF\n` +
+          `Agence : ${agencyName || '-'}` +
+          (isCleared ? `\n\nVotre dette est entierement soldee. Merci.` : ''),
+        metadata: { debtRef, amount, remainingAmount },
+        kind: 'DEBT_PAYMENT_RECEIVED',
+        templateVariables: templateVars,
+      },
+    );
+  });
+
   // PENALTY_APPLIED
   eventBus.on(DomainEvents.PENALTY_APPLIED, async (event: DomainEvent) => {
     const payload = event.payload as Record<string, any>;

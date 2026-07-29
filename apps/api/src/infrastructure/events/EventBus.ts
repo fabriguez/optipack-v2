@@ -72,6 +72,8 @@ export const DomainEvents = {
   PAYMENT_RECEIVED: 'payment.received',
   PAYMENT_VOIDED: 'payment.voided',
 
+  DEBT_PAYMENT_RECEIVED: 'debtPayment.received',
+
   DISBURSEMENT_CREATED: 'disbursement.created',
   DISBURSEMENT_VOIDED: 'disbursement.voided',
 

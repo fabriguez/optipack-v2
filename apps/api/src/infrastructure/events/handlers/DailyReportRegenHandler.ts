@@ -88,6 +88,7 @@ export function registerDailyReportRegenHandler(): void {
     DomainEvents.CASH_REGISTER_CLOSED,
     DomainEvents.PAYMENT_RECEIVED,
     DomainEvents.PAYMENT_VOIDED,
+    DomainEvents.DEBT_PAYMENT_RECEIVED,
     DomainEvents.DISBURSEMENT_CREATED,
     DomainEvents.DISBURSEMENT_VOIDED,
     DomainEvents.FUND_TRANSFER_CREATED,

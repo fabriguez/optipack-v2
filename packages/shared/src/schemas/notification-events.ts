@@ -196,6 +196,24 @@ export const NOTIFICATION_EVENT_REGISTRY: NotificationEventDefinition[] = [
     ],
   },
 
+  {
+    kind: 'DEBT_PAYMENT_RECEIVED',
+    label: 'Paiement de dette encaissé',
+    description: "Déclenché à chaque encaissement sur une dette client (paiement partiel ou soldant).",
+    category: 'payment',
+    recipient: 'client',
+    variables: [
+      { name: 'amount', label: 'Montant encaissé (XAF)', example: '10 000' },
+      { name: 'debtRef', label: 'Référence dette', example: 'DET-2024-0031' },
+      { name: 'motif', label: 'Motif de la dette', example: 'Colis retiré sans paiement' },
+      { name: 'paymentMethod', label: 'Mode de paiement', example: 'Espèces' },
+      { name: 'remainingAmount', label: 'Solde restant (XAF)', example: '5 000' },
+      { name: 'clientName', label: 'Nom du client', example: 'Jean Dupont' },
+      { name: 'agencyName', label: 'Nom de l\'agence', example: 'Agence Yaoundé Centre' },
+    ],
+    attachments: [],
+  },
+
   // ── PÉNALITÉS / STOCKAGE ─────────────────────────────────────────────────
   {
     kind: 'PENALTY_APPLIED',

@@ -10,6 +10,7 @@ import { formatAmount, formatDateTime } from '@transitsoftservices/shared';
 
 const SOURCE_LABELS: Record<string, string> = {
   PAYMENT: 'Paiement',
+  DEBT_PAYMENT: 'Paiement dette',
   DISBURSEMENT: 'Decaissement',
   TRANSFER: 'Transfert',
   EXPENSE: 'Depense',

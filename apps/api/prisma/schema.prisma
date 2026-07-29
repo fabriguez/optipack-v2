@@ -2785,6 +2785,7 @@ model JournalEntry {
 
 enum JournalSourceType {
   PAYMENT
+  DEBT_PAYMENT
   DISBURSEMENT
   TRANSFER
   EXPENSE

@@ -136,6 +136,7 @@ export type AccountType = (typeof AccountType)[keyof typeof AccountType];
 // -- Source ecriture comptable --
 export const JournalSourceType = {
   PAYMENT: 'PAYMENT',
+  DEBT_PAYMENT: 'DEBT_PAYMENT',
   DISBURSEMENT: 'DISBURSEMENT',
   TRANSFER: 'TRANSFER',
   EXPENSE: 'EXPENSE',

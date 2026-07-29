@@ -12,7 +12,7 @@ import { accountingApi } from '@/lib/api/finance';
 import { colors } from '@/lib/theme/colors';
 import { spacing } from '@/lib/theme/spacing';
 
-export const SOURCE_LABELS: Record<string, string> = { PAYMENT: 'Paiement', DISBURSEMENT: 'Decaissement', TRANSFER: 'Transfert', EXPENSE: 'Depense', PENALTY: 'Penalite', SALARY: 'Salaire' };
+export const SOURCE_LABELS: Record<string, string> = { PAYMENT: 'Paiement', DEBT_PAYMENT: 'Paiement dette', DISBURSEMENT: 'Decaissement', TRANSFER: 'Transfert', EXPENSE: 'Depense', PENALTY: 'Penalite', SALARY: 'Salaire' };
 
 function sumLines(lines: any[] = [], field: string) { return lines.reduce((s, l) => s + Number(l[field] ?? 0), 0); }
 
