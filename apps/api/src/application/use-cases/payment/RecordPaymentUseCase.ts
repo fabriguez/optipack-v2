@@ -13,6 +13,7 @@ import { LoyaltyConfigService } from '../../services/LoyaltyConfigService';
 import { GroupInvoiceService } from '../../services/GroupInvoiceService';
 import { StorageChargeService } from '../../services/StorageChargeService';
 import { AccountingAccountService } from '../../services/AccountingAccountService';
+import { PromoCodeService } from '../../services/promo/PromoCodeService';
 
 function tierFor(
   points: number,
@@ -35,6 +36,7 @@ export class RecordPaymentUseCase {
     private groupInvoice: GroupInvoiceService,
     private storageCharges: StorageChargeService,
     private accountingAccounts: AccountingAccountService,
+    private promoCodes: PromoCodeService,
   ) {}
 
   async execute(input: RecordPaymentInput, userId: string, ctx?: ScopeCtx): Promise<any> {
@@ -216,6 +218,10 @@ export class RecordPaymentUseCase {
       balance: Math.max(0, newBalance),
       status: newStatus,
     });
+
+    // Facture soldee : l'eventuel code promo reserve devient definitivement
+    // consomme (et inversement si un reliquat subsiste).
+    await this.promoCodes.syncForInvoice(invoice.id);
 
     // NB : les frais de magasinage ont deja ete cristallises (et factures) en
     // debut d'execute. Les charges DEPARTURE sont donc stoppees, et les charges

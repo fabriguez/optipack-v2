@@ -82,6 +82,7 @@ export const PUBLIC_PAGES: { path: string; title: string; description: string }[
   { path: '/track', title: 'Suivre un colis', description: 'Suivi en temps reel d un colis a partir de son numero de reference.' },
   { path: '/simulateur', title: 'Simulateur de tarifs', description: 'Estimation instantanee du cout d un envoi selon poids, volume et destination.' },
   { path: '/agencies', title: 'Agences', description: 'Liste des agences, adresses et horaires.' },
+  { path: '/promotions', title: 'Codes promo', description: 'Codes promo en cours, conditions et dates de validite.' },
   { path: '/about', title: 'A propos', description: 'Qui nous sommes et notre mission.' },
   { path: '/support', title: 'Support', description: 'Aide et questions frequentes.' },
   { path: '/docs', title: 'Documentation', description: 'Guides d utilisation de la plateforme.' },

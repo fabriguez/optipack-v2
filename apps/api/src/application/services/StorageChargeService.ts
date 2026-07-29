@@ -2,6 +2,7 @@ import { injectable } from 'tsyringe';
 import type { Prisma, ParcelStorageCharge } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { eventBus, DomainEvents } from '../../infrastructure/events/EventBus';
+import { invoiceAmountsUpdate } from './invoiceTotals';
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -338,7 +339,7 @@ export class StorageChargeService {
     const invoice = await db.invoice.findUnique({
       where: { id: input.invoiceId },
       select: {
-        id: true, totalAmount: true, discount: true, tva: true,
+        id: true, totalAmount: true, discount: true, promoDiscount: true, tva: true,
         paidAmount: true, status: true,
       },
     });
@@ -415,22 +416,18 @@ export class StorageChargeService {
 
     if (billedTotal <= 0) return 0;
 
-    // Injection dans la facture. Invariants existants conserves :
-    //   netAmount = totalAmount - discount + tva
-    //   balance   = netAmount - paidAmount
-    const newTotal = Number(invoice.totalAmount) + billedTotal;
-    const newNet = newTotal - Number(invoice.discount) + Number(invoice.tva);
-    const paid = Number(invoice.paidAmount);
-    const newBalance = newNet - paid;
-
+    // Injection dans la facture : le magasinage gonfle le brut, les remises
+    // (commerciale + code promo) restent inchangees. Cf. invoiceTotals.
     await db.invoice.update({
       where: { id: input.invoiceId },
-      data: {
-        totalAmount: newTotal,
-        netAmount: newNet,
-        balance: newBalance,
-        status: newBalance <= 0 ? 'PAID' : paid > 0 ? 'PARTIAL' : 'UNPAID',
-      },
+      data: invoiceAmountsUpdate({
+        totalAmount: Number(invoice.totalAmount) + billedTotal,
+        discount: Number(invoice.discount),
+        promoDiscount: Number(invoice.promoDiscount),
+        tva: Number(invoice.tva),
+        paidAmount: Number(invoice.paidAmount),
+        status: invoice.status,
+      }),
     });
 
     return billedTotal;

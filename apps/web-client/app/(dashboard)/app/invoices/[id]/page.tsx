@@ -55,6 +55,9 @@ interface InvoiceDetail {
     transport: number;
     storage: number;
     discount: number;
+    /** Remise issue d'un code promo, distincte de la remise commerciale. */
+    promoDiscount?: number;
+    promoCodeLabel?: string | null;
     tax: number;
     net: number;
     advances: number;
@@ -153,6 +156,13 @@ export default function InvoiceDetailPage() {
         {fees.discount > 0 && (
           <FeeRow label="Remise" value={`- ${formatAmount(fees.discount, currency)}`} muted />
         )}
+        {(fees.promoDiscount ?? 0) > 0 && (
+          <FeeRow
+            label={fees.promoCodeLabel ? `Code promo (${fees.promoCodeLabel})` : 'Code promo'}
+            value={`- ${formatAmount(fees.promoDiscount ?? 0, currency)}`}
+            muted
+          />
+        )}
         {fees.tax > 0 && (
           <FeeRow label="TVA" value={formatAmount(fees.tax, currency)} muted />
         )}
@@ -194,6 +204,10 @@ export default function InvoiceDetailPage() {
           reference={data.reference}
           referenceType="INVOICE"
           customer={{ fullName: '' }}
+          invoiceId={data.id}
+          promoDiscount={fees.promoDiscount ?? 0}
+          promoCodeLabel={fees.promoCodeLabel ?? null}
+          onPromoChanged={() => qc.invalidateQueries({ queryKey: ['portal'] })}
           onSuccess={() => {
             toast.success('Paiement enregistre.');
             setPaying(false);

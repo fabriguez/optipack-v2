@@ -35,6 +35,7 @@ import {
   ChevronLeft,
   ChevronDown,
   LogOut,
+  Ticket,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { useTenantMeta } from '@/lib/providers/TenantProvider';
@@ -98,6 +99,7 @@ const adminNav: NavItem[] = [
 const systemNav: NavItem[] = [
   { label: 'Personnel', href: '/employees', icon: UserCog, module: 'employees', permissions: ['personnel.read'] },
   { label: 'Fidelite', href: '/loyalty', icon: Star, module: 'loyalty', permissions: ['loyalty.read'] },
+  { label: 'Codes promo', href: '/promo-codes', icon: Ticket, permissions: ['promocode.read'] },
   { label: 'Penalites', href: '/penalties', icon: AlertTriangle, module: 'penalties', permissions: ['penalty.read'] },
   { label: 'Notifications', href: '/notifications', icon: Bell, permissions: ['notification.read'] },
   { label: 'Centre de notifications', href: '/notification-center', icon: Send, permissions: ['notification.read'] },

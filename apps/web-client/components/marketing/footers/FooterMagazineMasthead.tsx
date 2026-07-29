@@ -33,6 +33,7 @@ export function FooterMagazineMasthead() {
         <div className="mt-12 flex flex-wrap items-end justify-between gap-6 text-sm" style={{ color: 'var(--skin-foreground-muted)' }}>
           <div className="flex flex-wrap gap-6">
             <Link href="/track" className="hover:underline">Suivre un colis</Link>
+            <Link href="/promotions" className="hover:underline">Codes promo</Link>
             <Link href="/about" className="hover:underline">A propos</Link>
             <Link href="/cgv" className="hover:underline">CGV</Link>
             <Link href="/privacy" className="hover:underline">Confidentialite</Link>

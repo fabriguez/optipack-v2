@@ -6,6 +6,7 @@ import { eventBus, DomainEvents } from '../../infrastructure/events/EventBus';
 import { LoyaltyConfigService } from './LoyaltyConfigService';
 import { StorageChargeService } from './StorageChargeService';
 import { GroupInvoiceService } from './GroupInvoiceService';
+import { PromoCodeService } from './promo/PromoCodeService';
 
 /** Client de transaction interactive Prisma (writes du chemin critique). */
 type Tx = Prisma.TransactionClient;
@@ -77,6 +78,7 @@ export class OnlinePaymentSettlementService {
     private loyaltyConfig: LoyaltyConfigService,
     private storageCharges: StorageChargeService,
     private groupInvoice: GroupInvoiceService,
+    private promoCodes: PromoCodeService,
   ) {}
 
   /**
@@ -283,6 +285,10 @@ export class OnlinePaymentSettlementService {
       where: { id: invoice.id },
       data: { paidAmount: newPaidAmount, balance: Math.max(0, newBalance), status: newStatus },
     });
+
+    // Facture soldee : le code promo reserve devient consomme (meme regle que
+    // l'encaissement en caisse), dans la meme transaction.
+    await this.promoCodes.syncForInvoice(invoice.id, tx);
 
     return {
       paymentId: payment.id,

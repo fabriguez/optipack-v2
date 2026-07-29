@@ -90,6 +90,10 @@ export interface InvoiceData {
   payments: InvoicePayment[];
   totalAmount: number;
   discount: number;
+  // Remise issue d'un code promo, distincte de la remise commerciale : elle
+  // apparait sur sa propre ligne, avec le code utilise en libelle.
+  promoDiscount?: number;
+  promoCodeLabel?: string | null;
   tax: number;
   netAmount: number;
   paidAmount: number;
@@ -755,9 +759,20 @@ export class PDFService {
     const pending = Math.max(0, Number(invoiceData.pendingStorageFees ?? 0));
     const displayTotal = invoiceData.displayTotal ?? Number(invoiceData.netAmount) + pending;
     const amountDue = invoiceData.amountDue ?? Math.max(0, Number(invoiceData.balance) + pending);
+    const promoDiscount = Math.max(0, Number(invoiceData.promoDiscount ?? 0));
     const summaryLines: [string, string][] = [
       ['Total facture', formatCurrency(invoiceData.totalAmount)],
       ['Remise', formatCurrency(invoiceData.discount)],
+      ...(promoDiscount > 0
+        ? [
+            [
+              invoiceData.promoCodeLabel
+                ? `Code promo (${invoiceData.promoCodeLabel})`
+                : 'Code promo',
+              formatCurrency(promoDiscount),
+            ] as [string, string],
+          ]
+        : []),
       ['TVA', formatCurrency(invoiceData.tax)],
       ['Net facture', formatCurrency(invoiceData.netAmount)],
       ...(pending > 0

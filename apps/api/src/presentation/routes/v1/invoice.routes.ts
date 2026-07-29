@@ -12,6 +12,7 @@ import { StorageService } from '../../../infrastructure/storage/StorageService';
 import { safeFetch } from '../../../infrastructure/http/safeFetch';
 import { StorageChargeService } from '../../../application/services/StorageChargeService';
 import { deriveInvoiceView } from '../../../application/services/invoiceView';
+import { invoiceAmountsUpdate } from '../../../application/services/invoiceTotals';
 import { invoiceScope, scopeCtx } from '../../../application/services/scope/agencyScope';
 import { applyFieldPolicy, INVOICE_FIELD_POLICY } from '../../serializers/fieldPolicy';
 import { getPolicy } from '../../middleware/policyContext';
@@ -683,6 +684,8 @@ async function __buildPdfFromInvoice(invoice: any): Promise<Buffer> {
       })),
       totalAmount: Number((invoice as any).totalAmount ?? 0),
       discount: Number((invoice as any).discount ?? 0),
+      promoDiscount: Number((invoice as any).promoDiscount ?? 0),
+      promoCodeLabel: (invoice as any).promoCodeLabel ?? null,
       tax: Number((invoice as any).tva ?? 0),
       netAmount: Number((invoice as any).netAmount ?? 0),
       paidAmount: Number((invoice as any).paidAmount ?? 0),
@@ -835,16 +838,19 @@ router.post('/:id/discount', validate(applyInvoiceDiscountSchema), requirePermis
     }
 
     const previousDiscount = Number(invoice.discount);
-    const tva = Number(invoice.tva);
-    const newNet = Math.max(0, total - amount + tva);
-    const paid = Number(invoice.paidAmount);
-    const newBalance = Math.max(0, newNet - paid);
-    const newStatus = newBalance <= 0 ? 'PAID' : paid > 0 ? 'PARTIAL' : 'UNPAID';
+    const amounts = invoiceAmountsUpdate({
+      totalAmount: total,
+      discount: amount,
+      promoDiscount: Number(invoice.promoDiscount),
+      tva: Number(invoice.tva),
+      paidAmount: Number(invoice.paidAmount),
+      status: invoice.status,
+    });
 
     const updated = await prisma.$transaction(async (tx) => {
       const inv = await tx.invoice.update({
         where: { id: invoice.id },
-        data: { discount: amount, netAmount: newNet, balance: newBalance, status: newStatus as any },
+        data: amounts,
       });
       await tx.auditLog.create({
         data: {
@@ -858,8 +864,8 @@ router.post('/:id/discount', validate(applyInvoiceDiscountSchema), requirePermis
             newDiscount: amount,
             reason,
             totalAmount: total,
-            newNetAmount: newNet,
-            newBalance,
+            newNetAmount: amounts.netAmount,
+            newBalance: amounts.balance,
           },
         },
       });

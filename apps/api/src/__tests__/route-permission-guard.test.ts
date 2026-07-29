@@ -25,7 +25,9 @@ const SKIPPED_FILES = new Set([
   'payment-intent.routes.ts', // portail client (auth client)
   'public-agencies.routes.ts',
   'public-pricing.routes.ts',
+  'public-promo.routes.ts',
   'public-tracking.routes.ts',
+  'client-promo.routes.ts', // portail client (auth client + verification de propriete)
   'whatsapp-webhook.routes.ts',
   'me.routes.ts', // self-service employe
   'upload.routes.ts', // stockage generique authentifie — scoping objet a l'etape 2

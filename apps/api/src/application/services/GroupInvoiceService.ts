@@ -1,5 +1,6 @@
 import { injectable } from 'tsyringe';
 import { prisma } from '../../config/database';
+import { invoiceAmountsUpdate } from './invoiceTotals';
 
 /**
  * Service de synchronisation des factures de groupe de colis.
@@ -35,18 +36,30 @@ export class GroupInvoiceService {
 
     const members = await prisma.invoice.findMany({
       where: { id: { in: memberInvoiceIds } },
-      select: { totalAmount: true, paidAmount: true },
+      select: {
+        totalAmount: true, discount: true, promoDiscount: true,
+        tva: true, paidAmount: true,
+      },
     });
 
-    const total = members.reduce((s, i) => s + Number(i.totalAmount), 0);
-    const paid = members.reduce((s, i) => s + Number(i.paidAmount), 0);
-    const balance = Math.max(0, total - paid);
-    const status: 'UNPAID' | 'PARTIAL' | 'PAID' =
-      balance <= 0 ? 'PAID' : paid > 0 ? 'PARTIAL' : 'UNPAID';
+    // L'agregat reflete la somme de chaque poste des membres, remises incluses :
+    // une remise (commerciale ou code promo) posee sur une facture membre doit
+    // se voir sur la vue consolidee du groupe.
+    const sum = (pick: (i: (typeof members)[number]) => unknown) =>
+      members.reduce((s, i) => s + Number(pick(i) ?? 0), 0);
+
+    const amounts = invoiceAmountsUpdate({
+      totalAmount: sum((i) => i.totalAmount),
+      discount: sum((i) => i.discount),
+      promoDiscount: sum((i) => i.promoDiscount),
+      tva: sum((i) => i.tva),
+      paidAmount: sum((i) => i.paidAmount),
+    });
+    const status = amounts.status;
 
     await prisma.invoice.update({
       where: { id: aggregateId },
-      data: { totalAmount: total, netAmount: total, paidAmount: paid, balance, status },
+      data: { ...amounts, paidAmount: sum((i) => i.paidAmount) },
     });
 
     // Statut groupe : PAID quand tout est solde. On ne retrograde jamais

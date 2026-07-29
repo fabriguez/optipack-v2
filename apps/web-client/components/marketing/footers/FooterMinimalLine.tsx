@@ -15,6 +15,8 @@ export function FooterMinimalLine() {
     <footer className="border-t py-12 text-center" style={{ borderColor: 'color-mix(in oklab, var(--skin-border) 40%, transparent)' }}>
       <p className="text-xs font-light" style={{ color: 'var(--skin-foreground-muted)' }}>
         {orgName} (c) {year} ·{' '}
+        <Link href="/promotions" className="hover:underline">Codes promo</Link>
+        {' · '}
         <Link href="/cgv" className="hover:underline">CGV</Link>
         {' · '}
         <Link href="/privacy" className="hover:underline">Confidentialite</Link>

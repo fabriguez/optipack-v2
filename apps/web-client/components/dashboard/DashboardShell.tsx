@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Tag } from 'lucide-react';
+import { Tag, Ticket } from 'lucide-react';
 import { isAuthenticated, portalApi, type ClientProfile } from '@/lib/api/client';
 import { useLogout } from '@/lib/hooks/useAuth';
 import { cn } from '@/lib/utils';
@@ -25,6 +25,7 @@ const BASE_NAV = [
   { href: '/app', label: 'Accueil', icon: Home },
   { href: '/app/parcels', label: 'Mes colis', icon: Package },
   { href: '/app/invoices', label: 'Factures', icon: FileText },
+  { href: '/app/promo-codes', label: 'Codes promo', icon: Ticket },
   { href: '/app/profile', label: 'Profil', icon: User },
 ];
 const PARTNER_NAV = { href: '/app/tarifs', label: 'Mes tarifs', icon: Tag };

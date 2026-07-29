@@ -47,6 +47,10 @@ import workScheduleRoutes from './work-schedule.routes';
 import publicTrackingRoutes from './public-tracking.routes';
 import publicAgenciesRoutes from './public-agencies.routes';
 import publicPricingRoutes from './public-pricing.routes';
+import publicPromoRoutes from './public-promo.routes';
+import promoCodeRoutes from './promo-code.routes';
+import clientPromoRoutes from './client-promo.routes';
+import invoicePromoRoutes from './invoice-promo.routes';
 import whatsappWebhookRoutes from './whatsapp-webhook.routes';
 import financeRoutes from './finance.routes';
 import headOfficeRoutes from './head-office.routes';
@@ -63,6 +67,7 @@ router.use('/organization', tenantMetaRoutes);  // alias pour PATCH /organizatio
 router.use('/system', systemRoutes);  // Phase 4.5 : updates pilote par tenant
 router.use('/auth', authRoutes);
 router.use('/client-portal', paymentCheckoutRoutes);
+router.use('/client-portal', clientPromoRoutes);
 router.use('/client-portal', clientPortalRoutes);
 router.use('/client-portal/payment-intents', paymentIntentRoutes);
 // Suivi public (QR code scanne par le destinataire) — sans auth
@@ -72,6 +77,8 @@ router.use('/public', publicAgenciesRoutes);
 // Simulateur de prix public (vitrine + mobile) — sans auth, tarif partenaire
 // applique si token client present.
 router.use('/public', publicPricingRoutes);
+// Codes promo publics (page "Promotions" du site vitrine) — sans auth.
+router.use('/public', publicPromoRoutes);
 // Webhook WhatsApp Meta Cloud API (verification + reception messages).
 // Public, appele par Meta. Verifie via WHATSAPP_VERIFY_TOKEN env.
 router.use('/webhooks/whatsapp', whatsappWebhookRoutes);
@@ -89,7 +96,11 @@ router.use('/manifests', manifestRoutes);
 router.use('/routings', routingRoutes);
 
 // Finance
+// Le sous-routeur promo est monte AVANT invoice.routes : il ne declare que
+// /:id/promo-code, sans conflit avec les routes de facture existantes.
+router.use('/invoices', invoicePromoRoutes);
 router.use('/invoices', invoiceRoutes);
+router.use('/promo-codes', promoCodeRoutes);
 router.use('/payments', paymentRoutes);
 router.use('/cash-registers', cashRegisterRoutes);
 router.use('/accounting', accountingRoutes);

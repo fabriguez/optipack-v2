@@ -233,6 +233,15 @@ router.get('/invoices/:id', authenticateClient, async (req, res, next) => {
         date: invoice.createdAt ?? null,
       });
     }
+    if (Number(invoice.promoDiscount ?? 0) > 0) {
+      discounts.push({
+        id: `promo-${invoice.id}`,
+        amount: Number(invoice.promoDiscount),
+        reason: invoice.promoCodeLabel ?? 'Code promo',
+        source: 'INVOICE',
+        date: invoice.createdAt ?? null,
+      });
+    }
     for (const pay of invoice.payments) {
       if (Number(pay.discount ?? 0) > 0) {
         discounts.push({
@@ -281,6 +290,8 @@ router.get('/invoices/:id', authenticateClient, async (req, res, next) => {
           transport: transportFeesTotal,
           storage: storage.total,
           discount: Number(invoice.discount ?? 0),
+          promoDiscount: Number(invoice.promoDiscount ?? 0),
+          promoCodeLabel: invoice.promoCodeLabel ?? null,
           tax: Number(invoice.tva ?? 0),
           net: Number(invoice.netAmount ?? 0),
           advances: Number(invoice.paidAmount ?? 0),

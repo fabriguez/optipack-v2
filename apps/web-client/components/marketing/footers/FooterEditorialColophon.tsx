@@ -31,6 +31,7 @@ export function FooterEditorialColophon() {
             <ul className="mt-4 space-y-1.5 text-sm" style={{ color: 'var(--skin-foreground-muted)' }}>
               <li><Link href="/about" className="hover:underline">Manifeste</Link></li>
               <li><Link href="/track" className="hover:underline">Suivi</Link></li>
+              <li><Link href="/promotions" className="hover:underline">Codes promo</Link></li>
               <li><Link href="/team" className="hover:underline">Auteurs</Link></li>
               <li><Link href="/blog" className="hover:underline">Archives</Link></li>
             </ul>

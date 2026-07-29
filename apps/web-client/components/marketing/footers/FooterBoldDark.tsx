@@ -7,11 +7,30 @@ import { useTenantMeta } from '@/lib/providers/TenantMetaProvider';
  * Footer Bold (sapphire) : dark complet, grille 4 colonnes structurée,
  * tagline minimale, mentions legales en bas.
  */
-const COLS = [
-  { title: 'Plateforme', links: ['Features', 'Pricing', 'API', 'Docs'] },
-  { title: 'Entreprise', links: ['A propos', 'Equipe', 'Carrieres', 'Presse'] },
-  { title: 'Ressources', links: ['Blog', 'Support', 'Status', 'Securite'] },
-  { title: 'Legal', links: ['CGV', 'Confidentialite', 'Cookies', 'Mentions'] },
+// `href` optionnel : les entrees purement decoratives de ce skin restent en
+// ancre morte, celles qui pointent vers une vraie page portent leur route.
+const COLS: Array<{ title: string; links: Array<{ label: string; href?: string }> }> = [
+  {
+    title: 'Plateforme',
+    links: [
+      { label: 'Features' },
+      { label: 'Pricing' },
+      { label: 'Codes promo', href: '/promotions' },
+      { label: 'Docs' },
+    ],
+  },
+  {
+    title: 'Entreprise',
+    links: [{ label: 'A propos' }, { label: 'Equipe' }, { label: 'Carrieres' }, { label: 'Presse' }],
+  },
+  {
+    title: 'Ressources',
+    links: [{ label: 'Blog' }, { label: 'Support' }, { label: 'Status' }, { label: 'Securite' }],
+  },
+  {
+    title: 'Legal',
+    links: [{ label: 'CGV' }, { label: 'Confidentialite' }, { label: 'Cookies' }, { label: 'Mentions' }],
+  },
 ];
 
 export function FooterBoldDark() {
@@ -31,8 +50,8 @@ export function FooterBoldDark() {
               <h4 className="text-[10px] font-bold uppercase tracking-[0.25em] opacity-60">{c.title}</h4>
               <ul className="mt-4 space-y-2">
                 {c.links.map((l) => (
-                  <li key={l}>
-                    <Link href="#" className="text-xs opacity-80 hover:opacity-100">{l}</Link>
+                  <li key={l.label}>
+                    <Link href={l.href ?? '#'} className="text-xs opacity-80 hover:opacity-100">{l.label}</Link>
                   </li>
                 ))}
               </ul>

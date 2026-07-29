@@ -143,6 +143,11 @@ export const PERMISSION_CATALOG: Array<{ key: string; label: string; category: s
   // la promotion/retrogradation partenaire a un role specifique.
   { key: 'client.partner.manage', label: 'Gerer le statut partenaire', category: 'fidelite', description: 'Promouvoir un client au statut partenaire ou le lui retirer, et gerer ses tarifs dedies.' },
 
+  // codes promo
+  { key: 'promocode.read', label: 'Voir les codes promo', category: 'fidelite', description: 'Consulter les codes promo du tenant, leur perimetre, leurs limites et leur historique d\'utilisation.' },
+  { key: 'promocode.manage', label: 'Gerer les codes promo', category: 'fidelite', description: 'Creer, modifier, activer/desactiver et supprimer des codes promo, et les attribuer nominativement a des clients.' },
+  { key: 'promocode.apply', label: 'Appliquer un code promo sur une facture', category: 'fidelite', description: 'Saisir un code promo au nom d\'un client au moment de l\'encaissement, ou le retirer avant reglement.' },
+
   // penalite
   { key: 'penalty.read', label: 'Voir les penalites', category: 'penalite', description: 'Consulter les penalites appliquees aux clients (retards de paiement, infractions, avaries).' },
   { key: 'penalty.manage', label: 'Gerer les penalites', category: 'penalite', description: 'Creer, modifier ou annuler des penalites applicables aux clients ou aux colis.' },
@@ -219,6 +224,7 @@ export const POSITION_CATALOG: Array<{
       'agency.read', 'agency.manage',
       'dailyreport.read', 'dailyreport.manage',
       'loyalty.read', 'penalty.read', 'penalty.manage',
+      'promocode.read', 'promocode.manage', 'promocode.apply',
       'notification.read', 'notification.send',
       'support.read', 'support.reply', 'support.assign',
       'dashboard.read', 'report.read', 'report.export',
@@ -267,6 +273,7 @@ export const POSITION_CATALOG: Array<{
       'finance.history.read', 'finance.dashboard.read',
       'carrier.read',
       'penalty.read',
+      'promocode.read', 'promocode.apply',
       'dailyreport.read',
       'agency.read',
       'dashboard.read', 'report.read', 'report.export',

@@ -119,6 +119,8 @@ model Organization {
   wapinoConfig            TenantWapinoConfig?
   // Plannings de travail (horaires RH) scopes a l'organisation.
   workSchedules           WorkSchedule[]
+  // Codes promo emis par le tenant.
+  promoCodes              PromoCode[]
 
   @@map("organizations")
 }
@@ -1306,6 +1308,9 @@ model Client {
   disbursements           DisbursementVoucher[]
   headOfficeDisbursements HeadOfficeDisbursementVoucher[] @relation("HeadOfficeDisbursementClient")
   passwordResetTokens     ClientPasswordResetToken[]
+  // Codes promo attribues nominativement a ce client + historique d'usage.
+  promoAssignments        PromoCodeAssignment[]
+  promoRedemptions        PromoCodeRedemption[]
 
   @@index([organizationId])
   @@index([agencyId])
@@ -1403,6 +1408,7 @@ model TransitRoute {
   containers            Container[]
   partnerPricings       PartnerPricing[]
   warehouseStorageRules WarehouseStorageFeeRule[]
+  promoCodes            PromoCodeTransitRoute[]
 
   @@index([organizationId])
   @@map("transit_routes")
@@ -1809,7 +1815,16 @@ model Invoice {
   clientId    String
   agencyId    String
   totalAmount Decimal       @db.Decimal(15, 2)
+  // Remise commerciale accordee manuellement par un agent (permission
+  // invoice.discount). Distincte de promoDiscount pour que les deux puissent
+  // coexister et rester tracables separement.
   discount    Decimal       @default(0) @db.Decimal(15, 2)
+  // Remise issue d'un code promo. Alimentee uniquement par PromoCodeService,
+  // jamais saisie a la main. Le code applique est snapshote dans promoCodeLabel
+  // pour que la facture reste lisible meme si le code est supprime ensuite.
+  promoDiscount   Decimal @default(0) @db.Decimal(15, 2)
+  promoCodeId     String?
+  promoCodeLabel  String?
   tva         Decimal       @default(0) @db.Decimal(15, 2)
   netAmount   Decimal       @db.Decimal(15, 2)
   paidAmount  Decimal       @default(0) @db.Decimal(15, 2)
@@ -1825,18 +1840,21 @@ model Invoice {
   // Lien optionnel vers un ParcelGroup : la facture est globale pour le groupe.
   parcelGroupId String? @unique
 
-  client         Client          @relation(fields: [clientId], references: [id])
-  agency         Agency          @relation(fields: [agencyId], references: [id])
+  client           Client                @relation(fields: [clientId], references: [id])
+  agency           Agency                @relation(fields: [agencyId], references: [id])
   // 1 facture peut couvrir N colis (audit fix #5)
-  parcels        Parcel[]
-  payments       Payment[]
-  paymentIntents PaymentIntent[]
-  debts          Debt[]
-  parcelGroup    ParcelGroup?    @relation(fields: [parcelGroupId], references: [id])
+  parcels          Parcel[]
+  payments         Payment[]
+  paymentIntents   PaymentIntent[]
+  debts            Debt[]
+  parcelGroup      ParcelGroup?          @relation(fields: [parcelGroupId], references: [id])
+  promoCode        PromoCode?            @relation(fields: [promoCodeId], references: [id])
+  promoRedemptions PromoCodeRedemption[]
 
   @@index([clientId])
   @@index([agencyId])
   @@index([status])
+  @@index([promoCodeId])
   @@map("invoices")
 }
 
@@ -3559,4 +3577,168 @@ enum StoragePhase {
   DEPARTURE
   TRANSIT
   DESTINATION
+}
+
+// ============================================================
+// CODES PROMO
+// ============================================================
+// Un code promo accorde une remise sur une facture au moment du paiement.
+// Il porte trois familles de contraintes, toutes optionnelles et cumulatives :
+//   - PERIMETRE  : categories de colis et/ou routes de transit concernees.
+//                  Vide = toute la facture. Sinon la remise ne porte que sur
+//                  les colis eligibles ("assiette" = somme de leurs prix).
+//   - INTERVALLE : l'assiette doit tomber dans [minOrderAmount, maxOrderAmount].
+//   - VALIDITE   : fenetre de dates + limites d'usage (globale / par client).
+//
+// La remise n'est jamais recalculee apres coup : le montant accorde est fige
+// dans PromoCodeRedemption et reporte dans Invoice.promoDiscount.
+model PromoCode {
+  id             String @id @default(uuid())
+  organizationId String
+  // Toujours stocke en MAJUSCULES sans espaces (normalise a l'ecriture) pour
+  // que la saisie client soit insensible a la casse.
+  code           String
+  label          String
+  description    String?
+
+  discountType  PromoDiscountType
+  // Pourcentage (0-100) si PERCENT, montant en devise si AMOUNT.
+  discountValue Decimal           @db.Decimal(15, 2)
+  // Plafond de remise, pertinent uniquement pour PERCENT. null = pas de plafond.
+  maxDiscountAmount Decimal? @db.Decimal(15, 2)
+
+  // Intervalle de tarifs : l'assiette eligible doit etre dans cet intervalle.
+  // null d'un cote = borne ouverte.
+  minOrderAmount Decimal? @db.Decimal(15, 2)
+  maxOrderAmount Decimal? @db.Decimal(15, 2)
+
+  // Perimetre. Tableaux vides = aucune restriction sur cet axe.
+  parcelCategories ParcelCategory[] @default([])
+  transitTypes     TransitType[]    @default([])
+
+  // Fenetre de validite. null = pas de borne de ce cote.
+  startsAt  DateTime?
+  expiresAt DateTime?
+
+  // Limites d'usage. null = illimite. usedCount agrege les redemptions
+  // RESERVED + CONSUMED (une redemption RELEASED est decrementee).
+  maxUses          Int?
+  maxUsesPerClient Int?
+  usedCount        Int  @default(0)
+
+  visibility PromoCodeVisibility @default(PUBLIC)
+
+  isActive  Boolean   @default(true)
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+
+  createdByUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization Organization            @relation(fields: [organizationId], references: [id])
+  routes       PromoCodeTransitRoute[]
+  assignments  PromoCodeAssignment[]
+  redemptions  PromoCodeRedemption[]
+  invoices     Invoice[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@index([isActive])
+  @@index([visibility])
+  @@index([expiresAt])
+  @@map("promo_codes")
+}
+
+enum PromoDiscountType {
+  PERCENT
+  AMOUNT
+}
+
+// PUBLIC   : liste sur la page publique, utilisable par tous.
+// PRIVATE  : utilisable par quiconque connait le code, mais non liste.
+// ASSIGNED : utilisable uniquement par les clients explicitement assignes.
+enum PromoCodeVisibility {
+  PUBLIC
+  PRIVATE
+  ASSIGNED
+}
+
+// Restriction du code a des routes de transit precises.
+model PromoCodeTransitRoute {
+  promoCodeId    String
+  transitRouteId String
+
+  promoCode    PromoCode    @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
+  transitRoute TransitRoute @relation(fields: [transitRouteId], references: [id], onDelete: Cascade)
+
+  @@id([promoCodeId, transitRouteId])
+  @@index([transitRouteId])
+  @@map("promo_code_transit_routes")
+}
+
+// Attribution nominative d'un code a un client, avec son propre quota.
+// maxUses null retombe sur PromoCode.maxUsesPerClient, lui-meme null = illimite.
+model PromoCodeAssignment {
+  id          String @id @default(uuid())
+  promoCodeId String
+  clientId    String
+
+  maxUses   Int?
+  usedCount Int  @default(0)
+
+  assignedByUserId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  promoCode PromoCode @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
+  client    Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([promoCodeId, clientId])
+  @@index([clientId])
+  @@map("promo_code_assignments")
+}
+
+// Trace d'utilisation d'un code sur une facture. Cycle de vie :
+//   RESERVED : code applique sur la facture, paiement pas encore encaisse.
+//   CONSUMED : facture soldee, l'usage est definitivement decompte.
+//   RELEASED : code retire avant reglement -- le quota est rendu.
+// Une facture n'a au plus qu'une redemption non RELEASED a la fois.
+model PromoCodeRedemption {
+  id           String @id @default(uuid())
+  promoCodeId  String
+  clientId     String
+  invoiceId    String
+  assignmentId String?
+
+  // Snapshot fige au moment de l'application : la remise accordee et
+  // l'assiette sur laquelle elle a ete calculee (utile pour l'audit si le
+  // code ou les colis changent ensuite).
+  discountAmount Decimal @db.Decimal(15, 2)
+  eligibleBase   Decimal @db.Decimal(15, 2)
+  codeSnapshot   String
+
+  status     PromoRedemptionStatus @default(RESERVED)
+  consumedAt DateTime?
+  releasedAt DateTime?
+  // Qui a applique le code : null = le client depuis le portail.
+  appliedByUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  promoCode PromoCode @relation(fields: [promoCodeId], references: [id])
+  client    Client    @relation(fields: [clientId], references: [id])
+  invoice   Invoice   @relation(fields: [invoiceId], references: [id])
+
+  @@index([promoCodeId])
+  @@index([clientId])
+  @@index([invoiceId])
+  @@index([status])
+  @@map("promo_code_redemptions")
+}
+
+enum PromoRedemptionStatus {
+  RESERVED
+  CONSUMED
+  RELEASED
 }

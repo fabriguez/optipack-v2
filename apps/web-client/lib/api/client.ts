@@ -113,6 +113,57 @@ export interface MyTariff {
   isAdvantage: boolean;
 }
 
+/** Code promo tel qu'expose au client (vitrine ou espace personnel). */
+export interface PublicPromoCode {
+  id: string;
+  code: string;
+  label: string;
+  description: string | null;
+  discountType: 'PERCENT' | 'AMOUNT';
+  discountValue: number | string;
+  maxDiscountAmount: number | string | null;
+  minOrderAmount: number | string | null;
+  maxOrderAmount: number | string | null;
+  parcelCategories: string[];
+  transitTypes: string[];
+  startsAt: string | null;
+  expiresAt: string | null;
+  maxUsesPerClient: number | null;
+  routes: Array<{
+    id: string;
+    name: string;
+    type: 'AIR' | 'SEA' | 'LAND';
+    departureCity: string;
+    arrivalCity: string;
+  }>;
+  /** Presents uniquement sur la liste publique. */
+  isLimited?: boolean;
+  remainingUses?: number | null;
+}
+
+/** Code attribue nominativement : porte le quota restant du client. */
+export interface AssignedPromoCode extends Omit<PublicPromoCode, 'routes'> {
+  routes?: Array<{ transitRouteId: string }>;
+  assignment: { maxUses: number | null; usedCount: number; remainingUses: number | null };
+}
+
+export interface MyPromoCodes {
+  assigned: AssignedPromoCode[];
+  public: PublicPromoCode[];
+}
+
+/** Verdict d'une simulation de code promo sur une facture. */
+export interface PromoPreview {
+  code: string;
+  label: string;
+  description: string | null;
+  discountType: 'PERCENT' | 'AMOUNT';
+  discountValue: number;
+  evaluation:
+    | { ok: true; discountAmount: number; eligibleBase: number }
+    | { ok: false; reason: string; message: string };
+}
+
 /** Route de transit exposee publiquement pour le simulateur. */
 export interface PublicTransitRoute {
   id: string;
@@ -352,6 +403,31 @@ export const portalApi = {
     volume?: number;
   }): Promise<PriceSimulation> =>
     apiClient.post('/public/simulate-price', payload).then((r) => r.data.data),
+
+  // ---- Codes promo ----
+  /** Codes publics en cours (page vitrine, accessible sans compte). */
+  getPublicPromoCodes: (): Promise<PublicPromoCode[]> =>
+    apiClient.get('/public/promo-codes').then((r) => r.data.data),
+
+  /** Codes du client connecte : attributions nominatives + codes publics. */
+  getMyPromoCodes: (): Promise<MyPromoCodes> =>
+    apiClient.get('/client-portal/promo-codes').then((r) => r.data.data),
+
+  /** Simule un code sur une facture sans le poser (affichage de la remise). */
+  previewPromoCode: (invoiceId: string, code: string): Promise<PromoPreview> =>
+    apiClient
+      .post(`/client-portal/invoices/${invoiceId}/promo-code/preview`, { code })
+      .then((r) => r.data.data),
+
+  applyPromoCode: (invoiceId: string, code: string) =>
+    apiClient
+      .post(`/client-portal/invoices/${invoiceId}/promo-code`, { code })
+      .then((r) => r.data.data),
+
+  removePromoCode: (invoiceId: string) =>
+    apiClient
+      .delete(`/client-portal/invoices/${invoiceId}/promo-code`)
+      .then((r) => r.data.data),
 
   // ---- Payments ----
   createCheckout: (payload: import('@transitsoftservices/payments').CheckoutInput) =>

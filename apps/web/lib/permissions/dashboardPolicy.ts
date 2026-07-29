@@ -60,6 +60,7 @@ export const ROUTE_POLICY: RoutePolicy[] = [
   // --- Systeme ----------------------------------------------------------
   { prefix: '/employees', anyOf: ['personnel.read'] },
   { prefix: '/loyalty', anyOf: ['loyalty.read'] },
+  { prefix: '/promo-codes', anyOf: ['promocode.read'] },
   { prefix: '/penalties', anyOf: ['penalty.read'] },
   { prefix: '/notification-center', anyOf: ['notification.read'] },
   { prefix: '/notifications', anyOf: ['notification.read'] },

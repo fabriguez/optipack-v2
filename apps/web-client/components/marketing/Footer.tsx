@@ -10,6 +10,7 @@ const SECTIONS = [
     links: [
       { label: 'Fonctionnalites', href: '#features' },
       { label: 'Tarifs', href: '#pricing' },
+      { label: 'Codes promo', href: '/promotions' },
       { label: 'Suivre un colis', href: '/track' },
       { label: 'Application mobile', href: '/#app' },
       { label: 'Status', href: '/status' },

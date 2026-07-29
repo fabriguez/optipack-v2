@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CreditCard, Smartphone, Banknote } from 'lucide-react';
 import { MobileMoneyForm } from './MobileMoneyForm';
 import { StripeCardForm } from './StripeCardForm';
+import { PromoCodeField } from './PromoCodeField';
 
 type Tab = 'mobile_money' | 'card' | 'cash';
 
@@ -17,6 +18,17 @@ interface Props {
   customer: { fullName: string; phone?: string; email?: string };
   /** Methods to expose. Defaults to mobile_money + card. */
   methods?: Tab[];
+  /**
+   * Id de la facture. Requis pour proposer la saisie d'un code promo : la page
+   * de checkout autonome ne connait que la reference lisible, elle n'affiche
+   * donc pas le champ.
+   */
+  invoiceId?: string;
+  /** Remise promo deja posee sur la facture. */
+  promoDiscount?: number;
+  promoCodeLabel?: string | null;
+  /** Appele apres application/retrait d'un code : le parent recharge la facture. */
+  onPromoChanged?: () => void;
   onSuccess: (orderId: string) => void;
 }
 
@@ -30,6 +42,11 @@ export function CheckoutPanel(props: Props) {
   const methods = props.methods ?? ['mobile_money', 'card'];
   const [tab, setTab] = useState<Tab>(methods[0]);
   const [rawAmount, setRawAmount] = useState(String(props.amount));
+  // Appliquer ou retirer un code promo change le solde du : le champ montant
+  // doit suivre, sinon il resterait sur l'ancienne valeur et depasserait le max.
+  useEffect(() => {
+    setRawAmount(String(props.amount));
+  }, [props.amount]);
   const parsedAmount = Math.round(Number(rawAmount) || 0);
   const payAmount = Math.min(Math.max(parsedAmount, 1), props.amount);
   const amountError =
@@ -55,6 +72,16 @@ export function CheckoutPanel(props: Props) {
           {props.referenceType} #{props.reference}
         </p>
       </div>
+
+      {props.invoiceId && props.onPromoChanged && (
+        <PromoCodeField
+          invoiceId={props.invoiceId}
+          currency={props.currency}
+          promoDiscount={props.promoDiscount ?? 0}
+          promoCodeLabel={props.promoCodeLabel ?? null}
+          onChanged={props.onPromoChanged}
+        />
+      )}
 
       {/* Saisie du montant (acompte possible) */}
       <div>

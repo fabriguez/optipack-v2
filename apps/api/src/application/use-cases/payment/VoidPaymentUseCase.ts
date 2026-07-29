@@ -7,6 +7,7 @@ import { JOURNAL_ENTRY_REPOSITORY, type IJournalEntryRepository } from '../../in
 import { NotFoundError, ImmutabilityError, BusinessError } from '../../../domain/errors/BusinessError';
 import { assertAgencyActive } from '../../services/scope/agencyScope';
 import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
+import { PromoCodeService } from '../../services/promo/PromoCodeService';
 
 @injectable()
 export class VoidPaymentUseCase {
@@ -15,6 +16,7 @@ export class VoidPaymentUseCase {
     @inject(INVOICE_REPOSITORY) private invoiceRepo: IInvoiceRepository,
     @inject(CASH_REGISTER_REPOSITORY) private cashRegisterRepo: ICashRegisterRepository,
     @inject(JOURNAL_ENTRY_REPOSITORY) private journalRepo: IJournalEntryRepository,
+    private promoCodes: PromoCodeService,
   ) {}
 
   async execute(paymentId: string, reason: string, userId: string) {
@@ -43,6 +45,10 @@ export class VoidPaymentUseCase {
         balance: newBalance,
         status: newStatus,
       });
+
+      // Le solde se rouvre : un code promo deja consomme redevient reserve, il
+      // reste attache a la facture tant qu'elle n'est pas soldee.
+      await this.promoCodes.syncForInvoice(invoice.id);
     }
 
     // Reverse cash register

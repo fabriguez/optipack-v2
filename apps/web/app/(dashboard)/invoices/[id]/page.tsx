@@ -22,6 +22,7 @@ import { getApiBaseUrl } from '@/lib/api/baseUrl';
 import { formatAmount, formatDate, formatDateTime } from '@transitsoftservices/shared';
 import { PaymentFormDialog } from '../../payments/PaymentFormDialog';
 import { InvoiceDiscountDialog } from './InvoiceDiscountDialog';
+import { InvoicePromoCodePanel } from './InvoicePromoCodePanel';
 import { AuthedImage } from '@/components/shared/AuthedImage';
 import { ImageLightbox } from '@/components/shared/ImageLightbox';
 
@@ -413,12 +414,27 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           </AppCard>
         )}
 
+        {/* Code promo : saisie au guichet au nom du client, ou retrait du code
+            deja pose tant que la facture n'est pas soldee. */}
+        <InvoicePromoCodePanel
+          invoiceId={invoice.id}
+          promoDiscount={Number(invoice.promoDiscount ?? 0)}
+          promoCodeLabel={invoice.promoCodeLabel ?? null}
+          disabled={isSettled}
+        />
+
         {/* Invoice details */}
         <AppCard>
           <AppCardHeader title="Details de facturation" />
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <InfoItem label="Montant brut" value={formatAmount(Number(invoice.totalAmount))} />
             <InfoItem label="Remise" value={formatAmount(Number(invoice.discount))} />
+            {Number(invoice.promoDiscount ?? 0) > 0 && (
+              <InfoItem
+                label={invoice.promoCodeLabel ? `Code promo (${invoice.promoCodeLabel})` : 'Code promo'}
+                value={formatAmount(Number(invoice.promoDiscount))}
+              />
+            )}
             <InfoItem label="TVA" value={formatAmount(Number(invoice.tva))} />
             <InfoItem label="Devise" value={invoice.currency || 'XAF'} />
             {invoice.storageFeesTotal != null && Number(invoice.storageFeesTotal) > 0 && (
