@@ -42,7 +42,8 @@ export default function DebtDetailScreen() {
   if (!d) return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing['3xl'] }}><Text style={{ color: colors.gray[500] }}>Dette introuvable</Text></View>;
 
   const total = Number(d.totalAmount ?? 0), paid = Number(d.paidAmount ?? 0), remaining = Number(d.remainingAmount ?? 0);
-  const pct = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
+  // 100% uniquement si reellement soldee (jamais par arrondi).
+  const pct = total > 0 ? (remaining <= 0 ? 100 : Math.min(99, Math.floor((paid / total) * 100))) : 0;
   const canAct = d.status !== 'CANCELLED' && d.status !== 'CLEARED';
   const payments: any[] = d.payments ?? [];
   const histories: any[] = d.histories ?? [];

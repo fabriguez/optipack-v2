@@ -39,6 +39,9 @@ export function ParcelHandoverDialog({ open, onClose, parcel, untracked, onSucce
   const [clientId, setClientId] = useState<string>('');
   const [identityConfirmed, setIdentityConfirmed] = useState(false);
   const [note, setNote] = useState('');
+  // Echeances de la dette auto-creee si la facture n'est pas soldee.
+  const [debtNextDueDate, setDebtNextDueDate] = useState('');
+  const [debtDueDateFinal, setDebtDueDateFinal] = useState('');
   // Pour le mode untracked
   const [designation, setDesignation] = useState('');
   const [observation, setObservation] = useState('');
@@ -51,9 +54,24 @@ export function ParcelHandoverDialog({ open, onClose, parcel, untracked, onSucce
     setClientId(defaultId);
     setIdentityConfirmed(false);
     setNote('');
+    setDebtNextDueDate('');
+    setDebtDueDateFinal('');
     setDesignation('');
     setObservation('');
   }, [open, parcel]);
+
+  // Facture du colis : si elle a un solde restant, la remise cree
+  // automatiquement une dette CLIENT -> on propose les champs d'echeances.
+  const { data: parcelDetail } = useQuery({
+    queryKey: ['parcels', parcel?.id, 'handover-invoice'],
+    queryFn: () => apiClient.get(`/parcels/${parcel!.id}`).then((r) => r.data),
+    enabled: open && !!parcel,
+  });
+  const invoice = parcelDetail?.data?.invoice;
+  const unpaidBalance =
+    invoice && invoice.status !== 'CANCELLED' && invoice.status !== 'PAID'
+      ? Number(invoice.balance || 0)
+      : 0;
 
   // Fetch du client selectionne pour afficher ses photos.
   const { data: clientData } = useQuery({
@@ -70,6 +88,8 @@ export function ParcelHandoverDialog({ open, onClose, parcel, untracked, onSucce
           receivedByClientId: clientId,
           identityConfirmed,
           note: note || undefined,
+          debtNextDueDate: debtNextDueDate || undefined,
+          debtDueDateFinal: debtDueDateFinal || undefined,
         });
       }
       if (untracked) {
@@ -87,6 +107,9 @@ export function ParcelHandoverDialog({ open, onClose, parcel, untracked, onSucce
     onSuccess: () => {
       toast.success('Colis remis au client');
       qc.invalidateQueries({ queryKey: ['parcels'] });
+      // Le colis remis libere sa zone de rangement : rafraichit les compteurs
+      // de zones + stats magasin (['warehouses', id, 'spaces'] et 'summary').
+      qc.invalidateQueries({ queryKey: ['warehouses'] });
       onSuccess?.();
       onClose();
     },
@@ -268,6 +291,34 @@ export function ParcelHandoverDialog({ open, onClose, parcel, untracked, onSucce
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <PhotoSlot title="CNI - Recto" url={client.idDocumentUrl} />
               <PhotoSlot title="CNI - Verso" url={client.idDocumentBackUrl} />
+            </div>
+          </div>
+        )}
+
+        {parcel && unpaidBalance > 0 && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+            <p className="flex items-center gap-2 text-sm font-medium text-amber-900">
+              <AlertTriangle className="h-4 w-4" />
+              Facture {invoice?.reference} non soldee : reste{' '}
+              {unpaidBalance.toLocaleString('fr-FR')} a payer.
+            </p>
+            <p className="mt-1 text-xs text-amber-800">
+              Une dette CLIENT sera creee automatiquement a la remise. Definissez
+              ses echeances de paiement :
+            </p>
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <AppInput
+                label="Prochaine echeance (optionnel)"
+                type="date"
+                value={debtNextDueDate}
+                onChange={(e) => setDebtNextDueDate(e.target.value)}
+              />
+              <AppInput
+                label="Echeance finale (optionnel)"
+                type="date"
+                value={debtDueDateFinal}
+                onChange={(e) => setDebtDueDateFinal(e.target.value)}
+              />
             </div>
           </div>
         )}

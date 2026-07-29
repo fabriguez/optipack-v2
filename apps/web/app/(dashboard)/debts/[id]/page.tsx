@@ -68,7 +68,14 @@ export default function DebtDetailPage({ params }: { params: Promise<{ id: strin
   const totalAmount = Number(debt.totalAmount || 0);
   const remainingAmount = Number(debt.remainingAmount || 0);
   const paidAmount = Number(debt.paidAmount || (totalAmount - remainingAmount));
-  const paidPercent = totalAmount > 0 ? Math.round((paidAmount / totalAmount) * 100) : 0;
+  // 100% uniquement si la dette est reellement soldee : un arrondi (ex.
+  // 83000/83300 = 99.6) ne doit jamais afficher 100% avec un solde restant.
+  const paidPercent =
+    totalAmount > 0
+      ? remainingAmount <= 0
+        ? 100
+        : Math.min(99, Math.floor((paidAmount / totalAmount) * 100))
+      : 0;
 
   // Timeline merge : paiements + history sous forme d'evenements tries desc.
   type TimelineEvent = {

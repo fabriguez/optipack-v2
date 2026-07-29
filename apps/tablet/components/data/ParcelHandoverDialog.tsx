@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { View, Text, Pressable, Switch } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AppDialog } from '@/components/forms/AppDialog';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -42,6 +42,9 @@ export function ParcelHandoverDialog({
   const [clientName, setClientName] = useState('');
   const [identityConfirmed, setIdentityConfirmed] = useState(false);
   const [note, setNote] = useState('');
+  // Echeances de la dette auto-creee si la facture n'est pas soldee.
+  const [debtNextDueDate, setDebtNextDueDate] = useState('');
+  const [debtDueDateFinal, setDebtDueDateFinal] = useState('');
   const [designation, setDesignation] = useState('');
   const [observation, setObservation] = useState('');
 
@@ -51,13 +54,28 @@ export function ParcelHandoverDialog({
     setClientName(parcel?.recipient?.fullName ?? parcel?.client?.fullName ?? '');
     setIdentityConfirmed(false);
     setNote('');
+    setDebtNextDueDate('');
+    setDebtDueDateFinal('');
     setDesignation('');
     setObservation('');
   }, [open, parcel]);
 
+  // Facture du colis : solde restant => dette CLIENT auto-creee a la remise,
+  // on propose les champs d'echeances (mirror web).
+  const { data: parcelDetail } = useQuery({
+    queryKey: ['parcels', parcel?.id, 'handover-invoice'],
+    queryFn: () => parcelsApi.getById(parcel!.id),
+    enabled: open && !!parcel,
+  });
+  const invoice = (parcelDetail as any)?.data?.invoice;
+  const unpaidBalance =
+    invoice && invoice.status !== 'CANCELLED' && invoice.status !== 'PAID'
+      ? Number(invoice.balance || 0)
+      : 0;
+
   const mutation = useMutation({
     mutationFn: () => {
-      if (parcel) return parcelsApi.handover(parcel.id, { receivedByClientId: clientId, identityConfirmed, note: note || undefined });
+      if (parcel) return parcelsApi.handover(parcel.id, { receivedByClientId: clientId, identityConfirmed, note: note || undefined, debtNextDueDate: debtNextDueDate || undefined, debtDueDateFinal: debtDueDateFinal || undefined });
       if (untracked) return parcelsApi.handoverUntracked({ agencyId: untracked.agencyId, warehouseId: untracked.warehouseId, receivedByClientId: clientId, designation, observation: observation || undefined, identityConfirmed });
       throw new Error('Mode invalide');
     },
@@ -130,6 +148,21 @@ export function ParcelHandoverDialog({
         <View style={{ gap: 6 }}>
           <Text style={{ fontSize: 13, fontWeight: '500', color: colors.gray[700] }}>Client recepteur</Text>
           <EntityPicker value={clientId} name={clientName} onChange={(id, nm) => { setClientId(id); setClientName(nm); }} searcher={searchers.clients} queryKey="clients" placeholder="Rechercher un client..." />
+        </View>
+      )}
+
+      {parcel && unpaidBalance > 0 && (
+        <View style={{ backgroundColor: '#FFF8E1', borderWidth: 1, borderColor: '#FFE082', borderRadius: radius.md, padding: spacing.md, gap: spacing.sm }}>
+          <Text style={{ fontSize: 13, fontWeight: '600', color: '#8D6E00' }}>
+            Facture {invoice?.reference} non soldee : reste {unpaidBalance.toLocaleString('fr-FR')} a payer.
+          </Text>
+          <Text style={{ fontSize: 11, color: '#8D6E00' }}>
+            Une dette CLIENT sera creee automatiquement a la remise. Definissez ses echeances :
+          </Text>
+          <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+            <View style={{ flex: 1 }}><Input label="Prochaine echeance (AAAA-MM-JJ)" value={debtNextDueDate} onChangeText={setDebtNextDueDate} placeholder="2026-12-31" /></View>
+            <View style={{ flex: 1 }}><Input label="Echeance finale (AAAA-MM-JJ)" value={debtDueDateFinal} onChangeText={setDebtDueDateFinal} placeholder="2026-12-31" /></View>
+          </View>
         </View>
       )}
 

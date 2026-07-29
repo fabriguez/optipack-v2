@@ -17,6 +17,22 @@ interface HandoverInput {
   note?: string;
   /** URL d'une photo additionnelle (signature, preuve, ...) */
   proofUrl?: string;
+  /**
+   * Echeances de la dette auto-creee si le colis est remis avec une facture
+   * non soldee (ISO date). Ignorees si aucune dette n'est creee.
+   */
+  debtNextDueDate?: string;
+  debtDueDateFinal?: string;
+}
+
+/** Parse une date d'echeance optionnelle ; BusinessError si invalide. */
+function parseDueDate(value: string | undefined, label: string): Date | null {
+  if (!value) return null;
+  const d = new Date(value);
+  if (isNaN(d.getTime())) {
+    throw new BusinessError(`${label} invalide : ${value}`);
+  }
+  return d;
 }
 
 /**
@@ -72,6 +88,16 @@ export class HandoverParcelUseCase {
     if (!input.identityConfirmed) {
       throw new BusinessError(
         'L\'agent doit confirmer avoir confronte l\'identite (photo CNI) avec la personne en face.',
+      );
+    }
+
+    // Echeances de la dette auto-creee : validees AVANT toute mutation pour
+    // que la remise echoue proprement sur une saisie invalide.
+    const debtNextDueDate = parseDueDate(input.debtNextDueDate, 'Prochaine echeance');
+    const debtDueDateFinal = parseDueDate(input.debtDueDateFinal, 'Echeance finale');
+    if (debtNextDueDate && debtDueDateFinal && debtDueDateFinal < debtNextDueDate) {
+      throw new BusinessError(
+        "L'echeance finale ne peut pas preceder la prochaine echeance.",
       );
     }
 
@@ -215,6 +241,8 @@ export class HandoverParcelUseCase {
                   clientId: invoice.clientId,
                   parcelId: parcel.id,
                   invoiceId: invoice.id,
+                  nextDueDate: debtNextDueDate,
+                  dueDateFinal: debtDueDateFinal,
                   createdByUserId: userId,
                 },
               });
@@ -229,6 +257,8 @@ export class HandoverParcelUseCase {
                     source: 'HANDOVER',
                     parcelId: parcel.id,
                     invoiceId: invoice.id,
+                    nextDueDate: input.debtNextDueDate ?? null,
+                    dueDateFinal: input.debtDueDateFinal ?? null,
                   },
                   comment: 'Cree automatiquement a la remise du colis (solde facture impaye).',
                   userId,
