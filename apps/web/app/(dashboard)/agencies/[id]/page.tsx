@@ -323,8 +323,8 @@ export default function AgencyDetailPage({ params }: { params: Promise<{ id: str
   return (
     <PageTransition>
       <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
+        {/* Header : empile sur mobile (titre puis actions), une ligne en >= sm. */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
             <button onClick={() => router.back()} className="rounded-xl p-2 hover:bg-gray-100 transition-colors">
               <ArrowLeft className="h-5 w-5 text-gray-500" />
@@ -344,7 +344,7 @@ export default function AgencyDetailPage({ params }: { params: Promise<{ id: str
               </button>
             </Can>
             <div>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <h1 className="text-2xl font-bold text-gray-900">{agency.name}</h1>
                 <span className="font-mono text-xs font-bold text-primary-700 bg-primary-50 px-2.5 py-1 rounded-lg">{agency.code}</span>
                 <AppBadge variant={agency.isActive ? 'success' : 'error'}>{agency.isActive ? 'Actif' : 'Inactif'}</AppBadge>
@@ -352,7 +352,7 @@ export default function AgencyDetailPage({ params }: { params: Promise<{ id: str
               <p className="text-sm text-gray-500 mt-0.5">{agency.city}, {agency.country}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Can permission="agency.manage">
               <AppButton variant="outline" onClick={() => setShowEdit(true)}>
                 <Edit className="h-4 w-4" />

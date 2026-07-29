@@ -102,6 +102,15 @@ body {
   background: #9CA3AF;
 }
 
+/* Masque la scrollbar tout en gardant le scroll (barres d'onglets, carrousels). */
+@utility scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 @theme inline {
   --font-heading: var(--font-sans);
   --font-sans: var(--font-sans);
