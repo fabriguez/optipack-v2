@@ -41,6 +41,32 @@ export interface PromoPreview {
   evaluation: PromoEvaluation;
 }
 
+/**
+ * Code propose au guichet pour une facture donnee : identite du code, origine
+ * (attribue nominativement ou public) et verdict d'eligibilite deja calcule.
+ */
+export interface PromoCandidate {
+  id: string;
+  code: string;
+  label: string;
+  description: string | null;
+  discountType: 'PERCENT' | 'AMOUNT';
+  discountValue: number;
+  visibility: string;
+  startsAt: Date | null;
+  expiresAt: Date | null;
+  source: 'ASSIGNED' | 'PUBLIC';
+  /** Usages restants pour ce client (null = illimite). */
+  remainingUses: number | null;
+  evaluation: PromoEvaluation;
+}
+
+/** Etat des codes promo d'une facture : celui pose, et ceux proposables. */
+export interface InvoicePromoCandidates {
+  applied: { code: string | null; label: string | null; discountAmount: number } | null;
+  candidates: PromoCandidate[];
+}
+
 export interface ApplyPromoInput {
   code: string;
   invoiceId: string;
@@ -193,6 +219,167 @@ export class PromoCodeService {
       discountType: promo.discountType,
       discountValue: Number(promo.discountValue),
       evaluation,
+    };
+  }
+
+  /**
+   * Codes promo proposables sur une facture : les attributions nominatives du
+   * client plus les codes publics en cours de validite, chacun accompagne de
+   * son verdict d'eligibilite (et du montant de remise s'il est applicable).
+   *
+   * Sert au guichet : l'agent qui encaisse voit d'un coup d'oeil ce que le
+   * client peut utiliser sur ces colis, sans avoir a connaitre les codes.
+   *
+   * Les codes hors perimetre (mauvaise categorie de colis, montant hors
+   * bornes, quota epuise...) sont renvoyes eux aussi, avec le motif du refus :
+   * l'agent peut ainsi expliquer au client pourquoi son code ne passe pas.
+   *
+   * L'assiette et les quotas sont evalues en une passe : une requete pour les
+   * colis, une pour les attributions, une pour les compteurs d'usage -- pas de
+   * N+1 sur le nombre de codes.
+   */
+  async listForInvoice(input: {
+    invoiceId: string;
+    /** Si fourni, verifie que la facture appartient bien a ce client. */
+    clientId?: string;
+  }): Promise<InvoicePromoCandidates> {
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: input.invoiceId },
+      select: {
+        id: true, clientId: true, totalAmount: true, balance: true, status: true,
+        parcelGroupId: true, promoDiscount: true, promoCodeLabel: true,
+        promoCode: { select: { code: true } },
+        client: { select: { organizationId: true } },
+      },
+    });
+    if (!invoice) throw new NotFoundError('Facture', input.invoiceId);
+    if (input.clientId && invoice.clientId !== input.clientId) {
+      throw new NotFoundError('Facture', input.invoiceId);
+    }
+
+    const now = new Date();
+    // Fenetre de validite : inutile de proposer un code pas encore ouvert ou
+    // deja expire, il ne serait de toute facon jamais applicable.
+    const validWindow: Prisma.PromoCodeWhereInput = {
+      isActive: true,
+      isDeleted: false,
+      AND: [
+        { OR: [{ startsAt: null }, { startsAt: { lte: now } }] },
+        { OR: [{ expiresAt: null }, { expiresAt: { gte: now } }] },
+      ],
+    };
+
+    const [parcels, assignments, publicCodes, activeRedemption] = await Promise.all([
+      this.loadParcels(invoice.id, invoice.parcelGroupId),
+      prisma.promoCodeAssignment.findMany({
+        where: {
+          clientId: invoice.clientId,
+          promoCode: { organizationId: invoice.client.organizationId, ...validWindow },
+        },
+        select: {
+          id: true, maxUses: true, usedCount: true, promoCodeId: true,
+          promoCode: { include: PROMO_INCLUDE },
+        },
+      }),
+      prisma.promoCode.findMany({
+        where: {
+          organizationId: invoice.client.organizationId,
+          visibility: 'PUBLIC',
+          ...validWindow,
+        },
+        include: PROMO_INCLUDE,
+      }),
+      prisma.promoCodeRedemption.findFirst({
+        where: { invoiceId: invoice.id, status: { in: ['RESERVED', 'CONSUMED'] } },
+        select: { id: true },
+      }),
+    ]);
+
+    const assignmentByPromo = new Map(assignments.map((a) => [a.promoCodeId, a]));
+    // Un code public deja attribue nominativement ne doit pas apparaitre deux
+    // fois : l'attribution (qui porte le quota dedie) l'emporte.
+    const rows: { promo: PromoRow; source: 'ASSIGNED' | 'PUBLIC' }[] = [
+      ...assignments.map((a) => ({ promo: a.promoCode, source: 'ASSIGNED' as const })),
+      ...publicCodes
+        .filter((p) => !assignmentByPromo.has(p.id))
+        .map((p) => ({ promo: p, source: 'PUBLIC' as const })),
+    ];
+
+    // Compteurs d'usage du client, tous codes confondus, en une requete.
+    const usageCounts = rows.length
+      ? await prisma.promoCodeRedemption.groupBy({
+          by: ['promoCodeId'],
+          where: {
+            clientId: invoice.clientId,
+            promoCodeId: { in: rows.map((r) => r.promo.id) },
+            status: { in: ['RESERVED', 'CONSUMED'] },
+          },
+          _count: { _all: true },
+        })
+      : [];
+    const usedByPromo = new Map(usageCounts.map((u) => [u.promoCodeId, u._count._all]));
+
+    const invoiceView = {
+      totalAmount: Number(invoice.totalAmount),
+      balance: Number(invoice.balance),
+      status: invoice.status,
+    };
+
+    const candidates = rows.map<PromoCandidate>(({ promo, source }) => {
+      const assignment = assignmentByPromo.get(promo.id) ?? null;
+      const evaluation = evaluatePromoCode({
+        promo: this.toRules(promo),
+        invoice: invoiceView,
+        parcels,
+        usage: {
+          assignment: assignment
+            ? { id: assignment.id, maxUses: assignment.maxUses, usedCount: assignment.usedCount }
+            : null,
+          clientUsedCount: usedByPromo.get(promo.id) ?? 0,
+        },
+        hasActiveRedemption: !!activeRedemption,
+        now,
+      });
+
+      const quota = assignment?.maxUses ?? promo.maxUsesPerClient;
+      return {
+        id: promo.id,
+        code: promo.code,
+        label: promo.label,
+        description: promo.description,
+        discountType: promo.discountType,
+        discountValue: Number(promo.discountValue),
+        visibility: promo.visibility,
+        startsAt: promo.startsAt,
+        expiresAt: promo.expiresAt,
+        source,
+        remainingUses:
+          quota == null ? null : Math.max(0, quota - (usedByPromo.get(promo.id) ?? 0)),
+        evaluation,
+      };
+    });
+
+    // Les codes applicables d'abord, remise decroissante : l'agent propose
+    // spontanement la meilleure offre. Les refus suivent, par code.
+    candidates.sort((a, b) => {
+      if (a.evaluation.ok !== b.evaluation.ok) return a.evaluation.ok ? -1 : 1;
+      if (a.evaluation.ok && b.evaluation.ok) {
+        return b.evaluation.discountAmount - a.evaluation.discountAmount;
+      }
+      return a.code.localeCompare(b.code);
+    });
+
+    const appliedAmount = Number(invoice.promoDiscount ?? 0);
+    return {
+      applied:
+        appliedAmount > 0
+          ? {
+              code: invoice.promoCode?.code ?? null,
+              label: invoice.promoCodeLabel,
+              discountAmount: appliedAmount,
+            }
+          : null,
+      candidates,
     };
   }
 

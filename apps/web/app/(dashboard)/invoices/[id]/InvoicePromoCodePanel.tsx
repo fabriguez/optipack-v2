@@ -9,6 +9,7 @@ import { AppInput } from '@/components/ui/AppInput';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppBadge } from '@/components/ui/AppBadge';
 import { Can } from '@/lib/components/Can';
+import { ClientPromoCodePicker } from '@/components/promo/ClientPromoCodePicker';
 import { invoicePromoApi } from '@/lib/api/promoCodes';
 import { extractApiError } from '@/lib/api/errorMessage';
 import { formatAmount } from '@transitsoftservices/shared';
@@ -148,6 +149,13 @@ export function InvoicePromoCodePanel({
           >
             {preview.message}
           </p>
+        )}
+
+        {/* Codes deja detenus par le client : evite a l'agent de les demander. */}
+        {!disabled && (
+          <div className="mt-4 border-t border-gray-100 pt-4">
+            <ClientPromoCodePicker invoiceId={invoiceId} onApplied={refresh} />
+          </div>
         )}
       </AppCard>
     </Can>

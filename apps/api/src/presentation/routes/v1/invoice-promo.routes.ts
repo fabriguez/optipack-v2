@@ -30,6 +30,28 @@ async function invoiceClientId(invoiceId: string): Promise<string> {
   return invoice.clientId;
 }
 
+/**
+ * GET /invoices/:id/promo-code/available
+ * Codes promo mobilisables par le client sur cette facture, verdict inclus.
+ * Permet a l'agent qui encaisse de proposer une remise sans connaitre les
+ * codes du client. Lecture seule.
+ */
+router.get(
+  '/:id/promo-code/available',
+  requirePermission('promocode.apply', 'promocode.read'),
+  async (req, res, next) => {
+    try {
+      await invoiceScope.assert(req.params.id, scopeCtx(req));
+      const data = await container.resolve(PromoCodeService).listForInvoice({
+        invoiceId: req.params.id,
+      });
+      res.json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
 router.post(
   '/:id/promo-code',
   validate(applyPromoCodeSchema),

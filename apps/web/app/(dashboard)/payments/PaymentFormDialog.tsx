@@ -9,6 +9,7 @@ import { AppInput } from '@/components/ui/AppInput';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppSelect } from '@/components/ui/AppSelect';
 import { AppSearchSelect, type SearchOption } from '@/components/ui/AppSearchSelect';
+import { ClientPromoCodePicker } from '@/components/promo/ClientPromoCodePicker';
 import { searchers } from '@/lib/api/searchers';
 import { useRecordPayment } from '@/lib/hooks/usePayments';
 import { usePaymentMethods, useCreatePaymentMethod, type PaymentMethodItem } from '@/lib/hooks/usePaymentMethods';
@@ -309,6 +310,24 @@ export function PaymentFormDialog({ open, onClose, invoiceId, parcelTracking }: 
                 >
                   Payer le solde ({Number(activeInvoice.amountDue ?? activeInvoice.balance).toLocaleString()} XAF)
                 </AppButton>
+              </div>
+            )}
+
+            {/* Codes promo du client applicables sur ces colis. Appliquer un
+                code recalcule le solde : on remet le champ montant sur le
+                nouveau reste a payer pour eviter un encaissement en trop. */}
+            {Number(activeInvoice.amountDue ?? activeInvoice.balance ?? 0) > 0 && (
+              <div className="mt-3 border-t border-primary-100 pt-3">
+                <ClientPromoCodePicker
+                  invoiceId={activeInvoice.id}
+                  onApplied={async () => {
+                    const refreshed = await apiClient
+                      .get(`/invoices/${activeInvoice.id}`)
+                      .then((r) => r.data?.data);
+                    const due = Number(refreshed?.amountDue ?? refreshed?.balance ?? 0);
+                    setValue('amount', due, { shouldValidate: true });
+                  }}
+                />
               </div>
             )}
           </div>

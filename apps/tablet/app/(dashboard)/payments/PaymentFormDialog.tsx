@@ -8,6 +8,7 @@ import { AppDialog } from '@/components/forms/AppDialog';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { EntityPicker } from '@/components/data/EntityPicker';
+import { ClientPromoCodePicker } from '@/components/promo/ClientPromoCodePicker';
 import { useRecordPayment } from '@/lib/hooks/usePayments';
 import { usePaymentMethods, useCreatePaymentMethod } from '@/lib/hooks/usePaymentMethods';
 import { apiClient } from '@/lib/api/client';
@@ -97,6 +98,20 @@ export function PaymentFormDialog({ open, onClose, invoiceId: fixedInvoiceId, pa
           <Text style={lbl}>Facture *</Text>
           <EntityPicker value={invoice.id} name={invoice.name} onChange={(id, name) => { setInvoice({ id, name }); setParcelId(''); }} searcher={invoiceSearcher as never} queryKey="invoices-search" placeholder="Rechercher une facture..." />
         </View>
+      )}
+
+      {/* Codes promo du client sur cette facture. Appliquer un code recalcule
+          le solde : on remet le montant saisi sur le nouveau reste a payer. */}
+      {!!activeInvoiceId && Number(inv?.balance ?? 0) > 0 && (
+        <ClientPromoCodePicker
+          invoiceId={activeInvoiceId}
+          onApplied={async () => {
+            const refreshed = await apiClient
+              .get(`/invoices/${activeInvoiceId}`)
+              .then((r) => r.data?.data);
+            setAmount(String(Number(refreshed?.amountDue ?? refreshed?.balance ?? 0)));
+          }}
+        />
       )}
 
       {linkedParcels.length > 1 && (

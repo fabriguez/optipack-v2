@@ -9,7 +9,8 @@ import { AppBadge } from '@/components/ui/AppBadge';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { RowActions } from '@/components/shared/RowActions';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ClientPromoCodePicker } from '@/components/promo/ClientPromoCodePicker';
 import { usePaymentsByInvoice } from '@/lib/hooks/usePayments';
 import { usePermission, useIsTenantAdmin } from '@/lib/hooks/usePermission';
 import { Can } from '@/lib/components/Can';
@@ -27,6 +28,7 @@ const METHOD_LABELS: Record<string, string> = {
 export default function InvoiceDetailPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const [showPayment, setShowPayment] = useState(false);
   const [showDiscount, setShowDiscount] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -241,6 +243,17 @@ export default function InvoiceDetailPage() {
             </div>
           </div>
         </AppCard>
+
+        {/* Codes promo du client applicables sur cette facture. Masque une
+            fois la facture soldee ou annulee. */}
+        {balance > 0 && invoice.status !== 'CANCELLED' && (
+          <AppCard>
+            <ClientPromoCodePicker
+              invoiceId={invoice.id}
+              onApplied={() => qc.invalidateQueries({ queryKey: ['invoices', id] })}
+            />
+          </AppCard>
+        )}
 
         {/* Info cards row */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">

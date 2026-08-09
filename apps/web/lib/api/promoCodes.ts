@@ -87,7 +87,36 @@ export const promoCodesApi = {
 };
 
 /** Application d'un code promo sur une facture depuis le guichet. */
+/** Verdict d'eligibilite d'un code sur une facture donnee. */
+export type PromoEvaluation =
+  | { ok: false; reason: string; message: string }
+  | { ok: true; discountAmount: number; eligibleBase: number };
+
+/** Code proposable au guichet, avec son verdict deja calcule par l'API. */
+export interface PromoCandidate {
+  id: string;
+  code: string;
+  label: string;
+  description: string | null;
+  discountType: 'PERCENT' | 'AMOUNT';
+  discountValue: number;
+  visibility: string;
+  startsAt: string | null;
+  expiresAt: string | null;
+  source: 'ASSIGNED' | 'PUBLIC';
+  remainingUses: number | null;
+  evaluation: PromoEvaluation;
+}
+
+export interface InvoicePromoCandidates {
+  applied: { code: string | null; label: string | null; discountAmount: number } | null;
+  candidates: PromoCandidate[];
+}
+
 export const invoicePromoApi = {
+  /** Codes du client mobilisables sur cette facture (eligibles ou non). */
+  available: (invoiceId: string): Promise<{ data: InvoicePromoCandidates }> =>
+    apiClient.get(`/invoices/${invoiceId}/promo-code/available`).then((r) => r.data),
   preview: (invoiceId: string, code: string) =>
     apiClient.post(`/invoices/${invoiceId}/promo-code/preview`, { code }).then((r) => r.data),
   apply: (invoiceId: string, code: string) =>
