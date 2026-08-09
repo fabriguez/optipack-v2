@@ -4,6 +4,7 @@ import { generateReference } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
 import { BusinessError, NotFoundError } from '../../../domain/errors/BusinessError';
 import { assertAgencyActive } from '../../services/scope/agencyScope';
+import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 
 /**
  * Cree une dette typee (CLIENT / EMPLOYEE / AGENCY / CARRIER).
@@ -125,6 +126,26 @@ export class CreateDebtUseCase {
       });
 
       return created;
+    });
+
+    // Emission apres commit : les handlers de notification relisent la DB.
+    eventBus.emit({
+      type: DomainEvents.DEBT_CREATED,
+      payload: {
+        debtId: debt.id,
+        debtRef: debt.reference,
+        debtType: debt.type,
+        motif: debt.motif,
+        totalAmount: Number(debt.totalAmount),
+        clientId: debt.clientId,
+        agencyId: debt.agencyId,
+        organizationId: debt.organizationId,
+        nextDueDate: debt.nextDueDate,
+        dueDateFinal: debt.dueDateFinal,
+        priority: debt.priority,
+      },
+      timestamp: new Date(),
+      userId,
     });
 
     return debt;

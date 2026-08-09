@@ -7,6 +7,7 @@ import { Card, CardHeader } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { PayDialog } from '@/components/payment/PayDialog';
+import { PromoCodeField } from '@/components/payment/PromoCodeField';
 import { portalApi } from '@/lib/api/portal';
 import { downloadAndShare } from '@/lib/downloads';
 import { invoiceStatusLabel, paymentMethodLabel, parcelStatusLabel } from '@/lib/labels';
@@ -106,6 +107,13 @@ export default function InvoiceDetail() {
             {Number(i.fees?.discount ?? 0) > 0 && (
               <FeeRow label="Remise" value={`- ${formatAmount(Number(i.fees.discount))}`} muted />
             )}
+            {Number(i.fees?.promoDiscount ?? 0) > 0 && (
+              <FeeRow
+                label={i.fees?.promoCodeLabel ? `Code promo (${i.fees.promoCodeLabel})` : 'Code promo'}
+                value={`- ${formatAmount(Number(i.fees.promoDiscount))}`}
+                muted
+              />
+            )}
             {Number(i.fees?.tax ?? 0) > 0 && (
               <FeeRow label="TVA" value={formatAmount(Number(i.fees.tax))} muted />
             )}
@@ -119,6 +127,15 @@ export default function InvoiceDetail() {
               highlight={remaining > 0}
             />
           </Card>
+
+          {id && (
+            <PromoCodeField
+              invoiceId={id}
+              promoDiscount={Number(i.fees?.promoDiscount ?? 0)}
+              promoCodeLabel={i.fees?.promoCodeLabel ?? null}
+              locked={remaining <= 0 || effStatus === 'CANCELLED'}
+            />
+          )}
 
           {Array.isArray(i.storageLines) && i.storageLines.length > 0 && (
             <Card>

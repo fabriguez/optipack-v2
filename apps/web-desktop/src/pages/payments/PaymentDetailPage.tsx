@@ -6,7 +6,7 @@ import { AppButton } from '@/components/ui/AppButton';
 import { AppBadge } from '@/components/ui/AppBadge';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
-import { Can } from '@/lib/components/Can';
+import { useIsTenantAdmin } from '@/lib/hooks/usePermission';
 import { useQuery } from '@tanstack/react-query';
 import { useVoidPayment } from '@/lib/hooks/usePayments';
 import { apiClient } from '@/lib/api/client';
@@ -17,12 +17,26 @@ const METHOD_LABELS: Record<string, string> = {
   CASH: 'Especes', MOBILE_MONEY: 'Mobile Money', BANK_TRANSFER: 'Virement', CARD: 'Carte', CHECK: 'Cheque',
 };
 
+/** Fenetre d'annulation d'un paiement, alignee sur VoidPaymentUseCase (API). */
+const VOID_WINDOW_DAYS = 2;
+const VOID_WINDOW_MS = VOID_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+
+/** Le paiement est-il encore dans la fenetre d'annulation de 2 jours ? */
+function isWithinVoidWindow(createdAt?: string | null): boolean {
+  if (!createdAt) return false;
+  const created = new Date(createdAt).getTime();
+  if (Number.isNaN(created)) return false;
+  return Date.now() - created <= VOID_WINDOW_MS;
+}
+
 export default function PaymentDetailPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
   const [showVoid, setShowVoid] = useState(false);
   const [voidReason, setVoidReason] = useState('');
   const voidMutation = useVoidPayment();
+  // Annulation reservee aux administrateurs (garde miroir de la route API).
+  const isAdmin = useIsTenantAdmin();
 
   const { data, isLoading } = useQuery({
     queryKey: ['payments', id],
@@ -53,13 +67,17 @@ export default function PaymentDetailPage() {
               <p className="text-sm text-gray-500 mt-0.5">{formatDateTime(payment.createdAt)}</p>
             </div>
           </div>
-          {!payment.isVoided && (
-            <Can permission="payment.void">
+          {!payment.isVoided && isAdmin && (
+            isWithinVoidWindow(payment.createdAt) ? (
               <AppButton variant="destructive" onClick={() => setShowVoid(true)}>
                 <AlertTriangle className="h-4 w-4" />
                 Annuler le paiement
               </AppButton>
-            </Can>
+            ) : (
+              <p className="max-w-xs text-right text-xs text-gray-500">
+                Delai d&apos;annulation depasse ({VOID_WINDOW_DAYS} jours apres l&apos;encaissement).
+              </p>
+            )
           )}
         </div>
 

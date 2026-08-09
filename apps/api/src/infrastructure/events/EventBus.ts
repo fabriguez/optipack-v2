@@ -54,6 +54,12 @@ export const DomainEvents = {
   PARCEL_LOADED: 'parcel.loaded',
   PARCEL_UNLOADED: 'parcel.unloaded',
   PARCEL_DELIVERED: 'parcel.delivered',
+  // Evenements de gestion (backoffice) : alimentent le fil in-app des admins.
+  PARCEL_UPDATED: 'parcel.updated',
+  PARCEL_DELETED: 'parcel.deleted',
+  PARCEL_ARCHIVED: 'parcel.archived',
+  PARCEL_UNARCHIVED: 'parcel.unarchived',
+  PARCEL_LOST: 'parcel.lost',
   // ETA conteneur depassee : colis encore en transit apres la date d'arrivee
   // estimee. Emis par le cron de detection de retard.
   PARCEL_DELAYED: 'parcel.delayed',
@@ -68,10 +74,17 @@ export const DomainEvents = {
 
   INVOICE_CREATED: 'invoice.created',
   INVOICE_PAID: 'invoice.paid',
+  INVOICE_STATUS_CHANGED: 'invoice.statusChanged',
+  // Remise commerciale accordee (ou retiree) sur la facture d'un colis.
+  INVOICE_DISCOUNT_APPLIED: 'invoice.discountApplied',
 
   PAYMENT_RECEIVED: 'payment.received',
   PAYMENT_VOIDED: 'payment.voided',
 
+  DEBT_CREATED: 'debt.created',
+  DEBT_CANCELLED: 'debt.cancelled',
+  DEBT_STATUS_CHANGED: 'debt.statusChanged',
+  DEBT_DUE_SOON: 'debt.dueSoon',
   DEBT_PAYMENT_RECEIVED: 'debtPayment.received',
 
   DISBURSEMENT_CREATED: 'disbursement.created',

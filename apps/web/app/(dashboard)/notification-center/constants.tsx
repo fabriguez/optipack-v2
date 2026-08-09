@@ -47,6 +47,27 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   INVOICE_PAID: 'Facture reglee',
   CONTAINER_DEPARTED: 'Conteneur parti',
   CONTAINER_ARRIVED: 'Conteneur arrive',
+  CONTAINER_STATUS_CHANGED: 'Statut conteneur modifie',
+  // Evenements de gestion (fil administrateur).
+  PARCEL_UPDATED: 'Colis modifie',
+  PARCEL_DELETED: 'Colis supprime',
+  PARCEL_ARCHIVED: 'Colis archives',
+  PARCEL_UNARCHIVED: 'Colis desarchives',
+  PARCEL_LOST: 'Colis perdu',
+  PAYMENT_VOIDED: 'Paiement annule',
+  INVOICE_STATUS_CHANGED: 'Statut facture modifie',
+  INVOICE_DISCOUNT_APPLIED: 'Remise accordee',
+  DEBT_CREATED: 'Dette creee',
+  DEBT_CANCELLED: 'Dette annulee',
+  DEBT_STATUS_CHANGED: 'Statut dette modifie',
+  DEBT_DUE_SOON: 'Echeance de dette proche',
+  DEBT_DUE_SOON_ADMIN: 'Echeance de dette (admin)',
+  DEBT_PAYMENT_RECEIVED: 'Paiement de dette',
+  DEBT_PAYMENT_RECEIVED_ADMIN: 'Paiement de dette (admin)',
+  DEBT_OVERDUE_REMINDER: 'Relance dette en retard',
+  FUND_TRANSFER_CREATED: 'Virement initie',
+  FUND_TRANSFER_CONFIRMED: 'Virement confirme',
+  FUND_TRANSFER_VOIDED: 'Virement annule',
 };
 
 /** Resout un eventKind brut en libelle FR (fallback : la valeur brute). */

@@ -34,6 +34,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   invoice: 'Facturation',
   loyalty: 'Fidélité',
   container: 'Conteneurs (admin)',
+  admin: 'Supervision backoffice (admin)',
 };
 
 export function TenantNotificationConfig() {

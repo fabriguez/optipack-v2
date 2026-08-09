@@ -219,6 +219,23 @@ export class RecordPaymentUseCase {
       status: newStatus,
     });
 
+    if (newStatus !== invoice.status) {
+      eventBus.emit({
+        type: DomainEvents.INVOICE_STATUS_CHANGED,
+        payload: {
+          invoiceId: invoice.id,
+          invoiceRef: invoice.reference,
+          statusBefore: invoice.status,
+          statusAfter: newStatus,
+          balance: Math.max(0, newBalance),
+          clientId: invoice.clientId,
+          agencyId,
+        },
+        timestamp: new Date(),
+        userId,
+      });
+    }
+
     // Facture soldee : l'eventuel code promo reserve devient definitivement
     // consomme (et inversement si un reliquat subsiste).
     await this.promoCodes.syncForInvoice(invoice.id);

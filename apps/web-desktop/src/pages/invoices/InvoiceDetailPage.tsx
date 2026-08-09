@@ -11,7 +11,7 @@ import { RowActions } from '@/components/shared/RowActions';
 import { DashboardSkeleton } from '@/components/ui/AppSkeleton';
 import { useQuery } from '@tanstack/react-query';
 import { usePaymentsByInvoice } from '@/lib/hooks/usePayments';
-import { usePermission } from '@/lib/hooks/usePermission';
+import { usePermission, useIsTenantAdmin } from '@/lib/hooks/usePermission';
 import { Can } from '@/lib/components/Can';
 import { apiClient } from '@/lib/api/client';
 import { formatAmount, formatDate, formatDateTime } from '@transitsoftservices/shared';
@@ -37,7 +37,10 @@ export default function InvoiceDetailPage() {
   const [lightbox, setLightbox] = useState<{ parcelId: string; index: number; images: any[] } | null>(null);
 
   // Gating ABAC : meme cle que la route API POST /payments/:id/void
-  const canVoidPayment = usePermission('payment.void');
+  // Annulation d'un paiement : administrateurs uniquement (miroir API).
+  const hasVoidPermission = usePermission('payment.void');
+  const isTenantAdmin = useIsTenantAdmin();
+  const canVoidPayment = hasVoidPermission && isTenantAdmin;
 
   const handleDownloadPdf = async () => {
     setPdfLoading(true);

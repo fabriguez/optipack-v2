@@ -44,6 +44,8 @@ interface CreateGroupInput {
   label?: string;
   notes?: string;
   parcels: ParcelInGroupInput[];
+  /** Auteur de l'enregistrement, trace dans ParcelHistory. */
+  createdByUserId?: string | null;
 }
 
 function genTracking(): string {
@@ -214,6 +216,32 @@ export class CreateParcelGroupUseCase {
         });
         createdParcels.push(parcel);
 
+        // Historique d'entree en magasin. Sans cette ligne, les colis groupes
+        // n'apparaissent pas dans le flux "colis recus" du rapport journalier :
+        // ce flux est construit a partir de ParcelHistory (statusBefore=null,
+        // statusAfter=IN_STOCK), pas de la table Parcel.
+        await tx.parcelHistory.create({
+          data: {
+            parcelId: parcel.id,
+            action: 'CREATED',
+            statusBefore: null,
+            statusAfter: 'IN_STOCK',
+            isPresentAfter: true,
+            warehouseId: parcel.warehouseId,
+            transitRouteId: routeId,
+            userId: input.createdByUserId ?? null,
+            parcelDesignationSnapshot: parcel.designation,
+            parcelTrackingSnapshot: parcel.trackingNumber,
+            comment: `Colis enregistre dans le groupage ${group.reference}`,
+            metadata: {
+              parcelGroupId: group.id,
+              invoiceId: parcelInvoice.id,
+              invoiceRef: parcelInvoice.reference,
+              price,
+            } as never,
+          },
+        });
+
         // Notif client "colis enregistre" (parite avec CreateParcelUseCase /
         // CreateBatchParcelsUseCase, qui emettaient deja cet evenement).
         parcelCreatedEvents.push({
@@ -280,7 +308,12 @@ export class CreateParcelGroupUseCase {
 export class AddParcelToGroupUseCase {
   constructor(private groupInvoice: GroupInvoiceService) {}
 
-  async execute(groupId: string, parcel: ParcelInGroupInput, organizationId: string) {
+  async execute(
+    groupId: string,
+    parcel: ParcelInGroupInput,
+    organizationId: string,
+    userId?: string | null,
+  ) {
     const group = await prisma.parcelGroup.findUnique({ where: { id: groupId } });
     if (!group) throw new NotFoundError('Groupe', groupId);
     if (group.status !== 'DRAFT') {
@@ -326,7 +359,7 @@ export class AddParcelToGroupUseCase {
           balance: price,
         },
       });
-      return tx.parcel.create({
+      const row = await tx.parcel.create({
         data: {
           organizationId,
           trackingNumber: genTracking(),
@@ -348,6 +381,32 @@ export class AddParcelToGroupUseCase {
           invoiceId: parcelInvoice.id,
         },
       });
+
+      // Meme raison que dans CreateParcelGroupUseCase : sans ParcelHistory, le
+      // colis n'entre pas dans le flux "colis recus" du rapport journalier.
+      await tx.parcelHistory.create({
+        data: {
+          parcelId: row.id,
+          action: 'CREATED',
+          statusBefore: null,
+          statusAfter: 'IN_STOCK',
+          isPresentAfter: true,
+          warehouseId: row.warehouseId,
+          transitRouteId: routeId,
+          userId: userId ?? null,
+          parcelDesignationSnapshot: row.designation,
+          parcelTrackingSnapshot: row.trackingNumber,
+          comment: `Colis ajoute au groupage ${group.reference}`,
+          metadata: {
+            parcelGroupId: groupId,
+            invoiceId: parcelInvoice.id,
+            invoiceRef: parcelInvoice.reference,
+            price,
+          } as never,
+        },
+      });
+
+      return row;
     });
 
     // Resync facture agregat du groupe (nouveau colis -> total + eleve).

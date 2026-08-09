@@ -127,15 +127,25 @@ export class PrismaNotificationRepository implements INotificationRepository {
       ...(filters.userId && { userId: filters.userId }),
       ...(filters.clientId && { clientId: filters.clientId }),
       ...(filters.status && { status: filters.status as any }),
-      ...(filters.agencyIds?.length && {
-        agencyId: { in: filters.agencyIds },
-      }),
-      ...(search && {
-        OR: [
-          { title: { contains: search, mode: 'insensitive' } },
-          { message: { contains: search, mode: 'insensitive' } },
-        ],
-      }),
+      // Le filtre agence et la recherche vivent tous les deux dans un OR :
+      // ils sont combines via AND pour ne pas s'ecraser mutuellement.
+      AND: [
+        // Les alertes non rattachees a une agence (portee organisation :
+        // siege, virements HQ...) ont agencyId=null. `{ in: [...] }` les
+        // exclurait -- un NULL ne matche jamais un IN -- alors qu'elles sont
+        // bien destinees a l'utilisateur cible par `userId`.
+        ...(filters.agencyIds?.length
+          ? [{ OR: [{ agencyId: { in: filters.agencyIds } }, { agencyId: null }] }]
+          : []),
+        ...(search
+          ? [{
+              OR: [
+                { title: { contains: search, mode: 'insensitive' as const } },
+                { message: { contains: search, mode: 'insensitive' as const } },
+              ],
+            }]
+          : []),
+      ],
     };
 
     const [data, total] = await Promise.all([

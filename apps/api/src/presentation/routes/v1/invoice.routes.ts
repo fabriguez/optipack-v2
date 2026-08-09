@@ -16,6 +16,7 @@ import { invoiceAmountsUpdate } from '../../../application/services/invoiceTotal
 import { invoiceScope, scopeCtx } from '../../../application/services/scope/agencyScope';
 import { applyFieldPolicy, INVOICE_FIELD_POLICY } from '../../serializers/fieldPolicy';
 import { getPolicy } from '../../middleware/policyContext';
+import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 import sharp from 'sharp';
 
 /**
@@ -871,6 +872,34 @@ router.post('/:id/discount', validate(applyInvoiceDiscountSchema), requirePermis
       });
       return inv;
     });
+
+    // Alerte in-app admin : une remise commerciale accordee sur le colis
+    // facture doit rester visible sans consulter l'audit.
+    {
+      const parcel = await prisma.parcel.findFirst({
+        where: { invoiceId: invoice.id },
+        select: { id: true, trackingNumber: true, designation: true },
+      });
+      eventBus.emit({
+        type: DomainEvents.INVOICE_DISCOUNT_APPLIED,
+        payload: {
+          invoiceId: invoice.id,
+          invoiceRef: invoice.reference,
+          previousDiscount,
+          newDiscount: amount,
+          reason,
+          netAmount: amounts.netAmount,
+          balance: amounts.balance,
+          clientId: invoice.clientId,
+          agencyId: invoice.agencyId,
+          parcelId: parcel?.id ?? null,
+          trackingNumber: parcel?.trackingNumber ?? null,
+          designation: parcel?.designation ?? null,
+        },
+        timestamp: new Date(),
+        userId: req.user?.userId,
+      });
+    }
 
     // Si facture membre d'un groupe : on resync l'agregat (somme members).
     if (!invoice.parcelGroupId) {

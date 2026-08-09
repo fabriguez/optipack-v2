@@ -181,6 +181,22 @@ export class UnloadParcelUseCase {
       ...(isLastParcel && { status: 'UNLOADED' }),
     });
 
+    // Dernier colis sorti : le conteneur bascule en UNLOADED (statut terminal).
+    if (isLastParcel && container.status !== 'UNLOADED') {
+      eventBus.emit({
+        type: DomainEvents.CONTAINER_STATUS_CHANGED,
+        payload: {
+          containerId,
+          designation: container.designation,
+          statusBefore: container.status,
+          statusAfter: 'UNLOADED',
+          agencyId: container.arrivalAgencyId ?? container.departureAgencyId,
+        },
+        timestamp: new Date(),
+        userId,
+      });
+    }
+
     // Trace par colis dans l'historique du conteneur (chaque dechargement).
     await this.history.recordContainer({
       containerId,

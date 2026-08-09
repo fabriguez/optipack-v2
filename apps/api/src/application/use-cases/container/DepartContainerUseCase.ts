@@ -178,6 +178,20 @@ export class DepartContainerUseCase {
       userId,
     });
 
+    eventBus.emit({
+      type: DomainEvents.CONTAINER_STATUS_CHANGED,
+      payload: {
+        containerId,
+        designation: container.designation,
+        statusBefore: container.status,
+        statusAfter: 'IN_TRANSIT',
+        parcelCount: parcelIds.length,
+        agencyId: container.departureAgencyId,
+      },
+      timestamp: new Date(),
+      userId,
+    });
+
     // Emit parcel status change events for each parcel (LOADING -> IN_TRANSIT)
     try {
       for (const p of parcels) {

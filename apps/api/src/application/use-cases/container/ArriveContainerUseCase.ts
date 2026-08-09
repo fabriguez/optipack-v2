@@ -83,6 +83,20 @@ export class ArriveContainerUseCase {
       userId,
     });
 
+    eventBus.emit({
+      type: DomainEvents.CONTAINER_STATUS_CHANGED,
+      payload: {
+        containerId,
+        designation: container.designation,
+        statusBefore: container.status,
+        statusAfter: 'ARRIVED',
+        parcelCount: parcelIds.length,
+        agencyId: container.arrivalAgencyId ?? container.departureAgencyId,
+      },
+      timestamp: new Date(),
+      userId,
+    });
+
     // Emit parcel status change events for each parcel (IN_TRANSIT -> ARRIVED)
     try {
       for (const p of parcels) {

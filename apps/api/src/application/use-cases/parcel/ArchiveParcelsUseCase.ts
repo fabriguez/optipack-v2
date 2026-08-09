@@ -2,6 +2,45 @@ import { injectable, inject } from 'tsyringe';
 import { prisma } from '../../../config/database';
 import { BusinessError, NotFoundError } from '../../../domain/errors/BusinessError';
 import { HistoryService } from '../../services/HistoryService';
+import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
+
+/** Colis retenu pour l'evenement d'archivage (scope agence + libelle). */
+type ArchivedParcelView = {
+  id: string;
+  trackingNumber: string;
+  organizationId: string;
+  warehouse: { agencyId: string } | null;
+};
+
+/**
+ * Emet un evenement d'archivage agrege : une seule alerte pour un lot, avec
+ * les numeros de suivi concernes. Best-effort, jamais bloquant.
+ */
+function emitArchiveEvent(
+  type: typeof DomainEvents.PARCEL_ARCHIVED | typeof DomainEvents.PARCEL_UNARCHIVED,
+  parcels: ArchivedParcelView[],
+  userId: string,
+  reason?: string,
+): void {
+  if (parcels.length === 0) return;
+  try {
+    eventBus.emit({
+      type,
+      payload: {
+        parcelIds: parcels.map((p) => p.id),
+        trackingNumbers: parcels.map((p) => p.trackingNumber),
+        count: parcels.length,
+        reason: reason ?? null,
+        agencyId: parcels.find((p) => p.warehouse?.agencyId)?.warehouse?.agencyId ?? null,
+        organizationId: parcels[0]?.organizationId ?? null,
+      },
+      timestamp: new Date(),
+      userId,
+    });
+  } catch {
+    // non bloquant
+  }
+}
 
 interface BulkResult {
   archived: number;
@@ -29,7 +68,10 @@ export class ArchiveParcelsUseCase {
     const result: BulkResult = { archived: 0, skipped: 0, errors: [] };
     const parcels = await prisma.parcel.findMany({
       where: { id: { in: parcelIds }, isDeleted: false },
-      select: { id: true, status: true, isArchived: true, trackingNumber: true },
+      select: {
+        id: true, status: true, isArchived: true, trackingNumber: true,
+        organizationId: true, warehouse: { select: { agencyId: true } },
+      },
     });
     const found = new Set(parcels.map((p) => p.id));
     for (const id of parcelIds) {
@@ -70,6 +112,13 @@ export class ArchiveParcelsUseCase {
         ),
       );
       result.archived = archivableIds.length;
+      const archivedSet = new Set(archivableIds);
+      emitArchiveEvent(
+        DomainEvents.PARCEL_ARCHIVED,
+        parcels.filter((p) => archivedSet.has(p.id)),
+        userId,
+        reason,
+      );
     }
 
     return result;
@@ -89,7 +138,10 @@ export class UnarchiveParcelsUseCase {
     const result: BulkResult = { archived: 0, skipped: 0, errors: [] };
     const parcels = await prisma.parcel.findMany({
       where: { id: { in: parcelIds }, isDeleted: false },
-      select: { id: true, isArchived: true },
+      select: {
+        id: true, isArchived: true, trackingNumber: true,
+        organizationId: true, warehouse: { select: { agencyId: true } },
+      },
     });
     const found = new Set(parcels.map((p) => p.id));
     for (const id of parcelIds) {
@@ -115,6 +167,13 @@ export class UnarchiveParcelsUseCase {
         ),
       );
       result.archived = targetIds.length;
+      const targetSet = new Set(targetIds);
+      emitArchiveEvent(
+        DomainEvents.PARCEL_UNARCHIVED,
+        parcels.filter((p) => targetSet.has(p.id)),
+        userId,
+        reason,
+      );
     }
 
     return result;

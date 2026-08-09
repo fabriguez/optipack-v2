@@ -3,6 +3,7 @@ import type { VoidDebtInput } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
 import { BusinessError, NotFoundError } from '../../../domain/errors/BusinessError';
 import { assertAgencyActive } from '../../services/scope/agencyScope';
+import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 
 /**
  * Annule une dette (status = CANCELLED). Reserve admin (controle au niveau
@@ -33,8 +34,8 @@ export class VoidDebtUseCase {
     // absent (dette non rattachee a une agence) -> pas de verrou.
     if (debt.agencyId) await assertAgencyActive(debt.agencyId);
 
-    return prisma.$transaction(async (tx) => {
-      const updated = await tx.debt.update({
+    const updated = await prisma.$transaction(async (tx) => {
+      const row = await tx.debt.update({
         where: { id: debtId },
         data: {
           status: 'CANCELLED',
@@ -54,7 +55,28 @@ export class VoidDebtUseCase {
         },
       });
 
-      return updated;
+      return row;
     });
+
+    eventBus.emit({
+      type: DomainEvents.DEBT_CANCELLED,
+      payload: {
+        debtId,
+        debtRef: updated.reference,
+        debtType: updated.type,
+        motif: updated.motif,
+        totalAmount: Number(updated.totalAmount),
+        remainingAmount: Number(updated.remainingAmount),
+        statusBefore: debt.status,
+        reason: input.reason,
+        clientId: updated.clientId,
+        agencyId: updated.agencyId,
+        organizationId: updated.organizationId,
+      },
+      timestamp: new Date(),
+      userId,
+    });
+
+    return updated;
   }
 }

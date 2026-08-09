@@ -3,6 +3,7 @@ import { prisma } from '../../../config/database';
 import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessError';
 import { HistoryService } from '../../services/HistoryService';
 import { realtimeService } from '../../../infrastructure/realtime/RealtimeService';
+import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 
 /**
  * Soft-delete d'un colis : set isDeleted=true + deletedAt. Le colis disparait
@@ -27,7 +28,9 @@ export class DeleteParcelUseCase {
         containerId: true,
         status: true,
         warehouseId: true,
+        clientId: true,
         client: { select: { organizationId: true } },
+        warehouse: { select: { agencyId: true } },
       },
     });
     if (!parcel) throw new NotFoundError('Colis', parcelId);
@@ -62,5 +65,20 @@ export class DeleteParcelUseCase {
     if (parcel.client?.organizationId) {
       realtimeService.emitResourceChange(parcel.client.organizationId, 'parcels', 'deleted', parcelId);
     }
+
+    eventBus.emit({
+      type: DomainEvents.PARCEL_DELETED,
+      payload: {
+        parcelId,
+        trackingNumber: parcel.trackingNumber,
+        designation: parcel.designation,
+        statusBefore: parcel.status,
+        clientId: parcel.clientId,
+        agencyId: parcel.warehouse?.agencyId ?? null,
+        organizationId: parcel.client?.organizationId ?? null,
+      },
+      timestamp: new Date(),
+      userId,
+    });
   }
 }

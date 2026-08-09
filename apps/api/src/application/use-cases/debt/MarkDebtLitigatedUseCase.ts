@@ -3,6 +3,7 @@ import type { MarkDebtLitigatedInput } from '@transitsoftservices/shared';
 import { prisma } from '../../../config/database';
 import { BusinessError, NotFoundError } from '../../../domain/errors/BusinessError';
 import { assertAgencyActive } from '../../services/scope/agencyScope';
+import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 
 /**
  * Bascule une dette en statut LITIGATED. Empeche les relances automatiques
@@ -22,8 +23,8 @@ export class MarkDebtLitigatedUseCase {
     // agencyId absent (dette non rattachee a une agence) -> pas de verrou.
     if (debt.agencyId) await assertAgencyActive(debt.agencyId);
 
-    return prisma.$transaction(async (tx) => {
-      const updated = await tx.debt.update({
+    const updated = await prisma.$transaction(async (tx) => {
+      const row = await tx.debt.update({
         where: { id: debtId },
         data: { status: 'LITIGATED' },
       });
@@ -36,7 +37,26 @@ export class MarkDebtLitigatedUseCase {
           userId,
         },
       });
-      return updated;
+      return row;
     });
+
+    eventBus.emit({
+      type: DomainEvents.DEBT_STATUS_CHANGED,
+      payload: {
+        debtId,
+        debtRef: updated.reference,
+        statusBefore: debt.status,
+        statusAfter: 'LITIGATED',
+        reason: input.reason,
+        remainingAmount: Number(updated.remainingAmount),
+        clientId: updated.clientId,
+        agencyId: updated.agencyId,
+        organizationId: updated.organizationId,
+      },
+      timestamp: new Date(),
+      userId,
+    });
+
+    return updated;
   }
 }

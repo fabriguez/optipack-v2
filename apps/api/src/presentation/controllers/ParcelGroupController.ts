@@ -18,6 +18,7 @@ export class ParcelGroupController {
       const result = await useCase.execute({
         ...req.body,
         organizationId: getOrgId(req),
+        createdByUserId: req.user?.userId ?? null,
       });
       res.status(201).json({ success: true, data: result });
     } catch (err) {
@@ -55,7 +56,12 @@ export class ParcelGroupController {
     try {
       await parcelGroupScope.assert(req.params.id, scopeCtx(req));
       const useCase = container.resolve(AddParcelToGroupUseCase);
-      const result = await useCase.execute(req.params.id, req.body, getOrgId(req));
+      const result = await useCase.execute(
+        req.params.id,
+        req.body,
+        getOrgId(req),
+        req.user?.userId ?? null,
+      );
       res.status(201).json({ success: true, data: result });
     } catch (err) {
       next(err);

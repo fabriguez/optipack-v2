@@ -165,6 +165,27 @@ export class RecordDebtPaymentUseCase {
       userId,
     });
 
+    // Le paiement fait basculer le statut de la dette (ACTIVE -> PARTIALLY_PAID
+    // ou -> CLEARED) : evenement dedie pour le fil in-app des administrateurs.
+    if (updated.status !== debt.status) {
+      eventBus.emit({
+        type: DomainEvents.DEBT_STATUS_CHANGED,
+        payload: {
+          debtId,
+          debtRef: debt.reference,
+          statusBefore: debt.status,
+          statusAfter: updated.status,
+          reason: 'Paiement enregistre',
+          remainingAmount: Number(updated.remainingAmount),
+          clientId: debt.clientId,
+          agencyId: input.agencyId,
+          organizationId: debt.organizationId,
+        },
+        timestamp: new Date(),
+        userId,
+      });
+    }
+
     return { payment, debt: updated };
   }
 

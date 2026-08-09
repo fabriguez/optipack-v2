@@ -17,6 +17,7 @@ import { errorHandler } from './presentation/middleware/errorHandler';
 import v1Routes from './presentation/routes/v1';
 import { startCronJobs } from './infrastructure/cron/CronService';
 import { registerHandlers as registerNotificationHandlers } from './infrastructure/events/handlers/NotificationHandler';
+import { registerAdminNotificationHandlers } from './infrastructure/events/handlers/AdminNotificationHandler';
 import { registerDailyReportEmailHandler } from './infrastructure/events/handlers/DailyReportEmailHandler';
 import { registerDailyReportRegenHandler } from './infrastructure/events/handlers/DailyReportRegenHandler';
 import { registerRealtimeParcelHandlers } from './infrastructure/events/handlers/RealtimeParcelHandler';
@@ -136,6 +137,7 @@ async function start(): Promise<void> {
 
     // Register event handlers
     registerNotificationHandlers();
+    registerAdminNotificationHandlers();
     registerNotificationProviders();
     registerAllPaymentProviders();
     registerDailyReportEmailHandler();

@@ -4,6 +4,7 @@ import { NotFoundError, BusinessError } from '../../../domain/errors/BusinessErr
 import { HistoryService } from '../../services/HistoryService';
 import { StorageChargeService, computeAccrual } from '../../services/StorageChargeService';
 import { prisma } from '../../../config/database';
+import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 
 export interface UpdateParcelInput {
   designation?: string;
@@ -191,6 +192,28 @@ export class UpdateParcelUseCase {
       parcelTrackingSnapshot: parcel.trackingNumber,
       comment: 'Modification des informations du colis',
       metadata: { changes },
+    });
+
+    // Alerte in-app admin : une modification de colis est une operation
+    // sensible (poids, destination, magasin => prix et facturation).
+    const warehouseId = data.warehouse ? input.warehouseId ?? null : parcel.warehouseId;
+    const warehouse = warehouseId
+      ? await prisma.warehouse.findUnique({ where: { id: warehouseId }, select: { agencyId: true } })
+      : null;
+    eventBus.emit({
+      type: DomainEvents.PARCEL_UPDATED,
+      payload: {
+        parcelId,
+        trackingNumber: parcel.trackingNumber,
+        designation: updated.designation,
+        changedFields: Object.keys(changes),
+        changes,
+        clientId: parcel.clientId,
+        agencyId: warehouse?.agencyId ?? null,
+        organizationId: (parcel as { organizationId?: string | null }).organizationId ?? null,
+      },
+      timestamp: new Date(),
+      userId,
     });
 
     return updated;

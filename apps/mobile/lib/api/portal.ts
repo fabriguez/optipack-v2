@@ -87,6 +87,23 @@ export const portalApi = {
   invoiceById: (id: string) =>
     apiClient.get(`/client-portal/invoices/${id}`).then((r) => r.data),
 
+  // Codes promo : simulation puis application sur une facture non soldee.
+  // `preview` ne modifie rien, il alimente l'affichage de la remise avant
+  // validation ; `apply` pose le code et recalcule le solde a payer.
+  promoCodes: () => apiClient.get('/client-portal/promo-codes').then((r) => r.data),
+  previewPromoCode: (invoiceId: string, code: string) =>
+    apiClient
+      .post(`/client-portal/invoices/${invoiceId}/promo-code/preview`, { code })
+      .then((r) => r.data),
+  applyPromoCode: (invoiceId: string, code: string) =>
+    apiClient
+      .post(`/client-portal/invoices/${invoiceId}/promo-code`, { code })
+      .then((r) => r.data),
+  removePromoCode: (invoiceId: string) =>
+    apiClient
+      .delete(`/client-portal/invoices/${invoiceId}/promo-code`)
+      .then((r) => r.data),
+
   // Payments
   payments: (params?: { limit?: number; page?: number }) =>
     apiClient.get('/client-portal/payments', { params }).then((r) => r.data),

@@ -250,6 +250,23 @@ async function checkDebtAlerts(): Promise<void> {
           metadata: { debtId: debt.id, invoiceId: debt.invoiceId, kind: 'DEBT_DUE_SOON' },
         },
       );
+      // Les administrateurs sont prevenus en parallele (in-app + email) via
+      // le handler DEBT_DUE_SOON : suivi du recouvrement sans dependre du
+      // canal client.
+      eventBus.emit({
+        type: DomainEvents.DEBT_DUE_SOON,
+        payload: {
+          debtId: debt.id,
+          debtRef: debt.reference,
+          clientId: debt.clientId,
+          agencyId: debt.agencyId,
+          organizationId: debt.organizationId,
+          nextDueDate: debt.nextDueDate,
+          remainingAmount: Number(debt.remainingAmount),
+          priority: debt.priority,
+        },
+        timestamp: new Date(),
+      });
       await prisma.debt.update({ where: { id: debt.id }, data: { alertSent: true } });
       alerted++;
     } catch (err) {

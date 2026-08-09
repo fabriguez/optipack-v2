@@ -99,6 +99,25 @@ export class UpdateParcelStatusUseCase {
       userId,
     });
 
+    // Colis perdu : evenement dedie pour l'alerte in-app des administrateurs
+    // (le flux PARCEL_STATUS_CHANGED, lui, s'adresse au client).
+    if (isStatusChange && newStatus === 'LOST') {
+      eventBus.emit({
+        type: DomainEvents.PARCEL_LOST,
+        payload: {
+          parcelId,
+          trackingNumber: parcel.trackingNumber,
+          designation: parcel.designation,
+          statusBefore: oldStatus,
+          clientId: parcel.clientId,
+          agencyId: parcelAgencyId,
+          organizationId: (parcel as { organizationId?: string | null }).organizationId ?? null,
+        },
+        timestamp: new Date(),
+        userId,
+      });
+    }
+
     return updated;
   }
 }

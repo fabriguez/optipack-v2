@@ -9,6 +9,13 @@ import { assertAgencyActive } from '../../services/scope/agencyScope';
 import { eventBus, DomainEvents } from '../../../infrastructure/events/EventBus';
 import { PromoCodeService } from '../../services/promo/PromoCodeService';
 
+/**
+ * Fenetre d'annulation d'un paiement : 2 jours apres sa creation. Passe ce
+ * delai le paiement est definitif (il faut passer par un avoir / une remise).
+ */
+export const PAYMENT_VOID_WINDOW_DAYS = 2;
+const PAYMENT_VOID_WINDOW_MS = PAYMENT_VOID_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+
 @injectable()
 export class VoidPaymentUseCase {
   constructor(
@@ -25,6 +32,18 @@ export class VoidPaymentUseCase {
 
     if (payment.isVoided) {
       throw new BusinessError('Ce paiement est deja annule');
+    }
+
+    // Fenetre de 2 jours apres creation. Au-dela, le paiement est fige :
+    // l'encaissement est deja consolide en caisse et en comptabilite.
+    const ageMs = Date.now() - new Date(payment.createdAt).getTime();
+    if (ageMs > PAYMENT_VOID_WINDOW_MS) {
+      throw new BusinessError(
+        `Ce paiement ne peut plus etre annule : le delai de ${PAYMENT_VOID_WINDOW_DAYS} jours ` +
+          `apres sa creation est depasse.`,
+        409,
+        'PAYMENT_VOID_WINDOW_EXPIRED',
+      );
     }
 
     // Agence de rattachement desactivee : annulation gelee (409).
@@ -49,6 +68,23 @@ export class VoidPaymentUseCase {
       // Le solde se rouvre : un code promo deja consomme redevient reserve, il
       // reste attache a la facture tant qu'elle n'est pas soldee.
       await this.promoCodes.syncForInvoice(invoice.id);
+
+      if (newStatus !== invoice.status) {
+        eventBus.emit({
+          type: DomainEvents.INVOICE_STATUS_CHANGED,
+          payload: {
+            invoiceId: invoice.id,
+            invoiceRef: invoice.reference,
+            statusBefore: invoice.status,
+            statusAfter: newStatus,
+            balance: newBalance,
+            clientId: invoice.clientId,
+            agencyId: payment.agencyId,
+          },
+          timestamp: new Date(),
+          userId,
+        });
+      }
     }
 
     // Reverse cash register
@@ -86,7 +122,19 @@ export class VoidPaymentUseCase {
 
     eventBus.emit({
       type: DomainEvents.PAYMENT_VOIDED,
-      payload: { paymentId, amount: Number(payment.amount), reason, agencyId: payment.agencyId },
+      payload: {
+        paymentId,
+        paymentRef: payment.reference,
+        amount: Number(payment.amount),
+        paymentMethod: payment.paymentMethod,
+        reason,
+        agencyId: payment.agencyId,
+        invoiceId: payment.invoiceId,
+        invoiceRef: invoice?.reference ?? null,
+        clientId: invoice?.clientId ?? null,
+        voidedByUserId: userId,
+        paymentCreatedAt: payment.createdAt,
+      },
       timestamp: new Date(),
       userId,
     });

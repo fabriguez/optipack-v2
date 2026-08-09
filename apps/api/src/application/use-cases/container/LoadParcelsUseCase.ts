@@ -202,6 +202,21 @@ export class LoadParcelsUseCase {
           errors: errors.length,
         },
       });
+
+      if (previousStatus !== 'LOADING') {
+        eventBus.emit({
+          type: DomainEvents.CONTAINER_STATUS_CHANGED,
+          payload: {
+            containerId,
+            designation: container.designation,
+            statusBefore: previousStatus,
+            statusAfter: 'LOADING',
+            agencyId: container.departureAgencyId,
+          },
+          timestamp: new Date(),
+          userId,
+        });
+      }
     }
 
     return { loaded: loaded.length, errors, total: parcelIds.length };

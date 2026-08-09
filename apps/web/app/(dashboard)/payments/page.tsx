@@ -16,7 +16,7 @@ import { RowActions } from '@/components/shared/RowActions';
 import { MaskedValue, isMasked } from '@/components/ui/MaskedValue';
 import { useServerPagination } from '@/lib/hooks/useServerPagination';
 import { usePayments } from '@/lib/hooks/usePayments';
-import { usePermission } from '@/lib/hooks/usePermission';
+import { usePermission, useIsTenantAdmin } from '@/lib/hooks/usePermission';
 import { Can } from '@/lib/components/Can';
 import { searchers } from '@/lib/api/searchers';
 import { formatAmount, formatDateTime } from '@transitsoftservices/shared';
@@ -32,8 +32,12 @@ function PaymentsContent() {
   const [showCreate, setShowCreate] = useState(false);
   const { page, search, setPage, setSearch, queryParams } = useServerPagination();
 
-  // Gating ABAC : meme cle que la route API POST /payments/:id/void
-  const canVoid = usePermission('payment.void');
+  // Annulation : reservee aux administrateurs (role) ET couverte par la
+  // permission payment.void, comme la route API POST /payments/:id/void.
+  // Les deux hooks sont appeles inconditionnellement (regles des hooks).
+  const hasVoidPermission = usePermission('payment.void');
+  const isAdmin = useIsTenantAdmin();
+  const canVoid = hasVoidPermission && isAdmin;
 
   const agencyFilter = searchParams.get('agencyId') || '';
   const paymentMethodFilter = searchParams.get('paymentMethod') || '';
