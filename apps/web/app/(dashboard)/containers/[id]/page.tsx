@@ -129,7 +129,7 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
   const [showEdit, setShowEdit] = useState(false);
   const [showArrive, setShowArrive] = useState(false);
   const [showLoadDialog, setShowLoadDialog] = useState(false);
-  const [unloadTarget, setUnloadTarget] = useState<{ id: string; designation: string } | null>(null);
+  const [unloadTarget, setUnloadTarget] = useState<{ id: string; designation: string; trackingNumber?: string } | null>(null);
   const [unloadAction, setUnloadAction] = useState<'received' | 'not_found' | 'modified'>('received');
   const [unloadWarehouseId, setUnloadWarehouseId] = useState<string | null>(null);
   const [unloadWeight, setUnloadWeight] = useState('');
@@ -260,7 +260,14 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
         newWeight: unloadAction === 'modified' && unloadWeight ? Number(unloadWeight) : undefined,
         comment: unloadComment || undefined,
       });
-      toast.success('Colis decharge');
+      const label = unloadTarget.trackingNumber || unloadTarget.designation;
+      toast.success(
+        unloadAction === 'not_found'
+          ? `${label} : marque non retrouve au dechargement`
+          : unloadAction === 'modified'
+            ? `${label} decharge (poids modifie)`
+            : `${label} decharge et receptionne`,
+      );
       qc.invalidateQueries({ queryKey: ['containers', id] });
       qc.invalidateQueries({ queryKey: ['containers', id, 'parcels'] });
       qc.invalidateQueries({ queryKey: ['containers', id, 'history'] });
@@ -374,6 +381,9 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
       action: 'received',
       warehouseId: batchUnloadWarehouseId,
     });
+    // Le LiveScanCollector ne toaste que les echecs : on confirme le succes
+    // ici pour que l'operateur ait le meme retour qu'en dechargement manuel.
+    toast.success(`${match.trackingNumber} decharge et receptionne`);
     qc.invalidateQueries({ queryKey: ['containers', id] });
     qc.invalidateQueries({ queryKey: ['containers', id, 'parcels'] });
     qc.invalidateQueries({ queryKey: ['containers', id, 'history'] });
@@ -510,7 +520,7 @@ export default function ContainerDetailPage({ params }: { params: Promise<{ id: 
                 }]
               : []),
             ...(canManageContainer && canUnload
-              ? [{ label: 'Decharger', icon: <PackageMinus className="h-4 w-4" />, onClick: () => setUnloadTarget({ id: row.id, designation: row.designation }) }]
+              ? [{ label: 'Decharger', icon: <PackageMinus className="h-4 w-4" />, onClick: () => setUnloadTarget({ id: row.id, designation: row.designation, trackingNumber: row.trackingNumber }) }]
               : []),
             ...(canManageManifest && (container.status === 'IN_TRANSIT' || container.status === 'RECEIVED') && row.status !== 'LOST'
               ? [{

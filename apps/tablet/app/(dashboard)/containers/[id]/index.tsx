@@ -176,7 +176,11 @@ function ParcelsSection({ container }: { container: any }) {
         const p = (r?.data ?? []).find((x: any) => x.trackingNumber === code.trim()) ?? r?.data?.[0];
         if (!p) { toast.error('Introuvable'); return; }
         await containersApi.unload(containerId, { parcelId: p.id, action: 'received', warehouseId: unloadWh.id });
-        toast.success(`Decharge : ${p.trackingNumber}`);
+        toast.success(
+          unloadWh.name
+            ? `${p.trackingNumber} decharge et receptionne (${unloadWh.name})`
+            : `${p.trackingNumber} decharge et receptionne`,
+        );
       }
       invalidate();
     } catch (e: any) { toast.error(e?.response?.data?.message ?? 'Echec'); }
