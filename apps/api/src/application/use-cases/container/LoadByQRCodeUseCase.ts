@@ -9,7 +9,7 @@ import { NotFoundError } from '../../../domain/errors/BusinessError';
  * frontend extrait le tracking et l'envoie. On accepte aussi un tracking brut.
  *
  * On reutilise LoadParcelsUseCase pour appliquer toutes les regles
- * (capacite, type, dangerosite, destination != depart, etc.).
+ * (capacite, type, magasin dans l'agence de depart, destination != depart, etc.).
  */
 @injectable()
 export class LoadByQRCodeUseCase {

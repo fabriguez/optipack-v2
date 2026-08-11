@@ -161,8 +161,16 @@ function ParcelsSection({ container }: { container: any }) {
   const onScan = async (code: string) => {
     try {
       if (scanMode === 'load') {
-        await containersApi.loadByQr(containerId, code.trim());
-        toast.success(`Charge : ${code}`);
+        // load-by-qr repond 200 meme quand la regle metier refuse le colis
+        // (autre agence, destination = depart, capacite, type) : le verdict est
+        // dans data.success / data.reason, pas dans le code HTTP.
+        const res = await containersApi.loadByQr(containerId, code.trim());
+        const payload = (res as any)?.data ?? res;
+        if (!payload?.success) {
+          toast.error(payload?.reason ?? 'Chargement refuse');
+          return;
+        }
+        toast.success(`Charge : ${payload.trackingNumber ?? code}`);
       } else if (scanMode === 'unload') {
         const r = await parcelsApi.search(code.trim());
         const p = (r?.data ?? []).find((x: any) => x.trackingNumber === code.trim()) ?? r?.data?.[0];

@@ -171,7 +171,9 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultClient, default
       destinationAgencyId: v.destinationAgencyId,
       destinationAddress: v.destinationAddress || undefined,
       category: v.category || 'STANDARD',
-      declaredValue: v.declaredValue ? Number(String(v.declaredValue).replace(/[^\d.]/g, '')) : undefined,
+      // null (et pas undefined) quand le champ est vide : en edition, cela
+      // remet explicitement la valeur declaree a "non declaree".
+      declaredValue: v.declaredValue ? Number(String(v.declaredValue).replace(/[^\d.]/g, '')) : null,
       isFragile: !!v.isFragile,
       isHazardous: !!v.isHazardous,
       observation: v.observation || undefined,
@@ -304,7 +306,7 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultClient, default
       </View>
 
       <AppSwitch control={control} name="isFragile" label="Fragile" hint="Manipulation prudente requise" />
-      <AppSwitch control={control} name="isHazardous" label="Marchandise dangereuse" hint="Interdite en conteneur aerien" />
+      <AppSwitch control={control} name="isHazardous" label="Marchandise dangereuse" hint="Signalee sur l'etiquette et le manifeste" />
 
       <AppTextInput control={control} name="observation" label="Observation" multiline />
 

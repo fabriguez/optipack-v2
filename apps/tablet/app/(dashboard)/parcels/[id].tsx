@@ -26,6 +26,10 @@ const STEPS = [
 const STATUS_VARIANT: Record<string, 'default' | 'success' | 'warning' | 'info' | 'error'> = {
   IN_STOCK: 'default', LOADING: 'info', IN_TRANSIT: 'warning', ARRIVED: 'info', RECEIVED: 'info', DELIVERED: 'success', LOST: 'error',
 };
+const CATEGORY_LABEL: Record<string, string> = {
+  STANDARD: 'Standard', DOCUMENT: 'Document', FOOD: 'Alimentaire',
+  ELECTRONICS: 'Electronique', CLOTHING: 'Vetements', OTHER: 'Autre',
+};
 const ic = (n: keyof typeof Ionicons.glyphMap) => <Ionicons name={n} size={15} color={colors.gray[500]} />;
 
 function Row({ icon, label, value }: { icon: keyof typeof Ionicons.glyphMap; label: string; value?: string | null }) {
@@ -126,7 +130,22 @@ function InfoTab({ parcel: p }: { parcel: any }) {
         <Row icon="person-outline" label="Destinataire" value={p.recipient?.fullName} />
         <Row icon="business-outline" label="Magasin" value={p.warehouse?.name} />
         <Row icon="git-network-outline" label="Route" value={p.transitRoute?.name} />
-        <Row icon="pricetag-outline" label="Categorie" value={p.category} />
+        <Row icon="pricetag-outline" label="Categorie" value={CATEGORY_LABEL[p.category] ?? p.category} />
+        <Row
+          icon="shield-checkmark-outline"
+          label="Valeur declaree"
+          value={p.declaredValue != null && Number(p.declaredValue) > 0 ? formatAmount(Number(p.declaredValue)) : 'Non declaree'}
+        />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 8 }}>
+          <Text style={{ fontSize: 13, color: colors.gray[500] }}>Marquages</Text>
+          <View style={{ flex: 1, flexDirection: 'row', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {p.isFragile && <Badge variant="warning">Fragile</Badge>}
+            {p.isHazardous && <Badge variant="error">Marchandise dangereuse</Badge>}
+            {!p.isFragile && !p.isHazardous && (
+              <Text style={{ fontSize: 13, color: colors.gray[400] }}>Aucun</Text>
+            )}
+          </View>
+        </View>
         <Row icon="cash-outline" label="Prix" value={formatAmount(Number(p.price ?? 0))} />
         <Row icon="calendar-outline" label="Enregistre le" value={p.createdAt ? formatDate(p.createdAt) : '-'} />
         {!!p.observation && (

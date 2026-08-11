@@ -216,6 +216,26 @@ export default function ParcelDetailPage() {
           <LinkRow icon={Route} label="Route" value={parcel.transitRoute?.name || '-'} href={undefined} />
           <InfoRow icon={Clock} label="Enregistre le" value={formatDate(parcel.createdAt)} />
           <InfoRow icon={Clock} label="Arrive le" value={parcel.arrivalDate ? formatDate(parcel.arrivalDate) : '-'} />
+          <InfoRow icon={Package} label="Categorie" value={parcelCategoryLabel(parcel.category)} />
+          <InfoRow
+            icon={Banknote}
+            label="Valeur declaree"
+            value={
+              parcel.declaredValue != null && Number(parcel.declaredValue) > 0
+                ? formatAmount(Number(parcel.declaredValue))
+                : 'Non declaree'
+            }
+          />
+        </div>
+        {/* Marquages : toujours visibles (y compris "aucun") pour que l'operateur
+            sache que l'information a bien ete saisie. */}
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium text-gray-500">Marquages :</span>
+          {parcel.isFragile && <AppBadge variant="warning">Fragile</AppBadge>}
+          {parcel.isHazardous && <AppBadge variant="error">Marchandise dangereuse</AppBadge>}
+          {!parcel.isFragile && !parcel.isHazardous && (
+            <span className="text-xs text-gray-400">Aucun</span>
+          )}
         </div>
         {parcel.observation && (
           <div className="mt-4 rounded-xl bg-gray-50 p-3">
@@ -704,6 +724,26 @@ function LinkRow({ icon: Icon, label, value, href }: { icon: any; label: string;
   );
   if (href) return <Link to={href}>{content}</Link>;
   return content;
+}
+
+/** Libelle FR de l'enum ParcelCategory (miroir de celui du formulaire). */
+function parcelCategoryLabel(v?: string | null): string {
+  switch (v) {
+    case 'STANDARD':
+      return 'Standard';
+    case 'DOCUMENT':
+      return 'Document';
+    case 'FOOD':
+      return 'Alimentaire';
+    case 'ELECTRONICS':
+      return 'Electronique';
+    case 'CLOTHING':
+      return 'Vetements';
+    case 'OTHER':
+      return 'Autre';
+    default:
+      return 'Standard';
+  }
 }
 
 function Row({ label, value, mono, bold, children }: { label: string; value?: string; mono?: boolean; bold?: boolean; children?: React.ReactNode }) {

@@ -688,7 +688,7 @@ function ParcelCard({
             <div className="flex items-center justify-between rounded-xl bg-red-50 p-3">
               <div>
                 <p className="text-sm font-medium text-red-900">Marchandise dangereuse</p>
-                <p className="text-xs text-red-700">Interdite en aerien</p>
+                <p className="text-xs text-red-700">Signalee sur l&apos;etiquette</p>
               </div>
               <AppSwitch
                 checked={parcel.isHazardous}

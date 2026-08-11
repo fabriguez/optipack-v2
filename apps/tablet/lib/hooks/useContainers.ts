@@ -61,7 +61,15 @@ export function useLoadParcels() {
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['containers'] });
       qc.invalidateQueries({ queryKey: ['parcels'] });
-      toast.success(`${data.data.loaded} colis charges`);
+      // L'API repond 200 avec un bilan par colis : certains peuvent etre
+      // refuses (autre agence, destination = agence de depart, capacite,
+      // type). On remonte le detail au lieu d'annoncer un succes global.
+      const result = data.data as { loaded: number; errors?: { reason: string }[] };
+      const errors = result.errors ?? [];
+      if (result.loaded > 0) toast.success(`${result.loaded} colis charges`);
+      if (errors.length > 0) {
+        toast.error(`${errors.length} colis refuse(s) : ${errors[0].reason}`);
+      }
     },
     onError: (e) => toast.error(extractApiError(e, 'Erreur lors du chargement')),
   });

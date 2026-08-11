@@ -33,6 +33,8 @@ export class ListLoadableParcelsUseCase {
     // - meme magasin/agence : on ne charge que des colis presents dans une agence accessible
     //   au conteneur. On considere ici l'agence de depart du conteneur.
     // - type compatible (air/sea) sauf conteneur d'acheminement
+    // NB : les marchandises dangereuses sont chargeables sans restriction (le
+    // flag isHazardous reste purement informatif / etiquette).
     const where: any = {
       isDeleted: false,
       status: 'IN_STOCK',
@@ -51,10 +53,6 @@ export class ListLoadableParcelsUseCase {
 
     if (!c.isForwarding) {
       where.transitRoute = { type: c.type };
-      // Refus marchandise dangereuse en aerien
-      if (c.type === 'AIR') {
-        where.isHazardous = false;
-      }
     }
 
     if (filters.search) {

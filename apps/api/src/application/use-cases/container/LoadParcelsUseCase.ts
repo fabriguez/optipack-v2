@@ -53,6 +53,23 @@ export class LoadParcelsUseCase {
         continue;
       }
 
+      // Le colis doit se trouver physiquement dans un magasin de l'agence de
+      // depart du conteneur. Sinon on chargerait un colis stocke ailleurs
+      // (l'UI ne le propose pas, mais l'API doit refuser aussi : scan direct,
+      // appel manuel, ids injectes).
+      const parcelAgencyId = parcel.warehouse?.agency?.id ?? null;
+      if (!parcelAgencyId) {
+        errors.push({ parcelId, reason: "Colis sans magasin : chargement impossible" });
+        continue;
+      }
+      if (parcelAgencyId !== container.departureAgencyId) {
+        errors.push({
+          parcelId,
+          reason: "Colis stocke dans une autre agence que l'agence de depart du conteneur",
+        });
+        continue;
+      }
+
       // On refuse de charger un colis dont la destination est l'agence de depart
       // du conteneur : il est deja a destination, l'expedier serait une erreur.
       if (parcel.destinationAgencyId && parcel.destinationAgencyId === container.departureAgencyId) {
@@ -75,15 +92,9 @@ export class LoadParcelsUseCase {
         }
       }
 
-      // Audit fix #10 : refus des marchandises dangereuses dans les conteneurs AIR
-      // (sauf forwarding). Reglementation IATA standard.
-      if (parcel.isHazardous && container.type === 'AIR' && !container.isForwarding) {
-        errors.push({
-          parcelId,
-          reason: 'Marchandise dangereuse interdite en conteneur aerien (sauf acheminement)',
-        });
-        continue;
-      }
+      // Marchandise dangereuse : aucun blocage au chargement. Le flag reste
+      // informatif (etiquette, manifeste, badge UI) ; la decision d'embarquer
+      // appartient a l'exploitant.
 
       // Verification capacite : dimension selon type conteneur.
       // SEA -> volume (m3), sinon -> masse (kg).

@@ -16,6 +16,12 @@ export interface UpdateParcelInput {
   // changer l'agence de destination.
   destinationAgencyId?: string;
   destinationAddress?: string | null;
+  // Categorie + flags metiers : editables au meme titre que les autres champs
+  // descriptifs (ils pilotent l'etiquette imprimee et le chargement conteneur).
+  category?: string;
+  isFragile?: boolean;
+  isHazardous?: boolean;
+  declaredValue?: number | null;
   observation?: string | null;
   imageUrl?: string | null;
   recipientId?: string | null;
@@ -24,6 +30,16 @@ export interface UpdateParcelInput {
 }
 
 const EDITABLE_STATUSES = new Set(['IN_STOCK', 'ARRIVED', 'RECEIVED']);
+
+/** Valeurs autorisees de l'enum Prisma ParcelCategory. */
+const PARCEL_CATEGORIES = new Set([
+  'STANDARD',
+  'DOCUMENT',
+  'FOOD',
+  'ELECTRONICS',
+  'CLOTHING',
+  'OTHER',
+]);
 
 @injectable()
 export class UpdateParcelUseCase {
@@ -123,6 +139,41 @@ export class UpdateParcelUseCase {
     if (input.destinationAddress !== undefined && input.destinationAddress !== parcel.destinationAddress) {
       data.destinationAddress = input.destinationAddress;
       changes.destinationAddress = { from: parcel.destinationAddress, to: input.destinationAddress };
+    }
+    // Categorie + flags metiers. La categorie est validee contre l'enum Prisma
+    // (une valeur inconnue ferait planter l'update au niveau DB).
+    if (input.category !== undefined && PARCEL_CATEGORIES.has(input.category)) {
+      if (input.category !== (parcel as any).category) {
+        data.category = input.category;
+        changes.category = { from: (parcel as any).category, to: input.category };
+      }
+    }
+    if (input.isFragile !== undefined) {
+      const next = !!input.isFragile;
+      if (next !== (parcel as any).isFragile) {
+        data.isFragile = next;
+        changes.isFragile = { from: (parcel as any).isFragile, to: next };
+      }
+    }
+    if (input.isHazardous !== undefined) {
+      const next = !!input.isHazardous;
+      if (next !== (parcel as any).isHazardous) {
+        data.isHazardous = next;
+        changes.isHazardous = { from: (parcel as any).isHazardous, to: next };
+      }
+    }
+    if (input.declaredValue !== undefined) {
+      // '' / NaN / null cote client => on remet la valeur a null (non declaree).
+      const raw = input.declaredValue;
+      const next =
+        raw === null || raw === undefined || !Number.isFinite(Number(raw)) || Number(raw) < 0
+          ? null
+          : Number(raw);
+      const current = (parcel as any).declaredValue != null ? Number((parcel as any).declaredValue) : null;
+      if (next !== current) {
+        data.declaredValue = next;
+        changes.declaredValue = { from: current, to: next };
+      }
     }
     if (input.observation !== undefined) {
       data.observation = input.observation;

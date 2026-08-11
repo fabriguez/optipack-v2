@@ -33,6 +33,10 @@ interface ParcelLike {
   destinationAgency?: { id: string; name: string; city?: string | null } | null;
   weight?: number | string | null;
   volume?: number | string | null;
+  category?: string | null;
+  isFragile?: boolean | null;
+  isHazardous?: boolean | null;
+  declaredValue?: number | string | null;
   observation?: string | null;
   client?: { id: string; fullName: string; phone?: string };
   recipient?: { id: string; fullName: string; phone?: string } | null;
@@ -128,6 +132,10 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
         destinationAddress: parcel.destinationAddress ?? '',
         weight: parcel.weight ? Number(parcel.weight) : undefined,
         volume: parcel.volume ? Number(parcel.volume) : undefined,
+        category: (parcel.category as CreateParcelInput['category']) ?? 'STANDARD',
+        isFragile: !!parcel.isFragile,
+        isHazardous: !!parcel.isHazardous,
+        declaredValue: parcel.declaredValue != null ? Number(parcel.declaredValue) : null,
         observation: parcel.observation || '',
         clientId: parcel.client?.id ?? '',
         recipientId: parcel.recipient?.id,
@@ -209,6 +217,10 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
           destinationAddress: data.destinationAddress || null,
           weight: mode === 'volume' ? null : data.weight,
           volume: mode === 'weight' ? null : data.volume,
+          category: data.category || 'STANDARD',
+          isFragile: !!data.isFragile,
+          isHazardous: !!data.isHazardous,
+          declaredValue: data.declaredValue ?? null,
           observation: data.observation || null,
           recipientId: data.recipientId ?? null,
           warehouseId: data.warehouseId,
@@ -567,7 +579,7 @@ export function ParcelFormDialog({ open, onClose, parcel, defaultWarehouse, defa
               <div className="flex items-center justify-between rounded-xl bg-red-50 p-3">
                 <div>
                   <p className="text-sm font-medium text-red-900">Marchandise dangereuse</p>
-                  <p className="text-xs text-red-700">Interdite en conteneur aerien</p>
+                  <p className="text-xs text-red-700">Signalee sur l&apos;etiquette et le manifeste</p>
                 </div>
                 <AppSwitch checked={!!field.value} onCheckedChange={field.onChange} />
               </div>
